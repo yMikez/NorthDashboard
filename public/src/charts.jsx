@@ -218,14 +218,18 @@ function CountryBars({ data, maxValue, currency = 'USD' }) {
 
 // ---------- Funnel chart ----------
 function FunnelChart({ stages }) {
-  const topVol = stages[0].volume;
+  if (!stages || stages.length === 0) {
+    return <div className="funnel" style={{ padding: 24, textAlign: 'center', color: 'var(--navy-300)', fontSize: 12 }}>Sem dados de funil no período</div>;
+  }
+  const topVol = stages[0].volume || 0;
   const maxBarW = 88; // %
   return (
     <div className="funnel">
       {stages.map((s, i) => {
-        const pctOfTop = s.volume / topVol;
+        const pctOfTop = topVol > 0 ? s.volume / topVol : 0;
         const barW = Math.max(10, pctOfTop * maxBarW);
-        const dropPct = i > 0 ? 1 - (s.volume / stages[i - 1].volume) : 0;
+        const prevVol = i > 0 ? (stages[i - 1].volume || 0) : 0;
+        const dropPct = i > 0 && prevVol > 0 ? 1 - (s.volume / prevVol) : 0;
         const dropClass = dropPct > 0.7 ? 'bad' : dropPct > 0.4 ? 'warn' : 'ok';
         return (
           <div key={i} className="funnel-row">
