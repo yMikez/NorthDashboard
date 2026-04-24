@@ -593,6 +593,9 @@ function AllAffiliatesPage({ filters, onOpenAffiliate }) {
 // ---------- PRODUCTS ----------
 function ProductsPage({ filters }) {
   const [state, setProdState] = useState({ status: 'loading', data: null, error: null });
+  const [typeFilter, setTypeFilter] = useState('all');
+  const [view, setView] = useState('cards');
+  const [query, setQuery] = useState('');
 
   useEffect(() => {
     let cancelled = false;
@@ -610,13 +613,27 @@ function ProductsPage({ filters }) {
 
   const cur = filters.currency || 'USD';
   const byType = state.data?.byType || [];
-  const products = state.data?.products || [];
+  const allProducts = state.data?.products || [];
+
+  // Apply local filters: productType + search
+  const q = query.trim().toLowerCase();
+  const products = allProducts.filter((p) => {
+    if (typeFilter !== 'all' && p.productType !== typeFilter) return false;
+    if (q && !(p.name.toLowerCase().includes(q) || p.externalId.toLowerCase().includes(q))) return false;
+    return true;
+  });
+
+  // Type counts for the segment buttons
+  const typeCounts = { all: allProducts.length };
+  for (const t of ['FRONTEND', 'UPSELL', 'BUMP', 'DOWNSELL']) {
+    typeCounts[t] = allProducts.filter((p) => p.productType === t).length;
+  }
 
   const TYPE_META = {
-    FRONTEND: { label: 'Frontend', icon: 'target', accent: '#5BC8FF', tag: 'Entrada do funil' },
-    UPSELL:   { label: 'Upsell',   icon: 'arrow-up-right', accent: '#4A90FF', tag: 'Escalada pós-FE' },
-    BUMP:     { label: 'Bump',     icon: 'plus', accent: '#8B7FFF', tag: 'Add-on de checkout' },
-    DOWNSELL: { label: 'Downsell', icon: 'arrow-down-right', accent: '#6b84b8', tag: 'Recuperação pós-recusa' },
+    FRONTEND: { label: 'Frontend', accent: '#5BC8FF', tagClass: 'plat-cb' },
+    UPSELL:   { label: 'Upsell',   accent: '#4A90FF', tagClass: 'plat-cb' },
+    BUMP:     { label: 'Bump',     accent: '#8B7FFF', tagClass: 'plat-d24' },
+    DOWNSELL: { label: 'Downsell', accent: '#6b84b8', tagClass: 'plat-d24' },
   };
 
   return (
@@ -625,7 +642,39 @@ function ProductsPage({ filters }) {
         <div className="lead">
           <span className="eyebrow">PRODUCTS · OFFERS</span>
           <h2>Catalog <em>performance</em></h2>
-          <span className="sub">Por tipo de produto · SKUs consolidados abaixo</span>
+          <span className="sub">{products.length} de {allProducts.length} SKUs · clica num card pra abrir detalhes</span>
+        </div>
+        <div className="page-head-actions">
+          <div className="select-btn" style={{ padding: '0 10px', width: 220 }}>
+            <Icon name="search" size={13}/>
+            <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Buscar por nome ou ID..."
+              style={{ background: 'transparent', border: 0, color: 'var(--white)', outline: 'none', flex: 1, fontFamily: 'var(--f-mono)', fontSize: 12 }}/>
+          </div>
+          <div className="seg">
+            <button className={view === 'cards' ? 'is-active' : ''} onClick={() => setView('cards')}>
+              <Icon name="package" size={11}/> Cards
+            </button>
+            <button className={view === 'table' ? 'is-active' : ''} onClick={() => setView('table')}>
+              <Icon name="receipt" size={11}/> Table
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '4px 0 14px', flexWrap: 'wrap' }}>
+        <span className="f-label">TIPO</span>
+        <div className="seg">
+          {[
+            ['all', 'Todos'],
+            ['FRONTEND', 'Frontend'],
+            ['UPSELL', 'Upsell'],
+            ['BUMP', 'Bump'],
+            ['DOWNSELL', 'Downsell'],
+          ].map(([k, l]) => (
+            <button key={k} className={typeFilter === k ? 'is-active' : ''} onClick={() => setTypeFilter(k)}>
+              {l}<span style={{ marginLeft: 6, opacity: 0.5 }}>{fmtInt(typeCounts[k] || 0)}</span>
+            </button>
+          ))}
         </div>
       </div>
 
@@ -633,106 +682,152 @@ function ProductsPage({ filters }) {
         <div className="panel" style={{ color: 'var(--danger)' }}>Erro ao carregar: {state.error}</div>
       )}
 
-      <div className="prod-grid">
-        {state.status === 'loading' && (
-          <div className="panel" style={{ gridColumn: '1 / -1', textAlign: 'center', padding: 24, opacity: 0.6 }}>
-            Carregando...
-          </div>
-        )}
-        {byType.map((bucket) => {
-          const meta = TYPE_META[bucket.productType] || { label: bucket.productType, icon: 'package', accent: '#5BC8FF', tag: '' };
-          const margin = bucket.net - bucket.cpa;
-          const marginPct = bucket.revenue ? margin / bucket.revenue : 0;
-          const aov = bucket.orders ? bucket.revenue / bucket.orders : 0;
-          return (
-            <div key={bucket.productType} className="prod-card">
-              <div className="prod-thumb" style={{ color: meta.accent }}>
-                <Icon name={meta.icon} size={36} stroke={1.2}/>
-              </div>
-              <div>
-                <div className="prod-name">{meta.label}</div>
-                <div style={{ fontFamily: 'var(--f-mono)', fontSize: 10, color: 'var(--navy-400)', letterSpacing: '0.08em', marginTop: 2 }}>
-                  {meta.tag.toUpperCase()}
-                </div>
-              </div>
-              <div className="prod-plat">
-                <span style={{ fontFamily: 'var(--f-mono)', fontSize: 10, color: 'var(--navy-400)', marginLeft: 'auto' }}>
-                  {bucket.productCount} SKUs
-                </span>
-              </div>
-              <div className="prod-stats">
-                <div className="prod-stat"><div className="l">Revenue</div><div className="v">{fmtCurrency(bucket.revenue, cur, 0)}</div></div>
-                <div className="prod-stat"><div className="l">Orders</div><div className="v">{fmtInt(bucket.orders)}</div></div>
-                <div className="prod-stat"><div className="l">AOV</div><div className="v sm">{fmtCurrency(aov, cur, 0)}</div></div>
-                <div className="prod-stat"><div className="l">CPA</div><div className="v sm">{fmtCurrency(bucket.cpa, cur, 0)}</div></div>
-                <div className="prod-stat"><div className="l">Net margin</div><div className="v sm" style={{ color: margin > 0 ? 'var(--success)' : 'var(--danger)' }}>{fmtCurrency(margin, cur, 0)}</div></div>
-                <div className="prod-stat"><div className="l">Margin %</div><div className="v sm" style={{ color: marginPct > 0.2 ? 'var(--success)' : marginPct > 0.1 ? 'var(--warning)' : 'var(--danger)' }}>{(marginPct * 100).toFixed(1)}%</div></div>
-              </div>
-            </div>
-          );
-        })}
-      </div>
+      {state.status === 'loading' && (
+        <div className="panel" style={{ textAlign: 'center', padding: 32, opacity: 0.6 }}>Carregando...</div>
+      )}
 
-      <div className="panel" style={{ marginTop: 14 }}>
-        <div className="panel-head">
-          <div className="panel-title">
-            <span className="panel-eyebrow">SKU · LINE DETAIL</span>
-            <div className="panel-sub">Todos os produtos no catálogo ({products.length} SKUs)</div>
+      {state.status === 'ready' && products.length === 0 && (
+        <div className="panel" style={{ textAlign: 'center', padding: 32, opacity: 0.6 }}>
+          {q || typeFilter !== 'all' ? 'Nenhum produto bate com o filtro' : 'Sem produtos no período'}
+        </div>
+      )}
+
+      {view === 'cards' && (
+        <div className="prod-grid">
+          {products.map((p) => {
+            const meta = TYPE_META[p.productType] || { label: p.productType, accent: '#5BC8FF' };
+            const margin = p.net - p.cpa;
+            const marginPct = p.revenue ? margin / p.revenue : 0;
+            const aov = p.orders ? p.revenue / p.orders : 0;
+            const platClass = p.platformSlug === 'digistore24' ? 'plat-d24' : 'plat-cb';
+            const platShort = p.platformSlug === 'digistore24' ? 'D24' : 'CB';
+            const apColor = p.approvalRate > 0.7 ? 'var(--success)' : p.approvalRate > 0.5 ? 'var(--warning)' : 'var(--danger)';
+            return (
+              <div key={`${p.platformSlug}:${p.externalId}`} className="prod-card">
+                <div className="prod-thumb" style={{ color: meta.accent }}>
+                  <Icon name="package" size={36} stroke={1.2}/>
+                </div>
+                <div>
+                  <div className="prod-name" title={p.name}>{p.name}</div>
+                  <div style={{ fontFamily: 'var(--f-mono)', fontSize: 10, color: 'var(--navy-400)', letterSpacing: '0.06em', marginTop: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    {p.externalId}
+                  </div>
+                </div>
+                <div className="prod-plat">
+                  <span className={`plat ${platClass}`}>{platShort}</span>
+                  <span className="badge" style={{ background: `${meta.accent}22`, color: meta.accent, borderColor: `${meta.accent}55` }}>
+                    {meta.label}
+                  </span>
+                  {p.vendorAccount && (
+                    <span style={{ fontFamily: 'var(--f-mono)', fontSize: 10, color: 'var(--navy-400)', marginLeft: 'auto' }}>
+                      {p.vendorAccount}
+                    </span>
+                  )}
+                </div>
+                <div className="prod-stats">
+                  <div className="prod-stat"><div className="l">Revenue</div><div className="v">{fmtCurrency(p.revenue, cur, 0)}</div></div>
+                  <div className="prod-stat"><div className="l">Orders</div><div className="v">{fmtInt(p.orders)}</div></div>
+                  <div className="prod-stat"><div className="l">AOV</div><div className="v sm">{fmtCurrency(aov, cur, 0)}</div></div>
+                  <div className="prod-stat"><div className="l">Approval</div><div className="v sm" style={{ color: p.allOrders ? apColor : 'var(--navy-400)' }}>
+                    {p.allOrders ? (p.approvalRate * 100).toFixed(1) + '%' : '—'}
+                  </div></div>
+                  <div className="prod-stat"><div className="l">Net margin</div><div className="v sm" style={{ color: margin > 0 ? 'var(--success)' : 'var(--danger)' }}>{fmtCurrency(margin, cur, 0)}</div></div>
+                  <div className="prod-stat"><div className="l">Margin %</div><div className="v sm" style={{ color: marginPct > 0.2 ? 'var(--success)' : marginPct > 0.1 ? 'var(--warning)' : 'var(--danger)' }}>{(marginPct * 100).toFixed(1)}%</div></div>
+                </div>
+                {p.lastSoldAt && (
+                  <div style={{ marginTop: 10, paddingTop: 10, borderTop: '1px solid rgba(91,200,255,0.15)', fontSize: 11, color: 'var(--navy-300)', display: 'flex', justifyContent: 'space-between', fontFamily: 'var(--f-mono)' }}>
+                    <span>1ª venda: {fmtDateShort(p.firstSoldAt)}</span>
+                    <span>Última: {fmtDateShort(p.lastSoldAt)}</span>
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {view === 'table' && (
+        <div className="panel" style={{ padding: 0 }}>
+          <div className="tbl-wrap" style={{ margin: 0, padding: '0 4px', maxHeight: 720, overflowY: 'auto' }}>
+            <table className="tbl">
+              <thead>
+                <tr>
+                  <th>Product</th>
+                  <th>External ID</th>
+                  <th>Type</th>
+                  <th>Platform</th>
+                  <th>Vendor</th>
+                  <th className="num">Orders</th>
+                  <th className="num">Approval</th>
+                  <th className="num">Revenue</th>
+                  <th className="num">Net margin</th>
+                  <th className="num">CPA</th>
+                  <th>Last sale</th>
+                </tr>
+              </thead>
+              <tbody>
+                {products.map((p) => {
+                  const meta = TYPE_META[p.productType] || { label: p.productType, accent: '#5BC8FF' };
+                  const platClass = p.platformSlug === 'digistore24' ? 'plat-d24' : 'plat-cb';
+                  const platShort = p.platformSlug === 'digistore24' ? 'D24' : 'CB';
+                  const apColor = p.approvalRate > 0.7 ? 'var(--success)' : p.approvalRate > 0.5 ? 'var(--warning)' : 'var(--danger)';
+                  const margin = p.net - p.cpa;
+                  return (
+                    <tr key={`${p.platformSlug}:${p.externalId}`}>
+                      <td>{p.name}</td>
+                      <td className="cell-mono" style={{ color: 'var(--navy-300)' }}>{p.externalId}</td>
+                      <td>
+                        <span className="badge" style={{ background: `${meta.accent}22`, color: meta.accent, borderColor: `${meta.accent}55` }}>
+                          {meta.label}
+                        </span>
+                      </td>
+                      <td><span className={`plat ${platClass}`}>{platShort}</span></td>
+                      <td className="cell-mono" style={{ color: 'var(--navy-300)' }}>{p.vendorAccount || '—'}</td>
+                      <td className="num cell-mono">{fmtInt(p.orders)}</td>
+                      <td className="num cell-mono" style={{ color: p.allOrders ? apColor : 'var(--navy-400)' }}>
+                        {p.allOrders ? (p.approvalRate * 100).toFixed(1) + '%' : '—'}
+                      </td>
+                      <td className="num cell-mono">{fmtCurrency(p.revenue, cur, 0)}</td>
+                      <td className="num cell-mono" style={{ color: margin > 0 ? 'var(--success)' : 'var(--danger)' }}>
+                        {fmtCurrency(margin, cur, 0)}
+                      </td>
+                      <td className="num cell-mono">{fmtCurrency(p.cpa, cur, 0)}</td>
+                      <td className="cell-mono">{p.lastSoldAt ? fmtDateShort(p.lastSoldAt) : '—'}</td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
           </div>
         </div>
-        <div className="tbl-wrap">
-          <table className="tbl">
-            <thead>
-              <tr>
-                <th>Product</th>
-                <th>External ID</th>
-                <th>Type</th>
-                <th>Platform</th>
-                <th>Vendor</th>
-                <th className="num">Orders</th>
-                <th className="num">Approval</th>
-                <th className="num">Revenue</th>
-                <th className="num">Net margin</th>
-                <th className="num">CPA</th>
-                <th>Last sale</th>
-              </tr>
-            </thead>
-            <tbody>
-              {state.status === 'loading' && (
-                <tr><td colSpan={11} style={{ textAlign: 'center', padding: 24, opacity: 0.6 }}>Carregando...</td></tr>
-              )}
-              {state.status === 'ready' && products.length === 0 && (
-                <tr><td colSpan={11} style={{ textAlign: 'center', padding: 24, opacity: 0.6 }}>Sem produtos no período</td></tr>
-              )}
-              {products.map((p) => {
-                const platClass = p.platformSlug === 'digistore24' ? 'plat-d24' : 'plat-cb';
-                const platShort = p.platformSlug === 'digistore24' ? 'D24' : 'CB';
-                const apColor = p.approvalRate > 0.7 ? 'var(--success)' : p.approvalRate > 0.5 ? 'var(--warning)' : 'var(--danger)';
-                const margin = p.net - p.cpa;
-                return (
-                  <tr key={`${p.platformSlug}:${p.externalId}`}>
-                    <td>{p.name}</td>
-                    <td className="cell-mono" style={{ color: 'var(--navy-300)' }}>{p.externalId}</td>
-                    <td><span className="badge neutral">{p.productType.toLowerCase()}</span></td>
-                    <td><span className={`plat ${platClass}`}>{platShort}</span></td>
-                    <td className="cell-mono" style={{ color: 'var(--navy-300)' }}>{p.vendorAccount || '—'}</td>
-                    <td className="num cell-mono">{fmtInt(p.orders)}</td>
-                    <td className="num cell-mono" style={{ color: apColor }}>
-                      {p.allOrders ? (p.approvalRate * 100).toFixed(1) + '%' : '—'}
-                    </td>
-                    <td className="num cell-mono">{fmtCurrency(p.revenue, cur, 0)}</td>
-                    <td className="num cell-mono" style={{ color: margin > 0 ? 'var(--success)' : 'var(--danger)' }}>
-                      {fmtCurrency(margin, cur, 0)}
-                    </td>
-                    <td className="num cell-mono">{fmtCurrency(p.cpa, cur, 0)}</td>
-                    <td className="cell-mono">{p.lastSoldAt ? fmtDateShort(p.lastSoldAt) : '—'}</td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
+      )}
+
+      {/* Compact summary by type at the bottom (was the old card layout, now context not headline) */}
+      {byType.some((b) => b.orders > 0) && (
+        <div style={{ marginTop: 18 }}>
+          <div style={{ fontFamily: 'var(--f-mono)', fontSize: 9, letterSpacing: '0.18em', color: 'var(--navy-400)', textTransform: 'uppercase', marginBottom: 10 }}>
+            Resumo por tipo · período
+          </div>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 10 }}>
+            {byType.map((b) => {
+              const meta = TYPE_META[b.productType] || { label: b.productType, accent: '#5BC8FF' };
+              return (
+                <div key={b.productType} style={{ padding: 12, border: '1px solid var(--border-soft)', borderRadius: 6, background: 'rgba(91,200,255,0.03)' }}>
+                  <div style={{ fontFamily: 'var(--f-mono)', fontSize: 10, color: meta.accent, letterSpacing: '0.1em', marginBottom: 6 }}>
+                    {meta.label.toUpperCase()}
+                  </div>
+                  <div style={{ fontFamily: 'var(--f-display)', fontSize: 22, color: 'var(--white)', lineHeight: 1, marginBottom: 4 }}>
+                    {fmtCurrency(b.revenue, cur, 0)}
+                  </div>
+                  <div style={{ fontSize: 11, color: 'var(--navy-300)' }}>
+                    {fmtInt(b.orders)} orders · {b.productCount} SKUs
+                  </div>
+                </div>
+              );
+            })}
+          </div>
         </div>
-      </div>
+      )}
     </div>
   );
 }
