@@ -137,25 +137,25 @@ function OverviewPage({ filters }) {
       <div className="page-head">
         <div className="lead">
           <span className="eyebrow">{filters.preset.toUpperCase()} · TIER 1 GLOBAL · USD</span>
-          <h2>Operation <em>at a glance</em></h2>
+          <h2>Operação <em>em tempo real</em></h2>
           <span className="sub">{fmtRange(filters.dateRange)} · dados unificados ClickBank + Digistore24</span>
         </div>
         <div className="page-head-actions">
-          <button className="btn btn-ghost"><Icon name="calendar" size={12}/> Schedule report</button>
-          <button className="btn btn-primary"><Icon name="plus" size={12}/> Build view</button>
+          <button className="btn btn-ghost"><Icon name="calendar" size={12}/> Agendar relatório</button>
+          <button className="btn btn-primary"><Icon name="plus" size={12}/> Nova visão</button>
         </div>
       </div>
 
       <div className="kpi-grid">
-        <KpiCard label="GROSS REVENUE" icon="dollar"
+        <KpiCard label="RECEITA BRUTA" icon="dollar"
           value={fmtCurrency(kpis.gross, cur, 0)}
           {...deltaFor(kpis.gross, prev.gross)}
           sparkData={sparkGross}/>
-        <KpiCard label="NET REVENUE" icon="wallet"
+        <KpiCard label="RECEITA LÍQUIDA" icon="wallet"
           value={fmtCurrency(kpis.net, cur, 0)}
           {...deltaFor(kpis.net, prev.net)}
           sparkData={sparkNet}/>
-        <KpiCard label="ORDERS APPROVED" icon="shopping-cart"
+        <KpiCard label="PEDIDOS APROVADOS" icon="shopping-cart"
           value={fmtInt(kpis.approvedCount)}
           {...deltaFor(kpis.approvedCount, prev.approvedCount)}
           sparkData={sparkOrders}/>
@@ -163,21 +163,21 @@ function OverviewPage({ filters }) {
           value={fmtCurrency(kpis.aov, cur, 2)}
           {...deltaFor(kpis.aov, prev.aov)}
           sparkData={sparkAov}/>
-        <KpiCard label="APPROVAL RATE" icon="check"
+        <KpiCard label="TAXA DE APROVAÇÃO" icon="check"
           value={(kpis.approvalRate * 100).toFixed(1)} unit="%"
           {...deltaFor(kpis.approvalRate, prev.approvalRate)}
           sparkData={approvalSpark}/>
-        <KpiCard label="REFUND RATE" icon="refresh"
+        <KpiCard label="TAXA DE REEMBOLSO" icon="refresh"
           value={(kpis.refundRate * 100).toFixed(2)} unit="%"
           {...deltaFor(kpis.refundRate, prev.refundRate)}
           trend={kpis.refundRate > (prev.refundRate ?? 0) ? 'down' : 'up'}/>
-        <KpiCard label="CHARGEBACK RATE" icon="alert-triangle"
+        <KpiCard label="CHARGEBACK" icon="alert-triangle"
           alert={kpis.cbRate > 0.009}
           value={(kpis.cbRate * 100).toFixed(2)} unit="%"
           {...deltaFor(kpis.cbRate, prev.cbRate)}
           trend={kpis.cbRate > (prev.cbRate ?? 0) ? 'down' : 'up'}
-          hint={kpis.cbRate > 0.009 ? 'over threshold' : 'vs prev'}/>
-        <KpiCard label="NET PROFIT" icon="target"
+          hint={kpis.cbRate > 0.009 ? 'acima do limite' : 'vs anterior'}/>
+        <KpiCard label="LUCRO LÍQUIDO" icon="target"
           value={fmtCurrency(kpis.netProfit, cur, 0)}
           {...deltaFor(kpis.netProfit, prev.netProfit)}/>
       </div>
@@ -185,7 +185,7 @@ function OverviewPage({ filters }) {
       <div className="panel" style={{ marginBottom: 14 }}>
         <div className="panel-head">
           <div className="panel-title">
-            <span className="panel-eyebrow">TIME SERIES · DAILY</span>
+            <span className="panel-eyebrow">SÉRIE TEMPORAL · DIÁRIA</span>
             <div className="panel-metric">
               {metric === 'gross' && <>{fmtCurrency(kpis.gross, cur, 0)}
                 <span className={`delta ${deltaFor(kpis.gross, prev.gross).trend}`}>{deltaFor(kpis.gross, prev.gross).delta}</span></>}
@@ -201,7 +201,7 @@ function OverviewPage({ filters }) {
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
             <div className="metric-seg">
-              {[['gross','Gross'],['net','Net'],['orders','Orders'],['aov','AOV'],['approvalRate','Approval']].map(([k, l]) => (
+              {[['gross','Bruto'],['net','Líquido'],['orders','Pedidos'],['aov','AOV'],['approvalRate','Aprovação']].map(([k, l]) => (
                 <button key={k} className={`metric-opt ${metric === k ? 'is-active' : ''}`} onClick={() => setMetric(k)}>{l}</button>
               ))}
             </div>
@@ -218,18 +218,18 @@ function OverviewPage({ filters }) {
         <div className="panel">
           <div className="panel-head">
             <div className="panel-title">
-              <span className="panel-eyebrow">REVENUE BY PRODUCT TYPE</span>
-              <div className="panel-sub">Approved orders only · gross</div>
+              <span className="panel-eyebrow">RECEITA POR TIPO DE PRODUTO</span>
+              <div className="panel-sub">Apenas pedidos aprovados · receita bruta</div>
             </div>
           </div>
-          <Donut items={typeItems} totalLabel="Approved" format={(v) => fmtCurrency(v, cur, 0)}/>
+          <Donut items={typeItems} totalLabel="Aprovado" format={(v) => fmtCurrency(v, cur, 0)}/>
         </div>
 
         <div className="panel">
           <div className="panel-head">
             <div className="panel-title">
-              <span className="panel-eyebrow">REVENUE BY COUNTRY</span>
-              <div className="panel-sub">Top 8 · approved gross</div>
+              <span className="panel-eyebrow">RECEITA POR PAÍS</span>
+              <div className="panel-sub">Top 8 · receita bruta aprovada</div>
             </div>
           </div>
           <CountryBars data={countryData} maxValue={maxCountry} currency={cur}/>
@@ -240,8 +240,8 @@ function OverviewPage({ filters }) {
         <div className="panel">
           <div className="panel-head">
             <div className="panel-title">
-              <span className="panel-eyebrow">TOP 5 AFFILIATES</span>
-              <div className="panel-sub">Ranked by gross revenue</div>
+              <span className="panel-eyebrow">TOP 5 AFILIADOS</span>
+              <div className="panel-sub">Ordenados por receita bruta</div>
             </div>
           </div>
           <div className="tbl-wrap">
@@ -249,12 +249,12 @@ function OverviewPage({ filters }) {
               <thead>
                 <tr>
                   <th style={{ width: 28 }}>#</th>
-                  <th>Affiliate</th>
-                  <th>Platform</th>
-                  <th className="num">Orders</th>
-                  <th className="num">Revenue</th>
-                  <th className="num">Approval</th>
-                  <th className="num">Net margin</th>
+                  <th>Afiliado</th>
+                  <th>Plataforma</th>
+                  <th className="num">Pedidos</th>
+                  <th className="num">Receita</th>
+                  <th className="num">Aprovação</th>
+                  <th className="num">Margem</th>
                 </tr>
               </thead>
               <tbody>
@@ -263,6 +263,7 @@ function OverviewPage({ filters }) {
                     Sem afiliados no período
                   </td></tr>
                 )}
+                {/* placeholder mantido em PT-BR */}
                 {topAffiliates.map((a, i) => {
                   const plat = PLATFORM_VARIANTS[a.platformSlug] || { short: a.platformSlug.toUpperCase(), className: 'plat-cb' };
                   const apClass = a.approvalRate > 0.7 ? 'val-ok' : a.approvalRate > 0.5 ? 'val-warn' : 'val-bad';
@@ -297,8 +298,8 @@ function OverviewPage({ filters }) {
         <div className="panel">
           <div className="panel-head">
             <div className="panel-title">
-              <span className="panel-eyebrow">PLATFORM HEALTH</span>
-              <div className="panel-sub">Live connector status</div>
+              <span className="panel-eyebrow">SAÚDE DAS PLATAFORMAS</span>
+              <div className="panel-sub">Status dos connectors em tempo real</div>
             </div>
           </div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>

@@ -6,28 +6,28 @@ const { useState: useStateS, useEffect: useEffectS, useRef: useRefS } = React;
 function Sidebar({ active, onNav }) {
   const groups = [
     {
-      label: 'Analytics',
+      label: 'Análise',
       items: [
-        { id: 'overview', label: 'Overview', icon: 'layout-dashboard' },
-        { id: 'funnel',   label: 'Funnel Analytics', icon: 'bar-chart-3' },
+        { id: 'overview', label: 'Visão geral', icon: 'layout-dashboard' },
+        { id: 'funnel',   label: 'Funil', icon: 'bar-chart-3' },
       ]
     },
     {
-      label: 'Affiliates',
+      label: 'Afiliados',
       items: [
-        { id: 'leaderboard', label: 'Leaderboard', icon: 'trophy', badge: '34' },
-        { id: 'all-affiliates', label: 'All affiliates', icon: 'users' },
+        { id: 'leaderboard', label: 'Ranking', icon: 'trophy' },
+        { id: 'all-affiliates', label: 'Todos os afiliados', icon: 'users' },
       ]
     },
     {
-      label: 'Catalog',
+      label: 'Catálogo',
       items: [
-        { id: 'products', label: 'Products / Offers', icon: 'package' },
-        { id: 'transactions', label: 'Transactions', icon: 'receipt' },
+        { id: 'products', label: 'Produtos / Ofertas', icon: 'package' },
+        { id: 'transactions', label: 'Transações', icon: 'receipt' },
       ]
     },
     {
-      label: 'System',
+      label: 'Sistema',
       items: [
         { id: 'platforms', label: 'Plataformas', icon: 'plug' },
       ]
@@ -68,9 +68,9 @@ function Sidebar({ active, onNav }) {
           </span>
         </div>
         <div className="user-chip">
-          <div className="av">LM</div>
+          <div className="av">NS</div>
           <div className="who">
-            <span className="nm">Luiza Mendes</span>
+            <span className="nm">NorthScale Admin</span>
             <span className="rl">OWNER · ADMIN</span>
           </div>
         </div>
@@ -97,18 +97,18 @@ function Topbar({ title, titleEm, crumbs, onToggleCurrency, currency }) {
       </div>
       <div className="top-spacer"/>
       <div className="top-actions">
-        <button className="btn btn-ghost" title="Refresh data">
-          <Icon name="refresh" size={13}/> Synced 2m ago
+        <button className="btn btn-ghost" title="Atualizar dados">
+          <Icon name="refresh" size={13}/> Sincronizado há 2 min
         </button>
         <button className="btn btn-ghost">
-          <Icon name="download" size={13}/> Export
+          <Icon name="download" size={13}/> Exportar
         </button>
-        <button className="icon-btn" title="Notifications">
+        <button className="icon-btn" title="Notificações">
           <Icon name="bell" size={14}/>
           <span className="pip"/>
         </button>
         <div className="user-chip" style={{ padding: '4px 8px 4px 4px', borderRadius: 6, margin: 0 }}>
-          <div className="av" style={{ width: 26, height: 26, fontSize: 11 }}>LM</div>
+          <div className="av" style={{ width: 26, height: 26, fontSize: 11 }}>NS</div>
         </div>
       </div>
     </header>
@@ -125,7 +125,7 @@ function MultiSelect({ label, options, selected, onChange, icon }) {
     return () => document.removeEventListener('mousedown', onDoc);
   }, []);
   const isAll = selected.size === 0 || selected.size === options.length;
-  const pill = isAll ? 'All' : String(selected.size);
+  const pill = isAll ? 'Todos' : String(selected.size);
   return (
     <div ref={ref} style={{ position: 'relative' }}>
       <button className="select-btn" onClick={() => setOpen(v => !v)}>
@@ -143,9 +143,9 @@ function MultiSelect({ label, options, selected, onChange, icon }) {
         }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', padding: '4px 8px', marginBottom: 4 }}>
             <button className="dh-link" style={{ background: 'none', border: 0, color: 'var(--glow-cyan)', fontFamily: 'var(--f-mono)', fontSize: 10, letterSpacing: '0.08em', cursor: 'pointer' }}
-              onClick={() => onChange(new Set())}>ALL</button>
+              onClick={() => onChange(new Set())}>TODOS</button>
             <button className="dh-link" style={{ background: 'none', border: 0, color: 'var(--navy-300)', fontFamily: 'var(--f-mono)', fontSize: 10, letterSpacing: '0.08em', cursor: 'pointer' }}
-              onClick={() => onChange(new Set(options.map(o => o.id)))}>NONE</button>
+              onClick={() => onChange(new Set(options.map(o => o.id)))}>NENHUM</button>
           </div>
           <div style={{ maxHeight: 280, overflowY: 'auto' }}>
             {options.map(opt => {
@@ -186,8 +186,8 @@ function MultiSelect({ label, options, selected, onChange, icon }) {
 // ---------- Filter bar ----------
 function FilterBar({ filters, setFilters }) {
   const DATE_PRESETS = [
-    ['today', 'Today'], ['yesterday', 'Yesterday'], ['7d', '7D'], ['30d', '30D'],
-    ['mtd', 'MTD'], ['qtd', 'QTD'], ['ytd', 'YTD'], ['90d', '90D']
+    ['today', 'Hoje'], ['yesterday', 'Ontem'], ['7d', '7D'], ['30d', '30D'],
+    ['mtd', 'Mês'], ['qtd', 'Trimestre'], ['ytd', 'Ano'], ['90d', '90D']
   ];
 
   const platformOpts = window.MOCK.PLATFORMS.map(p => ({ id: p.id, label: p.name, swatch: p.id === 'digistore24' ? '#8B7FFF' : '#5BC8FF' }));
@@ -197,7 +197,7 @@ function FilterBar({ filters, setFilters }) {
   return (
     <div className="filters">
       <Icon name="filter" size={12} className="f-icon" />
-      <span className="f-label">RANGE</span>
+      <span className="f-label">PERÍODO</span>
       <div className="seg">
         {DATE_PRESETS.map(([k, l]) => (
           <button key={k} className={filters.preset === k ? 'is-active' : ''}
@@ -209,21 +209,21 @@ function FilterBar({ filters, setFilters }) {
         <Icon name="calendar" size={12}/>
         <span>{fmtDateShort(filters.dateRange.start)} → {fmtDateShort(filters.dateRange.end)}</span>
       </div>
-      <span className="f-label" style={{ marginLeft: 8 }}>COMPARE</span>
+      <span className="f-label" style={{ marginLeft: 8 }}>COMPARAR</span>
       <button className={`chip ${filters.compare ? 'is-active' : ''}`}
         onClick={() => setFilters(f => ({ ...f, compare: !f.compare }))}
       >
         <Icon name="arrow-up-right" size={12}/>
-        Prev period
+        Período anterior
       </button>
 
       <div style={{ flex: 1 }}/>
 
-      <MultiSelect label="Platform" icon="plug" options={platformOpts} selected={filters.platforms}
+      <MultiSelect label="Plataforma" icon="plug" options={platformOpts} selected={filters.platforms}
         onChange={(s) => setFilters(f => ({ ...f, platforms: s }))}/>
-      <MultiSelect label="Offer" icon="package" options={productOpts} selected={filters.funnels}
+      <MultiSelect label="Oferta" icon="package" options={productOpts} selected={filters.funnels}
         onChange={(s) => setFilters(f => ({ ...f, funnels: s }))}/>
-      <MultiSelect label="Country" icon="globe" options={countryOpts} selected={filters.countries}
+      <MultiSelect label="País" icon="globe" options={countryOpts} selected={filters.countries}
         onChange={(s) => setFilters(f => ({ ...f, countries: s }))}/>
     </div>
   );

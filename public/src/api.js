@@ -119,6 +119,23 @@ async function fetchProducts(filters) {
 }
 
 /**
+ * Fetch /api/metrics/affiliates/:externalId — drill-down detail for one affiliate.
+ *
+ * Returns { affiliate, kpis, ltv, daily, byProduct, byCountry, flags }.
+ * 404 if affiliate not found in DB.
+ */
+async function fetchAffiliateDetail(externalId, filters, platformHint) {
+  const params = {
+    start_date: toISODate(filters.dateRange.start),
+    end_date: toISODate(filters.dateRange.end),
+    platforms: setToCSV(filters.platforms),
+    countries: setToCSV(filters.countries),
+    platform: platformHint || null,
+  };
+  return fetchJSON(`/api/metrics/affiliates/${encodeURIComponent(externalId)}`, params);
+}
+
+/**
  * Fetch /api/metrics/funnel.
  *
  * Returns { stages, summary } — funnel stages FE → Bump → Upsell1 → Upsell2 → Downsell
@@ -138,6 +155,7 @@ window.NSApi = {
   fetchOverview,
   fetchOrders,
   fetchAffiliates,
+  fetchAffiliateDetail,
   fetchPlatforms,
   fetchProducts,
   fetchFunnel,

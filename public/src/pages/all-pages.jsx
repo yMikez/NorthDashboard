@@ -219,53 +219,53 @@ function LeaderboardPage({ filters, onOpenAffiliate }) {
     <div className="page-in">
       <div className="page-head">
         <div className="lead">
-          <span className="eyebrow">AFFILIATES · LEADERBOARD</span>
-          <h2>Who's <em>pulling the weight</em>.</h2>
-          <span className="sub">Volume vs. toxicity · flagged rows need attention</span>
+          <span className="eyebrow">AFILIADOS · RANKING</span>
+          <h2>Quem está <em>puxando o resultado</em>.</h2>
+          <span className="sub">Volume vs. risco · linhas marcadas precisam de atenção</span>
         </div>
         <div className="page-head-actions">
-          <button className="btn btn-ghost"><Icon name="download" size={12}/> Export CSV</button>
+          <button className="btn btn-ghost"><Icon name="download" size={12}/> Exportar CSV</button>
         </div>
       </div>
 
       <div className="mini-kpis">
         <div className="mini-kpi">
-          <div className="l">Active affiliates</div>
+          <div className="l">Afiliados ativos</div>
           <div className="v">{summary.activeNow}</div>
           <div className="s">
             <span style={{ color: summary.activeNow >= summary.activePrev ? 'var(--success)' : 'var(--danger)' }}>
               {summary.activeNow >= summary.activePrev ? '↗' : '↘'} {Math.abs(summary.activeNow - summary.activePrev)}
-            </span> vs prev period
+            </span> vs período anterior
           </div>
         </div>
         <div className={`mini-kpi ${summary.concentration > 0.6 ? 'is-alert' : ''}`}
           style={summary.concentration > 0.6 ? { borderColor: 'rgba(239,68,68,0.35)' } : {}}>
-          <div className="l">Top 5 concentration</div>
+          <div className="l">Concentração top 5</div>
           <div className="v" style={summary.concentration > 0.6 ? { color: 'var(--danger)' } : {}}>
             {(summary.concentration * 100).toFixed(0)}%
           </div>
-          <div className="s">{summary.concentration > 0.6 ? '⚠ concentration risk · over 60%' : 'healthy distribution'}</div>
+          <div className="s">{summary.concentration > 0.6 ? '⚠ risco de concentração · acima de 60%' : 'distribuição saudável'}</div>
         </div>
         <div className="mini-kpi">
-          <div className="l">New affiliates</div>
+          <div className="l">Novos afiliados</div>
           <div className="v">{summary.newAff}</div>
-          <div className="s">first sale in period</div>
+          <div className="s">primeira venda no período</div>
         </div>
         <div className="mini-kpi">
-          <div className="l">Churned</div>
+          <div className="l">Inativos</div>
           <div className="v" style={{ color: summary.churnedAff > 3 ? 'var(--warning)' : 'inherit' }}>{summary.churnedAff}</div>
-          <div className="s">active prev · silent now</div>
+          <div className="s">ativos antes · silenciosos agora</div>
         </div>
       </div>
 
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '4px 0 12px', flexWrap: 'wrap' }}>
-        <span className="f-label">SORT BY</span>
+        <span className="f-label">ORDENAR POR</span>
         <div className="seg">
-          {[['revenue','Revenue'],['orders','Orders'],['netMargin','Net margin'],['approvalRate','Approval'],['refundRate','Refunds'],['chargebackRate','Chargebacks']].map(([k,l]) => (
+          {[['revenue','Receita'],['orders','Pedidos'],['netMargin','Margem'],['approvalRate','Aprovação'],['refundRate','Reembolsos'],['chargebackRate','Chargebacks']].map(([k,l]) => (
             <button key={k} className={sortBy === k ? 'is-active' : ''} onClick={() => setSortBy(k)}>{l}</button>
           ))}
         </div>
-        <span className="f-label" style={{ marginLeft: 10 }}>MIN ORDERS</span>
+        <span className="f-label" style={{ marginLeft: 10 }}>MÍN. PEDIDOS</span>
         <div className="seg">
           {[1, 5, 10, 25].map(n => (
             <button key={n} className={minOrders === n ? 'is-active' : ''} onClick={() => setMinOrders(n)}>{n}+</button>
@@ -283,17 +283,17 @@ function LeaderboardPage({ filters, onOpenAffiliate }) {
             <thead>
               <tr>
                 <th style={{ width: 36 }}>#</th>
-                <th>Affiliate</th>
-                <th>Platform</th>
-                <th className="num">Orders</th>
-                <th className="num">Gross rev.</th>
-                <th>Approval</th>
-                <th className="num">Refund</th>
+                <th>Afiliado</th>
+                <th>Plataforma</th>
+                <th className="num">Pedidos</th>
+                <th className="num">Receita</th>
+                <th>Aprovação</th>
+                <th className="num">Reembolso</th>
                 <th className="num">Chargeback</th>
-                <th className="num">CPA paid</th>
-                <th className="num">Net margin</th>
-                <th>Top country</th>
-                <th>30d trend</th>
+                <th className="num">CPA pago</th>
+                <th className="num">Margem</th>
+                <th>País principal</th>
+                <th>Tendência 30d</th>
               </tr>
             </thead>
             <tbody>
@@ -352,63 +352,67 @@ function LeaderboardPage({ filters, onOpenAffiliate }) {
 
 // ---------- AFFILIATE DRAWER (drill-down) ----------
 function AffiliateDrawer({ affiliateId, filters, onClose }) {
-  const aff = window.MOCK.affiliates.find(a => a.id === affiliateId);
-  if (!aff) {
+  const [state, setDState] = useState({ status: 'loading', data: null, error: null });
+
+  useEffect(() => {
+    let cancelled = false;
+    setDState((s) => ({ ...s, status: 'loading' }));
+    window.NSApi.fetchAffiliateDetail(affiliateId, filters)
+      .then((data) => { if (!cancelled) setDState({ status: 'ready', data, error: null }); })
+      .catch((err) => {
+        if (cancelled) return;
+        console.error('fetchAffiliateDetail failed', err);
+        setDState({ status: 'error', data: null, error: err.message || String(err) });
+      });
+    return () => { cancelled = true; };
+  }, [affiliateId, filters.dateRange.start.getTime(), filters.dateRange.end.getTime(),
+      Array.from(filters.platforms).join(','), Array.from(filters.countries).join(',')]);
+
+  const cur = filters.currency || 'USD';
+  const data = state.data;
+
+  // Loading/error guards
+  if (state.status === 'loading' || (state.status === 'error' && !data)) {
     return (
       <>
         <div className="drawer-backdrop" onClick={onClose}/>
         <div className="drawer">
           <div className="drawer-head">
             <div className="drawer-aff">
-              <div className="av-lg">?</div>
+              <div className="av-lg" style={{ background: avatarColor(affiliateId) }}>{initials(affiliateId)}</div>
               <div>
                 <h3>{affiliateId}</h3>
-                <div className="sub">Drill-down em construção — endpoint /api/metrics/affiliates/:id vem na próxima fase</div>
-              </div>
-            </div>
-            <button className="icon-btn" onClick={onClose}><Icon name="x" size={14}/></button>
-          </div>
-          <div className="drawer-body" style={{ opacity: 0.7 }}>
-            <div className="panel">
-              <div className="panel-head">
-                <div className="panel-title">
-                  <span className="panel-eyebrow">EM BREVE</span>
-                  <div className="panel-sub">
-                    Por enquanto, use a Leaderboard/All affiliates pra ver números consolidados desse afiliado.
-                  </div>
+                <div className="sub">
+                  {state.status === 'loading' ? 'Carregando dados do afiliado…' : `Erro: ${state.error}`}
                 </div>
               </div>
             </div>
+            <button className="icon-btn" onClick={onClose}><Icon name="x" size={14}/></button>
           </div>
         </div>
       </>
     );
   }
 
-  const filtered = window.MOCK.orders.filter(o => o.affiliateId === affiliateId);
-  const inRange = filtered.filter(o => {
-    const t = new Date(o.createdAt).getTime();
-    return t >= filters.dateRange.start.getTime() && t <= filters.dateRange.end.getTime();
-  });
-  const k = aggregateKPIs(inRange);
-  const buckets = bucketByDay(inRange, filters.dateRange);
+  if (!data) return null;
 
-  // flags
-  const flags = [];
-  if (k.cbRate > 0.01) flags.push({ kind: 'bad', title: 'High chargeback rate', desc: `${(k.cbRate * 100).toFixed(2)}% chargebacks — above 1.0% MCC threshold. Review traffic quality and payment method mix.` });
-  if (k.refundRate > 0.12) flags.push({ kind: 'warn', title: 'Refund rate elevated', desc: `${(k.refundRate * 100).toFixed(1)}% refunds vs 6% benchmark. Check post-purchase promises on landing pages.` });
-  if (k.approvalRate < 0.55) flags.push({ kind: 'bad', title: 'Low approval rate', desc: `Only ${(k.approvalRate * 100).toFixed(1)}% of checkouts approved. Common in cold traffic or aggressive retargeting.` });
+  const aff = data.affiliate;
+  const k = data.kpis;
+  const displayName = aff.nickname || aff.externalId;
+  const platShort = aff.platformSlug === 'digistore24' ? 'D24' : 'CB';
+  const platClass = aff.platformSlug === 'digistore24' ? 'plat-d24' : 'plat-cb';
+  const joinedDaysAgo = Math.floor((Date.now() - new Date(aff.firstSeenAt).getTime()) / 86400000);
 
-  // by offer
-  const byOffer = {};
-  for (const o of inRange) {
-    if (o.status !== 'approved') continue;
-    byOffer[o.productId] = byOffer[o.productId] || { revenue: 0, orders: 0 };
-    byOffer[o.productId].revenue += o.grossAmount;
-    byOffer[o.productId].orders += 1;
-  }
-
-  const cur = filters.currency;
+  // Convert daily series to LineChart buckets shape
+  const buckets = data.daily.map((d) => ({
+    date: new Date(d.date),
+    gross: d.revenue,
+    net: d.revenue,
+    cpa: 0,
+    orders: d.orders,
+    approvedOrders: d.orders,
+    allOrders: d.allOrders,
+  }));
 
   return (
     <>
@@ -416,32 +420,78 @@ function AffiliateDrawer({ affiliateId, filters, onClose }) {
       <div className="drawer">
         <div className="drawer-head">
           <div className="drawer-aff">
-            <div className="av-lg" style={{ background: avatarColor(aff.id) }}>{initials(aff.name)}</div>
+            <div className="av-lg" style={{ background: avatarColor(aff.externalId) }}>{initials(displayName)}</div>
             <div>
-              <h3>{aff.nickname}</h3>
-              <div className="sub">{aff.id} · {aff.name} · joined {aff.joinedDaysAgo}d ago</div>
+              <h3>{displayName}</h3>
+              <div className="sub">
+                <span className={`plat ${platClass}`} style={{ marginRight: 8 }}>{platShort}</span>
+                {aff.externalId} · entrou há {joinedDaysAgo}d
+              </div>
             </div>
           </div>
           <button className="icon-btn" onClick={onClose}><Icon name="x" size={14}/></button>
         </div>
         <div className="drawer-body">
           <div className="mini-kpis">
-            <div className="mini-kpi"><div className="l">Revenue</div><div className="v">{fmtCurrency(k.gross, cur, 0)}</div><div className="s">{fmtInt(k.approvedCount)} approved orders</div></div>
-            <div className="mini-kpi"><div className="l">Approval rate</div><div className="v">{(k.approvalRate * 100).toFixed(1)}%</div><div className="s">{fmtInt(k.totalCount)} attempts</div></div>
-            <div className="mini-kpi"><div className="l">Refund rate</div><div className="v">{(k.refundRate * 100).toFixed(1)}%</div><div className="s">target &lt;6%</div></div>
-            <div className="mini-kpi"><div className="l">Chargeback</div><div className="v" style={{ color: k.cbRate > 0.01 ? 'var(--danger)' : 'inherit' }}>{(k.cbRate * 100).toFixed(2)}%</div><div className="s">MCC limit 1.0%</div></div>
+            <div className="mini-kpi">
+              <div className="l">Receita · período</div>
+              <div className="v">{fmtCurrency(k.revenue, cur, 0)}</div>
+              <div className="s">{fmtInt(k.orders)} pedidos aprovados</div>
+            </div>
+            <div className="mini-kpi">
+              <div className="l">Approval rate</div>
+              <div className="v">{k.allOrders ? (k.approvalRate * 100).toFixed(1) + '%' : '—'}</div>
+              <div className="s">{fmtInt(k.allOrders)} tentativas</div>
+            </div>
+            <div className="mini-kpi">
+              <div className="l">Refund rate</div>
+              <div className="v">{k.allOrders ? (k.refundRate * 100).toFixed(1) + '%' : '—'}</div>
+              <div className="s">meta &lt;6%</div>
+            </div>
+            <div className="mini-kpi">
+              <div className="l">Chargeback</div>
+              <div className="v" style={{ color: k.cbRate > 0.01 ? 'var(--danger)' : 'inherit' }}>
+                {k.allOrders ? (k.cbRate * 100).toFixed(2) + '%' : '—'}
+              </div>
+              <div className="s">limite MCC 1.0%</div>
+            </div>
           </div>
 
-          {flags.length > 0 && (
+          <div className="mini-kpis" style={{ marginTop: 0 }}>
+            <div className="mini-kpi">
+              <div className="l">CPA pago · período</div>
+              <div className="v">{fmtCurrency(k.cpa, cur, 0)}</div>
+              <div className="s">total transferido ao afiliado</div>
+            </div>
+            <div className="mini-kpi">
+              <div className="l">Net margin</div>
+              <div className="v" style={{ color: k.netMargin > 0 ? 'var(--success)' : 'var(--danger)' }}>
+                {fmtCurrency(k.netMargin, cur, 0)}
+              </div>
+              <div className="s">net − CPA</div>
+            </div>
+            <div className="mini-kpi">
+              <div className="l">AOV</div>
+              <div className="v">{fmtCurrency(k.aov, cur, 0)}</div>
+              <div className="s">ticket médio aprovado</div>
+            </div>
+            <div className="mini-kpi">
+              <div className="l">LTV total</div>
+              <div className="v">{fmtCurrency(data.ltv.revenue, cur, 0)}</div>
+              <div className="s">{fmtInt(data.ltv.orders)} pedidos · all-time</div>
+            </div>
+          </div>
+
+          {data.flags.length > 0 && (
             <div className="panel">
               <div className="panel-head">
                 <div className="panel-title">
-                  <span className="panel-eyebrow">AUTO FLAGS</span>
-                  <div className="panel-sub">Detected from current period</div>
+                  <span className="panel-eyebrow">SINAIS AUTOMÁTICOS</span>
+                  <div className="panel-sub">Detectados no período atual</div>
                 </div>
               </div>
               <div className="drawer-flags">
-                {flags.map((f, i) => (
+                {data.flags.map((f, i) => (
                   <div key={i} className={`flag-card ${f.kind}`}>
                     <Icon name="alert-triangle" size={14}/>
                     <div className="ft"><div className="t">{f.title}</div><div className="d">{f.desc}</div></div>
@@ -454,29 +504,77 @@ function AffiliateDrawer({ affiliateId, filters, onClose }) {
           <div className="panel">
             <div className="panel-head">
               <div className="panel-title">
-                <span className="panel-eyebrow">REVENUE · PERIOD</span>
-                <div className="panel-sub">Daily gross for {aff.nickname}</div>
+                <span className="panel-eyebrow">RECEITA DIÁRIA · PERÍODO</span>
+                <div className="panel-sub">Gross aprovado de {displayName}</div>
               </div>
             </div>
-            <LineChart buckets={buckets} metric="gross" height={200} currency={cur}/>
+            {buckets.length > 0
+              ? <LineChart buckets={buckets} metric="gross" height={200} currency={cur}/>
+              : <div style={{ padding: 24, textAlign: 'center', opacity: 0.6 }}>Sem vendas no período</div>}
           </div>
 
-          <div className="panel">
-            <div className="panel-head">
-              <div className="panel-title">
-                <span className="panel-eyebrow">BREAKDOWN BY OFFER</span>
+          {data.byProduct.length > 0 && (
+            <div className="panel">
+              <div className="panel-head">
+                <div className="panel-title">
+                  <span className="panel-eyebrow">VENDAS POR OFERTA</span>
+                  <div className="panel-sub">Aprovados, ordenados por receita</div>
+                </div>
               </div>
+              <table className="tbl">
+                <thead>
+                  <tr>
+                    <th>Oferta</th>
+                    <th>Tipo</th>
+                    <th className="num">Pedidos</th>
+                    <th className="num">Receita</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {data.byProduct.map((p) => (
+                    <tr key={p.externalId}>
+                      <td>
+                        <div>{p.name}</div>
+                        <div className="cell-mono" style={{ fontSize: 10, color: 'var(--navy-400)' }}>{p.externalId}</div>
+                      </td>
+                      <td><span className="badge neutral">{p.productType.toLowerCase()}</span></td>
+                      <td className="num cell-mono">{fmtInt(p.orders)}</td>
+                      <td className="num cell-mono">{fmtCurrency(p.revenue, cur, 0)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
             </div>
-            <table className="tbl">
-              <thead><tr><th>Offer</th><th className="num">Orders</th><th className="num">Revenue</th></tr></thead>
-              <tbody>
-                {Object.entries(byOffer).sort((a,b) => b[1].revenue - a[1].revenue).map(([pid, v]) => {
-                  const p = window.MOCK.PRODUCTS.find(x => x.id === pid);
-                  return <tr key={pid}><td>{p?.name || pid}</td><td className="num cell-mono">{fmtInt(v.orders)}</td><td className="num cell-mono">{fmtCurrency(v.revenue, cur, 0)}</td></tr>;
-                })}
-              </tbody>
-            </table>
-          </div>
+          )}
+
+          {data.byCountry.length > 0 && (
+            <div className="panel">
+              <div className="panel-head">
+                <div className="panel-title">
+                  <span className="panel-eyebrow">PAÍSES · TOP 8</span>
+                  <div className="panel-sub">Receita aprovada por país</div>
+                </div>
+              </div>
+              <table className="tbl">
+                <thead>
+                  <tr>
+                    <th>País</th>
+                    <th className="num">Pedidos</th>
+                    <th className="num">Receita</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {data.byCountry.map((c) => (
+                    <tr key={c.code}>
+                      <td className="cell-mono">{c.code}</td>
+                      <td className="num cell-mono">{fmtInt(c.orders)}</td>
+                      <td className="num cell-mono">{fmtCurrency(c.revenue, cur, 0)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
         </div>
       </div>
     </>
@@ -514,19 +612,19 @@ function AllAffiliatesPage({ filters, onOpenAffiliate }) {
     <div className="page-in">
       <div className="page-head">
         <div className="lead">
-          <span className="eyebrow">AFFILIATES · DIRECTORY</span>
-          <h2>All <em>affiliates</em></h2>
-          <span className="sub">{rows.length} total · searchable · export-ready</span>
+          <span className="eyebrow">AFILIADOS · DIRETÓRIO</span>
+          <h2>Todos os <em>afiliados</em></h2>
+          <span className="sub">{rows.length} no total · pesquisável · pronto pra exportar</span>
         </div>
         <div className="page-head-actions">
           <div className="select-btn" style={{ padding: '0 10px', width: 260 }}>
             <Icon name="search" size={13}/>
             <input value={query} onChange={(e) => setQuery(e.target.value)}
-              placeholder="Search by nickname or ID..."
+              placeholder="Buscar por nickname ou ID..."
               style={{ background: 'transparent', border: 0, color: 'var(--white)', outline: 'none', flex: 1, fontFamily: 'var(--f-body)', fontSize: 12 }}
             />
           </div>
-          <button className="btn btn-ghost"><Icon name="download" size={12}/> Export CSV</button>
+          <button className="btn btn-ghost"><Icon name="download" size={12}/> Exportar CSV</button>
         </div>
       </div>
 
@@ -539,11 +637,11 @@ function AllAffiliatesPage({ filters, onOpenAffiliate }) {
           <table className="tbl">
             <thead>
               <tr>
-                <th>Affiliate</th><th>Platform</th>
-                <th className="num">Rev · period</th><th className="num">Orders · period</th>
-                <th className="num">Approval</th><th className="num">Refund</th>
-                <th className="num">LTV revenue</th><th className="num">LTV orders</th>
-                <th>First sale</th><th>Last sale</th><th></th>
+                <th>Afiliado</th><th>Plataforma</th>
+                <th className="num">Receita · período</th><th className="num">Pedidos · período</th>
+                <th className="num">Aprovação</th><th className="num">Reembolso</th>
+                <th className="num">Receita LTV</th><th className="num">Pedidos LTV</th>
+                <th>1ª venda</th><th>Última venda</th><th></th>
               </tr>
             </thead>
             <tbody>
@@ -640,8 +738,8 @@ function ProductsPage({ filters }) {
     <div className="page-in">
       <div className="page-head">
         <div className="lead">
-          <span className="eyebrow">PRODUCTS · OFFERS</span>
-          <h2>Catalog <em>performance</em></h2>
+          <span className="eyebrow">PRODUTOS · OFERTAS</span>
+          <h2>Performance <em>do catálogo</em></h2>
           <span className="sub">{products.length} de {allProducts.length} SKUs · clica num card pra abrir detalhes</span>
         </div>
         <div className="page-head-actions">
@@ -655,14 +753,14 @@ function ProductsPage({ filters }) {
               <Icon name="package" size={11}/> Cards
             </button>
             <button className={view === 'table' ? 'is-active' : ''} onClick={() => setView('table')}>
-              <Icon name="receipt" size={11}/> Table
+              <Icon name="receipt" size={11}/> Tabela
             </button>
           </div>
         </div>
       </div>
 
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '4px 0 14px', flexWrap: 'wrap' }}>
-        <span className="f-label">TIPO</span>
+        <span className="f-label">TIPO DE PRODUTO</span>
         <div className="seg">
           {[
             ['all', 'Todos'],
@@ -725,14 +823,14 @@ function ProductsPage({ filters }) {
                   )}
                 </div>
                 <div className="prod-stats">
-                  <div className="prod-stat"><div className="l">Revenue</div><div className="v">{fmtCurrency(p.revenue, cur, 0)}</div></div>
-                  <div className="prod-stat"><div className="l">Orders</div><div className="v">{fmtInt(p.orders)}</div></div>
+                  <div className="prod-stat"><div className="l">Receita</div><div className="v">{fmtCurrency(p.revenue, cur, 0)}</div></div>
+                  <div className="prod-stat"><div className="l">Pedidos</div><div className="v">{fmtInt(p.orders)}</div></div>
                   <div className="prod-stat"><div className="l">AOV</div><div className="v sm">{fmtCurrency(aov, cur, 0)}</div></div>
-                  <div className="prod-stat"><div className="l">Approval</div><div className="v sm" style={{ color: p.allOrders ? apColor : 'var(--navy-400)' }}>
+                  <div className="prod-stat"><div className="l">Aprovação</div><div className="v sm" style={{ color: p.allOrders ? apColor : 'var(--navy-400)' }}>
                     {p.allOrders ? (p.approvalRate * 100).toFixed(1) + '%' : '—'}
                   </div></div>
-                  <div className="prod-stat"><div className="l">Net margin</div><div className="v sm" style={{ color: margin > 0 ? 'var(--success)' : 'var(--danger)' }}>{fmtCurrency(margin, cur, 0)}</div></div>
-                  <div className="prod-stat"><div className="l">Margin %</div><div className="v sm" style={{ color: marginPct > 0.2 ? 'var(--success)' : marginPct > 0.1 ? 'var(--warning)' : 'var(--danger)' }}>{(marginPct * 100).toFixed(1)}%</div></div>
+                  <div className="prod-stat"><div className="l">Margem</div><div className="v sm" style={{ color: margin > 0 ? 'var(--success)' : 'var(--danger)' }}>{fmtCurrency(margin, cur, 0)}</div></div>
+                  <div className="prod-stat"><div className="l">Margem %</div><div className="v sm" style={{ color: marginPct > 0.2 ? 'var(--success)' : marginPct > 0.1 ? 'var(--warning)' : 'var(--danger)' }}>{(marginPct * 100).toFixed(1)}%</div></div>
                 </div>
                 {p.lastSoldAt && (
                   <div style={{ marginTop: 10, paddingTop: 10, borderTop: '1px solid rgba(91,200,255,0.15)', fontSize: 11, color: 'var(--navy-300)', display: 'flex', justifyContent: 'space-between', fontFamily: 'var(--f-mono)' }}>
@@ -752,17 +850,17 @@ function ProductsPage({ filters }) {
             <table className="tbl">
               <thead>
                 <tr>
-                  <th>Product</th>
-                  <th>External ID</th>
-                  <th>Type</th>
-                  <th>Platform</th>
+                  <th>Produto</th>
+                  <th>ID externo</th>
+                  <th>Tipo</th>
+                  <th>Plataforma</th>
                   <th>Vendor</th>
-                  <th className="num">Orders</th>
-                  <th className="num">Approval</th>
-                  <th className="num">Revenue</th>
-                  <th className="num">Net margin</th>
+                  <th className="num">Pedidos</th>
+                  <th className="num">Aprovação</th>
+                  <th className="num">Receita</th>
+                  <th className="num">Margem</th>
                   <th className="num">CPA</th>
-                  <th>Last sale</th>
+                  <th>Última venda</th>
                 </tr>
               </thead>
               <tbody>
@@ -802,7 +900,7 @@ function ProductsPage({ filters }) {
         </div>
       )}
 
-      {/* Compact summary by type at the bottom (was the old card layout, now context not headline) */}
+      {/* Resumo por tipo no rodapé — contexto, não headline */}
       {byType.some((b) => b.orders > 0) && (
         <div style={{ marginTop: 18 }}>
           <div style={{ fontFamily: 'var(--f-mono)', fontSize: 9, letterSpacing: '0.18em', color: 'var(--navy-400)', textTransform: 'uppercase', marginBottom: 10 }}>
@@ -820,7 +918,7 @@ function ProductsPage({ filters }) {
                     {fmtCurrency(b.revenue, cur, 0)}
                   </div>
                   <div style={{ fontSize: 11, color: 'var(--navy-300)' }}>
-                    {fmtInt(b.orders)} orders · {b.productCount} SKUs
+                    {fmtInt(b.orders)} pedidos · {b.productCount} SKUs
                   </div>
                 </div>
               );
@@ -873,16 +971,16 @@ function TransactionsPage({ filters }) {
     <div className="page-in">
       <div className="page-head">
         <div className="lead">
-          <span className="eyebrow">TRANSACTIONS · LEDGER</span>
-          <h2>Every <em>order</em>, every line.</h2>
+          <span className="eyebrow">TRANSAÇÕES · LEDGER</span>
+          <h2>Cada <em>pedido</em>, cada linha.</h2>
           <span className="sub">
-            Raw stream · {fmtInt(showing)} of {fmtInt(total)} rows{showing < total ? ' · 500 row cap · use filters to narrow' : ''}
+            Stream bruto · {fmtInt(showing)} de {fmtInt(total)} linhas{showing < total ? ' · cap de 500 linhas · use filtros pra refinar' : ''}
           </span>
         </div>
         <div className="page-head-actions">
           <div className="select-btn" style={{ padding: '0 10px', width: 240 }}>
             <Icon name="search" size={13}/>
-            <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search Order ID / Affiliate..."
+            <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Buscar por ID de pedido ou afiliado..."
               style={{ background: 'transparent', border: 0, color: 'var(--white)', outline: 'none', flex: 1, fontFamily: 'var(--f-mono)', fontSize: 12 }}/>
           </div>
           <button className="btn btn-ghost"><Icon name="download" size={12}/> CSV</button>
@@ -893,7 +991,7 @@ function TransactionsPage({ filters }) {
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '4px 0 12px', flexWrap: 'wrap' }}>
         <span className="f-label">STATUS</span>
         <div className="seg">
-          {[['all','All'],['approved','Approved'],['pending','Pending'],['refunded','Refunded'],['chargeback','Chargeback']].map(([k, l]) => (
+          {[['all','Todos'],['approved','Aprovados'],['pending','Pendentes'],['refunded','Reembolsados'],['chargeback','Chargeback']].map(([k, l]) => (
             <button key={k} className={statusFilter === k ? 'is-active' : ''} onClick={() => setStatusFilter(k)}>
               {l}<span style={{ marginLeft: 6, opacity: 0.5 }}>{fmtInt(statusCounts[k] || 0)}</span>
             </button>
@@ -910,11 +1008,11 @@ function TransactionsPage({ filters }) {
           <table className="tbl">
             <thead>
               <tr>
-                <th>Date/time</th><th>Order</th><th>Platform</th>
-                <th>Product</th><th>Affiliate</th>
-                <th>Country</th><th>Payment</th>
-                <th className="num">Gross</th><th className="num">Fees</th>
-                <th className="num">Net</th>
+                <th>Data/hora</th><th>Pedido</th><th>Plataforma</th>
+                <th>Produto</th><th>Afiliado</th>
+                <th>País</th><th>Pagamento</th>
+                <th className="num">Bruto</th><th className="num">Taxas</th>
+                <th className="num">Líquido</th>
                 <th>Status</th>
                 <th className="num">CPA</th>
               </tr>
@@ -987,8 +1085,8 @@ function IntegrationsPage({ filters }) {
     <div className="page-in">
       <div className="page-head">
         <div className="lead">
-          <span className="eyebrow">SYSTEM · PLATAFORMAS</span>
-          <h2>Platform <em>overview</em></h2>
+          <span className="eyebrow">SISTEMA · PLATAFORMAS</span>
+          <h2>Visão <em>das plataformas</em></h2>
           <span className="sub">Receita, pedidos e saúde dos connectors por plataforma no período selecionado</span>
         </div>
       </div>
@@ -1016,39 +1114,39 @@ function IntegrationsPage({ filters }) {
                   <div className="ph-logo">{short}</div>
                   <div className="txt">
                     <span className="nm">{p.displayName}</span>
-                    <span className="sync">Synced {syncLabel}</span>
+                    <span className="sync">Sincronizado {syncLabel}</span>
                   </div>
                 </div>
                 {healthy
-                  ? <span className="ph-status ok"><span className="led"/>HEALTHY</span>
-                  : <span className="badge warn">NO SYNC YET</span>
+                  ? <span className="ph-status ok"><span className="led"/>SAUDÁVEL</span>
+                  : <span className="badge warn">SEM SYNC</span>
                 }
               </div>
 
               <div className="ph-stats">
                 <div className="ph-stat">
-                  <div className="l">Revenue · período</div>
+                  <div className="l">Receita · período</div>
                   <div className="v">{fmtCurrency(p.totalRevenue, cur, 0)}</div>
                 </div>
                 <div className="ph-stat">
-                  <div className="l">Orders approved</div>
+                  <div className="l">Pedidos aprovados</div>
                   <div className="v">{fmtInt(p.totalOrders)}</div>
                 </div>
               </div>
 
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginTop: 10 }}>
                 <div className="ph-stat">
-                  <div className="l">Approval</div>
+                  <div className="l">Aprovação</div>
                   <div className={`v cell-mono ${apClass}`} style={{ fontSize: 18 }}>
                     {p.allOrders ? (p.approvalRate * 100).toFixed(1) + '%' : '—'}
                   </div>
                 </div>
                 <div className="ph-stat">
-                  <div className="l">Affiliates ativos</div>
+                  <div className="l">Afiliados ativos</div>
                   <div className="v" style={{ fontSize: 18 }}>
                     {fmtInt(p.affiliatesActive)}
                     <span style={{ fontSize: 11, color: 'var(--navy-300)', marginLeft: 6 }}>
-                      / {fmtInt(p.affiliatesTotal)} total
+                      / {fmtInt(p.affiliatesTotal)} no total
                     </span>
                   </div>
                 </div>
@@ -1057,7 +1155,7 @@ function IntegrationsPage({ filters }) {
               {p.topProduct && (
                 <div style={{ marginTop: 12, paddingTop: 10, borderTop: '1px solid rgba(91,200,255,0.15)' }}>
                   <div style={{ fontSize: 10, letterSpacing: '0.1em', color: 'var(--navy-300)', marginBottom: 4 }}>
-                    TOP PRODUCT
+                    TOP PRODUTO
                   </div>
                   <div style={{ fontSize: 13, color: 'var(--white)', display: 'flex', justifyContent: 'space-between', gap: 12 }}>
                     <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
@@ -1080,10 +1178,10 @@ function IntegrationsPage({ filters }) {
                 <div className="ph-logo" style={{ color: 'var(--navy-400)' }}>{p.short}</div>
                 <div className="txt">
                   <span className="nm">{p.displayName}</span>
-                  <span className="sync">Not configured</span>
+                  <span className="sync">Não configurado</span>
                 </div>
               </div>
-              <span className="badge neutral">SOON</span>
+              <span className="badge neutral">EM BREVE</span>
             </div>
             <div style={{ fontSize: 12, color: 'var(--navy-200)', lineHeight: 1.5, marginTop: 8 }}>
               {p.desc}
@@ -1100,11 +1198,11 @@ function fmtSyncAgo(iso) {
   const d = new Date(iso);
   const mins = Math.round((Date.now() - d.getTime()) / 60000);
   if (mins < 1) return 'agora';
-  if (mins < 60) return `${mins} min atrás`;
+  if (mins < 60) return `há ${mins} min`;
   const hrs = Math.round(mins / 60);
-  if (hrs < 24) return `${hrs}h atrás`;
+  if (hrs < 24) return `há ${hrs}h`;
   const days = Math.round(hrs / 24);
-  return `${days}d atrás`;
+  return `há ${days}d`;
 }
 
 function FXPage({ filters }) {

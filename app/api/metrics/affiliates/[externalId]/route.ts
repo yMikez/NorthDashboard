@@ -1,0 +1,56 @@
+import { NextResponse } from 'next/server';
+import { getAffiliateDetail } from '@/lib/services/metrics';
+import { logger } from '@/lib/logger';
+
+export const runtime = 'nodejs';
+export const dynamic = 'force-dynamic';
+
+export async function GET(
+  req: Request,
+  { params }: { params: Promise<{ externalId: string }> },
+) {
+  const { externalId } = await params;
+  if (!externalId) {
+    return NextResponse.json({ error: 'externalId is required' }, { status: 400 });
+  }
+
+  const { searchParams } = new URL(req.url);
+  const startRaw = searchParams.get('start_date');
+  const endRaw = searchParams.get('end_date');
+  if (!startRaw || !endRaw) {
+    return NextResponse.json(
+      { error: 'start_date and end_date are required (ISO 8601)' },
+      { status: 400 },
+    );
+  }
+  const startDate = new Date(startRaw);
+  const endDate = new Date(endRaw);
+  if (Number.isNaN(startDate.getTime()) || Number.isNaN(endDate.getTime())) {
+    return NextResponse.json({ error: 'invalid date format' }, { status: 400 });
+  }
+
+  const platformSlugs = csvParam(searchParams.get('platforms'));
+  const countries = csvParam(searchParams.get('countries'));
+  const platformHint = searchParams.get('platform') ?? undefined;
+
+  try {
+    const data = await getAffiliateDetail(
+      decodeURIComponent(externalId),
+      { startDate, endDate, platformSlugs, countries },
+      platformHint,
+    );
+    if (!data) {
+      return NextResponse.json({ error: 'affiliate not found' }, { status: 404 });
+    }
+    return NextResponse.json(data);
+  } catch (err) {
+    logger.error({ err }, 'metrics/affiliates/[externalId] failed');
+    return NextResponse.json({ error: 'query failed' }, { status: 500 });
+  }
+}
+
+function csvParam(raw: string | null): string[] | undefined {
+  if (!raw) return undefined;
+  const parts = raw.split(',').map((s) => s.trim()).filter(Boolean);
+  return parts.length ? parts : undefined;
+}

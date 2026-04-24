@@ -98,6 +98,43 @@ export interface PlatformsResponse {
   }>;
 }
 
+export interface AffiliateDetailResponse {
+  affiliate: {
+    externalId: string;
+    nickname: string | null;
+    platformSlug: string;
+    firstSeenAt: string;
+    lastOrderAt: string | null;
+  };
+  kpis: {
+    revenue: number;
+    orders: number;
+    allOrders: number;
+    refunds: number;
+    chargebacks: number;
+    approvalRate: number;
+    refundRate: number;
+    cbRate: number;
+    cpa: number;
+    netMargin: number;
+    aov: number;
+  };
+  ltv: {
+    revenue: number;
+    orders: number;
+  };
+  daily: Array<{ date: string; revenue: number; orders: number; allOrders: number }>;
+  byProduct: Array<{
+    externalId: string;
+    name: string;
+    productType: string;
+    orders: number;
+    revenue: number;
+  }>;
+  byCountry: Array<{ code: string; orders: number; revenue: number }>;
+  flags: Array<{ kind: 'bad' | 'warn'; title: string; desc: string }>;
+}
+
 export interface AffiliatesResponse {
   summary: {
     activeNow: number;
@@ -710,6 +747,205 @@ export async function getPlatforms(
         };
       })
       .sort((a, b) => b.totalRevenue - a.totalRevenue),
+  };
+}
+
+/**
+ * Affiliate drill-down. Lookups by externalId — if the same externalId exists
+ * across platforms (rare but possible), can be disambiguated via optional
+ * platformSlug.
+ */
+export async function getAffiliateDetail(
+  externalId: string,
+  filters: MetricsFilters,
+  platformSlugHint?: string,
+): Promise<AffiliateDetailResponse | null> {
+  const affiliates = await db.affiliate.findMany({
+    where: {
+      externalId,
+      ...(platformSlugHint ? { platform: { slug: platformSlugHint } } : {}),
+    },
+    select: {
+      id: true,
+      externalId: true,
+      nickname: true,
+      firstSeenAt: true,
+      lastOrderAt: true,
+      platform: { select: { slug: true } },
+    },
+  });
+  if (affiliates.length === 0) return null;
+  // Pick the most-recently-active match if multiple platforms have same externalId.
+  const aff = affiliates.sort((a, b) => {
+    const al = a.lastOrderAt?.getTime() ?? 0;
+    const bl = b.lastOrderAt?.getTime() ?? 0;
+    return bl - al;
+  })[0];
+
+  // All orders for this affiliate within the period (for KPIs + daily + breakdowns)
+  const periodWhere: Prisma.OrderWhereInput = {
+    affiliateId: aff.id,
+    orderedAt: { gte: filters.startDate, lte: filters.endDate },
+  };
+  if (filters.platformSlugs?.length) {
+    periodWhere.platform = { slug: { in: filters.platformSlugs } };
+  }
+  if (filters.countries?.length) {
+    periodWhere.country = { in: filters.countries };
+  }
+
+  const periodOrders = await db.order.findMany({
+    where: periodWhere,
+    select: {
+      status: true,
+      grossAmountUsd: true,
+      netAmountUsd: true,
+      cpaPaidUsd: true,
+      country: true,
+      orderedAt: true,
+      productType: true,
+      product: { select: { externalId: true, name: true } },
+    },
+    orderBy: { orderedAt: 'asc' },
+  });
+
+  // LTV (all-time, all platforms — represents total business with this affiliate)
+  const ltvAgg = await db.order.aggregate({
+    where: { affiliateId: aff.id, status: 'APPROVED' },
+    _sum: { grossAmountUsd: true },
+    _count: { _all: true },
+  });
+
+  // KPIs
+  let revenue = 0;
+  let net = 0;
+  let cpa = 0;
+  let orders = 0;
+  let refunds = 0;
+  let chargebacks = 0;
+  for (const o of periodOrders) {
+    net += toNumber(o.netAmountUsd);
+    cpa += toNumber(o.cpaPaidUsd);
+    if (o.status === 'APPROVED') {
+      orders++;
+      revenue += toNumber(o.grossAmountUsd);
+    } else if (o.status === 'REFUNDED') refunds++;
+    else if (o.status === 'CHARGEBACK') chargebacks++;
+  }
+  const allOrders = periodOrders.length;
+  const denom = allOrders || 1;
+  const kpis = {
+    revenue: round2(revenue),
+    orders,
+    allOrders,
+    refunds,
+    chargebacks,
+    approvalRate: round4(orders / denom),
+    refundRate: round4(refunds / denom),
+    cbRate: round4(chargebacks / denom),
+    cpa: round2(cpa),
+    netMargin: round2(net - cpa),
+    aov: round2(orders ? revenue / orders : 0),
+  };
+
+  // Daily series (only days within range)
+  const daily = computeDaily(
+    periodOrders.map((o) => ({
+      orderedAt: o.orderedAt,
+      status: o.status,
+      grossAmountUsd: o.grossAmountUsd,
+      netAmountUsd: o.netAmountUsd,
+      cpaPaidUsd: o.cpaPaidUsd,
+    })) as unknown as OrderWithJoins[],
+    filters.startDate,
+    filters.endDate,
+  ).map((b) => ({
+    date: b.date,
+    revenue: b.gross,
+    orders: b.approvedOrders,
+    allOrders: b.allOrders,
+  }));
+
+  // By product
+  const productMap = new Map<
+    string,
+    { externalId: string; name: string; productType: string; orders: number; revenue: number }
+  >();
+  for (const o of periodOrders) {
+    if (o.status !== 'APPROVED') continue;
+    const key = o.product.externalId;
+    const entry = productMap.get(key) ?? {
+      externalId: o.product.externalId,
+      name: o.product.name,
+      productType: o.productType,
+      orders: 0,
+      revenue: 0,
+    };
+    entry.orders++;
+    entry.revenue += toNumber(o.grossAmountUsd);
+    productMap.set(key, entry);
+  }
+  const byProduct = Array.from(productMap.values())
+    .map((p) => ({ ...p, revenue: round2(p.revenue) }))
+    .sort((a, b) => b.revenue - a.revenue);
+
+  // By country
+  const countryMap = new Map<string, { code: string; orders: number; revenue: number }>();
+  for (const o of periodOrders) {
+    if (o.status !== 'APPROVED' || !o.country) continue;
+    const entry = countryMap.get(o.country) ?? { code: o.country, orders: 0, revenue: 0 };
+    entry.orders++;
+    entry.revenue += toNumber(o.grossAmountUsd);
+    countryMap.set(o.country, entry);
+  }
+  const byCountry = Array.from(countryMap.values())
+    .map((c) => ({ ...c, revenue: round2(c.revenue) }))
+    .sort((a, b) => b.revenue - a.revenue)
+    .slice(0, 8);
+
+  // Auto-flags (same heuristics as the legacy mock-based drawer)
+  const flags: AffiliateDetailResponse['flags'] = [];
+  if (allOrders >= 10) {
+    if (kpis.cbRate > 0.01) {
+      flags.push({
+        kind: 'bad',
+        title: 'Chargeback rate elevado',
+        desc: `${(kpis.cbRate * 100).toFixed(2)}% de chargebacks — acima do limite MCC de 1.0%. Reveja qualidade do tráfego e mix de pagamento.`,
+      });
+    }
+    if (kpis.refundRate > 0.12) {
+      flags.push({
+        kind: 'warn',
+        title: 'Refund rate elevado',
+        desc: `${(kpis.refundRate * 100).toFixed(1)}% de reembolsos vs benchmark de 6%. Cheque promessas pós-compra nas landing pages.`,
+      });
+    }
+    if (kpis.approvalRate < 0.55) {
+      flags.push({
+        kind: 'bad',
+        title: 'Approval rate baixo',
+        desc: `Apenas ${(kpis.approvalRate * 100).toFixed(1)}% dos checkouts aprovados. Comum em tráfego frio ou retargeting agressivo.`,
+      });
+    }
+  }
+
+  return {
+    affiliate: {
+      externalId: aff.externalId,
+      nickname: aff.nickname,
+      platformSlug: aff.platform.slug,
+      firstSeenAt: aff.firstSeenAt.toISOString(),
+      lastOrderAt: aff.lastOrderAt?.toISOString() ?? null,
+    },
+    kpis,
+    ltv: {
+      revenue: round2(toNumber(ltvAgg._sum.grossAmountUsd)),
+      orders: ltvAgg._count._all,
+    },
+    daily,
+    byProduct,
+    byCountry,
+    flags,
   };
 }
 

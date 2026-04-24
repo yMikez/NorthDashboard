@@ -28,13 +28,13 @@ const { useState: useStateApp, useEffect: useEffectApp } = React;
 
 // --- route ↔ metadata
 const ROUTES = {
-  'overview':       { title: 'Operation',  em: 'overview',  crumbs: ['Analytics', 'Overview'] },
-  'funnel':         { title: 'Funnel',     em: 'analytics', crumbs: ['Analytics', 'Funnel'] },
-  'leaderboard':    { title: 'Affiliate',  em: 'leaderboard', crumbs: ['Affiliates', 'Leaderboard'] },
-  'all-affiliates': { title: 'All',        em: 'affiliates',  crumbs: ['Affiliates', 'Directory'] },
-  'products':       { title: 'Products &', em: 'offers',      crumbs: ['Catalog', 'Products / Offers'] },
-  'transactions':   { title: 'Transactions', em: 'ledger',    crumbs: ['Catalog', 'Transactions'] },
-  'platforms':      { title: 'Platforms',  em: 'overview',    crumbs: ['System', 'Plataformas'] },
+  'overview':       { title: 'Visão',       em: 'geral',       crumbs: ['Análise', 'Visão geral'] },
+  'funnel':         { title: 'Funil',       em: 'completo',    crumbs: ['Análise', 'Funil'] },
+  'leaderboard':    { title: 'Ranking',     em: 'de afiliados', crumbs: ['Afiliados', 'Ranking'] },
+  'all-affiliates': { title: 'Diretório',   em: 'de afiliados', crumbs: ['Afiliados', 'Todos'] },
+  'products':       { title: 'Produtos &',  em: 'ofertas',     crumbs: ['Catálogo', 'Produtos / Ofertas'] },
+  'transactions':   { title: 'Transações',  em: 'do ledger',   crumbs: ['Catálogo', 'Transações'] },
+  'platforms':      { title: 'Plataformas', em: 'conectadas',  crumbs: ['Sistema', 'Plataformas'] },
 };
 
 function readHash() {
