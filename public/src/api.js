@@ -69,4 +69,22 @@ async function fetchOrders(filters, options = {}) {
   return fetchJSON('/api/metrics/orders', params);
 }
 
-window.NSApi = { fetchOverview, fetchOrders };
+/**
+ * Fetch /api/metrics/affiliates.
+ *
+ * Returns { summary, affiliates } — serves both Leaderboard and AllAffiliates
+ * pages. `affiliates` includes every affiliate known to the platform, with
+ * zero-valued period aggregates when no orders fall in the range. UI decides
+ * whether to filter by minOrders or show all.
+ */
+async function fetchAffiliates(filters) {
+  const params = {
+    start_date: toISODate(filters.dateRange.start),
+    end_date: toISODate(filters.dateRange.end),
+    platforms: setToCSV(filters.platforms),
+    countries: setToCSV(filters.countries),
+  };
+  return fetchJSON('/api/metrics/affiliates', params);
+}
+
+window.NSApi = { fetchOverview, fetchOrders, fetchAffiliates };

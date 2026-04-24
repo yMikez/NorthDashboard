@@ -310,54 +310,28 @@ function ConvLineChart({ buckets }) {
 // ---------- AFFILIATE LEADERBOARD ----------
 function LeaderboardPage({ filters, onOpenAffiliate }) {
   const [sortBy, setSortBy] = useState('revenue');
-  const [minOrders, setMinOrders] = useState(5);
+  const [minOrders, setMinOrders] = useState(1);
+  const [state, setLbState] = useState({ status: 'loading', data: null, error: null });
 
-  const filtered = useMemo(() => applyFilters(window.MOCK.orders, {
-    dateRange: filters.dateRange,
-    platforms: filters.platforms,
-    products: mapFunnelsToProducts(filters.funnels),
-    countries: filters.countries,
-    trafficSources: filters.trafficSources,
-  }), [filters]);
+  useEffect(() => {
+    let cancelled = false;
+    setLbState((s) => ({ ...s, status: 'loading' }));
+    window.NSApi.fetchAffiliates(filters)
+      .then((data) => { if (!cancelled) setLbState({ status: 'ready', data, error: null }); })
+      .catch((err) => {
+        if (cancelled) return;
+        console.error('fetchAffiliates failed', err);
+        setLbState({ status: 'error', data: null, error: err.message });
+      });
+    return () => { cancelled = true; };
+  }, [filters.dateRange.start.getTime(), filters.dateRange.end.getTime(),
+      Array.from(filters.platforms).join(','), Array.from(filters.countries).join(',')]);
 
-  const prevFiltered = useMemo(() => applyFilters(window.MOCK.orders, {
-    dateRange: previousRange(filters.dateRange),
-    platforms: filters.platforms,
-    products: mapFunnelsToProducts(filters.funnels),
-    countries: filters.countries,
-    trafficSources: filters.trafficSources,
-  }), [filters]);
+  const cur = filters.currency || 'USD';
+  const all = state.data?.affiliates || [];
+  const summary = state.data?.summary || { activeNow: 0, activePrev: 0, concentration: 0, newAff: 0, churnedAff: 0 };
 
-  const agg = {};
-  for (const o of filtered) {
-    const a = agg[o.affiliateId] = agg[o.affiliateId] || { id: o.affiliateId, revenue: 0, orders: 0, allOrders: 0, refunds: 0, cbs: 0, cpa: 0, net: 0, byCountry: {}, byTraffic: {} };
-    a.revenue += o.grossAmount;
-    a.cpa += o.cpaPaid;
-    a.net += o.netAmount;
-    a.allOrders++;
-    if (o.status === 'approved') a.orders++;
-    if (o.status === 'refunded') a.refunds++;
-    if (o.status === 'chargeback') a.cbs++;
-    a.byCountry[o.country] = (a.byCountry[o.country] || 0) + 1;
-    a.byTraffic[o.trafficSource] = (a.byTraffic[o.trafficSource] || 0) + 1;
-  }
-  const prevAgg = {};
-  for (const o of prevFiltered) {
-    const a = prevAgg[o.affiliateId] = prevAgg[o.affiliateId] || { revenue: 0 };
-    a.revenue += o.grossAmount;
-  }
-
-  const rows = Object.values(agg).filter(a => a.allOrders >= minOrders).map(a => {
-    const aff = window.MOCK.affiliates.find(x => x.id === a.id);
-    const approvalRate = a.allOrders ? a.orders / a.allOrders : 0;
-    const refundRate = a.allOrders ? a.refunds / a.allOrders : 0;
-    const cbRate = a.allOrders ? a.cbs / a.allOrders : 0;
-    const netMargin = a.net - a.cpa;
-    const topCountry = Object.entries(a.byCountry).sort((x, y) => y[1] - x[1])[0]?.[0] || '—';
-    const topTraffic = Object.entries(a.byTraffic).sort((x, y) => y[1] - x[1])[0]?.[0] || '—';
-    return { ...a, aff, approvalRate, refundRate, cbRate, netMargin, topCountry, topTraffic };
-  });
-  rows.sort((a, b) => {
+  const rows = all.filter((a) => a.allOrders >= minOrders).sort((a, b) => {
     switch (sortBy) {
       case 'orders': return b.orders - a.orders;
       case 'netMargin': return b.netMargin - a.netMargin;
@@ -367,38 +341,6 @@ function LeaderboardPage({ filters, onOpenAffiliate }) {
       default: return b.revenue - a.revenue;
     }
   });
-
-  // mini-kpis
-  const activeNow = rows.length;
-  const activePrev = Object.values(prevAgg).length;
-  const top5Rev = rows.slice(0, 5).reduce((s, r) => s + r.revenue, 0);
-  const totalRev = rows.reduce((s, r) => s + r.revenue, 0);
-  const concentration = totalRev ? top5Rev / totalRev : 0;
-  const newAff = rows.filter(r => !prevAgg[r.id]).length;
-  const churnedAff = Object.keys(prevAgg).filter(id => !agg[id]).length;
-
-  const cur = filters.currency;
-
-  // 30d sparkline for each affiliate — build once
-  const sparkByAff = useMemo(() => {
-    const out = {};
-    const end = filters.dateRange.end;
-    const start = new Date(end.getTime() - 30 * 24 * 3600 * 1000);
-    const sparkBuckets = bucketByDay(window.MOCK.orders.filter(o => {
-      const t = new Date(o.createdAt).getTime();
-      return t >= start.getTime() && t <= end.getTime();
-    }), { start, end });
-    // split by aff
-    for (const o of window.MOCK.orders) {
-      const t = new Date(o.createdAt).getTime();
-      if (t < start.getTime() || t > end.getTime()) continue;
-      const dayMs = 24 * 3600 * 1000;
-      const idx = Math.floor((t - start.getTime()) / dayMs);
-      out[o.affiliateId] = out[o.affiliateId] || Array(sparkBuckets.length).fill(0);
-      out[o.affiliateId][idx] = (out[o.affiliateId][idx] || 0) + (o.status === 'approved' ? o.grossAmount : 0);
-    }
-    return out;
-  }, [filters.dateRange]);
 
   return (
     <div className="page-in">
@@ -413,31 +355,36 @@ function LeaderboardPage({ filters, onOpenAffiliate }) {
         </div>
       </div>
 
-      {/* mini kpis */}
       <div className="mini-kpis">
         <div className="mini-kpi">
           <div className="l">Active affiliates</div>
-          <div className="v">{activeNow}</div>
-          <div className="s"><span style={{ color: activeNow >= activePrev ? 'var(--success)' : 'var(--danger)' }}>{activeNow >= activePrev ? '↗' : '↘'} {Math.abs(activeNow - activePrev)}</span> vs prev period</div>
+          <div className="v">{summary.activeNow}</div>
+          <div className="s">
+            <span style={{ color: summary.activeNow >= summary.activePrev ? 'var(--success)' : 'var(--danger)' }}>
+              {summary.activeNow >= summary.activePrev ? '↗' : '↘'} {Math.abs(summary.activeNow - summary.activePrev)}
+            </span> vs prev period
+          </div>
         </div>
-        <div className={`mini-kpi ${concentration > 0.6 ? 'is-alert' : ''}`} style={concentration > 0.6 ? { borderColor: 'rgba(239,68,68,0.35)' } : {}}>
+        <div className={`mini-kpi ${summary.concentration > 0.6 ? 'is-alert' : ''}`}
+          style={summary.concentration > 0.6 ? { borderColor: 'rgba(239,68,68,0.35)' } : {}}>
           <div className="l">Top 5 concentration</div>
-          <div className="v" style={concentration > 0.6 ? { color: 'var(--danger)' } : {}}>{(concentration * 100).toFixed(0)}%</div>
-          <div className="s">{concentration > 0.6 ? '⚠ concentration risk · over 60%' : 'healthy distribution'}</div>
+          <div className="v" style={summary.concentration > 0.6 ? { color: 'var(--danger)' } : {}}>
+            {(summary.concentration * 100).toFixed(0)}%
+          </div>
+          <div className="s">{summary.concentration > 0.6 ? '⚠ concentration risk · over 60%' : 'healthy distribution'}</div>
         </div>
         <div className="mini-kpi">
           <div className="l">New affiliates</div>
-          <div className="v">{newAff}</div>
+          <div className="v">{summary.newAff}</div>
           <div className="s">first sale in period</div>
         </div>
         <div className="mini-kpi">
           <div className="l">Churned</div>
-          <div className="v" style={{ color: churnedAff > 3 ? 'var(--warning)' : 'inherit' }}>{churnedAff}</div>
+          <div className="v" style={{ color: summary.churnedAff > 3 ? 'var(--warning)' : 'inherit' }}>{summary.churnedAff}</div>
           <div className="s">active prev · silent now</div>
         </div>
       </div>
 
-      {/* local filters */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '4px 0 12px', flexWrap: 'wrap' }}>
         <span className="f-label">SORT BY</span>
         <div className="seg">
@@ -452,6 +399,10 @@ function LeaderboardPage({ filters, onOpenAffiliate }) {
           ))}
         </div>
       </div>
+
+      {state.status === 'error' && (
+        <div className="panel" style={{ color: 'var(--danger)' }}>Erro ao carregar: {state.error}</div>
+      )}
 
       <div className="panel" style={{ padding: 0 }}>
         <div className="tbl-wrap" style={{ margin: 0, padding: '0 4px', maxHeight: 620, overflowY: 'auto' }}>
@@ -469,28 +420,38 @@ function LeaderboardPage({ filters, onOpenAffiliate }) {
                 <th className="num">CPA paid</th>
                 <th className="num">Net margin</th>
                 <th>Top country</th>
-                <th>Top source</th>
                 <th>30d trend</th>
               </tr>
             </thead>
             <tbody>
+              {state.status === 'loading' && (
+                <tr><td colSpan={12} style={{ textAlign: 'center', padding: 24, opacity: 0.6 }}>Carregando...</td></tr>
+              )}
+              {state.status === 'ready' && rows.length === 0 && (
+                <tr><td colSpan={12} style={{ textAlign: 'center', padding: 24, opacity: 0.6 }}>
+                  Nenhum afiliado com pelo menos {minOrders} pedido{minOrders > 1 ? 's' : ''} no período
+                </td></tr>
+              )}
               {rows.map((r, i) => {
                 const apClass = r.approvalRate > 0.7 ? 'val-ok' : r.approvalRate > 0.5 ? 'val-warn' : 'val-bad';
                 const rfClass = r.refundRate < 0.06 ? 'val-ok' : r.refundRate < 0.12 ? 'val-warn' : 'val-bad';
                 const cbClass = r.cbRate < 0.005 ? 'val-ok' : r.cbRate < 0.01 ? 'val-warn' : 'val-bad';
+                const platClass = r.platformSlug === 'digistore24' ? 'plat-d24' : 'plat-cb';
+                const platShort = r.platformSlug === 'digistore24' ? 'D24' : 'CB';
+                const displayName = r.nickname || r.externalId;
                 return (
-                  <tr key={r.id} onClick={() => onOpenAffiliate(r.id)}>
+                  <tr key={`${r.platformSlug}:${r.externalId}`} onClick={() => onOpenAffiliate(r.externalId)}>
                     <td className="rank">{String(i+1).padStart(2, '0')}</td>
                     <td>
                       <span className="cell-aff">
-                        <span className="av" style={{ background: avatarColor(r.id) }}>{initials(r.aff.name)}</span>
+                        <span className="av" style={{ background: avatarColor(r.externalId) }}>{initials(displayName)}</span>
                         <span className="meta">
-                          <span className="nm">{r.aff.nickname}</span>
-                          <span className="id">{r.aff.id} · {r.aff.name}</span>
+                          <span className="nm">{displayName}</span>
+                          <span className="id">{r.externalId}</span>
                         </span>
                       </span>
                     </td>
-                    <td><span className={`plat plat-${r.aff.platform === 'digistore24' ? 'd24' : 'cb'}`}>{r.aff.platform === 'digistore24' ? 'D24' : 'CB'}</span></td>
+                    <td><span className={`plat ${platClass}`}>{platShort}</span></td>
                     <td className="num cell-mono">{fmtInt(r.orders)}</td>
                     <td className="num cell-mono" style={{ color: 'var(--white)' }}>{fmtCurrency(r.revenue, cur, 0)}</td>
                     <td>
@@ -503,9 +464,8 @@ function LeaderboardPage({ filters, onOpenAffiliate }) {
                     <td className={`num cell-mono ${cbClass}`}>{(r.cbRate * 100).toFixed(2)}%</td>
                     <td className="num cell-mono">{fmtCurrency(r.cpa, cur, 0)}</td>
                     <td className="num cell-mono" style={{ color: r.netMargin > 0 ? 'var(--success)' : 'var(--danger)' }}>{fmtCurrency(r.netMargin, cur, 0)}</td>
-                    <td className="cell-mono">{r.topCountry}</td>
-                    <td className="cell-mono" style={{ color: 'var(--navy-200)' }}>{r.topTraffic}</td>
-                    <td><Sparkline data={sparkByAff[r.id] || [0,0]} width={80} height={18} fill={false}/></td>
+                    <td className="cell-mono">{r.topCountry || '—'}</td>
+                    <td><Sparkline data={r.sparkline && r.sparkline.length ? r.sparkline : [0,0]} width={80} height={18} fill={false}/></td>
                   </tr>
                 );
               })}
@@ -520,7 +480,37 @@ function LeaderboardPage({ filters, onOpenAffiliate }) {
 // ---------- AFFILIATE DRAWER (drill-down) ----------
 function AffiliateDrawer({ affiliateId, filters, onClose }) {
   const aff = window.MOCK.affiliates.find(a => a.id === affiliateId);
-  if (!aff) return null;
+  if (!aff) {
+    return (
+      <>
+        <div className="drawer-backdrop" onClick={onClose}/>
+        <div className="drawer">
+          <div className="drawer-head">
+            <div className="drawer-aff">
+              <div className="av-lg">?</div>
+              <div>
+                <h3>{affiliateId}</h3>
+                <div className="sub">Drill-down em construção — endpoint /api/metrics/affiliates/:id vem na próxima fase</div>
+              </div>
+            </div>
+            <button className="icon-btn" onClick={onClose}><Icon name="x" size={14}/></button>
+          </div>
+          <div className="drawer-body" style={{ opacity: 0.7 }}>
+            <div className="panel">
+              <div className="panel-head">
+                <div className="panel-title">
+                  <span className="panel-eyebrow">EM BREVE</span>
+                  <div className="panel-sub">
+                    Por enquanto, use a Leaderboard/All affiliates pra ver números consolidados desse afiliado.
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </>
+    );
+  }
 
   const filtered = window.MOCK.orders.filter(o => o.affiliateId === affiliateId);
   const inRange = filtered.filter(o => {
@@ -623,24 +613,29 @@ function AffiliateDrawer({ affiliateId, filters, onClose }) {
 // ---------- ALL AFFILIATES ----------
 function AllAffiliatesPage({ filters, onOpenAffiliate }) {
   const [query, setQuery] = useState('');
-  const rows = window.MOCK.affiliates.map(aff => {
-    const mine = window.MOCK.orders.filter(o => o.affiliateId === aff.id);
-    const inR = mine.filter(o => {
-      const t = new Date(o.createdAt).getTime();
-      return t >= filters.dateRange.start.getTime() && t <= filters.dateRange.end.getTime();
-    });
-    const k = aggregateKPIs(inR);
-    const ltv = mine.reduce((s, o) => s + (o.status === 'approved' ? o.grossAmount : 0), 0);
-    const first = mine.length ? mine.reduce((min, o) => o.createdAt < min ? o.createdAt : min, mine[0].createdAt) : null;
-    const last = mine.length ? mine.reduce((max, o) => o.createdAt > max ? o.createdAt : max, mine[0].createdAt) : null;
-    return { aff, k, ltv, firstSale: first, lastSale: last, ltvOrders: mine.filter(o => o.status === 'approved').length };
-  }).filter(r => {
-    if (!query) return true;
-    const q = query.toLowerCase();
-    return r.aff.name.toLowerCase().includes(q) || r.aff.nickname.toLowerCase().includes(q) || r.aff.id.toLowerCase().includes(q);
-  }).sort((a, b) => b.k.gross - a.k.gross);
+  const [state, setAllState] = useState({ status: 'loading', data: null, error: null });
 
-  const cur = filters.currency;
+  useEffect(() => {
+    let cancelled = false;
+    setAllState((s) => ({ ...s, status: 'loading' }));
+    window.NSApi.fetchAffiliates(filters)
+      .then((data) => { if (!cancelled) setAllState({ status: 'ready', data, error: null }); })
+      .catch((err) => {
+        if (cancelled) return;
+        console.error('fetchAffiliates failed', err);
+        setAllState({ status: 'error', data: null, error: err.message });
+      });
+    return () => { cancelled = true; };
+  }, [filters.dateRange.start.getTime(), filters.dateRange.end.getTime(),
+      Array.from(filters.platforms).join(','), Array.from(filters.countries).join(',')]);
+
+  const cur = filters.currency || 'USD';
+  const all = state.data?.affiliates || [];
+  const q = query.toLowerCase();
+  const rows = (q
+    ? all.filter((r) => (r.nickname || '').toLowerCase().includes(q) || r.externalId.toLowerCase().includes(q))
+    : all
+  ).slice().sort((a, b) => b.revenue - a.revenue);
 
   return (
     <div className="page-in">
@@ -654,13 +649,17 @@ function AllAffiliatesPage({ filters, onOpenAffiliate }) {
           <div className="select-btn" style={{ padding: '0 10px', width: 260 }}>
             <Icon name="search" size={13}/>
             <input value={query} onChange={(e) => setQuery(e.target.value)}
-              placeholder="Search by name, nickname, or ID..."
+              placeholder="Search by nickname or ID..."
               style={{ background: 'transparent', border: 0, color: 'var(--white)', outline: 'none', flex: 1, fontFamily: 'var(--f-body)', fontSize: 12 }}
             />
           </div>
           <button className="btn btn-ghost"><Icon name="download" size={12}/> Export CSV</button>
         </div>
       </div>
+
+      {state.status === 'error' && (
+        <div className="panel" style={{ color: 'var(--danger)' }}>Erro ao carregar: {state.error}</div>
+      )}
 
       <div className="panel" style={{ padding: 0 }}>
         <div className="tbl-wrap" style={{ margin: 0, padding: '0 4px', maxHeight: 720, overflowY: 'auto' }}>
@@ -675,26 +674,41 @@ function AllAffiliatesPage({ filters, onOpenAffiliate }) {
               </tr>
             </thead>
             <tbody>
-              {rows.map(r => (
-                <tr key={r.aff.id} onClick={() => onOpenAffiliate(r.aff.id)}>
-                  <td>
-                    <span className="cell-aff">
-                      <span className="av" style={{ background: avatarColor(r.aff.id) }}>{initials(r.aff.name)}</span>
-                      <span className="meta"><span className="nm">{r.aff.nickname}</span><span className="id">{r.aff.id} · {r.aff.name}</span></span>
-                    </span>
-                  </td>
-                  <td><span className={`plat plat-${r.aff.platform === 'digistore24' ? 'd24' : 'cb'}`}>{r.aff.platform === 'digistore24' ? 'D24' : 'CB'}</span></td>
-                  <td className="num cell-mono">{fmtCurrency(r.k.gross, cur, 0)}</td>
-                  <td className="num cell-mono">{fmtInt(r.k.approvedCount)}</td>
-                  <td className="num cell-mono" style={{ color: r.k.approvalRate > 0.7 ? 'var(--success)' : r.k.approvalRate > 0.5 ? 'var(--warning)' : 'var(--danger)' }}>{r.k.totalCount ? (r.k.approvalRate * 100).toFixed(1) + '%' : '—'}</td>
-                  <td className="num cell-mono">{r.k.totalCount ? (r.k.refundRate * 100).toFixed(1) + '%' : '—'}</td>
-                  <td className="num cell-mono">{fmtCurrency(r.ltv, cur, 0)}</td>
-                  <td className="num cell-mono">{fmtInt(r.ltvOrders)}</td>
-                  <td className="cell-mono">{r.firstSale ? fmtDateShort(r.firstSale) : '—'}</td>
-                  <td className="cell-mono">{r.lastSale ? fmtDateShort(r.lastSale) : '—'}</td>
-                  <td><Icon name="chevron-right" size={13}/></td>
-                </tr>
-              ))}
+              {state.status === 'loading' && (
+                <tr><td colSpan={11} style={{ textAlign: 'center', padding: 24, opacity: 0.6 }}>Carregando...</td></tr>
+              )}
+              {state.status === 'ready' && rows.length === 0 && (
+                <tr><td colSpan={11} style={{ textAlign: 'center', padding: 24, opacity: 0.6 }}>
+                  {query ? 'Nenhum afiliado encontrado' : 'Nenhum afiliado ainda'}
+                </td></tr>
+              )}
+              {rows.map((r) => {
+                const displayName = r.nickname || r.externalId;
+                const platClass = r.platformSlug === 'digistore24' ? 'plat-d24' : 'plat-cb';
+                const platShort = r.platformSlug === 'digistore24' ? 'D24' : 'CB';
+                return (
+                  <tr key={`${r.platformSlug}:${r.externalId}`} onClick={() => onOpenAffiliate(r.externalId)}>
+                    <td>
+                      <span className="cell-aff">
+                        <span className="av" style={{ background: avatarColor(r.externalId) }}>{initials(displayName)}</span>
+                        <span className="meta"><span className="nm">{displayName}</span><span className="id">{r.externalId}</span></span>
+                      </span>
+                    </td>
+                    <td><span className={`plat ${platClass}`}>{platShort}</span></td>
+                    <td className="num cell-mono">{fmtCurrency(r.revenue, cur, 0)}</td>
+                    <td className="num cell-mono">{fmtInt(r.orders)}</td>
+                    <td className="num cell-mono" style={{ color: r.approvalRate > 0.7 ? 'var(--success)' : r.approvalRate > 0.5 ? 'var(--warning)' : 'var(--danger)' }}>
+                      {r.allOrders ? (r.approvalRate * 100).toFixed(1) + '%' : '—'}
+                    </td>
+                    <td className="num cell-mono">{r.allOrders ? (r.refundRate * 100).toFixed(1) + '%' : '—'}</td>
+                    <td className="num cell-mono">{fmtCurrency(r.ltvRevenue, cur, 0)}</td>
+                    <td className="num cell-mono">{fmtInt(r.ltvOrders)}</td>
+                    <td className="cell-mono">{r.firstSeenAt ? fmtDateShort(r.firstSeenAt) : '—'}</td>
+                    <td className="cell-mono">{r.lastOrderAt ? fmtDateShort(r.lastOrderAt) : '—'}</td>
+                    <td><Icon name="chevron-right" size={13}/></td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </div>

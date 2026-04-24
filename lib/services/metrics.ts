@@ -33,6 +33,38 @@ export interface DailyBucket {
   allOrders: number;
 }
 
+export interface AffiliatesResponse {
+  summary: {
+    activeNow: number;
+    activePrev: number;
+    concentration: number;
+    newAff: number;
+    churnedAff: number;
+    totalRevenue: number;
+  };
+  affiliates: Array<{
+    externalId: string;
+    platformSlug: string;
+    nickname: string | null;
+    revenue: number;
+    orders: number;
+    allOrders: number;
+    refunds: number;
+    chargebacks: number;
+    approvalRate: number;
+    refundRate: number;
+    cbRate: number;
+    cpa: number;
+    netMargin: number;
+    topCountry: string | null;
+    ltvRevenue: number;
+    ltvOrders: number;
+    firstSeenAt: string | null;
+    lastOrderAt: string | null;
+    sparkline: number[];
+  }>;
+}
+
 export interface OrdersResponse {
   orders: Array<{
     externalId: string;
@@ -137,6 +169,213 @@ export async function getOverview(
   }
 
   return response;
+}
+
+export async function getAffiliates(
+  filters: MetricsFilters,
+): Promise<AffiliatesResponse> {
+  const span = filters.endDate.getTime() - filters.startDate.getTime();
+  const prevEnd = new Date(filters.startDate.getTime() - 1);
+  const prevStart = new Date(prevEnd.getTime() - span);
+  const sparkStart = new Date(filters.endDate.getTime() - 30 * 24 * 3600 * 1000);
+  const coverageStart = new Date(Math.min(prevStart.getTime(), sparkStart.getTime()));
+
+  const whereInCoverage: Prisma.OrderWhereInput = {
+    orderedAt: { gte: coverageStart, lte: filters.endDate },
+    affiliateId: { not: null },
+  };
+  if (filters.platformSlugs?.length) {
+    whereInCoverage.platform = { slug: { in: filters.platformSlugs } };
+  }
+  if (filters.countries?.length) {
+    whereInCoverage.country = { in: filters.countries };
+  }
+  if (filters.productExternalIds?.length) {
+    whereInCoverage.product = { externalId: { in: filters.productExternalIds } };
+  }
+
+  const orders = await db.order.findMany({
+    where: whereInCoverage,
+    select: {
+      status: true,
+      grossAmountUsd: true,
+      netAmountUsd: true,
+      cpaPaidUsd: true,
+      country: true,
+      orderedAt: true,
+      affiliate: { select: { externalId: true, nickname: true, platformId: true } },
+      platform: { select: { slug: true } },
+    },
+  });
+
+  const ltvByAff = await db.order.groupBy({
+    by: ['affiliateId'],
+    where: { affiliateId: { not: null }, status: 'APPROVED' },
+    _sum: { grossAmountUsd: true },
+    _count: { _all: true },
+  });
+  const affiliatesAll = await db.affiliate.findMany({
+    select: {
+      externalId: true,
+      nickname: true,
+      firstSeenAt: true,
+      lastOrderAt: true,
+      platform: { select: { slug: true } },
+      id: true,
+    },
+  });
+
+  const ltvMap = new Map<string, { revenue: number; orders: number }>();
+  for (const row of ltvByAff) {
+    if (!row.affiliateId) continue;
+    ltvMap.set(row.affiliateId, {
+      revenue: toNumber(row._sum.grossAmountUsd),
+      orders: row._count._all,
+    });
+  }
+  const affMetaById = new Map<string, (typeof affiliatesAll)[number]>();
+  for (const a of affiliatesAll) affMetaById.set(a.id, a);
+
+  interface Agg {
+    externalId: string;
+    platformSlug: string;
+    nickname: string | null;
+    revenue: number;
+    orders: number;
+    allOrders: number;
+    refunds: number;
+    chargebacks: number;
+    cpa: number;
+    net: number;
+    byCountry: Map<string, number>;
+    sparkline: number[];
+  }
+
+  const SPARK_DAYS = 30;
+  const dayMs = 24 * 3600 * 1000;
+  const sparkStartMs = sparkStart.getTime();
+  const periodStartMs = filters.startDate.getTime();
+  const periodEndMs = filters.endDate.getTime();
+  const prevStartMs = prevStart.getTime();
+  const prevEndMs = prevEnd.getTime();
+
+  const inPeriod = new Map<string, Agg>();
+  const prevSeen = new Set<string>();
+
+  for (const o of orders) {
+    if (!o.affiliate) continue;
+    const aff = o.affiliate;
+    const t = o.orderedAt.getTime();
+    const key = `${o.platform.slug}:${aff.externalId}`;
+
+    if (t >= prevStartMs && t <= prevEndMs) prevSeen.add(key);
+
+    if (t >= periodStartMs && t <= periodEndMs) {
+      let a = inPeriod.get(key);
+      if (!a) {
+        a = {
+          externalId: aff.externalId,
+          platformSlug: o.platform.slug,
+          nickname: aff.nickname,
+          revenue: 0,
+          orders: 0,
+          allOrders: 0,
+          refunds: 0,
+          chargebacks: 0,
+          cpa: 0,
+          net: 0,
+          byCountry: new Map(),
+          sparkline: new Array(SPARK_DAYS).fill(0),
+        };
+        inPeriod.set(key, a);
+      }
+      a.allOrders++;
+      a.cpa += toNumber(o.cpaPaidUsd);
+      a.net += toNumber(o.netAmountUsd);
+      if (o.status === 'APPROVED') {
+        a.revenue += toNumber(o.grossAmountUsd);
+        a.orders++;
+      } else if (o.status === 'REFUNDED') {
+        a.refunds++;
+      } else if (o.status === 'CHARGEBACK') {
+        a.chargebacks++;
+      }
+      if (o.country) {
+        a.byCountry.set(o.country, (a.byCountry.get(o.country) ?? 0) + 1);
+      }
+    }
+
+    if (t >= sparkStartMs && t <= periodEndMs && o.status === 'APPROVED') {
+      const idx = Math.min(SPARK_DAYS - 1, Math.floor((t - sparkStartMs) / dayMs));
+      let a = inPeriod.get(key);
+      if (a) {
+        a.sparkline[idx] += toNumber(o.grossAmountUsd);
+      }
+    }
+  }
+
+  const totalRevenue = Array.from(inPeriod.values()).reduce((s, a) => s + a.revenue, 0);
+  const sortedByRev = Array.from(inPeriod.values()).sort((a, b) => b.revenue - a.revenue);
+  const top5Revenue = sortedByRev.slice(0, 5).reduce((s, a) => s + a.revenue, 0);
+  const concentration = totalRevenue > 0 ? top5Revenue / totalRevenue : 0;
+
+  const nowKeys = new Set(inPeriod.keys());
+  const newAff = Array.from(nowKeys).filter((k) => !prevSeen.has(k)).length;
+  const churnedAff = Array.from(prevSeen).filter((k) => !nowKeys.has(k)).length;
+
+  const affiliates = affiliatesAll.map((aff) => {
+    const key = `${aff.platform.slug}:${aff.externalId}`;
+    const a = inPeriod.get(key);
+    const ltv = ltvMap.get(aff.id);
+    let topCountry: string | null = null;
+    if (a) {
+      let topCount = 0;
+      for (const [code, count] of a.byCountry) {
+        if (count > topCount) {
+          topCount = count;
+          topCountry = code;
+        }
+      }
+    }
+    const allOrders = a?.allOrders ?? 0;
+    const orders = a?.orders ?? 0;
+    const refunds = a?.refunds ?? 0;
+    const chargebacks = a?.chargebacks ?? 0;
+    const denom = allOrders || 1;
+    return {
+      externalId: aff.externalId,
+      platformSlug: aff.platform.slug,
+      nickname: aff.nickname,
+      revenue: round2(a?.revenue ?? 0),
+      orders,
+      allOrders,
+      refunds,
+      chargebacks,
+      approvalRate: allOrders ? round4(orders / denom) : 0,
+      refundRate: allOrders ? round4(refunds / denom) : 0,
+      cbRate: allOrders ? round4(chargebacks / denom) : 0,
+      cpa: round2(a?.cpa ?? 0),
+      netMargin: round2((a?.net ?? 0) - (a?.cpa ?? 0)),
+      topCountry,
+      ltvRevenue: round2(ltv?.revenue ?? 0),
+      ltvOrders: ltv?.orders ?? 0,
+      firstSeenAt: aff.firstSeenAt.toISOString(),
+      lastOrderAt: aff.lastOrderAt?.toISOString() ?? null,
+      sparkline: (a?.sparkline ?? new Array(SPARK_DAYS).fill(0)).map((v) => round2(v)),
+    };
+  }).sort((a, b) => b.revenue - a.revenue);
+
+  return {
+    summary: {
+      activeNow: inPeriod.size,
+      activePrev: prevSeen.size,
+      concentration: round4(concentration),
+      newAff,
+      churnedAff,
+      totalRevenue: round2(totalRevenue),
+    },
+    affiliates,
+  };
 }
 
 export async function getOrders(
