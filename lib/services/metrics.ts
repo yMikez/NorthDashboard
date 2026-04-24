@@ -33,23 +33,37 @@ export interface DailyBucket {
   allOrders: number;
 }
 
+export interface FunnelStage {
+  id: string;
+  label: string;
+  volume: number;
+  revenue: number;
+  takeRate: number;
+}
+
+export interface FunnelSummary {
+  feGroups: number;
+  totalGroups: number;
+  totalRevenue: number;
+  aov: number;
+  aovFEOnly: number;
+  aovWithUpsell: number;
+  revenueLiftFromUpsells: number;
+}
+
 export interface FunnelResponse {
-  stages: Array<{
-    id: string;
-    label: string;
-    volume: number;
-    revenue: number;
-    takeRate: number;
+  stages: FunnelStage[];
+  summary: FunnelSummary;
+  // Per-FE-product breakdown. Each entry has the same shape as the global
+  // stages/summary, but scoped to groups whose FE order is for that product.
+  // Groups with no FE order in the period are excluded from byFunnel.
+  byFunnel: Array<{
+    productExternalId: string;
+    productName: string;
+    platformSlug: string;
+    stages: FunnelStage[];
+    summary: FunnelSummary;
   }>;
-  summary: {
-    feGroups: number;
-    totalGroups: number;
-    totalRevenue: number;
-    aov: number;
-    aovFEOnly: number;
-    aovWithUpsell: number;
-    revenueLiftFromUpsells: number;
-  };
 }
 
 export interface ProductsResponse {
@@ -296,6 +310,7 @@ export async function getFunnel(
       funnelStep: true,
       productType: true,
       platform: { select: { slug: true } },
+      product: { select: { externalId: true, name: true } },
     },
   });
 
@@ -314,6 +329,9 @@ export async function getFunnel(
     u1Revenue: number;
     u2Revenue: number;
     downRevenue: number;
+    feProductExternalId: string | null;
+    feProductName: string | null;
+    fePlatformSlug: string | null;
   }
 
   const groups = new Map<string, Group>();
@@ -333,6 +351,9 @@ export async function getFunnel(
         u1Revenue: 0,
         u2Revenue: 0,
         downRevenue: 0,
+        feProductExternalId: null,
+        feProductName: null,
+        fePlatformSlug: null,
       };
       groups.set(groupKey, g);
     }
@@ -342,6 +363,12 @@ export async function getFunnel(
     if (t === 'FRONTEND') {
       g.hasFE = true;
       g.feRevenue += gross;
+      // First FE wins as the funnel identity for this group.
+      if (!g.feProductExternalId) {
+        g.feProductExternalId = o.product.externalId;
+        g.feProductName = o.product.name;
+        g.fePlatformSlug = o.platform.slug;
+      }
     } else if (t === 'BUMP') {
       g.hasBump = true;
       g.bumpRevenue += gross;
@@ -359,6 +386,71 @@ export async function getFunnel(
     }
   }
 
+  const allGroups = Array.from(groups.values());
+  const global = aggregateGroups(allGroups, allGroups.length);
+
+  // Bucket groups by FE product. Groups without an FE order in the period are
+  // excluded — we can't attribute their upsells to a specific funnel.
+  interface FunnelBucket {
+    productExternalId: string;
+    productName: string;
+    platformSlug: string;
+    groups: Group[];
+  }
+  const buckets = new Map<string, FunnelBucket>();
+  for (const g of allGroups) {
+    if (!g.hasFE || !g.feProductExternalId) continue;
+    const key = `${g.fePlatformSlug}:${g.feProductExternalId}`;
+    let b = buckets.get(key);
+    if (!b) {
+      b = {
+        productExternalId: g.feProductExternalId,
+        productName: g.feProductName ?? g.feProductExternalId,
+        platformSlug: g.fePlatformSlug ?? 'unknown',
+        groups: [],
+      };
+      buckets.set(key, b);
+    }
+    b.groups.push(g);
+  }
+
+  const byFunnel = Array.from(buckets.values())
+    .map((b) => {
+      const agg = aggregateGroups(b.groups, b.groups.length);
+      return {
+        productExternalId: b.productExternalId,
+        productName: b.productName,
+        platformSlug: b.platformSlug,
+        stages: agg.stages,
+        summary: agg.summary,
+      };
+    })
+    .sort((a, b) => b.summary.totalRevenue - a.summary.totalRevenue);
+
+  return {
+    stages: global.stages,
+    summary: global.summary,
+    byFunnel,
+  };
+}
+
+interface FunnelGroupAgg {
+  hasFE: boolean;
+  hasBump: boolean;
+  hasU1: boolean;
+  hasU2: boolean;
+  hasDown: boolean;
+  feRevenue: number;
+  bumpRevenue: number;
+  u1Revenue: number;
+  u2Revenue: number;
+  downRevenue: number;
+}
+
+function aggregateGroups(
+  groupList: FunnelGroupAgg[],
+  totalGroups: number,
+): { stages: FunnelStage[]; summary: FunnelSummary } {
   let feGroups = 0;
   let bumpGroups = 0;
   let u1Groups = 0;
@@ -374,7 +466,7 @@ export async function getFunnel(
   let groupsFEOnly = 0;
   let groupsWithUpsell = 0;
 
-  for (const g of groups.values()) {
+  for (const g of groupList) {
     if (g.hasFE) feGroups++;
     if (g.hasBump) bumpGroups++;
     if (g.hasU1) u1Groups++;
@@ -447,7 +539,7 @@ export async function getFunnel(
     ],
     summary: {
       feGroups,
-      totalGroups: groups.size,
+      totalGroups,
       totalRevenue: round2(totalRevenue),
       aov: round2(aov),
       aovFEOnly: round2(aovFEOnly),

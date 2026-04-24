@@ -1,9 +1,33 @@
 /* global React */
 /* All remaining pages: Funnel, Leaderboard, All Affiliates, Products, Transactions, Settings */
 
+function funnelTabStyle(active) {
+  return {
+    display: 'inline-flex', alignItems: 'center', gap: 6,
+    padding: '6px 10px', whiteSpace: 'nowrap',
+    background: active ? 'rgba(91,200,255,0.15)' : 'transparent',
+    border: active ? '1px solid rgba(91,200,255,0.4)' : '1px solid transparent',
+    borderRadius: 6, cursor: 'pointer',
+    fontFamily: 'var(--f-mono)', fontSize: 11, letterSpacing: '0.04em',
+    color: active ? 'var(--white)' : 'var(--navy-200)',
+  };
+}
+const funnelTabPillStyle = {
+  fontSize: 10, fontFamily: 'var(--f-mono)',
+  background: 'rgba(91,200,255,0.1)', color: 'var(--glow-cyan)',
+  padding: '1px 5px', borderRadius: 3,
+};
+function truncFunnelName(name, max = 28) {
+  if (!name) return '—';
+  // Drop the " · vendor" tail Products use, then truncate.
+  const head = name.split(' · ')[0];
+  return head.length > max ? head.slice(0, max - 1) + '…' : head;
+}
+
 // ---------- FUNNEL ANALYTICS ----------
 function FunnelPage({ filters }) {
   const [state, setFunState] = useState({ status: 'loading', data: null, error: null });
+  const [selected, setSelected] = useState('all');
 
   useEffect(() => {
     let cancelled = false;
@@ -19,12 +43,29 @@ function FunnelPage({ filters }) {
   }, [filters.dateRange.start.getTime(), filters.dateRange.end.getTime(),
       Array.from(filters.platforms).join(','), Array.from(filters.countries).join(',')]);
 
+  // Reset selection if the chosen funnel no longer exists in the new dataset
+  useEffect(() => {
+    if (selected === 'all') return;
+    const list = state.data?.byFunnel || [];
+    if (!list.some((f) => f.productExternalId === selected)) setSelected('all');
+  }, [state.data, selected]);
+
   const cur = filters.currency || 'USD';
-  const stages = state.data?.stages || [];
-  const summary = state.data?.summary || {
+  const byFunnel = state.data?.byFunnel || [];
+  const emptySummary = {
     feGroups: 0, totalGroups: 0, totalRevenue: 0,
     aov: 0, aovFEOnly: 0, aovWithUpsell: 0, revenueLiftFromUpsells: 0,
   };
+  const view = selected === 'all'
+    ? { stages: state.data?.stages || [], summary: state.data?.summary || emptySummary, name: null, platformSlug: null }
+    : (() => {
+        const hit = byFunnel.find((f) => f.productExternalId === selected);
+        return hit
+          ? { stages: hit.stages, summary: hit.summary, name: hit.productName, platformSlug: hit.platformSlug }
+          : { stages: [], summary: emptySummary, name: null, platformSlug: null };
+      })();
+  const stages = view.stages;
+  const summary = view.summary;
 
   // Adapt to FunnelChart shape: { label, volume }
   const chartStages = stages.map((s) => ({ label: s.label, volume: s.volume }));
@@ -35,12 +76,49 @@ function FunnelPage({ filters }) {
         <div className="lead">
           <span className="eyebrow">FUNNEL ANALYTICS</span>
           <h2>Front-end <em>até backend</em>.</h2>
-          <span className="sub">100% = vendas iniciais · take rates relativas ao FE</span>
+          <span className="sub">
+            {selected === 'all'
+              ? '100% = vendas iniciais · take rates relativas ao FE'
+              : `Funil isolado: ${view.name} · ${view.platformSlug}`}
+          </span>
         </div>
       </div>
 
       {state.status === 'error' && (
         <div className="panel" style={{ color: 'var(--danger)' }}>Erro ao carregar: {state.error}</div>
+      )}
+
+      {byFunnel.length > 0 && (
+        <div style={{
+          display: 'flex', gap: 6, marginBottom: 14, padding: 4,
+          background: 'rgba(91,200,255,0.04)', border: '1px solid var(--border)',
+          borderRadius: 8, overflowX: 'auto',
+        }}>
+          <button
+            onClick={() => setSelected('all')}
+            className={selected === 'all' ? 'is-active' : ''}
+            style={funnelTabStyle(selected === 'all')}
+          >
+            Todos
+            <span style={funnelTabPillStyle}>{fmtInt(state.data?.summary?.feGroups || 0)}</span>
+          </button>
+          {byFunnel.map((f) => (
+            <button
+              key={f.productExternalId}
+              onClick={() => setSelected(f.productExternalId)}
+              className={selected === f.productExternalId ? 'is-active' : ''}
+              style={funnelTabStyle(selected === f.productExternalId)}
+              title={`${f.productName} · ${f.platformSlug}`}
+            >
+              <span style={{
+                width: 6, height: 6, borderRadius: '50%',
+                background: f.platformSlug === 'digistore24' ? '#8B7FFF' : '#5BC8FF',
+              }}/>
+              {truncFunnelName(f.productName)}
+              <span style={funnelTabPillStyle}>{fmtInt(f.summary.feGroups)}</span>
+            </button>
+          ))}
+        </div>
       )}
 
       <div className="mini-kpis">
