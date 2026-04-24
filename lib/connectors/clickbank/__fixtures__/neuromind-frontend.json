@@ -1,0 +1,104 @@
+{
+  "affiliate": "testaff01",
+  "attemptCount": 1,
+  "commonTrackingParameters": {
+    "deviceType": "Desktop",
+    "country": "US",
+    "trackingType": "direct",
+    "os": "Windows NT",
+    "city": "Phoenix",
+    "useragent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36",
+    "clickTimestamp": "2026-04-24T00:16:10.669756922Z",
+    "clickId": "00000000-0000-0000-0000-000000000000",
+    "osVersion": "??",
+    "browser": "Chrome",
+    "browserVersion": "138",
+    "deviceModel": "Desktop",
+    "state": "Arizona",
+    "deviceBrand": "Unknown",
+    "browserLang": "en"
+  },
+  "currency": "USD",
+  "customer": {
+    "shipping": {
+      "address": {
+        "address1": "123 Test St",
+        "address2": "",
+        "city": "Phoenix",
+        "country": "US",
+        "county": "MARICOPA",
+        "postalCode": "85050",
+        "state": "AZ"
+      },
+      "email": "buyer@example.test",
+      "firstName": "Test",
+      "fullName": "Test Buyer",
+      "lastName": "Buyer",
+      "phoneNumber": "+15555550000"
+    },
+    "billing": {
+      "address": {
+        "country": "US",
+        "postalCode": "85050",
+        "state": "AZ"
+      },
+      "email": "buyer@example.test",
+      "firstName": "Test",
+      "fullName": "Test Buyer",
+      "lastName": "Buyer",
+      "phoneNumber": "+15555550000"
+    }
+  },
+  "lineItems": [
+    {
+      "accountAmount": 28.94,
+      "affiliatePayout": 240,
+      "downloadUrl": "https://example.test/thanks/?item=TestProduct-FE&cbreceipt=TEST0001",
+      "itemNo": "TestProduct-FE",
+      "lineItemType": "ORIGINAL",
+      "productDiscount": 0,
+      "productPrice": 294,
+      "productTitle": "Test Product",
+      "quantity": 1,
+      "recurring": false,
+      "shippable": true,
+      "shippingAmount": 0,
+      "shippingLiable": true,
+      "taxAmount": 26.75
+    }
+  ],
+  "orderLanguage": "EN",
+  "paymentMethod": "VISA",
+  "receipt": "TEST0001",
+  "role": "VENDOR",
+  "totalAccountAmount": 28.94,
+  "totalOrderAmount": 320.75,
+  "totalShippingAmount": 0,
+  "totalTaxAmount": 26.75,
+  "transactionTime": "20260423T175704-0700",
+  "transactionType": "SALE",
+  "upsell": {
+    "upsellFlowId": 62496,
+    "upsellFlowName": "Test Upsell Flow",
+    "upsellOriginalReceipt": "TEST0001",
+    "upsellSession": "TESTSESSION01"
+  },
+  "vendor": "testvendor",
+  "vendorVariables": {
+    "cbitems": "TestProduct-FE",
+    "template": "test1",
+    "ad": "Test_CP-01_AD01",
+    "aff_sub1": "1559512",
+    "cbfid": "62496",
+    "traffic_type": "Desktop",
+    "traffic_source": "Taboola_Test",
+    "creative": "4263737651",
+    "offer": "TEST_OFFER_01",
+    "campaign": "Test_CP-06_21-04",
+    "campaignkey": "test-key",
+    "aff_sub2": "49048796",
+    "aff_sub3": "Test sub3 text",
+    "adgroup": ""
+  },
+  "version": 8
+}

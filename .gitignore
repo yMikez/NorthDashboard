@@ -1,0 +1,15 @@
+node_modules/
+.next/
+out/
+.env
+.env.local
+.env.*.local
+!.env.example
+
+*.log
+.DS_Store
+
+prisma/migrations/dev.db*
+
+coverage/
+.vitest-cache/

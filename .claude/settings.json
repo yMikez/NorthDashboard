@@ -1,0 +1,16 @@
+{
+  "permissions": {
+    "allow": [
+      "WebSearch",
+      "WebFetch(domain:docs.digistore24.com)",
+      "WebFetch(domain:help.digistore24.com)",
+      "WebFetch(domain:www.digistore24.com)",
+      "Read(//c/Users/anton/.claude/projects/c--Users-anton-Documents-P-ginas-NorthScale-NorthScaleDashboard/memory/**)",
+      "Bash(mkdir -p public)",
+      "Bash(mv index.html public/)",
+      "Bash(mv src *)",
+      "Bash(mv styles *)",
+      "Bash(mv assets *)"
+    ]
+  }
+}

@@ -1,0 +1,293 @@
+/* ============================================================
+   Northscale Design System — Colors & Type
+   Single source of truth for CSS tokens + base type styles.
+   Import this file FIRST before any component styles.
+   ============================================================ */
+
+/* Local brand fonts — Fraunces (display). Variable axes: opsz 9–144, SOFT 0–100, wght 300–900.
+   Geist + Geist Mono still loaded via Google Fonts (no local files provided). */
+@import url('https://fonts.googleapis.com/css2?family=Geist:wght@300..700&family=Geist+Mono:wght@400;500;600&display=swap');
+
+@font-face {
+  font-family: 'Fraunces';
+  font-style: normal;
+  font-weight: 300 900;
+  font-display: swap;
+  src: url('./fonts/Fraunces-VariableFont_SOFTWONKopszwght.ttf') format('truetype-variations'),
+       url('./fonts/Fraunces-VariableFont_SOFTWONKopszwght.ttf') format('truetype');
+  font-variation-settings: 'opsz' 144;
+}
+@font-face {
+  font-family: 'Fraunces';
+  font-style: italic;
+  font-weight: 300 900;
+  font-display: swap;
+  src: url('./fonts/Fraunces-Italic-VariableFont_SOFTWONKopszwght.ttf') format('truetype-variations'),
+       url('./fonts/Fraunces-Italic-VariableFont_SOFTWONKopszwght.ttf') format('truetype');
+}
+
+:root {
+  /* ---------- NAVY (primary) ---------- */
+  --navy-50:  #F4F6FB;
+  --navy-100: #E4EAF5;
+  --navy-200: #BBC8E2;
+  --navy-300: #8CA1C8;
+  --navy-400: #5B78AA;
+  --navy-500: #3956A1;
+  --navy-600: #1E3A8A;   /* official navy — links, filled states */
+  --navy-700: #152A66;
+  --navy-800: #0F1F4D;
+  --navy-900: #060D25;
+  --navy-950: #030617;   /* app background */
+
+  /* ---------- GLOW (accents) ---------- */
+  --glow-cyan:     #5BC8FF;   /* CTAs, highlights, focus state */
+  --glow-electric: #4A90FF;   /* gradients, hover states */
+  --glow-violet:   #8B7FFF;   /* auroras, secondary accent */
+
+  /* ---------- NEUTRALS ---------- */
+  --white:    #FFFFFF;
+  --gray-50:  #FAFAFA;
+  --gray-100: #F2F2F3;
+  --gray-200: #E4E4E7;
+  --gray-300: #C8C9CF;
+  --gray-400: #8F919A;
+  --gray-500: #5E616B;
+  --gray-600: #3F424B;
+  --gray-700: #272933;
+  --gray-800: #15161D;
+  --gray-900: #0A0B12;
+
+  /* ---------- SEMANTIC ---------- */
+  --success: #10B981;
+  --warning: #F59E0B;
+  --danger:  #EF4444;
+
+  /* ---------- FOREGROUND / BACKGROUND aliases ---------- */
+  --bg:      var(--navy-950);
+  --bg-raised: rgba(15, 31, 77, 0.3);   /* cards over dark */
+  --bg-elev: rgba(6, 13, 37, 0.6);       /* elevated panels */
+  --fg1:     var(--white);               /* primary text on dark */
+  --fg2:     var(--navy-100);
+  --fg3:     var(--navy-200);            /* body text on dark */
+  --fg4:     var(--navy-300);            /* secondary text */
+  --fg5:     var(--navy-400);            /* hint / meta */
+  --border-soft: rgba(91, 200, 255, 0.08);
+  --border:      rgba(91, 200, 255, 0.15);
+  --border-strong: rgba(91, 200, 255, 0.4);
+  --accent:  var(--glow-cyan);
+
+  /* ---------- SPACING (4px grid) ---------- */
+  --s-1: 4px;   --s-2: 8px;   --s-3: 12px;
+  --s-4: 16px;  --s-5: 24px;  --s-6: 32px;
+  --s-7: 48px;  --s-8: 64px;  --s-9: 96px;
+  --s-10: 128px;
+
+  /* ---------- RADIUS ---------- */
+  --r-sm: 4px;  --r-md: 8px;  --r-lg: 12px;
+  --r-xl: 20px; --r-full: 999px;
+
+  /* ---------- SHADOWS ---------- */
+  --shadow-sm: 0 1px 2px rgba(0,0,0,0.2);
+  --shadow-md: 0 4px 12px rgba(0,0,0,0.3);
+  --shadow-lg: 0 20px 60px -20px rgba(91, 200, 255, 0.3);
+  --shadow-glow: 0 0 40px -10px rgba(91, 200, 255, 0.3);
+  --shadow-glow-strong: 0 10px 40px -10px rgba(74, 144, 255, 0.8);
+
+  /* ---------- FONTS ---------- */
+  --f-display: 'Fraunces', 'Times New Roman', serif;
+  --f-body:    'Geist', system-ui, -apple-system, sans-serif;
+  --f-mono:    'Geist Mono', 'SF Mono', Menlo, monospace;
+
+  /* Fraunces variable axes presets */
+  --fvs-hero:    'opsz' 144, 'SOFT' 30, 'wght' 500;
+  --fvs-hero-em: 'opsz' 144, 'SOFT' 80, 'wght' 400;  /* italic accent */
+  --fvs-display: 'opsz' 144, 'SOFT' 20, 'wght' 500;
+  --fvs-h3:      'opsz' 48,  'SOFT' 30, 'wght' 500;
+
+  /* ---------- MOTION ---------- */
+  --ease-smooth: cubic-bezier(0.22, 1, 0.36, 1);
+  --ease-out:    cubic-bezier(0.33, 1, 0.68, 1);
+  --dur-fast:   150ms;
+  --dur-base:   250ms;
+  --dur-slow:   400ms;
+
+  /* ---------- TYPE TOKENS ---------- */
+  --t-hero-size:       clamp(48px, 8vw, 88px);
+  --t-hero-lh:         0.95;
+  --t-hero-tracking:   -0.04em;
+
+  --t-display-xl-size: 72px;
+  --t-display-lg-size: 48px;
+  --t-display-md-size: 36px;
+  --t-display-sm-size: 24px;
+
+  --t-body-lg-size: 18px;
+  --t-body-md-size: 15px;
+  --t-body-sm-size: 13px;
+
+  --t-label-size:    13px;
+  --t-mono-tag-size: 12px;
+}
+
+/* ============================================================
+   BASE TYPE — semantic elements get brand defaults
+   ============================================================ */
+
+html { -webkit-text-size-adjust: 100%; }
+
+body {
+  font-family: var(--f-body);
+  font-size: var(--t-body-md-size);
+  line-height: 1.6;
+  color: var(--fg3);
+  background: var(--bg);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+h1, h2, h3, h4, h5, h6 {
+  font-family: var(--f-display);
+  color: var(--fg1);
+  font-weight: 500;
+  line-height: 1.1;
+  letter-spacing: -0.03em;
+  margin: 0;
+}
+
+h1 {
+  font-size: var(--t-hero-size);
+  line-height: var(--t-hero-lh);
+  letter-spacing: var(--t-hero-tracking);
+  font-variation-settings: var(--fvs-hero);
+}
+h1 em, h2 em, h3 em {
+  font-style: italic;
+  color: var(--glow-cyan);
+  font-variation-settings: var(--fvs-hero-em);
+  text-shadow: 0 0 40px rgba(91, 200, 255, 0.25);
+}
+
+h2 {
+  font-size: clamp(32px, 5vw, 52px);
+  font-variation-settings: var(--fvs-display);
+}
+
+h3 {
+  font-size: var(--t-display-sm-size);
+  letter-spacing: -0.02em;
+  font-variation-settings: var(--fvs-h3);
+}
+
+p {
+  margin: 0 0 var(--s-3);
+  font-size: var(--t-body-md-size);
+  line-height: 1.6;
+  color: var(--fg3);
+}
+
+strong, b { font-weight: 600; color: var(--fg1); }
+
+small { font-size: var(--t-body-sm-size); color: var(--fg4); }
+
+code, pre, kbd, samp {
+  font-family: var(--f-mono);
+  font-size: var(--t-mono-tag-size);
+}
+code {
+  background: rgba(91, 200, 255, 0.1);
+  color: var(--glow-cyan);
+  padding: 2px 6px;
+  border-radius: var(--r-sm);
+}
+
+a {
+  color: var(--glow-cyan);
+  text-decoration: none;
+  transition: color var(--dur-base) var(--ease-smooth);
+}
+a:hover { color: var(--white); }
+
+hr {
+  border: none;
+  border-top: 1px solid var(--border);
+  margin: var(--s-6) 0;
+}
+
+::selection {
+  background: rgba(91, 200, 255, 0.35);
+  color: var(--white);
+}
+
+/* ============================================================
+   UTILITY TYPE CLASSES
+   Apply directly for inline usage.
+   ============================================================ */
+
+.t-hero {
+  font-family: var(--f-display);
+  font-size: var(--t-hero-size);
+  line-height: var(--t-hero-lh);
+  letter-spacing: var(--t-hero-tracking);
+  color: var(--fg1);
+  font-weight: 500;
+  font-variation-settings: var(--fvs-hero);
+}
+.t-display-xl {
+  font-family: var(--f-display);
+  font-size: var(--t-display-xl-size);
+  line-height: 0.95; letter-spacing: -0.04em;
+  color: var(--fg1); font-weight: 500;
+  font-variation-settings: var(--fvs-hero);
+}
+.t-display-lg {
+  font-family: var(--f-display);
+  font-size: var(--t-display-lg-size);
+  line-height: 1.05; letter-spacing: -0.03em;
+  color: var(--fg1); font-weight: 500;
+  font-variation-settings: var(--fvs-display);
+}
+.t-display-md {
+  font-family: var(--f-display);
+  font-size: var(--t-display-md-size);
+  line-height: 1.1; letter-spacing: -0.025em;
+  color: var(--fg1); font-weight: 500;
+  font-variation-settings: var(--fvs-h3);
+}
+.t-display-sm {
+  font-family: var(--f-display);
+  font-size: var(--t-display-sm-size);
+  line-height: 1.2; letter-spacing: -0.02em;
+  color: var(--fg1); font-weight: 500;
+  font-variation-settings: var(--fvs-h3);
+}
+
+.t-body-lg { font: 400 var(--t-body-lg-size)/1.6 var(--f-body); color: var(--fg2); }
+.t-body-md { font: 400 var(--t-body-md-size)/1.6 var(--f-body); color: var(--fg3); }
+.t-body-sm { font: 400 var(--t-body-sm-size)/1.55 var(--f-body); color: var(--fg4); }
+
+.t-label    { font: 500 var(--t-label-size)/1.4 var(--f-body); color: var(--fg1); }
+
+.t-mono     { font-family: var(--f-mono); font-size: var(--t-mono-tag-size); }
+.t-mono-tag {
+  font-family: var(--f-mono);
+  font-size: var(--t-mono-tag-size);
+  font-weight: 500;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--glow-cyan);
+}
+.t-eyebrow {
+  font-family: var(--f-mono);
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.25em;
+  text-transform: uppercase;
+  color: var(--glow-cyan);
+}
+
+.t-italic-accent {
+  font-style: italic;
+  color: var(--glow-cyan);
+  font-variation-settings: var(--fvs-hero-em);
+}

@@ -1,0 +1,192 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Platform {
+  id          String   @id @default(cuid())
+  slug        String   @unique
+  displayName String
+  isActive    Boolean  @default(true)
+  lastSyncAt  DateTime?
+  createdAt   DateTime @default(now())
+
+  orders     Order[]
+  products   Product[]
+  affiliates Affiliate[]
+  customers  Customer[]
+}
+
+enum ProductType {
+  FRONTEND
+  UPSELL
+  DOWNSELL
+  BUMP
+}
+
+model Product {
+  id              String      @id @default(cuid())
+  platformId      String
+  externalId      String
+  name            String
+  productType     ProductType
+  funnelPosition  Int?
+  parentProductId String?
+  costOfGoods     Decimal?    @db.Decimal(10, 2)
+  currency        String      @default("USD")
+  isActive        Boolean     @default(true)
+  createdAt       DateTime    @default(now())
+
+  platform Platform  @relation(fields: [platformId], references: [id])
+  parent   Product?  @relation("FunnelTree", fields: [parentProductId], references: [id])
+  children Product[] @relation("FunnelTree")
+  orders   Order[]
+
+  @@unique([platformId, externalId])
+}
+
+model Affiliate {
+  id          String    @id @default(cuid())
+  platformId  String
+  externalId  String
+  nickname    String?
+  firstSeenAt DateTime
+  lastOrderAt DateTime?
+
+  platform Platform @relation(fields: [platformId], references: [id])
+  orders   Order[]
+
+  @@unique([platformId, externalId])
+  @@index([lastOrderAt])
+}
+
+model Customer {
+  id          String    @id @default(cuid())
+  platformId  String
+  externalId  String
+  email       String?
+  firstName   String?
+  lastName    String?
+  language    String?
+  country     String?
+  firstSeenAt DateTime
+  lastOrderAt DateTime?
+
+  platform Platform @relation(fields: [platformId], references: [id])
+  orders   Order[]
+
+  @@unique([platformId, externalId])
+  @@index([email])
+}
+
+enum OrderStatus {
+  PENDING
+  APPROVED
+  REFUNDED
+  CHARGEBACK
+  CANCELED
+}
+
+enum BillingType {
+  SINGLE_PAYMENT
+  INSTALLMENT
+  SUBSCRIPTION
+  UNKNOWN
+}
+
+model Order {
+  id                    String      @id @default(cuid())
+  platformId            String
+  externalId            String
+  parentExternalId      String?
+  previousTransactionId String?
+  vendorAccount         String?
+  productId             String
+  affiliateId           String?
+  customerId            String?
+
+  currencyOriginal String
+  grossAmountOrig  Decimal @db.Decimal(12, 2)
+  grossAmountUsd   Decimal @db.Decimal(12, 2)
+  taxAmount        Decimal @db.Decimal(12, 2) @default(0)
+  fees             Decimal @db.Decimal(12, 2) @default(0)
+  netAmountUsd     Decimal @db.Decimal(12, 2)
+  cpaPaidUsd       Decimal @db.Decimal(12, 2) @default(0)
+
+  status      OrderStatus
+  eventType   String
+  billingType BillingType @default(UNKNOWN)
+  paySequenceNo      Int?
+  numberOfInstallments Int?
+
+  paymentMethod String?
+  country       String?
+  state         String?
+  city          String?
+
+  funnelSessionId String?
+  funnelStep      Int?
+  clickId         String?
+  trackingId      String?
+  campaignKey     String?
+  trafficSource   String?
+  deviceType      String?
+  browser         String?
+
+  detailsUrl String?
+
+  orderedAt    DateTime
+  approvedAt   DateTime?
+  refundedAt   DateTime?
+  chargebackAt DateTime?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  rawMetadata Json?
+
+  platform  Platform   @relation(fields: [platformId], references: [id])
+  product   Product    @relation(fields: [productId], references: [id])
+  affiliate Affiliate? @relation(fields: [affiliateId], references: [id])
+  customer  Customer?  @relation(fields: [customerId], references: [id])
+
+  @@unique([platformId, externalId])
+  @@index([orderedAt])
+  @@index([affiliateId, orderedAt])
+  @@index([productId, orderedAt])
+  @@index([status])
+  @@index([funnelSessionId])
+  @@index([parentExternalId])
+  @@index([vendorAccount, orderedAt])
+}
+
+model FxRate {
+  id    String   @id @default(cuid())
+  date  DateTime @db.Date
+  base  String
+  quote String
+  rate  Decimal  @db.Decimal(12, 6)
+
+  @@unique([date, base, quote])
+}
+
+model IngestLog {
+  id           String    @id @default(cuid())
+  source       String
+  platformSlug String
+  eventType    String
+  externalId   String?
+  payload      Json
+  signatureOk  Boolean?
+  processedOk  Boolean   @default(false)
+  error        String?
+  receivedAt   DateTime  @default(now())
+  processedAt  DateTime?
+
+  @@index([platformSlug, receivedAt])
+  @@index([processedOk])
+  @@index([externalId])
+}

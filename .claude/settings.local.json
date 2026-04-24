@@ -1,0 +1,8 @@
+{
+  "permissions": {
+    "allow": [
+      "WebFetch(domain:support.clickbank.com)",
+      "WebFetch(domain:dev.digistore24.com)"
+    ]
+  }
+}

@@ -1,0 +1,137 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=1440"/>
+<title>Northscale · Operations Dashboard</title>
+<link rel="stylesheet" href="styles/colors_and_type.css"/>
+<link rel="stylesheet" href="styles/dashboard.css"/>
+<link rel="icon" href="assets/logo-mark-dark.svg"/>
+</head>
+<body>
+<div id="app"></div>
+
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+
+<script src="src/mock.js"></script>
+<script type="text/babel" src="src/utils.jsx"></script>
+<script type="text/babel" src="src/charts.jsx"></script>
+<script type="text/babel" src="src/shell.jsx"></script>
+<script type="text/babel" src="src/pages/overview.jsx"></script>
+<script type="text/babel" src="src/pages/all-pages.jsx"></script>
+
+<script type="text/babel" data-presets="react">
+const { useState: useStateApp, useEffect: useEffectApp } = React;
+
+// --- route ↔ metadata
+const ROUTES = {
+  'overview':       { title: 'Operation',  em: 'overview',  crumbs: ['Analytics', 'Overview'] },
+  'funnel':         { title: 'Funnel',     em: 'analytics', crumbs: ['Analytics', 'Funnel'] },
+  'leaderboard':    { title: 'Affiliate',  em: 'leaderboard', crumbs: ['Affiliates', 'Leaderboard'] },
+  'all-affiliates': { title: 'All',        em: 'affiliates',  crumbs: ['Affiliates', 'Directory'] },
+  'products':       { title: 'Products &', em: 'offers',      crumbs: ['Catalog', 'Products / Offers'] },
+  'transactions':   { title: 'Transactions', em: 'ledger',    crumbs: ['Catalog', 'Transactions'] },
+  'integrations':   { title: 'Platform',   em: 'integrations', crumbs: ['System', 'Integrations'] },
+  'fx-currency':    { title: 'FX /',       em: 'currency',    crumbs: ['System', 'FX / Currency'] },
+  'users-perms':    { title: 'Users &',    em: 'permissions', crumbs: ['System', 'Users & Permissions'] },
+};
+
+function readHash() {
+  const h = location.hash.replace(/^#/, '');
+  const [route, q] = h.split('?');
+  const params = new URLSearchParams(q || '');
+  return { route: ROUTES[route] ? route : 'overview', params };
+}
+function writeHash(route, params) {
+  const s = params.toString();
+  location.hash = route + (s ? '?' + s : '');
+}
+
+function decodeSet(s) { return new Set(s ? s.split(',').filter(Boolean) : []); }
+function encodeSet(set) { return Array.from(set).join(','); }
+
+function App() {
+  const [hashState, setHashState] = useStateApp(readHash());
+
+  useEffectApp(() => {
+    const fn = () => setHashState(readHash());
+    window.addEventListener('hashchange', fn);
+    return () => window.removeEventListener('hashchange', fn);
+  }, []);
+
+  const params = hashState.params;
+  const initialPreset = params.get('range') || '30d';
+
+  const [filters, setFilters] = useStateApp(() => ({
+    preset: initialPreset,
+    dateRange: rangeForPreset(initialPreset),
+    compare: params.get('cmp') === '1',
+    platforms: decodeSet(params.get('plat')),
+    funnels: decodeSet(params.get('of')),
+    countries: decodeSet(params.get('co')),
+    trafficSources: decodeSet(params.get('ts')),
+    currency: params.get('cur') || 'USD',
+  }));
+
+  // persist filters to URL
+  useEffectApp(() => {
+    const p = new URLSearchParams();
+    if (filters.preset !== '30d') p.set('range', filters.preset);
+    if (filters.compare) p.set('cmp', '1');
+    if (filters.platforms.size) p.set('plat', encodeSet(filters.platforms));
+    if (filters.funnels.size) p.set('of', encodeSet(filters.funnels));
+    if (filters.countries.size) p.set('co', encodeSet(filters.countries));
+    if (filters.trafficSources.size) p.set('ts', encodeSet(filters.trafficSources));
+    if (filters.currency !== 'USD') p.set('cur', filters.currency);
+    const currentPath = hashState.route;
+    const newHash = currentPath + (p.toString() ? '?' + p.toString() : '');
+    if (location.hash.replace(/^#/, '') !== newHash) {
+      history.replaceState(null, '', '#' + newHash);
+    }
+  }, [filters, hashState.route]);
+
+  const [drawerAff, setDrawerAff] = useStateApp(null);
+
+  function onNav(route) {
+    setDrawerAff(null);
+    writeHash(route, new URLSearchParams(location.hash.split('?')[1] || ''));
+  }
+
+  const r = ROUTES[hashState.route];
+
+  return (
+    <div className="app">
+      <FXLayers/>
+      <Sidebar active={hashState.route} onNav={onNav}/>
+      <div className="main">
+        <Topbar
+          title={r.title} titleEm={r.em} crumbs={r.crumbs}
+          currency={filters.currency}
+          onToggleCurrency={(c) => setFilters(f => ({ ...f, currency: c }))}
+        />
+        <FilterBar filters={filters} setFilters={setFilters}/>
+        <div className="page">
+          {hashState.route === 'overview'       && <OverviewPage filters={filters}/>}
+          {hashState.route === 'funnel'         && <FunnelPage filters={filters}/>}
+          {hashState.route === 'leaderboard'    && <LeaderboardPage filters={filters} onOpenAffiliate={setDrawerAff}/>}
+          {hashState.route === 'all-affiliates' && <AllAffiliatesPage filters={filters} onOpenAffiliate={setDrawerAff}/>}
+          {hashState.route === 'products'       && <ProductsPage filters={filters}/>}
+          {hashState.route === 'transactions'   && <TransactionsPage filters={filters}/>}
+          {hashState.route === 'integrations'   && <IntegrationsPage/>}
+          {hashState.route === 'fx-currency'    && <FXPage filters={filters}/>}
+          {hashState.route === 'users-perms'    && <UsersPage/>}
+        </div>
+      </div>
+
+      {drawerAff && <AffiliateDrawer affiliateId={drawerAff} filters={filters} onClose={() => setDrawerAff(null)}/>}
+    </div>
+  );
+}
+
+const root = ReactDOM.createRoot(document.getElementById('app'));
+root.render(<App/>);
+</script>
+</body>
+</html>
