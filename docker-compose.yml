@@ -1,0 +1,46 @@
+services:
+  app:
+    container_name: dashboard-app
+    build: .
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:-dashboard}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-dashboard}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - internal
+      - web
+    # No 'ports' here — reverse proxy on host (supportchat-caddy or Traefik) reaches us
+    # via Docker network at dashboard-app:3000.
+
+  postgres:
+    container_name: dashboard-postgres
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-dashboard}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB:-dashboard}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - internal
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-dashboard} -d ${POSTGRES_DB:-dashboard}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  postgres_data:
+
+networks:
+  internal:
+    driver: bridge
+  web:
+    external: true
+    # Pre-existing network that the supportchat-caddy (or Traefik) is attached to.
+    # Create it once on the host with: docker network create web
+    # Then attach supportchat-caddy to it so it can reach dashboard-app:3000.
