@@ -719,27 +719,32 @@ function AllAffiliatesPage({ filters, onOpenAffiliate }) {
 
 // ---------- PRODUCTS ----------
 function ProductsPage({ filters }) {
-  const filtered = useMemo(() => applyFilters(window.MOCK.orders, {
-    dateRange: filters.dateRange, platforms: filters.platforms,
-    products: null, countries: filters.countries, trafficSources: filters.trafficSources,
-  }), [filters]);
+  const [state, setProdState] = useState({ status: 'loading', data: null, error: null });
 
-  // aggregate by product
-  const perProd = {};
-  for (const o of filtered) {
-    if (o.status !== 'approved') continue;
-    const k = perProd[o.productId] = perProd[o.productId] || { revenue: 0, orders: 0, cpa: 0, net: 0 };
-    k.revenue += o.grossAmount; k.orders++; k.cpa += o.cpaPaid; k.net += o.netAmount;
-  }
+  useEffect(() => {
+    let cancelled = false;
+    setProdState((s) => ({ ...s, status: 'loading' }));
+    window.NSApi.fetchProducts(filters)
+      .then((data) => { if (!cancelled) setProdState({ status: 'ready', data, error: null }); })
+      .catch((err) => {
+        if (cancelled) return;
+        console.error('fetchProducts failed', err);
+        setProdState({ status: 'error', data: null, error: err.message });
+      });
+    return () => { cancelled = true; };
+  }, [filters.dateRange.start.getTime(), filters.dateRange.end.getTime(),
+      Array.from(filters.platforms).join(','), Array.from(filters.countries).join(',')]);
 
-  // aggregate by funnel for the card
-  const funnels = [
-    { id: 'fx', name: 'FocusRx', tag: 'Nootropic · daily focus', icon: 'target', accent: '#5BC8FF' },
-    { id: 'sx', name: 'SleepCore', tag: 'Deep-sleep melatonin stack', icon: 'moon', accent: '#8B7FFF' },
-    { id: 'mx', name: 'MetaLean', tag: 'Thermogenic · metabolic', icon: 'flame', accent: '#4A90FF' },
-  ];
+  const cur = filters.currency || 'USD';
+  const byType = state.data?.byType || [];
+  const products = state.data?.products || [];
 
-  const cur = filters.currency;
+  const TYPE_META = {
+    FRONTEND: { label: 'Frontend', icon: 'target', accent: '#5BC8FF', tag: 'Entrada do funil' },
+    UPSELL:   { label: 'Upsell',   icon: 'arrow-up-right', accent: '#4A90FF', tag: 'Escalada pós-FE' },
+    BUMP:     { label: 'Bump',     icon: 'plus', accent: '#8B7FFF', tag: 'Add-on de checkout' },
+    DOWNSELL: { label: 'Downsell', icon: 'arrow-down-right', accent: '#6b84b8', tag: 'Recuperação pós-recusa' },
+  };
 
   return (
     <div className="page-in">
@@ -747,49 +752,46 @@ function ProductsPage({ filters }) {
         <div className="lead">
           <span className="eyebrow">PRODUCTS · OFFERS</span>
           <h2>Catalog <em>performance</em></h2>
-          <span className="sub">By funnel · front-end + upsells rolled up</span>
+          <span className="sub">Por tipo de produto · SKUs consolidados abaixo</span>
         </div>
       </div>
 
-      <div className="prod-grid">
-        {funnels.map(f => {
-          const fe = window.MOCK.PRODUCTS.find(p => p.funnel === f.id && p.type === 'frontend');
-          const feK = perProd[fe.id] || { revenue: 0, orders: 0, cpa: 0, net: 0 };
-          // funnel totals (all product types in funnel)
-          let funnelRev = 0, funnelOrders = 0, funnelNet = 0, funnelCpa = 0;
-          for (const p of window.MOCK.PRODUCTS.filter(x => x.funnel === f.id)) {
-            const k = perProd[p.id] || {};
-            funnelRev += k.revenue || 0;
-            funnelNet += k.net || 0;
-            funnelCpa += k.cpa || 0;
-          }
-          const u1 = perProd[`${f.id}-up1`] || { orders: 0 };
-          const takeU1 = feK.orders ? u1.orders / feK.orders : 0;
-          const aov = feK.orders ? funnelRev / feK.orders : 0;
-          const margin = funnelNet - funnelCpa;
-          const marginPct = funnelRev ? margin / funnelRev : 0;
+      {state.status === 'error' && (
+        <div className="panel" style={{ color: 'var(--danger)' }}>Erro ao carregar: {state.error}</div>
+      )}
 
+      <div className="prod-grid">
+        {state.status === 'loading' && (
+          <div className="panel" style={{ gridColumn: '1 / -1', textAlign: 'center', padding: 24, opacity: 0.6 }}>
+            Carregando...
+          </div>
+        )}
+        {byType.map((bucket) => {
+          const meta = TYPE_META[bucket.productType] || { label: bucket.productType, icon: 'package', accent: '#5BC8FF', tag: '' };
+          const margin = bucket.net - bucket.cpa;
+          const marginPct = bucket.revenue ? margin / bucket.revenue : 0;
+          const aov = bucket.orders ? bucket.revenue / bucket.orders : 0;
           return (
-            <div key={f.id} className="prod-card">
-              <div className="prod-thumb" style={{ color: f.accent }}>
-                <Icon name={f.icon} size={36} stroke={1.2}/>
+            <div key={bucket.productType} className="prod-card">
+              <div className="prod-thumb" style={{ color: meta.accent }}>
+                <Icon name={meta.icon} size={36} stroke={1.2}/>
               </div>
               <div>
-                <div className="prod-name">{f.name}</div>
-                <div style={{ fontFamily: 'var(--f-mono)', fontSize: 10, color: 'var(--navy-400)', letterSpacing: '0.08em', marginTop: 2 }}>{f.tag.toUpperCase()}</div>
+                <div className="prod-name">{meta.label}</div>
+                <div style={{ fontFamily: 'var(--f-mono)', fontSize: 10, color: 'var(--navy-400)', letterSpacing: '0.08em', marginTop: 2 }}>
+                  {meta.tag.toUpperCase()}
+                </div>
               </div>
               <div className="prod-plat">
-                <span className="plat plat-d24">D24</span>
-                <span className="plat plat-cb">CB</span>
                 <span style={{ fontFamily: 'var(--f-mono)', fontSize: 10, color: 'var(--navy-400)', marginLeft: 'auto' }}>
-                  {window.MOCK.PRODUCTS.filter(p => p.funnel === f.id).length} SKUs
+                  {bucket.productCount} SKUs
                 </span>
               </div>
               <div className="prod-stats">
-                <div className="prod-stat"><div className="l">Revenue</div><div className="v">{fmtCurrency(funnelRev, cur, 0)}</div></div>
-                <div className="prod-stat"><div className="l">Orders (FE)</div><div className="v">{fmtInt(feK.orders)}</div></div>
+                <div className="prod-stat"><div className="l">Revenue</div><div className="v">{fmtCurrency(bucket.revenue, cur, 0)}</div></div>
+                <div className="prod-stat"><div className="l">Orders</div><div className="v">{fmtInt(bucket.orders)}</div></div>
                 <div className="prod-stat"><div className="l">AOV</div><div className="v sm">{fmtCurrency(aov, cur, 0)}</div></div>
-                <div className="prod-stat"><div className="l">U1 take</div><div className="v sm">{(takeU1 * 100).toFixed(1)}%</div></div>
+                <div className="prod-stat"><div className="l">CPA</div><div className="v sm">{fmtCurrency(bucket.cpa, cur, 0)}</div></div>
                 <div className="prod-stat"><div className="l">Net margin</div><div className="v sm" style={{ color: margin > 0 ? 'var(--success)' : 'var(--danger)' }}>{fmtCurrency(margin, cur, 0)}</div></div>
                 <div className="prod-stat"><div className="l">Margin %</div><div className="v sm" style={{ color: marginPct > 0.2 ? 'var(--success)' : marginPct > 0.1 ? 'var(--warning)' : 'var(--danger)' }}>{(marginPct * 100).toFixed(1)}%</div></div>
               </div>
@@ -802,27 +804,55 @@ function ProductsPage({ filters }) {
         <div className="panel-head">
           <div className="panel-title">
             <span className="panel-eyebrow">SKU · LINE DETAIL</span>
-            <div className="panel-sub">Every product across the catalog</div>
+            <div className="panel-sub">Todos os produtos no catálogo ({products.length} SKUs)</div>
           </div>
         </div>
         <div className="tbl-wrap">
           <table className="tbl">
             <thead>
-              <tr><th>Product</th><th>SKU</th><th>Type</th><th>Funnel</th><th className="num">Price</th><th className="num">Orders</th><th className="num">Revenue</th><th className="num">Net</th></tr>
+              <tr>
+                <th>Product</th>
+                <th>External ID</th>
+                <th>Type</th>
+                <th>Platform</th>
+                <th>Vendor</th>
+                <th className="num">Orders</th>
+                <th className="num">Approval</th>
+                <th className="num">Revenue</th>
+                <th className="num">Net margin</th>
+                <th className="num">CPA</th>
+                <th>Last sale</th>
+              </tr>
             </thead>
             <tbody>
-              {window.MOCK.PRODUCTS.map(p => {
-                const k = perProd[p.id] || { revenue: 0, orders: 0, net: 0 };
+              {state.status === 'loading' && (
+                <tr><td colSpan={11} style={{ textAlign: 'center', padding: 24, opacity: 0.6 }}>Carregando...</td></tr>
+              )}
+              {state.status === 'ready' && products.length === 0 && (
+                <tr><td colSpan={11} style={{ textAlign: 'center', padding: 24, opacity: 0.6 }}>Sem produtos no período</td></tr>
+              )}
+              {products.map((p) => {
+                const platClass = p.platformSlug === 'digistore24' ? 'plat-d24' : 'plat-cb';
+                const platShort = p.platformSlug === 'digistore24' ? 'D24' : 'CB';
+                const apColor = p.approvalRate > 0.7 ? 'var(--success)' : p.approvalRate > 0.5 ? 'var(--warning)' : 'var(--danger)';
+                const margin = p.net - p.cpa;
                 return (
-                  <tr key={p.id}>
+                  <tr key={`${p.platformSlug}:${p.externalId}`}>
                     <td>{p.name}</td>
-                    <td className="cell-mono">{p.sku}</td>
-                    <td><span className="badge neutral">{p.type}</span></td>
-                    <td className="cell-mono">{p.funnel.toUpperCase()}</td>
-                    <td className="num cell-mono">{fmtCurrency(p.price, cur, 0)}</td>
-                    <td className="num cell-mono">{fmtInt(k.orders)}</td>
-                    <td className="num cell-mono">{fmtCurrency(k.revenue, cur, 0)}</td>
-                    <td className="num cell-mono">{fmtCurrency(k.net, cur, 0)}</td>
+                    <td className="cell-mono" style={{ color: 'var(--navy-300)' }}>{p.externalId}</td>
+                    <td><span className="badge neutral">{p.productType.toLowerCase()}</span></td>
+                    <td><span className={`plat ${platClass}`}>{platShort}</span></td>
+                    <td className="cell-mono" style={{ color: 'var(--navy-300)' }}>{p.vendorAccount || '—'}</td>
+                    <td className="num cell-mono">{fmtInt(p.orders)}</td>
+                    <td className="num cell-mono" style={{ color: apColor }}>
+                      {p.allOrders ? (p.approvalRate * 100).toFixed(1) + '%' : '—'}
+                    </td>
+                    <td className="num cell-mono">{fmtCurrency(p.revenue, cur, 0)}</td>
+                    <td className="num cell-mono" style={{ color: margin > 0 ? 'var(--success)' : 'var(--danger)' }}>
+                      {fmtCurrency(margin, cur, 0)}
+                    </td>
+                    <td className="num cell-mono">{fmtCurrency(p.cpa, cur, 0)}</td>
+                    <td className="cell-mono">{p.lastSoldAt ? fmtDateShort(p.lastSoldAt) : '—'}</td>
                   </tr>
                 );
               })}

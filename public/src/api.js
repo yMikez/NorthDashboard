@@ -102,4 +102,26 @@ async function fetchPlatforms(filters) {
   return fetchJSON('/api/metrics/platforms', params);
 }
 
-window.NSApi = { fetchOverview, fetchOrders, fetchAffiliates, fetchPlatforms };
+/**
+ * Fetch /api/metrics/products.
+ *
+ * Returns { byType, products } — per-productType summaries (FRONTEND/UPSELL/
+ * BUMP/DOWNSELL) + full product list with per-SKU aggregates.
+ */
+async function fetchProducts(filters) {
+  const params = {
+    start_date: toISODate(filters.dateRange.start),
+    end_date: toISODate(filters.dateRange.end),
+    platforms: setToCSV(filters.platforms),
+    countries: setToCSV(filters.countries),
+  };
+  return fetchJSON('/api/metrics/products', params);
+}
+
+window.NSApi = {
+  fetchOverview,
+  fetchOrders,
+  fetchAffiliates,
+  fetchPlatforms,
+  fetchProducts,
+};

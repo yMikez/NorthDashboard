@@ -33,6 +33,34 @@ export interface DailyBucket {
   allOrders: number;
 }
 
+export interface ProductsResponse {
+  byType: Array<{
+    productType: string;
+    revenue: number;
+    orders: number;
+    net: number;
+    cpa: number;
+    productCount: number;
+  }>;
+  products: Array<{
+    externalId: string;
+    name: string;
+    productType: string;
+    platformSlug: string;
+    vendorAccount: string | null;
+    revenue: number;
+    orders: number;
+    allOrders: number;
+    refunds: number;
+    chargebacks: number;
+    net: number;
+    cpa: number;
+    approvalRate: number;
+    firstSoldAt: string | null;
+    lastSoldAt: string | null;
+  }>;
+}
+
 export interface PlatformsResponse {
   platforms: Array<{
     slug: string;
@@ -187,6 +215,147 @@ export async function getOverview(
   }
 
   return response;
+}
+
+export async function getProducts(
+  filters: MetricsFilters,
+): Promise<ProductsResponse> {
+  const where: Prisma.OrderWhereInput = {
+    orderedAt: { gte: filters.startDate, lte: filters.endDate },
+  };
+  if (filters.platformSlugs?.length) {
+    where.platform = { slug: { in: filters.platformSlugs } };
+  }
+  if (filters.countries?.length) {
+    where.country = { in: filters.countries };
+  }
+
+  const orders = await db.order.findMany({
+    where,
+    select: {
+      status: true,
+      grossAmountUsd: true,
+      netAmountUsd: true,
+      cpaPaidUsd: true,
+      vendorAccount: true,
+      orderedAt: true,
+      product: {
+        select: { externalId: true, name: true, productType: true, id: true },
+      },
+      platform: { select: { slug: true } },
+    },
+  });
+
+  interface ProductAgg {
+    externalId: string;
+    name: string;
+    productType: string;
+    platformSlug: string;
+    vendorAccount: string | null;
+    revenue: number;
+    orders: number;
+    allOrders: number;
+    refunds: number;
+    chargebacks: number;
+    net: number;
+    cpa: number;
+    firstSoldAt: Date | null;
+    lastSoldAt: Date | null;
+  }
+
+  const byProduct = new Map<string, ProductAgg>();
+
+  for (const o of orders) {
+    const key = `${o.platform.slug}:${o.product.externalId}`;
+    let p = byProduct.get(key);
+    if (!p) {
+      p = {
+        externalId: o.product.externalId,
+        name: o.product.name,
+        productType: o.product.productType,
+        platformSlug: o.platform.slug,
+        vendorAccount: o.vendorAccount,
+        revenue: 0,
+        orders: 0,
+        allOrders: 0,
+        refunds: 0,
+        chargebacks: 0,
+        net: 0,
+        cpa: 0,
+        firstSoldAt: null,
+        lastSoldAt: null,
+      };
+      byProduct.set(key, p);
+    }
+    p.allOrders++;
+    p.net += toNumber(o.netAmountUsd);
+    p.cpa += toNumber(o.cpaPaidUsd);
+    if (o.status === 'APPROVED') {
+      p.orders++;
+      p.revenue += toNumber(o.grossAmountUsd);
+      if (!p.firstSoldAt || o.orderedAt < p.firstSoldAt) p.firstSoldAt = o.orderedAt;
+      if (!p.lastSoldAt || o.orderedAt > p.lastSoldAt) p.lastSoldAt = o.orderedAt;
+    } else if (o.status === 'REFUNDED') {
+      p.refunds++;
+    } else if (o.status === 'CHARGEBACK') {
+      p.chargebacks++;
+    }
+  }
+
+  const products = Array.from(byProduct.values())
+    .map((p) => ({
+      externalId: p.externalId,
+      name: p.name,
+      productType: p.productType,
+      platformSlug: p.platformSlug,
+      vendorAccount: p.vendorAccount,
+      revenue: round2(p.revenue),
+      orders: p.orders,
+      allOrders: p.allOrders,
+      refunds: p.refunds,
+      chargebacks: p.chargebacks,
+      net: round2(p.net),
+      cpa: round2(p.cpa),
+      approvalRate: p.allOrders ? round4(p.orders / p.allOrders) : 0,
+      firstSoldAt: p.firstSoldAt?.toISOString() ?? null,
+      lastSoldAt: p.lastSoldAt?.toISOString() ?? null,
+    }))
+    .sort((a, b) => b.revenue - a.revenue);
+
+  const typeBucket = new Map<
+    string,
+    { revenue: number; orders: number; net: number; cpa: number; productCount: number }
+  >();
+  for (const p of products) {
+    const t = p.productType;
+    const entry = typeBucket.get(t) ?? { revenue: 0, orders: 0, net: 0, cpa: 0, productCount: 0 };
+    entry.revenue += p.revenue;
+    entry.orders += p.orders;
+    entry.net += p.net;
+    entry.cpa += p.cpa;
+    entry.productCount += 1;
+    typeBucket.set(t, entry);
+  }
+  const TYPE_ORDER = ['FRONTEND', 'UPSELL', 'BUMP', 'DOWNSELL'];
+  const byType = TYPE_ORDER.map((productType) => {
+    const e = typeBucket.get(productType) ?? {
+      revenue: 0,
+      orders: 0,
+      net: 0,
+      cpa: 0,
+      productCount: 0,
+    };
+    return {
+      productType,
+      revenue: round2(e.revenue),
+      orders: e.orders,
+      net: round2(e.net),
+      cpa: round2(e.cpa),
+      productCount: e.productCount,
+    };
+  });
+
+  return { byType, products };
 }
 
 export async function getPlatforms(
