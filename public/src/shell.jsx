@@ -29,9 +29,7 @@ function Sidebar({ active, onNav }) {
     {
       label: 'System',
       items: [
-        { id: 'integrations', label: 'Integrations', icon: 'plug' },
-        { id: 'fx-currency',  label: 'FX / Currency', icon: 'dollar' },
-        { id: 'users-perms',  label: 'Users & permissions', icon: 'settings' },
+        { id: 'platforms', label: 'Plataformas', icon: 'plug' },
       ]
     }
   ];
@@ -195,7 +193,6 @@ function FilterBar({ filters, setFilters }) {
   const platformOpts = window.MOCK.PLATFORMS.map(p => ({ id: p.id, label: p.name, swatch: p.id === 'digistore24' ? '#8B7FFF' : '#5BC8FF' }));
   const productOpts = window.MOCK.PRODUCTS.filter(p => p.type === 'frontend').map(p => ({ id: p.funnel, label: p.name.split(' · ')[0], meta: p.sku.slice(0, 5) }));
   const countryOpts = window.MOCK.COUNTRIES.map(c => ({ id: c.code, label: c.name, meta: c.code }));
-  const trafficOpts = ['Facebook','YouTube','Google','Native','TikTok','Email','Other'].map(t => ({ id: t, label: t }));
 
   return (
     <div className="filters">
@@ -228,16 +225,6 @@ function FilterBar({ filters, setFilters }) {
         onChange={(s) => setFilters(f => ({ ...f, funnels: s }))}/>
       <MultiSelect label="Country" icon="globe" options={countryOpts} selected={filters.countries}
         onChange={(s) => setFilters(f => ({ ...f, countries: s }))}/>
-      <MultiSelect label="Source" icon="zap" options={trafficOpts} selected={filters.trafficSources}
-        onChange={(s) => setFilters(f => ({ ...f, trafficSources: s }))}/>
-
-      <div className="seg" style={{ marginLeft: 4 }}>
-        {['USD','EUR','GBP'].map(c => (
-          <button key={c} className={filters.currency === c ? 'is-active' : ''}
-            onClick={() => setFilters(f => ({ ...f, currency: c }))}
-          >{c}</button>
-        ))}
-      </div>
     </div>
   );
 }

@@ -1,5 +1,8 @@
-/* global React */
-/* Overview page: 8 KPIs, main time chart, breakdowns, top 5, platform health. */
+/* global React, useState, useMemo, Icon, Sparkline, LineChart, Donut, CountryBars,
+   fmtCurrency, fmtInt, avatarColor, initials */
+/* Overview page: fetches /api/metrics/overview, renders 8 KPIs + charts + tables. */
+
+const { useEffect: useEffectOv } = React;
 
 function KpiCard({ label, value, unit, delta, trend, sparkData, icon, alert, hint }) {
   const deltaClass = trend === 'up' ? 'up' : trend === 'down' ? 'down' : 'flat';
@@ -26,113 +29,116 @@ function KpiCard({ label, value, unit, delta, trend, sparkData, icon, alert, hin
   );
 }
 
+const PRODUCT_TYPE_LABELS = {
+  FRONTEND: 'Front-end',
+  UPSELL: 'Upsell',
+  BUMP: 'Bump',
+  DOWNSELL: 'Downsell',
+};
+
+const PRODUCT_TYPE_COLORS = {
+  FRONTEND: '#5BC8FF',
+  UPSELL: '#4A90FF',
+  BUMP: '#8B7FFF',
+  DOWNSELL: '#6b84b8',
+};
+
+const COUNTRY_NAMES = {
+  US: 'United States', CA: 'Canada', UK: 'United Kingdom', GB: 'United Kingdom',
+  AU: 'Australia', DE: 'Germany', NZ: 'New Zealand', IE: 'Ireland', NL: 'Netherlands',
+  FR: 'France', ES: 'Spain', IT: 'Italy', BR: 'Brazil', MX: 'Mexico', JP: 'Japan',
+};
+
+const PLATFORM_VARIANTS = {
+  digistore24: { short: 'D24', className: 'plat-d24' },
+  clickbank: { short: 'CB', className: 'plat-cb' },
+};
+
+function deltaFor(cur, prev) {
+  if (prev === undefined || prev === null) return { delta: '—', trend: 'flat' };
+  if (prev === 0) return cur === 0 ? { delta: '0%', trend: 'flat' } : { delta: '+∞', trend: 'up' };
+  const d = (cur - prev) / prev;
+  return {
+    delta: (d >= 0 ? '+' : '') + (d * 100).toFixed(1) + '%',
+    trend: d >= 0.002 ? 'up' : d <= -0.002 ? 'down' : 'flat',
+  };
+}
+
 function OverviewPage({ filters }) {
-  const filteredOrders = useMemo(() => applyFilters(window.MOCK.orders, {
-    dateRange: filters.dateRange,
-    platforms: filters.platforms,
-    products: mapFunnelsToProducts(filters.funnels),
-    countries: filters.countries,
-    trafficSources: filters.trafficSources,
-  }), [filters]);
-
-  const prevRange = useMemo(() => previousRange(filters.dateRange), [filters.dateRange]);
-  const prevOrders = useMemo(() => applyFilters(window.MOCK.orders, {
-    dateRange: prevRange,
-    platforms: filters.platforms,
-    products: mapFunnelsToProducts(filters.funnels),
-    countries: filters.countries,
-    trafficSources: filters.trafficSources,
-  }), [filters, prevRange]);
-
-  const kpi = aggregateKPIs(filteredOrders);
-  const kpiPrev = aggregateKPIs(prevOrders);
-  const buckets = useMemo(() => bucketByDay(filteredOrders, filters.dateRange), [filteredOrders, filters.dateRange]);
-  const cmpBuckets = useMemo(() => bucketByDay(prevOrders, prevRange), [prevOrders, prevRange]);
-
+  const [state, setState] = useStateApp({ status: 'loading', data: null, error: null });
   const [metric, setMetric] = useState('gross');
 
-  function deltaFor(cur, prev) {
-    if (prev === 0) return { delta: '+∞', trend: 'up' };
-    const d = (cur - prev) / prev;
-    return {
-      delta: (d >= 0 ? '+' : '') + (d * 100).toFixed(1) + '%',
-      trend: d >= 0.002 ? 'up' : d <= -0.002 ? 'down' : 'flat'
-    };
+  useEffectOv(() => {
+    let cancelled = false;
+    setState((s) => ({ ...s, status: 'loading' }));
+    window.NSApi.fetchOverview({ ...filters, compare: true })
+      .then((data) => {
+        if (cancelled) return;
+        setState({ status: 'ready', data, error: null });
+      })
+      .catch((err) => {
+        if (cancelled) return;
+        console.error('fetchOverview failed', err);
+        setState({ status: 'error', data: null, error: err.message });
+      });
+    return () => { cancelled = true; };
+  }, [filters.dateRange.start.getTime(), filters.dateRange.end.getTime(),
+      encodeSet(filters.platforms), encodeSet(filters.countries)]);
+
+  const cur = filters.currency || 'USD';
+
+  if (state.status === 'loading' && !state.data) {
+    return <div className="page-in"><div className="panel">Carregando métricas...</div></div>;
+  }
+  if (state.status === 'error') {
+    return <div className="page-in"><div className="panel" style={{ color: 'var(--danger)' }}>
+      Erro ao carregar: {state.error}
+    </div></div>;
   }
 
-  const sparkGross = buckets.map(b => b.gross);
-  const sparkNet = buckets.map(b => b.net);
-  const sparkOrders = buckets.map(b => b.approvedOrders);
-  const sparkAov = buckets.map(b => b.approvedOrders ? b.gross / b.approvedOrders : 0);
+  const { kpis, previous, daily, byCountry, byProductType, topAffiliates, platformHealth } = state.data;
+  const prev = previous || {};
 
-  const approvalSpark = buckets.map(b => b.allOrders ? b.approvedOrders / b.allOrders : 0);
-  const refundSpark = buckets.map(b => {
-    // recount refunds from orders isn't tracked in buckets; use a proxy via allOrders-approvedOrders
-    return b.allOrders ? (b.allOrders - b.approvedOrders) / b.allOrders * 0.5 : 0;
+  const buckets = daily.map((b) => ({
+    date: new Date(b.date),
+    gross: b.gross,
+    net: b.net,
+    cpa: b.cpa,
+    orders: b.approvedOrders,
+    approvedOrders: b.approvedOrders,
+    allOrders: b.allOrders,
+  }));
+
+  const sparkGross = buckets.map((b) => b.gross);
+  const sparkNet = buckets.map((b) => b.net);
+  const sparkOrders = buckets.map((b) => b.approvedOrders);
+  const sparkAov = buckets.map((b) => (b.approvedOrders ? b.gross / b.approvedOrders : 0));
+  const approvalSpark = buckets.map((b) => (b.allOrders ? b.approvedOrders / b.allOrders : 0));
+
+  const typeItems = ['FRONTEND', 'UPSELL', 'BUMP', 'DOWNSELL'].map((key) => {
+    const found = byProductType.find((x) => x.label === key);
+    return {
+      label: PRODUCT_TYPE_LABELS[key],
+      value: found ? found.value : 0,
+      color: PRODUCT_TYPE_COLORS[key],
+    };
   });
 
-  // product-type breakdown (approved only)
-  const typeBreakdown = {};
-  for (const o of filteredOrders) {
-    if (o.status !== 'approved') continue;
-    typeBreakdown[o.productType] = (typeBreakdown[o.productType] || 0) + o.grossAmount;
-  }
-  const typeItems = [
-    { label: 'Front-end', value: typeBreakdown.frontend || 0, color: '#5BC8FF' },
-    { label: 'Upsell',    value: typeBreakdown.upsell   || 0, color: '#4A90FF' },
-    { label: 'Bump',      value: typeBreakdown.bump     || 0, color: '#8B7FFF' },
-    { label: 'Downsell',  value: typeBreakdown.downsell || 0, color: '#6b84b8' },
-  ];
-
-  // country breakdown
-  const countryAgg = {};
-  for (const o of filteredOrders) {
-    if (o.status !== 'approved') continue;
-    countryAgg[o.country] = countryAgg[o.country] || { value: 0, orders: 0 };
-    countryAgg[o.country].value += o.grossAmount;
-    countryAgg[o.country].orders += 1;
-  }
-  const countryData = window.MOCK.COUNTRIES.map(c => ({
-    code: c.code, name: c.name,
-    value: countryAgg[c.code]?.value || 0,
-    orders: countryAgg[c.code]?.orders || 0,
-  })).filter(c => c.value > 0).sort((a, b) => b.value - a.value).slice(0, 8);
-  const maxCountry = Math.max(1, ...countryData.map(c => c.value));
-
-  // top 5 affiliates
-  const affAgg = {};
-  for (const o of filteredOrders) {
-    const a = affAgg[o.affiliateId] = affAgg[o.affiliateId] || {
-      revenue: 0, orders: 0, approvedOrders: 0, allOrders: 0, cpa: 0, net: 0
-    };
-    a.revenue += o.grossAmount;
-    a.cpa += o.cpaPaid;
-    a.net += o.netAmount;
-    a.allOrders++;
-    if (o.status === 'approved') { a.approvedOrders++; a.orders++; }
-  }
-  const topAffs = Object.entries(affAgg)
-    .map(([id, a]) => ({ id, ...a, approvalRate: a.allOrders ? a.approvedOrders / a.allOrders : 0 }))
-    .sort((a, b) => b.revenue - a.revenue)
-    .slice(0, 5);
-
-  // platform health
-  const platAgg = {};
-  for (const o of filteredOrders) {
-    const a = platAgg[o.platform] = platAgg[o.platform] || { revenue: 0, orders: 0 };
-    a.revenue += o.grossAmount;
-    if (o.status === 'approved') a.orders++;
-  }
-
-  const cur = filters.currency;
+  const countryData = byCountry.map((c) => ({
+    code: c.code,
+    name: COUNTRY_NAMES[c.code] || c.code,
+    value: c.value,
+    orders: c.orders,
+  }));
+  const maxCountry = Math.max(1, ...countryData.map((c) => c.value));
 
   return (
     <div className="page-in">
       <div className="page-head">
         <div className="lead">
-          <span className="eyebrow">APRIL · 2026 · TIER 1 GLOBAL</span>
+          <span className="eyebrow">{filters.preset.toUpperCase()} · TIER 1 GLOBAL · USD</span>
           <h2>Operation <em>at a glance</em></h2>
-          <span className="sub">Last synced 2m ago · America/New_York · All channels unified</span>
+          <span className="sub">{fmtRange(filters.dateRange)} · dados unificados ClickBank + Digistore24</span>
         </div>
         <div className="page-head-actions">
           <button className="btn btn-ghost"><Icon name="calendar" size={12}/> Schedule report</button>
@@ -140,70 +146,57 @@ function OverviewPage({ filters }) {
         </div>
       </div>
 
-      {/* 8 KPI cards */}
       <div className="kpi-grid">
         <KpiCard label="GROSS REVENUE" icon="dollar"
-          value={fmtCurrency(kpi.gross, cur, 0)}
-          {...deltaFor(kpi.gross, kpiPrev.gross)}
-          sparkData={sparkGross}
-        />
+          value={fmtCurrency(kpis.gross, cur, 0)}
+          {...deltaFor(kpis.gross, prev.gross)}
+          sparkData={sparkGross}/>
         <KpiCard label="NET REVENUE" icon="wallet"
-          value={fmtCurrency(kpi.net, cur, 0)}
-          {...deltaFor(kpi.net, kpiPrev.net)}
-          sparkData={sparkNet}
-        />
+          value={fmtCurrency(kpis.net, cur, 0)}
+          {...deltaFor(kpis.net, prev.net)}
+          sparkData={sparkNet}/>
         <KpiCard label="ORDERS APPROVED" icon="shopping-cart"
-          value={fmtInt(kpi.approvedCount)}
-          {...deltaFor(kpi.approvedCount, kpiPrev.approvedCount)}
-          sparkData={sparkOrders}
-        />
+          value={fmtInt(kpis.approvedCount)}
+          {...deltaFor(kpis.approvedCount, prev.approvedCount)}
+          sparkData={sparkOrders}/>
         <KpiCard label="AOV" icon="trending-up"
-          value={fmtCurrency(kpi.aov, cur, 2)}
-          {...deltaFor(kpi.aov, kpiPrev.aov)}
-          sparkData={sparkAov}
-        />
+          value={fmtCurrency(kpis.aov, cur, 2)}
+          {...deltaFor(kpis.aov, prev.aov)}
+          sparkData={sparkAov}/>
         <KpiCard label="APPROVAL RATE" icon="check"
-          value={(kpi.approvalRate * 100).toFixed(1)} unit="%"
-          {...deltaFor(kpi.approvalRate, kpiPrev.approvalRate)}
-          sparkData={approvalSpark}
-        />
+          value={(kpis.approvalRate * 100).toFixed(1)} unit="%"
+          {...deltaFor(kpis.approvalRate, prev.approvalRate)}
+          sparkData={approvalSpark}/>
         <KpiCard label="REFUND RATE" icon="refresh"
-          value={(kpi.refundRate * 100).toFixed(2)} unit="%"
-          {...deltaFor(kpi.refundRate, kpiPrev.refundRate)}
-          trend={kpi.refundRate > kpiPrev.refundRate ? 'down' : 'up'}
-          sparkData={refundSpark}
-        />
+          value={(kpis.refundRate * 100).toFixed(2)} unit="%"
+          {...deltaFor(kpis.refundRate, prev.refundRate)}
+          trend={kpis.refundRate > (prev.refundRate ?? 0) ? 'down' : 'up'}/>
         <KpiCard label="CHARGEBACK RATE" icon="alert-triangle"
-          alert={kpi.cbRate > 0.009}
-          value={(kpi.cbRate * 100).toFixed(2)} unit="%"
-          {...deltaFor(kpi.cbRate, kpiPrev.cbRate)}
-          trend={kpi.cbRate > kpiPrev.cbRate ? 'down' : 'up'}
-          hint={kpi.cbRate > 0.009 ? 'over threshold' : 'vs prev'}
-          sparkData={buckets.map((_, i) => 0.005 + (i / buckets.length) * 0.004 + Math.sin(i) * 0.0015)}
-        />
+          alert={kpis.cbRate > 0.009}
+          value={(kpis.cbRate * 100).toFixed(2)} unit="%"
+          {...deltaFor(kpis.cbRate, prev.cbRate)}
+          trend={kpis.cbRate > (prev.cbRate ?? 0) ? 'down' : 'up'}
+          hint={kpis.cbRate > 0.009 ? 'over threshold' : 'vs prev'}/>
         <KpiCard label="NET PROFIT" icon="target"
-          value={fmtCurrency(kpi.netProfit, cur, 0)}
-          {...deltaFor(kpi.netProfit, kpiPrev.netProfit)}
-          sparkData={buckets.map(b => b.net - b.cpa - b.gross * 0.12)}
-        />
+          value={fmtCurrency(kpis.netProfit, cur, 0)}
+          {...deltaFor(kpis.netProfit, prev.netProfit)}/>
       </div>
 
-      {/* Time chart */}
       <div className="panel" style={{ marginBottom: 14 }}>
         <div className="panel-head">
           <div className="panel-title">
             <span className="panel-eyebrow">TIME SERIES · DAILY</span>
             <div className="panel-metric">
-              {metric === 'gross' && <>{fmtCurrency(kpi.gross, cur, 0)}
-                <span className={`delta ${deltaFor(kpi.gross, kpiPrev.gross).trend}`}>{deltaFor(kpi.gross, kpiPrev.gross).delta}</span></>}
-              {metric === 'net' && <>{fmtCurrency(kpi.net, cur, 0)}
-                <span className={`delta ${deltaFor(kpi.net, kpiPrev.net).trend}`}>{deltaFor(kpi.net, kpiPrev.net).delta}</span></>}
-              {metric === 'orders' && <>{fmtInt(kpi.approvedCount)}
-                <span className={`delta ${deltaFor(kpi.approvedCount, kpiPrev.approvedCount).trend}`}>{deltaFor(kpi.approvedCount, kpiPrev.approvedCount).delta}</span></>}
-              {metric === 'aov' && <>{fmtCurrency(kpi.aov, cur, 2)}
-                <span className={`delta ${deltaFor(kpi.aov, kpiPrev.aov).trend}`}>{deltaFor(kpi.aov, kpiPrev.aov).delta}</span></>}
-              {metric === 'approvalRate' && <>{(kpi.approvalRate * 100).toFixed(1)}%
-                <span className={`delta ${deltaFor(kpi.approvalRate, kpiPrev.approvalRate).trend}`}>{deltaFor(kpi.approvalRate, kpiPrev.approvalRate).delta}</span></>}
+              {metric === 'gross' && <>{fmtCurrency(kpis.gross, cur, 0)}
+                <span className={`delta ${deltaFor(kpis.gross, prev.gross).trend}`}>{deltaFor(kpis.gross, prev.gross).delta}</span></>}
+              {metric === 'net' && <>{fmtCurrency(kpis.net, cur, 0)}
+                <span className={`delta ${deltaFor(kpis.net, prev.net).trend}`}>{deltaFor(kpis.net, prev.net).delta}</span></>}
+              {metric === 'orders' && <>{fmtInt(kpis.approvedCount)}
+                <span className={`delta ${deltaFor(kpis.approvedCount, prev.approvedCount).trend}`}>{deltaFor(kpis.approvedCount, prev.approvedCount).delta}</span></>}
+              {metric === 'aov' && <>{fmtCurrency(kpis.aov, cur, 2)}
+                <span className={`delta ${deltaFor(kpis.aov, prev.aov).trend}`}>{deltaFor(kpis.aov, prev.aov).delta}</span></>}
+              {metric === 'approvalRate' && <>{(kpis.approvalRate * 100).toFixed(1)}%
+                <span className={`delta ${deltaFor(kpis.approvalRate, prev.approvalRate).trend}`}>{deltaFor(kpis.approvalRate, prev.approvalRate).delta}</span></>}
             </div>
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
@@ -214,15 +207,13 @@ function OverviewPage({ filters }) {
             </div>
             <div className="panel-legend">
               <span className="legend-dot cyan"><span/>{filters.preset.toUpperCase()}</span>
-              {filters.compare && <span className="legend-dot dim"><span/>PREV</span>}
             </div>
           </div>
         </div>
-        <LineChart buckets={buckets} compareBuckets={filters.compare ? cmpBuckets : null}
+        <LineChart buckets={buckets} compareBuckets={null}
           metric={metric} currency={cur} height={260}/>
       </div>
 
-      {/* Row 3: breakdowns */}
       <div className="grid-2">
         <div className="panel">
           <div className="panel-head">
@@ -240,13 +231,11 @@ function OverviewPage({ filters }) {
               <span className="panel-eyebrow">REVENUE BY COUNTRY</span>
               <div className="panel-sub">Top 8 · approved gross</div>
             </div>
-            <button className="btn btn-ghost"><Icon name="map" size={12}/> View on map</button>
           </div>
           <CountryBars data={countryData} maxValue={maxCountry} currency={cur}/>
         </div>
       </div>
 
-      {/* Row 4: Top affiliates + platform health */}
       <div className="grid-2-asym">
         <div className="panel">
           <div className="panel-head">
@@ -254,7 +243,6 @@ function OverviewPage({ filters }) {
               <span className="panel-eyebrow">TOP 5 AFFILIATES</span>
               <div className="panel-sub">Ranked by gross revenue</div>
             </div>
-            <button className="btn btn-ghost">View all <Icon name="chevron-right" size={12}/></button>
           </div>
           <div className="tbl-wrap">
             <table className="tbl">
@@ -270,29 +258,33 @@ function OverviewPage({ filters }) {
                 </tr>
               </thead>
               <tbody>
-                {topAffs.map((a, i) => {
-                  const aff = window.MOCK.affiliates.find(x => x.id === a.id);
-                  if (!aff) return null;
-                  const apProfit = a.net - a.cpa;
+                {topAffiliates.length === 0 && (
+                  <tr><td colSpan={7} style={{ textAlign: 'center', opacity: 0.6, padding: 24 }}>
+                    Sem afiliados no período
+                  </td></tr>
+                )}
+                {topAffiliates.map((a, i) => {
+                  const plat = PLATFORM_VARIANTS[a.platformSlug] || { short: a.platformSlug.toUpperCase(), className: 'plat-cb' };
                   const apClass = a.approvalRate > 0.7 ? 'val-ok' : a.approvalRate > 0.5 ? 'val-warn' : 'val-bad';
+                  const displayName = a.nickname || a.externalId;
                   return (
-                    <tr key={a.id}>
+                    <tr key={`${a.platformSlug}:${a.externalId}`}>
                       <td className="rank">{String(i+1).padStart(2, '0')}</td>
                       <td>
                         <span className="cell-aff">
-                          <span className="av" style={{ background: avatarColor(a.id) }}>{initials(aff.name)}</span>
+                          <span className="av" style={{ background: avatarColor(a.externalId) }}>{initials(displayName)}</span>
                           <span className="meta">
-                            <span className="nm">{aff.nickname}</span>
-                            <span className="id">{aff.id} · {aff.name}</span>
+                            <span className="nm">{displayName}</span>
+                            <span className="id">{a.externalId}</span>
                           </span>
                         </span>
                       </td>
-                      <td><span className={`plat plat-${aff.platform === 'digistore24' ? 'd24' : 'cb'}`}>{aff.platform === 'digistore24' ? 'D24' : 'CB'}</span></td>
-                      <td className="num cell-mono">{fmtInt(a.approvedOrders)}</td>
+                      <td><span className={`plat ${plat.className}`}>{plat.short}</span></td>
+                      <td className="num cell-mono">{fmtInt(a.orders)}</td>
                       <td className="num cell-mono">{fmtCurrency(a.revenue, cur, 0)}</td>
                       <td className={`num cell-mono ${apClass}`}>{(a.approvalRate * 100).toFixed(1)}%</td>
-                      <td className="num cell-mono" style={{ color: apProfit > 0 ? 'var(--success)' : 'var(--danger)' }}>
-                        {fmtCurrency(apProfit, cur, 0)}
+                      <td className="num cell-mono" style={{ color: a.netMargin > 0 ? 'var(--success)' : 'var(--danger)' }}>
+                        {fmtCurrency(a.netMargin, cur, 0)}
                       </td>
                     </tr>
                   );
@@ -310,20 +302,21 @@ function OverviewPage({ filters }) {
             </div>
           </div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-            <PlatformHealth id="digistore24" name="Digistore24" short="D24" ok revenue={platAgg.digistore24?.revenue || 0} orders={platAgg.digistore24?.orders || 0} lastSync="2 min ago" currency={cur}/>
-            <PlatformHealth id="clickbank" name="ClickBank" short="CB" ok revenue={platAgg.clickbank?.revenue || 0} orders={platAgg.clickbank?.orders || 0} lastSync="4 min ago" currency={cur}/>
-            <div className="ph-card" style={{ borderStyle: 'dashed', opacity: 0.7 }}>
-              <div className="ph-head">
-                <div className="ph-name">
-                  <div className="ph-logo" style={{ color: 'var(--navy-400)' }}><Icon name="plus" size={16}/></div>
-                  <div className="txt">
-                    <span className="nm">Add new platform</span>
-                    <span className="sync">BuyGoods · MaxWeb · Sticky.io</span>
-                  </div>
-                </div>
-                <span className="badge neutral">Soon</span>
-              </div>
-            </div>
+            {platformHealth.map((p) => {
+              const variant = PLATFORM_VARIANTS[p.slug] || { short: p.slug.slice(0,3).toUpperCase() };
+              return (
+                <PlatformHealth
+                  key={p.slug}
+                  name={p.displayName}
+                  short={variant.short}
+                  ok
+                  revenue={p.totalRevenue}
+                  orders={p.totalOrders}
+                  lastSync={p.lastSyncAt ? fmtSyncAgo(p.lastSyncAt) : '—'}
+                  currency={cur}
+                />
+              );
+            })}
           </div>
         </div>
       </div>
@@ -331,7 +324,7 @@ function OverviewPage({ filters }) {
   );
 }
 
-function PlatformHealth({ id, name, short, ok, revenue, orders, lastSync, currency }) {
+function PlatformHealth({ name, short, ok, revenue, orders, lastSync, currency }) {
   return (
     <div className="ph-card">
       <div className="ph-head">
@@ -358,14 +351,28 @@ function PlatformHealth({ id, name, short, ok, revenue, orders, lastSync, curren
   );
 }
 
-// helper: map selected funnel codes (fx/sx/mx) to matching product ids
-function mapFunnelsToProducts(funnelSet) {
-  if (!funnelSet || funnelSet.size === 0) return new Set();
-  const out = new Set();
-  for (const p of window.MOCK.PRODUCTS) {
-    if (funnelSet.has(p.funnel)) out.add(p.id);
-  }
-  return out;
+function fmtRange(range) {
+  const start = range.start instanceof Date ? range.start : new Date(range.start);
+  const end = range.end instanceof Date ? range.end : new Date(range.end);
+  const opts = { month: 'short', day: 'numeric' };
+  return `${start.toLocaleDateString('en-US', opts)} → ${end.toLocaleDateString('en-US', opts)}`;
 }
 
-Object.assign(window, { OverviewPage, mapFunnelsToProducts });
+function fmtSyncAgo(iso) {
+  const d = new Date(iso);
+  const mins = Math.round((Date.now() - d.getTime()) / 60000);
+  if (mins < 1) return 'just now';
+  if (mins < 60) return `${mins} min ago`;
+  const hrs = Math.round(mins / 60);
+  if (hrs < 24) return `${hrs}h ago`;
+  const days = Math.round(hrs / 24);
+  return `${days}d ago`;
+}
+
+// encodeSet declared in index.html script scope — fallback here in case of load order
+function encodeSet(set) {
+  if (!set || set.size === 0) return '';
+  return Array.from(set).join(',');
+}
+
+Object.assign(window, { OverviewPage });

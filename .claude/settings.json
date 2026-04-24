@@ -10,7 +10,9 @@
       "Bash(mv index.html public/)",
       "Bash(mv src *)",
       "Bash(mv styles *)",
-      "Bash(mv assets *)"
+      "Bash(mv assets *)",
+      "Bash(npm run *)",
+      "Bash(git add *)"
     ]
   }
 }

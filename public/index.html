@@ -16,6 +16,7 @@
 <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
 
 <script src="src/mock.js"></script>
+<script src="src/api.js"></script>
 <script type="text/babel" src="src/utils.jsx"></script>
 <script type="text/babel" src="src/charts.jsx"></script>
 <script type="text/babel" src="src/shell.jsx"></script>
@@ -33,9 +34,7 @@ const ROUTES = {
   'all-affiliates': { title: 'All',        em: 'affiliates',  crumbs: ['Affiliates', 'Directory'] },
   'products':       { title: 'Products &', em: 'offers',      crumbs: ['Catalog', 'Products / Offers'] },
   'transactions':   { title: 'Transactions', em: 'ledger',    crumbs: ['Catalog', 'Transactions'] },
-  'integrations':   { title: 'Platform',   em: 'integrations', crumbs: ['System', 'Integrations'] },
-  'fx-currency':    { title: 'FX /',       em: 'currency',    crumbs: ['System', 'FX / Currency'] },
-  'users-perms':    { title: 'Users &',    em: 'permissions', crumbs: ['System', 'Users & Permissions'] },
+  'platforms':      { title: 'Platforms',  em: 'overview',    crumbs: ['System', 'Plataformas'] },
 };
 
 function readHash() {
@@ -71,8 +70,10 @@ function App() {
     platforms: decodeSet(params.get('plat')),
     funnels: decodeSet(params.get('of')),
     countries: decodeSet(params.get('co')),
-    trafficSources: decodeSet(params.get('ts')),
-    currency: params.get('cur') || 'USD',
+    // Retained for backward-compat with pages still reading filters.trafficSources / filters.currency.
+    // Both removed from FilterBar UI + URL persistence in Fase 2A cleanup.
+    trafficSources: new Set(),
+    currency: 'USD',
   }));
 
   // persist filters to URL
@@ -83,8 +84,6 @@ function App() {
     if (filters.platforms.size) p.set('plat', encodeSet(filters.platforms));
     if (filters.funnels.size) p.set('of', encodeSet(filters.funnels));
     if (filters.countries.size) p.set('co', encodeSet(filters.countries));
-    if (filters.trafficSources.size) p.set('ts', encodeSet(filters.trafficSources));
-    if (filters.currency !== 'USD') p.set('cur', filters.currency);
     const currentPath = hashState.route;
     const newHash = currentPath + (p.toString() ? '?' + p.toString() : '');
     if (location.hash.replace(/^#/, '') !== newHash) {
@@ -119,9 +118,7 @@ function App() {
           {hashState.route === 'all-affiliates' && <AllAffiliatesPage filters={filters} onOpenAffiliate={setDrawerAff}/>}
           {hashState.route === 'products'       && <ProductsPage filters={filters}/>}
           {hashState.route === 'transactions'   && <TransactionsPage filters={filters}/>}
-          {hashState.route === 'integrations'   && <IntegrationsPage/>}
-          {hashState.route === 'fx-currency'    && <FXPage filters={filters}/>}
-          {hashState.route === 'users-perms'    && <UsersPage/>}
+          {hashState.route === 'platforms'      && <IntegrationsPage/>}
         </div>
       </div>
 

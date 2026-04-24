@@ -48,7 +48,7 @@ function avatarColor(id) {
 }
 
 // ---------- date range utils ----------
-function rangeForPreset(preset, today = window.MOCK.TODAY) {
+function rangeForPreset(preset, today = new Date()) {
   const end = new Date(today);
   end.setUTCHours(23,59,59,999);
   let start = new Date(today);
