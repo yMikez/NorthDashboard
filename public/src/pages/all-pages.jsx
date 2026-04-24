@@ -958,50 +958,155 @@ function TransactionsPage({ filters }) {
 }
 
 // ---------- SETTINGS (integrations, FX, users) ----------
-function IntegrationsPage() {
+function IntegrationsPage({ filters }) {
+  const [state, setPlatState] = useState({ status: 'loading', data: null, error: null });
+
+  useEffect(() => {
+    let cancelled = false;
+    setPlatState((s) => ({ ...s, status: 'loading' }));
+    window.NSApi.fetchPlatforms(filters)
+      .then((data) => { if (!cancelled) setPlatState({ status: 'ready', data, error: null }); })
+      .catch((err) => {
+        if (cancelled) return;
+        console.error('fetchPlatforms failed', err);
+        setPlatState({ status: 'error', data: null, error: err.message });
+      });
+    return () => { cancelled = true; };
+  }, [filters.dateRange.start.getTime(), filters.dateRange.end.getTime(),
+      Array.from(filters.countries).join(',')]);
+
+  const cur = filters.currency || 'USD';
+  const platforms = state.data?.platforms || [];
+
+  const PLATFORM_SHORT = { digistore24: 'D24', clickbank: 'CB' };
+  const comingSoon = [
+    { slug: 'buygoods', displayName: 'BuyGoods', short: 'BG', desc: 'Connector pendente · credenciais não configuradas' },
+    { slug: 'maxweb', displayName: 'MaxWeb', short: 'MW', desc: 'Connector pendente · credenciais não configuradas' },
+    { slug: 'stickyio', displayName: 'Sticky.io', short: 'SK', desc: 'Connector em desenvolvimento' },
+  ].filter((p) => !platforms.some((x) => x.slug === p.slug));
+
   return (
     <div className="page-in">
       <div className="page-head">
         <div className="lead">
-          <span className="eyebrow">SETTINGS · INTEGRATIONS</span>
-          <h2>Platform <em>connectors</em></h2>
-          <span className="sub">Plug new affiliate networks without touching the UI</span>
+          <span className="eyebrow">SYSTEM · PLATAFORMAS</span>
+          <h2>Platform <em>overview</em></h2>
+          <span className="sub">Receita, pedidos e saúde dos connectors por plataforma no período selecionado</span>
         </div>
       </div>
+
+      {state.status === 'error' && (
+        <div className="panel" style={{ color: 'var(--danger)' }}>Erro ao carregar: {state.error}</div>
+      )}
+
       <div className="grid-3">
-        {[
-          { name: 'Digistore24', short: 'D24', status: 'ok', sync: '2 min ago', desc: 'Production — full sync incl. refunds & chargebacks', rows: '38,402' },
-          { name: 'ClickBank', short: 'CB', status: 'ok', sync: '4 min ago', desc: 'Production — webhook + rest polling fallback', rows: '31,188' },
-          { name: 'BuyGoods', short: 'BG', status: 'neutral', sync: 'Not configured', desc: 'Connector ready · add API credentials to activate', rows: '—' },
-          { name: 'MaxWeb', short: 'MW', status: 'neutral', sync: 'Not configured', desc: 'Connector ready · add API credentials to activate', rows: '—' },
-          { name: 'Sticky.io', short: 'SK', status: 'neutral', sync: 'Not configured', desc: 'Internal store · connector in development', rows: '—' },
-        ].map(p => (
-          <div key={p.name} className="ph-card">
-            <div className="ph-head">
-              <div className="ph-name">
-                <div className="ph-logo">{p.short}</div>
-                <div className="txt"><span className="nm">{p.name}</span><span className="sync">{p.sync}</span></div>
-              </div>
-              {p.status === 'ok'
-                ? <span className="ph-status ok"><span className="led"/>HEALTHY</span>
-                : <span className="badge neutral">READY</span>
-              }
-            </div>
-            <div style={{ fontSize: 12, color: 'var(--navy-200)', lineHeight: 1.5 }}>{p.desc}</div>
-            <div className="ph-stats">
-              <div className="ph-stat"><div className="l">Orders · 90d</div><div className="v">{p.rows}</div></div>
-              <div className="ph-stat">
-                {p.status === 'ok'
-                  ? <button className="btn btn-ghost" style={{ marginTop: 4 }}><Icon name="settings" size={12}/> Configure</button>
-                  : <button className="btn btn-primary" style={{ marginTop: 4 }}><Icon name="link" size={12}/> Connect</button>
+        {state.status === 'loading' && (
+          <div className="panel" style={{ gridColumn: '1 / -1', textAlign: 'center', padding: 24, opacity: 0.6 }}>
+            Carregando...
+          </div>
+        )}
+
+        {platforms.map((p) => {
+          const short = PLATFORM_SHORT[p.slug] || p.slug.slice(0, 3).toUpperCase();
+          const syncLabel = p.lastSyncAt ? fmtSyncAgo(p.lastSyncAt) : 'nunca';
+          const apClass = p.approvalRate > 0.7 ? 'val-ok' : p.approvalRate > 0.5 ? 'val-warn' : 'val-bad';
+          const healthy = p.isActive && p.lastSyncAt;
+          return (
+            <div key={p.slug} className="ph-card">
+              <div className="ph-head">
+                <div className="ph-name">
+                  <div className="ph-logo">{short}</div>
+                  <div className="txt">
+                    <span className="nm">{p.displayName}</span>
+                    <span className="sync">Synced {syncLabel}</span>
+                  </div>
+                </div>
+                {healthy
+                  ? <span className="ph-status ok"><span className="led"/>HEALTHY</span>
+                  : <span className="badge warn">NO SYNC YET</span>
                 }
               </div>
+
+              <div className="ph-stats">
+                <div className="ph-stat">
+                  <div className="l">Revenue · período</div>
+                  <div className="v">{fmtCurrency(p.totalRevenue, cur, 0)}</div>
+                </div>
+                <div className="ph-stat">
+                  <div className="l">Orders approved</div>
+                  <div className="v">{fmtInt(p.totalOrders)}</div>
+                </div>
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginTop: 10 }}>
+                <div className="ph-stat">
+                  <div className="l">Approval</div>
+                  <div className={`v cell-mono ${apClass}`} style={{ fontSize: 18 }}>
+                    {p.allOrders ? (p.approvalRate * 100).toFixed(1) + '%' : '—'}
+                  </div>
+                </div>
+                <div className="ph-stat">
+                  <div className="l">Affiliates ativos</div>
+                  <div className="v" style={{ fontSize: 18 }}>
+                    {fmtInt(p.affiliatesActive)}
+                    <span style={{ fontSize: 11, color: 'var(--navy-300)', marginLeft: 6 }}>
+                      / {fmtInt(p.affiliatesTotal)} total
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              {p.topProduct && (
+                <div style={{ marginTop: 12, paddingTop: 10, borderTop: '1px solid rgba(91,200,255,0.15)' }}>
+                  <div style={{ fontSize: 10, letterSpacing: '0.1em', color: 'var(--navy-300)', marginBottom: 4 }}>
+                    TOP PRODUCT
+                  </div>
+                  <div style={{ fontSize: 13, color: 'var(--white)', display: 'flex', justifyContent: 'space-between', gap: 12 }}>
+                    <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      {p.topProduct.name}
+                    </span>
+                    <span className="cell-mono" style={{ color: 'var(--glow-cyan)' }}>
+                      {fmtCurrency(p.topProduct.revenue, cur, 0)}
+                    </span>
+                  </div>
+                </div>
+              )}
+            </div>
+          );
+        })}
+
+        {comingSoon.map((p) => (
+          <div key={p.slug} className="ph-card" style={{ borderStyle: 'dashed', opacity: 0.7 }}>
+            <div className="ph-head">
+              <div className="ph-name">
+                <div className="ph-logo" style={{ color: 'var(--navy-400)' }}>{p.short}</div>
+                <div className="txt">
+                  <span className="nm">{p.displayName}</span>
+                  <span className="sync">Not configured</span>
+                </div>
+              </div>
+              <span className="badge neutral">SOON</span>
+            </div>
+            <div style={{ fontSize: 12, color: 'var(--navy-200)', lineHeight: 1.5, marginTop: 8 }}>
+              {p.desc}
             </div>
           </div>
         ))}
       </div>
     </div>
   );
+}
+
+// Helper: format relative "synced X ago" from ISO timestamp
+function fmtSyncAgo(iso) {
+  const d = new Date(iso);
+  const mins = Math.round((Date.now() - d.getTime()) / 60000);
+  if (mins < 1) return 'agora';
+  if (mins < 60) return `${mins} min atrás`;
+  const hrs = Math.round(mins / 60);
+  if (hrs < 24) return `${hrs}h atrás`;
+  const days = Math.round(hrs / 24);
+  return `${days}d atrás`;
 }
 
 function FXPage({ filters }) {

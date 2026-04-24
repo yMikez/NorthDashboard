@@ -87,4 +87,19 @@ async function fetchAffiliates(filters) {
   return fetchJSON('/api/metrics/affiliates', params);
 }
 
-window.NSApi = { fetchOverview, fetchOrders, fetchAffiliates };
+/**
+ * Fetch /api/metrics/platforms.
+ *
+ * Returns { platforms } — per-platform aggregates for the period:
+ * revenue, orders, approval/refund/cb rates, affiliate counts, top product.
+ */
+async function fetchPlatforms(filters) {
+  const params = {
+    start_date: toISODate(filters.dateRange.start),
+    end_date: toISODate(filters.dateRange.end),
+    countries: setToCSV(filters.countries),
+  };
+  return fetchJSON('/api/metrics/platforms', params);
+}
+
+window.NSApi = { fetchOverview, fetchOrders, fetchAffiliates, fetchPlatforms };

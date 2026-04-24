@@ -118,7 +118,7 @@ function App() {
           {hashState.route === 'all-affiliates' && <AllAffiliatesPage filters={filters} onOpenAffiliate={setDrawerAff}/>}
           {hashState.route === 'products'       && <ProductsPage filters={filters}/>}
           {hashState.route === 'transactions'   && <TransactionsPage filters={filters}/>}
-          {hashState.route === 'platforms'      && <IntegrationsPage/>}
+          {hashState.route === 'platforms'      && <IntegrationsPage filters={filters}/>}
         </div>
       </div>
 

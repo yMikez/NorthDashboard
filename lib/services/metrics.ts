@@ -33,6 +33,24 @@ export interface DailyBucket {
   allOrders: number;
 }
 
+export interface PlatformsResponse {
+  platforms: Array<{
+    slug: string;
+    displayName: string;
+    isActive: boolean;
+    lastSyncAt: string | null;
+    totalRevenue: number;
+    totalOrders: number;
+    allOrders: number;
+    approvalRate: number;
+    refundRate: number;
+    cbRate: number;
+    affiliatesTotal: number;
+    affiliatesActive: number;
+    topProduct: { externalId: string; name: string; revenue: number; orders: number } | null;
+  }>;
+}
+
 export interface AffiliatesResponse {
   summary: {
     activeNow: number;
@@ -169,6 +187,136 @@ export async function getOverview(
   }
 
   return response;
+}
+
+export async function getPlatforms(
+  filters: MetricsFilters,
+): Promise<PlatformsResponse> {
+  const platforms = await db.platform.findMany({
+    select: { id: true, slug: true, displayName: true, isActive: true, lastSyncAt: true },
+  });
+
+  const where: Prisma.OrderWhereInput = {
+    orderedAt: { gte: filters.startDate, lte: filters.endDate },
+  };
+  if (filters.countries?.length) {
+    where.country = { in: filters.countries };
+  }
+
+  const orders = await db.order.findMany({
+    where,
+    select: {
+      status: true,
+      grossAmountUsd: true,
+      affiliateId: true,
+      platform: { select: { id: true, slug: true } },
+      product: { select: { externalId: true, name: true } },
+    },
+  });
+
+  const affiliatesTotalByPlatform = await db.affiliate.groupBy({
+    by: ['platformId'],
+    _count: { _all: true },
+  });
+  const affTotalMap = new Map<string, number>();
+  for (const row of affiliatesTotalByPlatform) {
+    affTotalMap.set(row.platformId, row._count._all);
+  }
+
+  interface PlatformAgg {
+    id: string;
+    slug: string;
+    displayName: string;
+    isActive: boolean;
+    lastSyncAt: string | null;
+    revenue: number;
+    orders: number;
+    allOrders: number;
+    refunds: number;
+    chargebacks: number;
+    activeAffIds: Set<string>;
+    byProduct: Map<string, { externalId: string; name: string; revenue: number; orders: number }>;
+  }
+
+  const byPlatform = new Map<string, PlatformAgg>();
+  for (const p of platforms) {
+    byPlatform.set(p.id, {
+      id: p.id,
+      slug: p.slug,
+      displayName: p.displayName,
+      isActive: p.isActive,
+      lastSyncAt: p.lastSyncAt?.toISOString() ?? null,
+      revenue: 0,
+      orders: 0,
+      allOrders: 0,
+      refunds: 0,
+      chargebacks: 0,
+      activeAffIds: new Set(),
+      byProduct: new Map(),
+    });
+  }
+
+  for (const o of orders) {
+    const p = byPlatform.get(o.platform.id);
+    if (!p) continue;
+    p.allOrders++;
+    if (o.affiliateId) p.activeAffIds.add(o.affiliateId);
+    if (o.status === 'APPROVED') {
+      const gross = toNumber(o.grossAmountUsd);
+      p.orders++;
+      p.revenue += gross;
+      const key = o.product.externalId;
+      const prod = p.byProduct.get(key) ?? {
+        externalId: key,
+        name: o.product.name,
+        revenue: 0,
+        orders: 0,
+      };
+      prod.revenue += gross;
+      prod.orders++;
+      p.byProduct.set(key, prod);
+    } else if (o.status === 'REFUNDED') {
+      p.refunds++;
+    } else if (o.status === 'CHARGEBACK') {
+      p.chargebacks++;
+    }
+  }
+
+  return {
+    platforms: Array.from(byPlatform.values())
+      .map((p) => {
+        const denom = p.allOrders || 1;
+        let topProduct:
+          | { externalId: string; name: string; revenue: number; orders: number }
+          | null = null;
+        for (const prod of p.byProduct.values()) {
+          if (!topProduct || prod.revenue > topProduct.revenue) {
+            topProduct = {
+              externalId: prod.externalId,
+              name: prod.name,
+              revenue: round2(prod.revenue),
+              orders: prod.orders,
+            };
+          }
+        }
+        return {
+          slug: p.slug,
+          displayName: p.displayName,
+          isActive: p.isActive,
+          lastSyncAt: p.lastSyncAt,
+          totalRevenue: round2(p.revenue),
+          totalOrders: p.orders,
+          allOrders: p.allOrders,
+          approvalRate: p.allOrders ? round4(p.orders / denom) : 0,
+          refundRate: p.allOrders ? round4(p.refunds / denom) : 0,
+          cbRate: p.allOrders ? round4(p.chargebacks / denom) : 0,
+          affiliatesTotal: affTotalMap.get(p.id) ?? 0,
+          affiliatesActive: p.activeAffIds.size,
+          topProduct,
+        };
+      })
+      .sort((a, b) => b.totalRevenue - a.totalRevenue),
+  };
 }
 
 export async function getAffiliates(
