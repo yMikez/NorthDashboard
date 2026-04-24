@@ -33,6 +33,38 @@ export interface DailyBucket {
   allOrders: number;
 }
 
+export interface OrdersResponse {
+  orders: Array<{
+    externalId: string;
+    parentExternalId: string | null;
+    platformSlug: string;
+    productExternalId: string;
+    productName: string;
+    productType: string;
+    affiliateExternalId: string | null;
+    affiliateNickname: string | null;
+    country: string | null;
+    paymentMethod: string | null;
+    grossAmountUsd: number;
+    fees: number;
+    netAmountUsd: number;
+    cpaPaidUsd: number;
+    status: string;
+    orderedAt: string;
+  }>;
+  statusCounts: Record<string, number>;
+  total: number;
+  limit: number;
+  offset: number;
+}
+
+export interface OrdersOptions {
+  status?: string;
+  search?: string;
+  limit?: number;
+  offset?: number;
+}
+
 export interface OverviewResponse {
   range: { start: string; end: string };
   kpis: OverviewKPIs;
@@ -105,6 +137,100 @@ export async function getOverview(
   }
 
   return response;
+}
+
+export async function getOrders(
+  filters: MetricsFilters,
+  options: OrdersOptions = {},
+): Promise<OrdersResponse> {
+  const where: Prisma.OrderWhereInput = {
+    orderedAt: { gte: filters.startDate, lte: filters.endDate },
+  };
+  if (filters.platformSlugs?.length) {
+    where.platform = { slug: { in: filters.platformSlugs } };
+  }
+  if (filters.countries?.length) {
+    where.country = { in: filters.countries };
+  }
+  if (filters.productExternalIds?.length) {
+    where.product = { externalId: { in: filters.productExternalIds } };
+  }
+  if (options.search) {
+    const q = options.search.trim();
+    if (q) {
+      where.OR = [
+        { externalId: { contains: q, mode: 'insensitive' } },
+        { parentExternalId: { contains: q, mode: 'insensitive' } },
+        { affiliate: { externalId: { contains: q, mode: 'insensitive' } } },
+        { affiliate: { nickname: { contains: q, mode: 'insensitive' } } },
+      ];
+    }
+  }
+
+  const countsRaw = await db.order.groupBy({
+    by: ['status'],
+    where,
+    _count: { _all: true },
+  });
+  const statusCounts: Record<string, number> = {
+    all: 0,
+    approved: 0,
+    pending: 0,
+    refunded: 0,
+    chargeback: 0,
+    canceled: 0,
+  };
+  for (const row of countsRaw) {
+    const key = row.status.toLowerCase();
+    statusCounts[key] = row._count._all;
+    statusCounts.all += row._count._all;
+  }
+
+  const filteredWhere: Prisma.OrderWhereInput = { ...where };
+  if (options.status && options.status !== 'all') {
+    filteredWhere.status = options.status.toUpperCase() as Prisma.OrderWhereInput['status'];
+  }
+
+  const total = await db.order.count({ where: filteredWhere });
+  const limit = Math.min(Math.max(options.limit ?? 500, 1), 1000);
+  const offset = Math.max(options.offset ?? 0, 0);
+
+  const rows = await db.order.findMany({
+    where: filteredWhere,
+    include: {
+      platform: { select: { slug: true, displayName: true } },
+      product: { select: { externalId: true, name: true, productType: true } },
+      affiliate: { select: { externalId: true, nickname: true } },
+    },
+    orderBy: { orderedAt: 'desc' },
+    take: limit,
+    skip: offset,
+  });
+
+  return {
+    orders: rows.map((o) => ({
+      externalId: o.externalId,
+      parentExternalId: o.parentExternalId,
+      platformSlug: o.platform.slug,
+      productExternalId: o.product.externalId,
+      productName: o.product.name,
+      productType: o.product.productType,
+      affiliateExternalId: o.affiliate?.externalId ?? null,
+      affiliateNickname: o.affiliate?.nickname ?? null,
+      country: o.country,
+      paymentMethod: o.paymentMethod,
+      grossAmountUsd: toNumber(o.grossAmountUsd),
+      fees: toNumber(o.fees),
+      netAmountUsd: toNumber(o.netAmountUsd),
+      cpaPaidUsd: toNumber(o.cpaPaidUsd),
+      status: o.status,
+      orderedAt: o.orderedAt.toISOString(),
+    })),
+    statusCounts,
+    total,
+    limit,
+    offset,
+  };
 }
 
 async function fetchOrders(filters: MetricsFilters): Promise<OrderWithJoins[]> {

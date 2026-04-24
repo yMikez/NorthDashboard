@@ -824,28 +824,38 @@ function ProductsPage({ filters }) {
 function TransactionsPage({ filters }) {
   const [query, setQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
+  const [debouncedQuery, setDebouncedQuery] = useState('');
+  const [state, setStateTx] = useState({ status: 'loading', data: null, error: null });
 
-  const filtered = useMemo(() => {
-    let r = applyFilters(window.MOCK.orders, {
-      dateRange: filters.dateRange, platforms: filters.platforms,
-      products: mapFunnelsToProducts(filters.funnels),
-      countries: filters.countries, trafficSources: filters.trafficSources,
-    });
-    if (statusFilter !== 'all') r = r.filter(o => o.status === statusFilter);
-    if (query) {
-      const q = query.toLowerCase();
-      r = r.filter(o => o.id.toLowerCase().includes(q) || o.orderGroup.toLowerCase().includes(q) || o.affiliateId.toLowerCase().includes(q));
-    }
-    return r.sort((a, b) => b.createdAt.localeCompare(a.createdAt)).slice(0, 500);
-  }, [filters, query, statusFilter]);
+  // Debounce search input so we don't hammer the endpoint on every keystroke.
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedQuery(query), 300);
+    return () => clearTimeout(t);
+  }, [query]);
 
-  const statusCounts = {};
-  for (const o of window.MOCK.orders) {
-    if (new Date(o.createdAt) < filters.dateRange.start || new Date(o.createdAt) > filters.dateRange.end) continue;
-    statusCounts[o.status] = (statusCounts[o.status] || 0) + 1;
-  }
+  useEffect(() => {
+    let cancelled = false;
+    setStateTx((s) => ({ ...s, status: 'loading' }));
+    window.NSApi.fetchOrders(filters, { status: statusFilter, search: debouncedQuery, limit: 500 })
+      .then((data) => {
+        if (cancelled) return;
+        setStateTx({ status: 'ready', data, error: null });
+      })
+      .catch((err) => {
+        if (cancelled) return;
+        console.error('fetchOrders failed', err);
+        setStateTx({ status: 'error', data: null, error: err.message });
+      });
+    return () => { cancelled = true; };
+  }, [filters.dateRange.start.getTime(), filters.dateRange.end.getTime(),
+      Array.from(filters.platforms).join(','), Array.from(filters.countries).join(','),
+      statusFilter, debouncedQuery]);
 
-  const cur = filters.currency;
+  const cur = filters.currency || 'USD';
+  const orders = state.data?.orders || [];
+  const statusCounts = state.data?.statusCounts || {};
+  const total = state.data?.total ?? 0;
+  const showing = orders.length;
 
   return (
     <div className="page-in">
@@ -853,7 +863,9 @@ function TransactionsPage({ filters }) {
         <div className="lead">
           <span className="eyebrow">TRANSACTIONS · LEDGER</span>
           <h2>Every <em>order</em>, every line.</h2>
-          <span className="sub">Raw stream · {fmtInt(filtered.length)} rows shown · 500 row cap · use filters to narrow</span>
+          <span className="sub">
+            Raw stream · {fmtInt(showing)} of {fmtInt(total)} rows{showing < total ? ' · 500 row cap · use filters to narrow' : ''}
+          </span>
         </div>
         <div className="page-head-actions">
           <div className="select-btn" style={{ padding: '0 10px', width: 240 }}>
@@ -871,11 +883,15 @@ function TransactionsPage({ filters }) {
         <div className="seg">
           {[['all','All'],['approved','Approved'],['pending','Pending'],['refunded','Refunded'],['chargeback','Chargeback']].map(([k, l]) => (
             <button key={k} className={statusFilter === k ? 'is-active' : ''} onClick={() => setStatusFilter(k)}>
-              {l}{k !== 'all' && <span style={{ marginLeft: 6, opacity: 0.5 }}>{fmtInt(statusCounts[k] || 0)}</span>}
+              {l}<span style={{ marginLeft: 6, opacity: 0.5 }}>{fmtInt(statusCounts[k] || 0)}</span>
             </button>
           ))}
         </div>
       </div>
+
+      {state.status === 'error' && (
+        <div className="panel" style={{ color: 'var(--danger)' }}>Erro ao carregar: {state.error}</div>
+      )}
 
       <div className="panel" style={{ padding: 0 }}>
         <div className="tbl-wrap" style={{ margin: 0, padding: '0 4px', maxHeight: 720, overflowY: 'auto' }}>
@@ -892,23 +908,30 @@ function TransactionsPage({ filters }) {
               </tr>
             </thead>
             <tbody>
-              {filtered.map(o => {
-                const p = window.MOCK.PRODUCTS.find(x => x.id === o.productId);
-                const aff = window.MOCK.affiliates.find(x => x.id === o.affiliateId);
+              {state.status === 'loading' && (
+                <tr><td colSpan={12} style={{ textAlign: 'center', padding: 24, opacity: 0.6 }}>Carregando...</td></tr>
+              )}
+              {state.status === 'ready' && orders.length === 0 && (
+                <tr><td colSpan={12} style={{ textAlign: 'center', padding: 24, opacity: 0.6 }}>Nenhuma transação no período</td></tr>
+              )}
+              {orders.map((o) => {
+                const platClass = o.platformSlug === 'digistore24' ? 'plat-d24' : 'plat-cb';
+                const platShort = o.platformSlug === 'digistore24' ? 'D24' : 'CB';
+                const statusLc = o.status.toLowerCase();
                 return (
-                  <tr key={o.id}>
-                    <td className="cell-mono">{fmtDateTime(o.createdAt)}</td>
-                    <td className="cell-mono">{o.id}</td>
-                    <td><span className={`plat plat-${o.platform === 'digistore24' ? 'd24' : 'cb'}`}>{o.platform === 'digistore24' ? 'D24' : 'CB'}</span></td>
-                    <td>{p?.name || o.productId}</td>
-                    <td className="cell-mono">{aff?.nickname || o.affiliateId}</td>
-                    <td className="cell-mono">{o.country}</td>
-                    <td className="cell-mono">{o.paymentMethod}</td>
-                    <td className="num cell-mono">{fmtCurrency(o.grossAmount, cur, 2)}</td>
+                  <tr key={`${o.platformSlug}:${o.externalId}`}>
+                    <td className="cell-mono">{fmtDateTime(o.orderedAt)}</td>
+                    <td className="cell-mono">{o.externalId}</td>
+                    <td><span className={`plat ${platClass}`}>{platShort}</span></td>
+                    <td>{o.productName || o.productExternalId}</td>
+                    <td className="cell-mono">{o.affiliateNickname || o.affiliateExternalId || '—'}</td>
+                    <td className="cell-mono">{o.country || '—'}</td>
+                    <td className="cell-mono">{o.paymentMethod || '—'}</td>
+                    <td className="num cell-mono">{fmtCurrency(o.grossAmountUsd, cur, 2)}</td>
                     <td className="num cell-mono" style={{ color: 'var(--navy-400)' }}>{fmtCurrency(o.fees, cur, 2)}</td>
-                    <td className="num cell-mono">{fmtCurrency(o.netAmount, cur, 2)}</td>
-                    <td><span className={`st st-${o.status}`}>{o.status}</span></td>
-                    <td className="num cell-mono">{fmtCurrency(o.cpaPaid, cur, 2)}</td>
+                    <td className="num cell-mono">{fmtCurrency(o.netAmountUsd, cur, 2)}</td>
+                    <td><span className={`st st-${statusLc}`}>{statusLc}</span></td>
+                    <td className="num cell-mono">{fmtCurrency(o.cpaPaidUsd, cur, 2)}</td>
                   </tr>
                 );
               })}

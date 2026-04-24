@@ -47,4 +47,26 @@ async function fetchOverview(filters) {
   return fetchJSON('/api/metrics/overview', params);
 }
 
-window.NSApi = { fetchOverview };
+/**
+ * Fetch /api/metrics/orders.
+ *
+ * filters: shared dashboard filters.
+ * options: { status, search, limit, offset }.
+ *
+ * Response: { orders, statusCounts, total, limit, offset }.
+ */
+async function fetchOrders(filters, options = {}) {
+  const params = {
+    start_date: toISODate(filters.dateRange.start),
+    end_date: toISODate(filters.dateRange.end),
+    platforms: setToCSV(filters.platforms),
+    countries: setToCSV(filters.countries),
+    status: options.status && options.status !== 'all' ? options.status : null,
+    search: options.search || null,
+    limit: options.limit != null ? String(options.limit) : null,
+    offset: options.offset != null ? String(options.offset) : null,
+  };
+  return fetchJSON('/api/metrics/orders', params);
+}
+
+window.NSApi = { fetchOverview, fetchOrders };

@@ -13,3 +13,4 @@ prisma/migrations/dev.db*
 
 coverage/
 .vitest-cache/
+tsconfig.tsbuildinfo
