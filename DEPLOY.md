@@ -173,9 +173,61 @@ Criar a pasta antes:
 mkdir -p /var/backups/dashboard
 ```
 
-## 10. Update workflow (futuro)
+## 10. Deploy automatizado via GitHub Actions
 
-Quando quiser fazer deploy de mudanças:
+O workflow [.github/workflows/deploy.yml](.github/workflows/deploy.yml) roda em todo `push` em `main`:
+
+1. **test**: `npm ci` + `prisma generate` + `npm run test` (bloqueia deploy se falhar)
+2. **deploy**: SSH na VPS → `git reset --hard origin/main` + `docker compose up -d --build app`
+3. **health check**: aguarda `/api/health` responder 200 antes de marcar o job como sucesso
+
+### Setup inicial (uma vez só)
+
+**Na sua máquina local**:
+
+```powershell
+ssh-keygen -t ed25519 -f $HOME\.ssh\gha_deploy -N '""'
+type $HOME\.ssh\gha_deploy.pub
+```
+
+Copia a saída do `type` (chave pública).
+
+**Na VPS** (via SSH atual):
+
+```bash
+mkdir -p ~/.ssh && chmod 700 ~/.ssh
+echo "COLE_A_CHAVE_PUBLICA_AQUI" >> ~/.ssh/authorized_keys
+chmod 600 ~/.ssh/authorized_keys
+```
+
+**Testar o SSH com a chave nova, na máquina local**:
+
+```powershell
+ssh -i $HOME\.ssh\gha_deploy root@72.62.104.202 "echo ok"
+```
+
+Se retornar `ok`, a key funciona.
+
+**Adicionar secrets no GitHub** (repo → Settings → Secrets and variables → Actions → New repository secret):
+
+| Nome | Valor |
+| --- | --- |
+| `VPS_HOST` | `72.62.104.202` |
+| `VPS_USER` | `root` |
+| `VPS_SSH_KEY` | conteúdo **completo** de `~/.ssh/gha_deploy` (a chave privada, incluindo linhas `BEGIN`/`END`) |
+| `VPS_SSH_PORT` | `22` (opcional se for default) |
+
+Pra obter o conteúdo da chave privada no PowerShell:
+
+```powershell
+type $HOME\.ssh\gha_deploy
+```
+
+Copia o output inteiro, incluindo `-----BEGIN OPENSSH PRIVATE KEY-----` e `-----END OPENSSH PRIVATE KEY-----`.
+
+### Deploy manual (fallback)
+
+Se GHA estiver fora ou você precisa forçar:
 
 ```bash
 cd /opt/dashboard
@@ -183,7 +235,11 @@ git pull
 docker compose up -d --build app
 ```
 
-A migration roda automática no start do container (pelo CMD do Dockerfile).
+A migration roda automática no start do container.
+
+### Disparar deploy manualmente via GHA
+
+Repo GitHub → Actions → "CI + Deploy" → "Run workflow" → branch `main` → Run.
 
 ## Troubleshooting
 

@@ -1,0 +1,62 @@
+name: CI + Deploy
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  test:
+    name: Tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Generate Prisma client
+        run: npx prisma generate
+
+      - name: Run Vitest
+        run: npm run test
+
+  deploy:
+    name: Deploy to VPS
+    needs: test
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
+    steps:
+      - name: Deploy via SSH
+        uses: appleboy/ssh-action@v1.2.0
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          port: ${{ secrets.VPS_SSH_PORT || 22 }}
+          command_timeout: 10m
+          script: |
+            set -e
+            cd /opt/dashboard
+            git fetch origin main
+            git reset --hard origin/main
+            docker compose up -d --build app
+            docker image prune -f
+
+      - name: Wait for health check
+        run: |
+          for i in {1..30}; do
+            if curl -sf https://dash.thenorthscales.com/api/health > /dev/null; then
+              echo "::notice::Health check passed after ${i} attempts"
+              exit 0
+            fi
+            echo "Waiting for /api/health (attempt $i/30)..."
+            sleep 3
+          done
+          echo "::error::Health check failed after 90s"
+          exit 1
