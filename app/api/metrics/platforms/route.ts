@@ -23,9 +23,10 @@ export async function GET(req: Request) {
   }
 
   const countries = csvParam(searchParams.get('countries'));
+  const productExternalIds = csvParam(searchParams.get('products'));
 
   try {
-    const data = await getPlatforms({ startDate, endDate, countries });
+    const data = await getPlatforms({ startDate, endDate, countries, productExternalIds });
     return NextResponse.json(data);
   } catch (err) {
     logger.error({ err }, 'metrics/platforms failed');

@@ -41,7 +41,8 @@ function FunnelPage({ filters }) {
       });
     return () => { cancelled = true; };
   }, [filters.dateRange.start.getTime(), filters.dateRange.end.getTime(),
-      Array.from(filters.platforms).join(','), Array.from(filters.countries).join(',')]);
+      Array.from(filters.platforms).join(','), Array.from(filters.countries).join(','),
+      Array.from(filters.funnels).join(',')]);
 
   // Reset selection if the chosen funnel no longer exists in the new dataset
   useEffect(() => {
@@ -276,7 +277,8 @@ function LeaderboardPage({ filters, onOpenAffiliate }) {
       });
     return () => { cancelled = true; };
   }, [filters.dateRange.start.getTime(), filters.dateRange.end.getTime(),
-      Array.from(filters.platforms).join(','), Array.from(filters.countries).join(',')]);
+      Array.from(filters.platforms).join(','), Array.from(filters.countries).join(','),
+      Array.from(filters.funnels).join(',')]);
 
   const cur = filters.currency || 'USD';
   const all = state.data?.affiliates || [];
@@ -444,7 +446,8 @@ function AffiliateDrawer({ affiliateId, filters, onClose }) {
       });
     return () => { cancelled = true; };
   }, [affiliateId, filters.dateRange.start.getTime(), filters.dateRange.end.getTime(),
-      Array.from(filters.platforms).join(','), Array.from(filters.countries).join(',')]);
+      Array.from(filters.platforms).join(','), Array.from(filters.countries).join(','),
+      Array.from(filters.funnels).join(',')]);
 
   const cur = filters.currency || 'USD';
   const data = state.data;
@@ -676,7 +679,8 @@ function AllAffiliatesPage({ filters, onOpenAffiliate }) {
       });
     return () => { cancelled = true; };
   }, [filters.dateRange.start.getTime(), filters.dateRange.end.getTime(),
-      Array.from(filters.platforms).join(','), Array.from(filters.countries).join(',')]);
+      Array.from(filters.platforms).join(','), Array.from(filters.countries).join(','),
+      Array.from(filters.funnels).join(',')]);
 
   const cur = filters.currency || 'USD';
   const all = state.data?.affiliates || [];
@@ -785,7 +789,8 @@ function ProductsPage({ filters }) {
       });
     return () => { cancelled = true; };
   }, [filters.dateRange.start.getTime(), filters.dateRange.end.getTime(),
-      Array.from(filters.platforms).join(','), Array.from(filters.countries).join(',')]);
+      Array.from(filters.platforms).join(','), Array.from(filters.countries).join(','),
+      Array.from(filters.funnels).join(',')]);
 
   const cur = filters.currency || 'USD';
   const byType = state.data?.byType || [];
@@ -1037,6 +1042,7 @@ function TransactionsPage({ filters }) {
     return () => { cancelled = true; };
   }, [filters.dateRange.start.getTime(), filters.dateRange.end.getTime(),
       Array.from(filters.platforms).join(','), Array.from(filters.countries).join(','),
+      Array.from(filters.funnels).join(','),
       statusFilter, debouncedQuery]);
 
   const cur = filters.currency || 'USD';

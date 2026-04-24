@@ -183,16 +183,49 @@ function MultiSelect({ label, options, selected, onChange, icon }) {
   );
 }
 
+// Routes that already render comparison data (deltas vs previous period).
+// Other routes hide the toggle since flipping it would have no visible effect.
+const ROUTES_WITH_COMPARE = new Set(['overview']);
+
 // ---------- Filter bar ----------
-function FilterBar({ filters, setFilters }) {
+function FilterBar({ filters, setFilters, options, route }) {
   const DATE_PRESETS = [
     ['today', 'Hoje'], ['yesterday', 'Ontem'], ['7d', '7D'], ['30d', '30D'],
     ['mtd', 'Mês'], ['qtd', 'Trimestre'], ['ytd', 'Ano'], ['90d', '90D']
   ];
 
-  const platformOpts = window.MOCK.PLATFORMS.map(p => ({ id: p.id, label: p.name, swatch: p.id === 'digistore24' ? '#8B7FFF' : '#5BC8FF' }));
-  const productOpts = window.MOCK.PRODUCTS.filter(p => p.type === 'frontend').map(p => ({ id: p.funnel, label: p.name.split(' · ')[0], meta: p.sku.slice(0, 5) }));
-  const countryOpts = window.MOCK.COUNTRIES.map(c => ({ id: c.code, label: c.name, meta: c.code }));
+  // Real options come from /api/metrics/filters (loaded async by App). Fall
+  // back to MOCK universe while loading so the bar isn't blank on first paint.
+  const platformOpts = options?.platforms
+    ? options.platforms.map((p) => ({
+        id: p.id,
+        label: p.label,
+        swatch: p.id === 'digistore24' ? '#8B7FFF' : '#5BC8FF',
+      }))
+    : window.MOCK.PLATFORMS.map((p) => ({
+        id: p.id, label: p.name,
+        swatch: p.id === 'digistore24' ? '#8B7FFF' : '#5BC8FF',
+      }));
+
+  const productOpts = options?.funnels
+    ? options.funnels.map((f) => ({
+        id: f.id,
+        label: f.label,
+        meta: String(f.orderCount),
+      }))
+    : window.MOCK.PRODUCTS.filter((p) => p.type === 'frontend').map((p) => ({
+        id: p.funnel, label: p.name.split(' · ')[0], meta: p.sku.slice(0, 5),
+      }));
+
+  const countryOpts = options?.countries
+    ? options.countries.map((c) => ({
+        id: c.id, label: c.label, meta: String(c.orderCount),
+      }))
+    : window.MOCK.COUNTRIES.map((c) => ({
+        id: c.code, label: c.name, meta: c.code,
+      }));
+
+  const showCompare = ROUTES_WITH_COMPARE.has(route);
 
   return (
     <div className="filters">
@@ -209,13 +242,17 @@ function FilterBar({ filters, setFilters }) {
         <Icon name="calendar" size={12}/>
         <span>{fmtDateShort(filters.dateRange.start)} → {fmtDateShort(filters.dateRange.end)}</span>
       </div>
-      <span className="f-label" style={{ marginLeft: 8 }}>COMPARAR</span>
-      <button className={`chip ${filters.compare ? 'is-active' : ''}`}
-        onClick={() => setFilters(f => ({ ...f, compare: !f.compare }))}
-      >
-        <Icon name="arrow-up-right" size={12}/>
-        Período anterior
-      </button>
+      {showCompare && (
+        <>
+          <span className="f-label" style={{ marginLeft: 8 }}>COMPARAR</span>
+          <button className={`chip ${filters.compare ? 'is-active' : ''}`}
+            onClick={() => setFilters(f => ({ ...f, compare: !f.compare }))}
+          >
+            <Icon name="arrow-up-right" size={12}/>
+            Período anterior
+          </button>
+        </>
+      )}
 
       <div style={{ flex: 1 }}/>
 

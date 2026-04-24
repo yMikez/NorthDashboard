@@ -83,7 +83,8 @@ function OverviewPage({ filters }) {
       });
     return () => { cancelled = true; };
   }, [filters.dateRange.start.getTime(), filters.dateRange.end.getTime(),
-      encodeSet(filters.platforms), encodeSet(filters.countries)]);
+      encodeSet(filters.platforms), encodeSet(filters.countries),
+      encodeSet(filters.funnels), filters.compare]);
 
   const cur = filters.currency || 'USD';
 

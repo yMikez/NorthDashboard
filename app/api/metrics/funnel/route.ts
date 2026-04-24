@@ -24,9 +24,10 @@ export async function GET(req: Request) {
 
   const platformSlugs = csvParam(searchParams.get('platforms'));
   const countries = csvParam(searchParams.get('countries'));
+  const productExternalIds = csvParam(searchParams.get('products'));
 
   try {
-    const data = await getFunnel({ startDate, endDate, platformSlugs, countries });
+    const data = await getFunnel({ startDate, endDate, platformSlugs, countries, productExternalIds });
     return NextResponse.json(data);
   } catch (err) {
     logger.error({ err }, 'metrics/funnel failed');

@@ -53,11 +53,21 @@ function encodeSet(set) { return Array.from(set).join(','); }
 
 function App() {
   const [hashState, setHashState] = useStateApp(readHash());
+  const [filterOptions, setFilterOptions] = useStateApp(null);
 
   useEffectApp(() => {
     const fn = () => setHashState(readHash());
     window.addEventListener('hashchange', fn);
     return () => window.removeEventListener('hashchange', fn);
+  }, []);
+
+  // Load real filter options once on mount. We don't refresh on every
+  // navigation — the universe of platforms/funnels/countries changes only
+  // when new orders arrive, which is rare relative to user interaction.
+  useEffectApp(() => {
+    window.NSApi.fetchFilterOptions()
+      .then((data) => setFilterOptions(data))
+      .catch((err) => console.error('fetchFilterOptions failed', err));
   }, []);
 
   const params = hashState.params;
@@ -110,7 +120,7 @@ function App() {
           currency={filters.currency}
           onToggleCurrency={(c) => setFilters(f => ({ ...f, currency: c }))}
         />
-        <FilterBar filters={filters} setFilters={setFilters}/>
+        <FilterBar filters={filters} setFilters={setFilters} options={filterOptions} route={hashState.route}/>
         <div className="page">
           {hashState.route === 'overview'       && <OverviewPage filters={filters}/>}
           {hashState.route === 'funnel'         && <FunnelPage filters={filters}/>}

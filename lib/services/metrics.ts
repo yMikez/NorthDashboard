@@ -386,7 +386,19 @@ export async function getFunnel(
     }
   }
 
-  const allGroups = Array.from(groups.values());
+  // When the user picks specific FE products, keep only groups whose FE order
+  // matches. This is a group-level filter — applying productExternalIds to the
+  // raw orders query would drop the upsell rows (they have different SKUs) and
+  // collapse the funnel. Groups with no FE in the period stay (they can't be
+  // matched anyway and would already be excluded from byFunnel below).
+  const productFilter = filters.productExternalIds?.length
+    ? new Set(filters.productExternalIds)
+    : null;
+  const allGroups = Array.from(groups.values()).filter((g) => {
+    if (!productFilter) return true;
+    if (!g.hasFE || !g.feProductExternalId) return false;
+    return productFilter.has(g.feProductExternalId);
+  });
   const global = aggregateGroups(allGroups, allGroups.length);
 
   // Bucket groups by FE product. Groups without an FE order in the period are
@@ -561,6 +573,9 @@ export async function getProducts(
   if (filters.countries?.length) {
     where.country = { in: filters.countries };
   }
+  if (filters.productExternalIds?.length) {
+    where.product = { externalId: { in: filters.productExternalIds } };
+  }
 
   const orders = await db.order.findMany({
     where,
@@ -724,6 +739,9 @@ export async function getPlatforms(
   };
   if (filters.countries?.length) {
     where.country = { in: filters.countries };
+  }
+  if (filters.productExternalIds?.length) {
+    where.product = { externalId: { in: filters.productExternalIds } };
   }
 
   const orders = await db.order.findMany({
