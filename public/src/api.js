@@ -118,10 +118,27 @@ async function fetchProducts(filters) {
   return fetchJSON('/api/metrics/products', params);
 }
 
+/**
+ * Fetch /api/metrics/funnel.
+ *
+ * Returns { stages, summary } — funnel stages FE → Bump → Upsell1 → Upsell2 → Downsell
+ * computed from order groups (parentExternalId). Take rates relative to FE count.
+ */
+async function fetchFunnel(filters) {
+  const params = {
+    start_date: toISODate(filters.dateRange.start),
+    end_date: toISODate(filters.dateRange.end),
+    platforms: setToCSV(filters.platforms),
+    countries: setToCSV(filters.countries),
+  };
+  return fetchJSON('/api/metrics/funnel', params);
+}
+
 window.NSApi = {
   fetchOverview,
   fetchOrders,
   fetchAffiliates,
   fetchPlatforms,
   fetchProducts,
+  fetchFunnel,
 };

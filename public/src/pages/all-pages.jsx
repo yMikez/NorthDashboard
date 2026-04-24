@@ -3,244 +3,122 @@
 
 // ---------- FUNNEL ANALYTICS ----------
 function FunnelPage({ filters }) {
-  const [selectedFunnels, setSelectedFunnels] = useState(new Set(['fx']));
+  const [state, setFunState] = useState({ status: 'loading', data: null, error: null });
 
-  const allFunnels = [
-    { id: 'fx', name: 'FocusRx', color: '#5BC8FF' },
-    { id: 'sx', name: 'SleepCore', color: '#8B7FFF' },
-    { id: 'mx', name: 'MetaLean', color: '#4A90FF' },
-  ];
+  useEffect(() => {
+    let cancelled = false;
+    setFunState((s) => ({ ...s, status: 'loading' }));
+    window.NSApi.fetchFunnel(filters)
+      .then((data) => { if (!cancelled) setFunState({ status: 'ready', data, error: null }); })
+      .catch((err) => {
+        if (cancelled) return;
+        console.error('fetchFunnel failed', err);
+        setFunState({ status: 'error', data: null, error: err.message });
+      });
+    return () => { cancelled = true; };
+  }, [filters.dateRange.start.getTime(), filters.dateRange.end.getTime(),
+      Array.from(filters.platforms).join(','), Array.from(filters.countries).join(',')]);
 
-  const dFrom = dayIndexFromDate(filters.dateRange.start);
-  const dTo = dayIndexFromDate(filters.dateRange.end);
+  const cur = filters.currency || 'USD';
+  const stages = state.data?.stages || [];
+  const summary = state.data?.summary || {
+    feGroups: 0, totalGroups: 0, totalRevenue: 0,
+    aov: 0, aovFEOnly: 0, aovWithUpsell: 0, revenueLiftFromUpsells: 0,
+  };
 
-  const funnelData = Array.from(selectedFunnels).map(id => {
-    const e = window.MOCK.funnelEventsForRange(Math.max(0, dFrom), Math.min(89, dTo), id);
-    return { id, name: allFunnels.find(f => f.id === id)?.name || id, events: e };
-  });
-
-  const primary = funnelData[0];
-  const stages = primary ? [
-    { label: 'Landing page views',   volume: primary.events.landing },
-    { label: 'VSL engaged',           volume: primary.events.vsl },
-    { label: 'Checkout initiated',    volume: primary.events.checkInit },
-    { label: 'Checkout completed',    volume: primary.events.checkDone },
-    { label: 'Payment approved',      volume: primary.events.approved },
-    { label: 'Upsell 1 — shown',      volume: primary.events.up1Shown },
-    { label: 'Upsell 1 — accepted',   volume: primary.events.up1Acc },
-    { label: 'Upsell 2 — shown',      volume: primary.events.up2Shown },
-    { label: 'Upsell 2 — accepted',   volume: primary.events.up2Acc },
-  ] : [];
-
-  // upsell/downsell take rates table (aggregated from orders)
-  const filtered = useMemo(() => applyFilters(window.MOCK.orders, {
-    dateRange: filters.dateRange,
-    platforms: filters.platforms,
-    products: mapFunnelsToProducts(selectedFunnels.size ? selectedFunnels : new Set(['fx','sx','mx'])),
-    countries: filters.countries,
-    trafficSources: filters.trafficSources,
-  }), [filters, selectedFunnels]);
-
-  // approval by payment method
-  const pmAgg = {};
-  for (const o of filtered) {
-    const k = o.paymentMethod;
-    pmAgg[k] = pmAgg[k] || { approved: 0, all: 0, revenue: 0 };
-    pmAgg[k].all++;
-    if (o.status === 'approved') { pmAgg[k].approved++; pmAgg[k].revenue += o.grossAmount; }
-  }
-  const pmRows = Object.entries(pmAgg).sort((a,b) => b[1].all - a[1].all);
-
-  // upsell take rate by step (from all orders in range)
-  const takeSteps = ['fx','sx','mx'].filter(f => selectedFunnels.size === 0 || selectedFunnels.has(f)).flatMap(f => {
-    // pairs: fe->up1, up1->up2, fe->bump
-    return [
-      { key: f + '-up1', label: `${allFunnels.find(x=>x.id===f).name} → Upsell 1`, step: 'up1', funnel: f },
-      { key: f + '-up2', label: `${allFunnels.find(x=>x.id===f).name} → Upsell 2`, step: 'up2', funnel: f },
-      { key: f + '-bp',  label: `${allFunnels.find(x=>x.id===f).name} → Bump`,     step: 'bump', funnel: f },
-    ];
-  });
-  const takeData = takeSteps.map(s => {
-    let shown = 0, accepted = 0, revenue = 0;
-    for (const o of filtered) {
-      if (o.status !== 'approved') continue;
-      if (!o.productId.startsWith(s.funnel)) continue;
-      if (o.productType === 'frontend') shown++;
-      if (s.step === 'up1' && o.productId.endsWith('up1')) { accepted++; revenue += o.grossAmount; }
-      if (s.step === 'up2' && o.productId.endsWith('up2')) { accepted++; revenue += o.grossAmount; }
-      if (s.step === 'bump' && o.productType === 'bump') { accepted++; revenue += o.grossAmount; }
-    }
-    return { ...s, shown, accepted, rate: shown ? accepted / shown : 0, revenue };
-  });
-
-  // AOV lift
-  const feOnly = filtered.filter(o => o.status === 'approved' && o.productType === 'frontend');
-  const avgFE = feOnly.length ? feOnly.reduce((s, o) => s + o.grossAmount, 0) / feOnly.length : 0;
-  const grossByGroup = {};
-  for (const o of filtered) {
-    if (o.status !== 'approved') continue;
-    grossByGroup[o.orderGroup] = grossByGroup[o.orderGroup] || { gross: 0, hasUp1: false, hasUp2: false };
-    grossByGroup[o.orderGroup].gross += o.grossAmount;
-    if (o.productType === 'upsell' && o.productId.endsWith('up1')) grossByGroup[o.orderGroup].hasUp1 = true;
-    if (o.productType === 'upsell' && o.productId.endsWith('up2')) grossByGroup[o.orderGroup].hasUp2 = true;
-  }
-  const groups = Object.values(grossByGroup);
-  const withUp1 = groups.filter(g => g.hasUp1 && !g.hasUp2);
-  const withUp12 = groups.filter(g => g.hasUp1 && g.hasUp2);
-  const avgUp1 = withUp1.length ? withUp1.reduce((s, g) => s + g.gross, 0) / withUp1.length : 0;
-  const avgUp12 = withUp12.length ? withUp12.reduce((s, g) => s + g.gross, 0) / withUp12.length : 0;
-
-  // funnel conv time series (approved/landing per day — simplified)
-  const convBuckets = bucketByDay(filtered, filters.dateRange).map((b, i) => {
-    const dIdx = dFrom + i;
-    const funnelsInUse = selectedFunnels.size ? Array.from(selectedFunnels) : ['fx','sx','mx'];
-    let lp = 0;
-    funnelsInUse.forEach(f => {
-      const e = window.MOCK.funnelEventsForRange(dIdx, dIdx, f);
-      lp += e.landing;
-    });
-    return { ...b, landing: lp, convRate: lp ? b.approvedOrders / lp : 0 };
-  });
-
-  const cur = filters.currency;
+  // Adapt to FunnelChart shape: { label, volume }
+  const chartStages = stages.map((s) => ({ label: s.label, volume: s.volume }));
 
   return (
     <div className="page-in">
       <div className="page-head">
         <div className="lead">
           <span className="eyebrow">FUNNEL ANALYTICS</span>
-          <h2>Where the funnel <em>leaks</em>.</h2>
-          <span className="sub">Stage-by-stage drop-off · compare up to 3 funnels side by side</span>
-        </div>
-        <div className="page-head-actions">
-          <div className="seg">
-            {allFunnels.map(f => (
-              <button key={f.id} className={selectedFunnels.has(f.id) ? 'is-active' : ''}
-                onClick={() => {
-                  const s = new Set(selectedFunnels);
-                  if (s.has(f.id)) s.delete(f.id); else s.add(f.id);
-                  if (s.size === 0) s.add('fx');
-                  if (s.size > 3) return;
-                  setSelectedFunnels(s);
-                }}>
-                {f.name}
-              </button>
-            ))}
-          </div>
+          <h2>Front-end <em>até backend</em>.</h2>
+          <span className="sub">100% = vendas iniciais · take rates relativas ao FE</span>
         </div>
       </div>
 
-      {/* Main funnel */}
+      {state.status === 'error' && (
+        <div className="panel" style={{ color: 'var(--danger)' }}>Erro ao carregar: {state.error}</div>
+      )}
+
+      <div className="mini-kpis">
+        <div className="mini-kpi">
+          <div className="l">Frontend orders</div>
+          <div className="v">{fmtInt(summary.feGroups)}</div>
+          <div className="s">topo do funil = 100%</div>
+        </div>
+        <div className="mini-kpi">
+          <div className="l">Total revenue</div>
+          <div className="v">{fmtCurrency(summary.totalRevenue, cur, 0)}</div>
+          <div className="s">FE + bumps + upsells + downsells</div>
+        </div>
+        <div className="mini-kpi">
+          <div className="l">AOV (full funnel)</div>
+          <div className="v">{fmtCurrency(summary.aov, cur, 0)}</div>
+          <div className="s">receita total / FE orders</div>
+        </div>
+        <div className="mini-kpi">
+          <div className="l">Lift de upsells</div>
+          <div className="v" style={{ color: summary.revenueLiftFromUpsells > 0.3 ? 'var(--success)' : summary.revenueLiftFromUpsells > 0.1 ? 'var(--warning)' : 'inherit' }}>
+            {summary.aovFEOnly > 0 ? `+${(summary.revenueLiftFromUpsells * 100).toFixed(0)}%` : '—'}
+          </div>
+          <div className="s">AOV com upsell vs só FE</div>
+        </div>
+      </div>
+
       <div className="panel" style={{ marginBottom: 14 }}>
         <div className="panel-head">
           <div className="panel-title">
-            <span className="panel-eyebrow">PRIMARY FUNNEL · {primary?.name.toUpperCase()}</span>
-            <div className="panel-sub">Volume and drop-off · drop-offs &gt;70% flagged in red</div>
+            <span className="panel-eyebrow">FUNNEL · FE → BACKEND</span>
+            <div className="panel-sub">Volume por estágio · take rate relativa às vendas frontend</div>
           </div>
           <div className="panel-legend">
-            <span className="legend-dot cyan"><span/>{fmtInt(stages[0]?.volume || 0)} LANDING → {fmtInt(stages[4]?.volume || 0)} APPROVED</span>
+            <span className="legend-dot cyan"><span/>{fmtInt(summary.feGroups)} FE → {fmtInt(summary.totalGroups)} grupos totais</span>
           </div>
         </div>
-        <FunnelChart stages={stages}/>
+        <FunnelChart stages={chartStages}/>
       </div>
 
-      {/* Take rates + AOV lift */}
       <div className="grid-2">
         <div className="panel">
           <div className="panel-head">
             <div className="panel-title">
-              <span className="panel-eyebrow">UPSELL / DOWNSELL TAKE RATES</span>
-              <div className="panel-sub">% of approved checkouts that accept each upsell</div>
+              <span className="panel-eyebrow">TAKE RATES · POR ESTÁGIO</span>
+              <div className="panel-sub">% de pedidos FE que avançaram pra cada estágio backend</div>
             </div>
           </div>
           <div className="tbl-wrap">
             <table className="tbl">
               <thead>
-                <tr><th>Offer step</th><th className="num">Shown</th><th className="num">Accepted</th><th className="num">Take rate</th><th className="num">Revenue</th></tr>
+                <tr>
+                  <th>Stage</th>
+                  <th className="num">Orders</th>
+                  <th className="num">Take rate</th>
+                  <th className="num">Revenue</th>
+                </tr>
               </thead>
               <tbody>
-                {takeData.map(t => (
-                  <tr key={t.key}>
-                    <td>{t.label}</td>
-                    <td className="num cell-mono">{fmtInt(t.shown)}</td>
-                    <td className="num cell-mono">{fmtInt(t.accepted)}</td>
-                    <td className="num cell-mono" style={{ color: t.rate > 0.25 ? 'var(--success)' : t.rate > 0.12 ? 'var(--warning)' : 'var(--danger)' }}>
-                      {(t.rate * 100).toFixed(1)}%
-                    </td>
-                    <td className="num cell-mono">{fmtCurrency(t.revenue, cur, 0)}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </div>
-
-        <div className="panel">
-          <div className="panel-head">
-            <div className="panel-title">
-              <span className="panel-eyebrow">AOV LIFT — BY STACK</span>
-              <div className="panel-sub">Average order value with/without upsells</div>
-            </div>
-          </div>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: 12, padding: '10px 0' }}>
-            {[
-              { label: 'FE only', value: avgFE, color: '#8CA1C8' },
-              { label: 'FE + Upsell 1', value: avgUp1 || avgFE * 1.8, color: '#5BC8FF' },
-              { label: 'FE + Upsell 1 + 2', value: avgUp12 || avgFE * 2.6, color: '#4A90FF' },
-            ].map((r, i) => {
-              const maxV = Math.max(avgFE, avgUp1, avgUp12) || 1;
-              const liftPct = i === 0 ? 0 : (r.value - avgFE) / avgFE;
-              return (
-                <div key={r.label} style={{ display: 'grid', gridTemplateColumns: '130px 1fr 90px', gap: 12, alignItems: 'center' }}>
-                  <div style={{ fontSize: 12, color: 'var(--navy-100)' }}>{r.label}</div>
-                  <div style={{ position: 'relative', height: 26, background: 'rgba(91,200,255,0.06)', borderRadius: 4, overflow: 'hidden' }}>
-                    <div style={{ position: 'absolute', inset: 0, width: `${(r.value / maxV) * 100}%`,
-                      background: `linear-gradient(90deg, ${r.color}, ${r.color}44)`, borderRadius: 4,
-                      display: 'flex', alignItems: 'center', paddingLeft: 10,
-                      fontFamily: 'var(--f-display)', fontSize: 14, color: 'var(--white)', letterSpacing: '-0.01em',
-                      fontVariationSettings: "'opsz' 48, 'SOFT' 40"
-                    }}>
-                      {fmtCurrency(r.value, cur, 0)}
-                    </div>
-                  </div>
-                  <div style={{ textAlign: 'right', fontFamily: 'var(--f-mono)', fontSize: 11, color: i === 0 ? 'var(--navy-400)' : 'var(--success)' }}>
-                    {i === 0 ? '—' : `+${(liftPct * 100).toFixed(0)}% lift`}
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        </div>
-      </div>
-
-      {/* Approval by payment method */}
-      <div className="grid-2">
-        <div className="panel">
-          <div className="panel-head">
-            <div className="panel-title">
-              <span className="panel-eyebrow">APPROVAL RATE · BY PAYMENT METHOD</span>
-              <div className="panel-sub">Tier 1 international card approval varies widely</div>
-            </div>
-          </div>
-          <div className="tbl-wrap">
-            <table className="tbl">
-              <thead><tr><th>Method</th><th className="num">Attempts</th><th className="num">Approved</th><th>Rate</th><th className="num">Revenue</th></tr></thead>
-              <tbody>
-                {pmRows.map(([k, v]) => {
-                  const rate = v.all ? v.approved / v.all : 0;
-                  const cls = rate > 0.78 ? 'ok' : rate > 0.65 ? 'warn' : 'bad';
+                {state.status === 'loading' && (
+                  <tr><td colSpan={4} style={{ textAlign: 'center', padding: 24, opacity: 0.6 }}>Carregando...</td></tr>
+                )}
+                {stages.map((s) => {
+                  const isFE = s.id === 'frontend';
+                  const rateColor = isFE
+                    ? 'var(--white)'
+                    : s.takeRate > 0.25 ? 'var(--success)'
+                    : s.takeRate > 0.12 ? 'var(--warning)'
+                    : s.takeRate > 0   ? 'var(--danger)'
+                    : 'var(--navy-400)';
                   return (
-                    <tr key={k}>
-                      <td><Icon name="credit-card" size={12} className="" /> <span style={{ marginLeft: 8 }}>{k}</span></td>
-                      <td className="num cell-mono">{fmtInt(v.all)}</td>
-                      <td className="num cell-mono">{fmtInt(v.approved)}</td>
-                      <td>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                          <span className="cell-mono" style={{ minWidth: 44 }}>{(rate * 100).toFixed(1)}%</span>
-                          <div className={`ratebar ${cls}`}><span style={{ width: `${rate * 100}%` }}/></div>
-                        </div>
+                    <tr key={s.id}>
+                      <td>{s.label}{isFE && <span style={{ marginLeft: 8, fontSize: 10, color: 'var(--navy-400)', fontFamily: 'var(--f-mono)' }}>BASELINE</span>}</td>
+                      <td className="num cell-mono">{fmtInt(s.volume)}</td>
+                      <td className="num cell-mono" style={{ color: rateColor }}>
+                        {(s.takeRate * 100).toFixed(1)}%
                       </td>
-                      <td className="num cell-mono">{fmtCurrency(v.revenue, cur, 0)}</td>
+                      <td className="num cell-mono">{fmtCurrency(s.revenue, cur, 0)}</td>
                     </tr>
                   );
                 })}
@@ -252,57 +130,52 @@ function FunnelPage({ filters }) {
         <div className="panel">
           <div className="panel-head">
             <div className="panel-title">
-              <span className="panel-eyebrow">FUNNEL CONVERSION OVER TIME</span>
-              <div className="panel-sub">Landing → approved · watch for VSL regressions</div>
+              <span className="panel-eyebrow">AOV LIFT — FE vs FE+UPSELLS</span>
+              <div className="panel-sub">Quanto cada grupo gasta em média</div>
             </div>
-            <div className="panel-legend"><span className="legend-dot cyan"><span/>CONV RATE</span></div>
           </div>
-          <ConvLineChart buckets={convBuckets}/>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: 12, padding: '10px 0' }}>
+            {[
+              { label: 'FE only', value: summary.aovFEOnly, color: '#8CA1C8' },
+              { label: 'FE + upsell/bump/down', value: summary.aovWithUpsell, color: '#5BC8FF' },
+              { label: 'AOV global', value: summary.aov, color: '#4A90FF' },
+            ].map((r, i) => {
+              const maxV = Math.max(summary.aovFEOnly, summary.aovWithUpsell, summary.aov, 1);
+              const liftPct = i === 1 && summary.aovFEOnly > 0 ? (r.value - summary.aovFEOnly) / summary.aovFEOnly : null;
+              return (
+                <div key={r.label} style={{ display: 'grid', gridTemplateColumns: '160px 1fr 80px', gap: 12, alignItems: 'center' }}>
+                  <div style={{ fontSize: 12, color: 'var(--navy-100)' }}>{r.label}</div>
+                  <div style={{ position: 'relative', height: 26, background: 'rgba(91,200,255,0.06)', borderRadius: 4, overflow: 'hidden' }}>
+                    <div style={{
+                      position: 'absolute', inset: 0,
+                      width: `${(r.value / maxV) * 100}%`,
+                      background: `linear-gradient(90deg, ${r.color}, ${r.color}44)`,
+                      borderRadius: 4,
+                      display: 'flex', alignItems: 'center', paddingLeft: 10,
+                      fontFamily: 'var(--f-display)', fontSize: 14, color: 'var(--white)',
+                      letterSpacing: '-0.01em',
+                      fontVariationSettings: "'opsz' 48, 'SOFT' 40",
+                    }}>
+                      {fmtCurrency(r.value, cur, 0)}
+                    </div>
+                  </div>
+                  <div style={{
+                    textAlign: 'right', fontFamily: 'var(--f-mono)', fontSize: 11,
+                    color: liftPct != null && liftPct > 0 ? 'var(--success)' : 'var(--navy-400)',
+                  }}>
+                    {liftPct != null ? `+${(liftPct * 100).toFixed(0)}%` : '—'}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+          {summary.feGroups === 0 && (
+            <div style={{ padding: 14, fontSize: 12, color: 'var(--navy-300)', borderTop: '1px solid var(--border)' }}>
+              Sem vendas FE no período — quando vendas chegarem, o lift aparece aqui.
+            </div>
+          )}
         </div>
       </div>
-    </div>
-  );
-}
-
-function ConvLineChart({ buckets }) {
-  const [hover, setHover] = useState(null);
-  const ref = useRef(null);
-  const W = 1000, H = 260, PAD_L = 50, PAD_R = 20, PAD_T = 20, PAD_B = 30;
-  const innerW = W - PAD_L - PAD_R, innerH = H - PAD_T - PAD_B;
-  const vals = buckets.map(b => b.convRate);
-  const max = Math.max(0.01, ...vals) * 1.1;
-  const xFor = (i) => PAD_L + (buckets.length <= 1 ? 0 : (i / (buckets.length - 1)) * innerW);
-  const yFor = (v) => PAD_T + innerH - (v / max) * innerH;
-  const path = 'M' + buckets.map((b, i) => `${xFor(i)} ${yFor(b.convRate)}`).join(' L ');
-  const area = path + ` L ${xFor(buckets.length - 1)} ${PAD_T + innerH} L ${PAD_L} ${PAD_T + innerH} Z`;
-  const yTicks = [0, 0.25, 0.5, 0.75, 1].map(t => t * max);
-  const labIdx = Array.from({ length: Math.min(6, buckets.length) }).map((_, i) => Math.round(i / 5 * (buckets.length - 1)));
-  function onMove(e) {
-    const rect = ref.current.getBoundingClientRect();
-    const scale = W / rect.width;
-    const x = (e.clientX - rect.left) * scale - PAD_L;
-    if (x < 0 || x > innerW) { setHover(null); return; }
-    setHover(Math.round((x / innerW) * (buckets.length - 1)));
-  }
-  return (
-    <div style={{ position: 'relative' }}>
-      <svg ref={ref} viewBox={`0 0 ${W} ${H}`} className="chart-svg" onMouseMove={onMove} onMouseLeave={() => setHover(null)}>
-        <defs><linearGradient id="gradCyan2" x1="0" x2="0" y1="0" y2="1">
-          <stop offset="0%" stopColor="#5BC8FF" stopOpacity="0.35"/>
-          <stop offset="100%" stopColor="#5BC8FF" stopOpacity="0"/>
-        </linearGradient></defs>
-        <g className="chart-grid">{yTicks.map((t, i) => <line key={i} x1={PAD_L} x2={W - PAD_R} y1={yFor(t)} y2={yFor(t)}/>)}</g>
-        <g className="chart-axis">{yTicks.map((t, i) => <text key={i} x={PAD_L - 8} y={yFor(t) + 3} textAnchor="end">{(t * 100).toFixed(1)}%</text>)}</g>
-        <g className="chart-axis">{labIdx.map(i => <text key={i} x={xFor(i)} y={H - 10} textAnchor="middle">{fmtDateShort(buckets[i].date)}</text>)}</g>
-        <path d={area} fill="url(#gradCyan2)"/>
-        <path d={path} className="chart-line"/>
-        {hover != null && (
-          <>
-            <line className="chart-tt-line" x1={xFor(hover)} x2={xFor(hover)} y1={PAD_T} y2={PAD_T + innerH}/>
-            <circle cx={xFor(hover)} cy={yFor(buckets[hover].convRate)} r="4" className="chart-dot"/>
-          </>
-        )}
-      </svg>
     </div>
   );
 }

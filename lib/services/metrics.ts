@@ -33,6 +33,25 @@ export interface DailyBucket {
   allOrders: number;
 }
 
+export interface FunnelResponse {
+  stages: Array<{
+    id: string;
+    label: string;
+    volume: number;
+    revenue: number;
+    takeRate: number;
+  }>;
+  summary: {
+    feGroups: number;
+    totalGroups: number;
+    totalRevenue: number;
+    aov: number;
+    aovFEOnly: number;
+    aovWithUpsell: number;
+    revenueLiftFromUpsells: number;
+  };
+}
+
 export interface ProductsResponse {
   byType: Array<{
     productType: string;
@@ -215,6 +234,190 @@ export async function getOverview(
   }
 
   return response;
+}
+
+export async function getFunnel(
+  filters: MetricsFilters,
+): Promise<FunnelResponse> {
+  const where: Prisma.OrderWhereInput = {
+    orderedAt: { gte: filters.startDate, lte: filters.endDate },
+    status: 'APPROVED',
+  };
+  if (filters.platformSlugs?.length) {
+    where.platform = { slug: { in: filters.platformSlugs } };
+  }
+  if (filters.countries?.length) {
+    where.country = { in: filters.countries };
+  }
+
+  const orders = await db.order.findMany({
+    where,
+    select: {
+      externalId: true,
+      parentExternalId: true,
+      grossAmountUsd: true,
+      funnelStep: true,
+      product: { select: { productType: true } },
+      platform: { select: { slug: true } },
+    },
+  });
+
+  // A "group" represents a single buyer's funnel session. Group key:
+  //   parentExternalId when present (digistore order_id, clickbank upsellOriginalReceipt),
+  //   otherwise the order's own externalId (a frontend with no upsells).
+  // We scope keys per platform to avoid ID collisions between sources.
+  interface Group {
+    hasFE: boolean;
+    hasBump: boolean;
+    hasU1: boolean;
+    hasU2: boolean;
+    hasDown: boolean;
+    feRevenue: number;
+    bumpRevenue: number;
+    u1Revenue: number;
+    u2Revenue: number;
+    downRevenue: number;
+  }
+
+  const groups = new Map<string, Group>();
+
+  for (const o of orders) {
+    const groupKey = `${o.platform.slug}:${o.parentExternalId ?? o.externalId}`;
+    let g = groups.get(groupKey);
+    if (!g) {
+      g = {
+        hasFE: false,
+        hasBump: false,
+        hasU1: false,
+        hasU2: false,
+        hasDown: false,
+        feRevenue: 0,
+        bumpRevenue: 0,
+        u1Revenue: 0,
+        u2Revenue: 0,
+        downRevenue: 0,
+      };
+      groups.set(groupKey, g);
+    }
+    const gross = toNumber(o.grossAmountUsd);
+    const t = o.product.productType;
+    const step = o.funnelStep ?? 0;
+    if (t === 'FRONTEND') {
+      g.hasFE = true;
+      g.feRevenue += gross;
+    } else if (t === 'BUMP') {
+      g.hasBump = true;
+      g.bumpRevenue += gross;
+    } else if (t === 'UPSELL') {
+      if (step >= 2) {
+        g.hasU2 = true;
+        g.u2Revenue += gross;
+      } else {
+        g.hasU1 = true;
+        g.u1Revenue += gross;
+      }
+    } else if (t === 'DOWNSELL') {
+      g.hasDown = true;
+      g.downRevenue += gross;
+    }
+  }
+
+  let feGroups = 0;
+  let bumpGroups = 0;
+  let u1Groups = 0;
+  let u2Groups = 0;
+  let downGroups = 0;
+  let feRevenue = 0;
+  let bumpRevenue = 0;
+  let u1Revenue = 0;
+  let u2Revenue = 0;
+  let downRevenue = 0;
+  let revenueFEOnly = 0;
+  let revenueWithUpsell = 0;
+  let groupsFEOnly = 0;
+  let groupsWithUpsell = 0;
+
+  for (const g of groups.values()) {
+    if (g.hasFE) feGroups++;
+    if (g.hasBump) bumpGroups++;
+    if (g.hasU1) u1Groups++;
+    if (g.hasU2) u2Groups++;
+    if (g.hasDown) downGroups++;
+    feRevenue += g.feRevenue;
+    bumpRevenue += g.bumpRevenue;
+    u1Revenue += g.u1Revenue;
+    u2Revenue += g.u2Revenue;
+    downRevenue += g.downRevenue;
+
+    if (g.hasFE) {
+      const groupRev =
+        g.feRevenue + g.bumpRevenue + g.u1Revenue + g.u2Revenue + g.downRevenue;
+      const takesUpsell = g.hasU1 || g.hasU2 || g.hasBump || g.hasDown;
+      if (takesUpsell) {
+        groupsWithUpsell++;
+        revenueWithUpsell += groupRev;
+      } else {
+        groupsFEOnly++;
+        revenueFEOnly += groupRev;
+      }
+    }
+  }
+
+  const totalRevenue = feRevenue + bumpRevenue + u1Revenue + u2Revenue + downRevenue;
+  const aov = feGroups ? totalRevenue / feGroups : 0;
+  const aovFEOnly = groupsFEOnly ? revenueFEOnly / groupsFEOnly : 0;
+  const aovWithUpsell = groupsWithUpsell ? revenueWithUpsell / groupsWithUpsell : 0;
+  const revenueLiftFromUpsells =
+    aovFEOnly > 0 ? (aovWithUpsell - aovFEOnly) / aovFEOnly : 0;
+
+  return {
+    stages: [
+      {
+        id: 'frontend',
+        label: 'Frontend',
+        volume: feGroups,
+        revenue: round2(feRevenue),
+        takeRate: 1.0,
+      },
+      {
+        id: 'bump',
+        label: 'Order Bump',
+        volume: bumpGroups,
+        revenue: round2(bumpRevenue),
+        takeRate: feGroups ? round4(bumpGroups / feGroups) : 0,
+      },
+      {
+        id: 'upsell1',
+        label: 'Upsell 1',
+        volume: u1Groups,
+        revenue: round2(u1Revenue),
+        takeRate: feGroups ? round4(u1Groups / feGroups) : 0,
+      },
+      {
+        id: 'upsell2',
+        label: 'Upsell 2+',
+        volume: u2Groups,
+        revenue: round2(u2Revenue),
+        takeRate: feGroups ? round4(u2Groups / feGroups) : 0,
+      },
+      {
+        id: 'downsell',
+        label: 'Downsell',
+        volume: downGroups,
+        revenue: round2(downRevenue),
+        takeRate: feGroups ? round4(downGroups / feGroups) : 0,
+      },
+    ],
+    summary: {
+      feGroups,
+      totalGroups: groups.size,
+      totalRevenue: round2(totalRevenue),
+      aov: round2(aov),
+      aovFEOnly: round2(aovFEOnly),
+      aovWithUpsell: round2(aovWithUpsell),
+      revenueLiftFromUpsells: round4(revenueLiftFromUpsells),
+    },
+  };
 }
 
 export async function getProducts(
