@@ -111,3 +111,51 @@ describe('parseClickBankIngest — upsell detection', () => {
     expect(n.funnelStep).toBe(1);
   });
 });
+
+describe('parseClickBankIngest — DW heuristic for downsells', () => {
+  it('classifies "DW1" itemNo as DOWNSELL even when lineItemType=UPSELL', () => {
+    const p: ClickBankIngestPayload = {
+      ...frontend,
+      receipt: 'DOWN001',
+      lineItems: [{
+        ...frontend.lineItems[0],
+        lineItemType: 'UPSELL',
+        itemNo: 'NeuroMindPro-5-DW1-V1',
+      }],
+      upsell: { ...frontend.upsell, upsellOriginalReceipt: 'TEST0001', upsellPath: 'b' },
+    };
+    expect(parseClickBankIngest(p).productType).toBe('DOWNSELL');
+  });
+
+  it('classifies "DOWN" itemNo as DOWNSELL', () => {
+    const p: ClickBankIngestPayload = {
+      ...frontend,
+      lineItems: [{ ...frontend.lineItems[0], lineItemType: 'UPSELL', itemNo: 'Some-DOWN-Variant' }],
+    };
+    expect(parseClickBankIngest(p).productType).toBe('DOWNSELL');
+  });
+
+  it('classifies "ds2" itemNo as DOWNSELL', () => {
+    const p: ClickBankIngestPayload = {
+      ...frontend,
+      lineItems: [{ ...frontend.lineItems[0], lineItemType: 'UPSELL', itemNo: 'Foo-ds2-vsX' }],
+    };
+    expect(parseClickBankIngest(p).productType).toBe('DOWNSELL');
+  });
+
+  it('does NOT misclassify "drift" or other DW-substring as DOWNSELL', () => {
+    const p: ClickBankIngestPayload = {
+      ...frontend,
+      lineItems: [{ ...frontend.lineItems[0], lineItemType: 'UPSELL', itemNo: 'DriftCo-Premium' }],
+    };
+    expect(parseClickBankIngest(p).productType).toBe('UPSELL');
+  });
+
+  it('keeps UPSELL when itemNo has no downsell marker', () => {
+    const p: ClickBankIngestPayload = {
+      ...frontend,
+      lineItems: [{ ...frontend.lineItems[0], lineItemType: 'UPSELL', itemNo: 'MaxVitalize-6-UP1-vs2' }],
+    };
+    expect(parseClickBankIngest(p).productType).toBe('UPSELL');
+  });
+});

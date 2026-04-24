@@ -117,6 +117,13 @@ model Order {
   netAmountUsd     Decimal @db.Decimal(12, 2)
   cpaPaidUsd       Decimal @db.Decimal(12, 2) @default(0)
 
+  // Per-order productType. Authoritative classification for THIS sale's role
+  // in the funnel. The same SKU can be FE in one order and UPSELL in another
+  // (e.g., NeuroMindPro-6-FE-vs2 sold direct vs as upgrade after 3-FE), so we
+  // store role per-order, not per-product. Product.productType remains as a
+  // catalog hint (most-recent observed type).
+  productType ProductType @default(FRONTEND)
+
   status      OrderStatus
   eventType   String
   billingType BillingType @default(UNKNOWN)

@@ -16,7 +16,7 @@ export function parseClickBankIngest(payload: ClickBankIngestPayload): Normalize
     throw new Error('ClickBank payload has no lineItems');
   }
 
-  const productType = mapProductType(primary.lineItemType);
+  const productType = mapProductType(primary.lineItemType, primary.itemNo);
   const status = mapStatus(payload.transactionType);
 
   const tracking = payload.commonTrackingParameters ?? {};
@@ -100,7 +100,18 @@ export function parseClickBankIngest(payload: ClickBankIngestPayload): Normalize
   };
 }
 
-function mapProductType(lineItemType: ClickBankLineItemType): NormalizedProductType {
+// ClickBank's lineItemType is unreliable for distinguishing UPSELL from DOWNSELL —
+// downsell SKUs (e.g. NeuroMindPro-5-DW1-V1) get sent as lineItemType="UPSELL".
+// Override to DOWNSELL when the itemNo carries a downsell marker.
+const DOWNSELL_ITEM_PATTERN = /(?:^|[-_])(dw\d*|down(?:sell)?|ds\d*)(?:[-_]|$)/i;
+
+function mapProductType(
+  lineItemType: ClickBankLineItemType,
+  itemNo: string,
+): NormalizedProductType {
+  if (lineItemType === 'UPSELL' && DOWNSELL_ITEM_PATTERN.test(itemNo)) {
+    return 'DOWNSELL';
+  }
   switch (lineItemType) {
     case 'ORIGINAL':
       return 'FRONTEND';

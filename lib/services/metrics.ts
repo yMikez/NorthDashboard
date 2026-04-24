@@ -257,7 +257,7 @@ export async function getFunnel(
       parentExternalId: true,
       grossAmountUsd: true,
       funnelStep: true,
-      product: { select: { productType: true } },
+      productType: true,
       platform: { select: { slug: true } },
     },
   });
@@ -300,7 +300,7 @@ export async function getFunnel(
       groups.set(groupKey, g);
     }
     const gross = toNumber(o.grossAmountUsd);
-    const t = o.product.productType;
+    const t = o.productType;
     const step = o.funnelStep ?? 0;
     if (t === 'FRONTEND') {
       g.hasFE = true;
@@ -442,6 +442,7 @@ export async function getProducts(
       cpaPaidUsd: true,
       vendorAccount: true,
       orderedAt: true,
+      productType: true,
       product: {
         select: { externalId: true, name: true, productType: true, id: true },
       },
@@ -452,7 +453,11 @@ export async function getProducts(
   interface ProductAgg {
     externalId: string;
     name: string;
+    // Most-common per-order productType observed for this SKU. Falls back to
+    // catalog Product.productType if no orders. The same SKU may appear as
+    // FRONTEND in some orders and UPSELL in others — the dominant role wins.
     productType: string;
+    typeCounts: Record<string, number>;
     platformSlug: string;
     vendorAccount: string | null;
     revenue: number;
@@ -476,6 +481,7 @@ export async function getProducts(
         externalId: o.product.externalId,
         name: o.product.name,
         productType: o.product.productType,
+        typeCounts: {},
         platformSlug: o.platform.slug,
         vendorAccount: o.vendorAccount,
         revenue: 0,
@@ -491,6 +497,7 @@ export async function getProducts(
       byProduct.set(key, p);
     }
     p.allOrders++;
+    p.typeCounts[o.productType] = (p.typeCounts[o.productType] ?? 0) + 1;
     p.net += toNumber(o.netAmountUsd);
     p.cpa += toNumber(o.cpaPaidUsd);
     if (o.status === 'APPROVED') {
@@ -503,6 +510,20 @@ export async function getProducts(
     } else if (o.status === 'CHARGEBACK') {
       p.chargebacks++;
     }
+  }
+
+  // Resolve per-SKU display productType: pick the most-frequent per-order
+  // classification. Catalog Product.productType is fallback when no orders.
+  for (const p of byProduct.values()) {
+    let topType = p.productType;
+    let topCount = 0;
+    for (const [type, count] of Object.entries(p.typeCounts)) {
+      if (count > topCount) {
+        topCount = count;
+        topType = type;
+      }
+    }
+    p.productType = topType;
   }
 
   const products = Array.from(byProduct.values())
@@ -525,36 +546,37 @@ export async function getProducts(
     }))
     .sort((a, b) => b.revenue - a.revenue);
 
+  // byType bucket aggregates from per-ORDER productType (not per-SKU display),
+  // so revenue lands in the right bucket even when a SKU is sold in multiple
+  // roles.
   const typeBucket = new Map<
     string,
-    { revenue: number; orders: number; net: number; cpa: number; productCount: number }
+    { revenue: number; orders: number; net: number; cpa: number; productSet: Set<string> }
   >();
-  for (const p of products) {
-    const t = p.productType;
-    const entry = typeBucket.get(t) ?? { revenue: 0, orders: 0, net: 0, cpa: 0, productCount: 0 };
-    entry.revenue += p.revenue;
-    entry.orders += p.orders;
-    entry.net += p.net;
-    entry.cpa += p.cpa;
-    entry.productCount += 1;
+  for (const o of orders) {
+    const t = o.productType;
+    const entry =
+      typeBucket.get(t) ?? { revenue: 0, orders: 0, net: 0, cpa: 0, productSet: new Set<string>() };
+    const skuKey = `${o.platform.slug}:${o.product.externalId}`;
+    entry.productSet.add(skuKey);
+    entry.net += toNumber(o.netAmountUsd);
+    entry.cpa += toNumber(o.cpaPaidUsd);
+    if (o.status === 'APPROVED') {
+      entry.orders++;
+      entry.revenue += toNumber(o.grossAmountUsd);
+    }
     typeBucket.set(t, entry);
   }
   const TYPE_ORDER = ['FRONTEND', 'UPSELL', 'BUMP', 'DOWNSELL'];
   const byType = TYPE_ORDER.map((productType) => {
-    const e = typeBucket.get(productType) ?? {
-      revenue: 0,
-      orders: 0,
-      net: 0,
-      cpa: 0,
-      productCount: 0,
-    };
+    const e = typeBucket.get(productType);
     return {
       productType,
-      revenue: round2(e.revenue),
-      orders: e.orders,
-      net: round2(e.net),
-      cpa: round2(e.cpa),
-      productCount: e.productCount,
+      revenue: round2(e?.revenue ?? 0),
+      orders: e?.orders ?? 0,
+      net: round2(e?.net ?? 0),
+      cpa: round2(e?.cpa ?? 0),
+      productCount: e?.productSet.size ?? 0,
     };
   });
 
@@ -973,7 +995,7 @@ export async function getOrders(
       platformSlug: o.platform.slug,
       productExternalId: o.product.externalId,
       productName: o.product.name,
-      productType: o.product.productType,
+      productType: o.productType,
       affiliateExternalId: o.affiliate?.externalId ?? null,
       affiliateNickname: o.affiliate?.nickname ?? null,
       country: o.country,
@@ -1127,7 +1149,7 @@ function computeByProductType(
   };
   for (const o of orders) {
     if (o.status !== 'APPROVED') continue;
-    const t = o.product.productType;
+    const t = o.productType;
     totals[t] = (totals[t] ?? 0) + toNumber(o.grossAmountUsd);
   }
   return Object.entries(totals)

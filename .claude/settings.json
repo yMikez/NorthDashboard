@@ -12,7 +12,18 @@
       "Bash(mv styles *)",
       "Bash(mv assets *)",
       "Bash(npm run *)",
-      "Bash(git add *)"
+      "Bash(git add *)",
+      "Bash(git commit -m ' *)",
+      "Bash(git push *)",
+      "Bash(npx tsc *)",
+      "Bash(git commit -m 'feat\\(metrics\\): Transactions page consuming /api/metrics/orders *)",
+      "Bash(git commit -m 'feat\\(metrics\\): Leaderboard + AllAffiliates consuming /api/metrics/affiliates *)",
+      "Bash(git commit -m 'feat\\(metrics\\): Plataformas page consuming /api/metrics/platforms *)",
+      "Bash(git commit *)",
+      "Bash(docker start *)",
+      "Bash(npx prisma *)",
+      "Bash(docker exec *)",
+      "Bash(tasklist)"
     ]
   }
 }

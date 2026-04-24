@@ -74,6 +74,7 @@ export async function auditProducts(
       grossAmountUsd: true,
       funnelStep: true,
       orderedAt: true,
+      productType: true,
       platform: { select: { slug: true } },
       product: { select: { externalId: true, name: true, productType: true, id: true } },
     },
@@ -101,7 +102,7 @@ export async function auditProducts(
         funnelStepsSeen: {} as Record<string, number>,
       };
     p.totalOrders++;
-    p.byProductType[o.product.productType] = (p.byProductType[o.product.productType] ?? 0) + 1;
+    p.byProductType[o.productType] = (p.byProductType[o.productType] ?? 0) + 1;
     const stepKey = o.funnelStep === null ? 'null' : String(o.funnelStep);
     p.funnelStepsSeen[stepKey] = (p.funnelStepsSeen[stepKey] ?? 0) + 1;
     byPlatform[slug] = p;
@@ -141,7 +142,7 @@ export async function auditProducts(
         platformSlug: o.platform.slug,
         externalId: o.product.externalId,
         name: o.product.name,
-        productType: o.product.productType,
+        productType: o.productType,
         totalOrders: 0,
         approvedOrders: 0,
         refunded: 0,
@@ -172,10 +173,10 @@ export async function auditProducts(
   let upsellWithoutFrontend = 0;
   let upsellsWithoutParent = 0;
   for (const o of orders) {
-    if (o.product.productType === 'UPSELL' && !o.parentExternalId) upsellsWithoutParent++;
+    if (o.productType === 'UPSELL' && !o.parentExternalId) upsellsWithoutParent++;
   }
   for (const [, groupOrdersArr] of groupOrders) {
-    const types = groupOrdersArr.map((x) => x.product.productType);
+    const types = groupOrdersArr.map((x) => x.productType);
     const feCount = types.filter((t) => t === 'FRONTEND').length;
     const hasUpsell = types.some((t) => t === 'UPSELL' || t === 'BUMP' || t === 'DOWNSELL');
     if (feCount === 1 && !hasUpsell) soloFrontend++;
@@ -196,8 +197,8 @@ export async function auditProducts(
   };
   for (const o of orders) {
     if (o.platform.slug === 'digistore24') {
-      digistoreByProductType[o.product.productType] =
-        (digistoreByProductType[o.product.productType] ?? 0) + 1;
+      digistoreByProductType[o.productType] =
+        (digistoreByProductType[o.productType] ?? 0) + 1;
     }
   }
 
@@ -205,7 +206,7 @@ export async function auditProducts(
   const sampleChains: ProductAuditResponse['sampleFunnelChains'] = [];
   for (const [groupKey, groupOrdersArr] of groupOrders) {
     if (sampleChains.length >= 5) break;
-    const types = groupOrdersArr.map((x) => x.product.productType);
+    const types = groupOrdersArr.map((x) => x.productType);
     const hasUpsell = types.some((t) => t === 'UPSELL' || t === 'BUMP' || t === 'DOWNSELL');
     const hasFE = types.includes('FRONTEND');
     if (!hasUpsell || !hasFE) continue;
@@ -217,7 +218,7 @@ export async function auditProducts(
         .map((o) => ({
           externalId: o.externalId,
           parentExternalId: o.parentExternalId,
-          productType: o.product.productType,
+          productType: o.productType,
           productName: o.product.name,
           funnelStep: o.funnelStep,
           grossAmountUsd: Number(o.grossAmountUsd),
@@ -226,6 +227,10 @@ export async function auditProducts(
         })),
     });
   }
+
+  // Note: top products list still uses Product.productType as catalog hint.
+  // Per-order misclassifications are visible in sampleFunnelChains and the
+  // anomalies counters (computed from o.productType).
 
   return {
     generatedAt: new Date().toISOString(),

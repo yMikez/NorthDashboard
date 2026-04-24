@@ -102,6 +102,8 @@ export async function upsertOrder(normalized: NormalizedOrder): Promise<UpsertOr
     affiliateId,
     customerId,
 
+    productType: normalized.productType as ProductType,
+
     currencyOriginal: normalized.currencyOriginal,
     grossAmountOrig: new Prisma.Decimal(normalized.grossAmountOrig),
     grossAmountUsd: new Prisma.Decimal(normalized.grossAmountUsd),
