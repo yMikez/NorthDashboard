@@ -31,12 +31,13 @@ export async function GET(
 
   const platformSlugs = csvParam(searchParams.get('platforms'));
   const countries = csvParam(searchParams.get('countries'));
+  const productExternalIds = csvParam(searchParams.get('products'));
   const platformHint = searchParams.get('platform') ?? undefined;
 
   try {
     const data = await getAffiliateDetail(
       decodeURIComponent(externalId),
-      { startDate, endDate, platformSlugs, countries },
+      { startDate, endDate, platformSlugs, countries, productExternalIds },
       platformHint,
     );
     if (!data) {

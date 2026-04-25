@@ -22,11 +22,12 @@ export async function GET(req: Request) {
     return NextResponse.json({ error: 'invalid date format' }, { status: 400 });
   }
 
+  const platformSlugs = csvParam(searchParams.get('platforms'));
   const countries = csvParam(searchParams.get('countries'));
   const productExternalIds = csvParam(searchParams.get('products'));
 
   try {
-    const data = await getPlatforms({ startDate, endDate, countries, productExternalIds });
+    const data = await getPlatforms({ startDate, endDate, platformSlugs, countries, productExternalIds });
     return NextResponse.json(data);
   } catch (err) {
     logger.error({ err }, 'metrics/platforms failed');

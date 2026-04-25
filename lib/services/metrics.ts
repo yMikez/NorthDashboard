@@ -730,13 +730,21 @@ export async function getProducts(
 export async function getPlatforms(
   filters: MetricsFilters,
 ): Promise<PlatformsResponse> {
+  // When the user filters by platform, drop the others from the page entirely
+  // (cards for unfiltered platforms would just show zeros and add noise).
   const platforms = await db.platform.findMany({
+    where: filters.platformSlugs?.length
+      ? { slug: { in: filters.platformSlugs } }
+      : undefined,
     select: { id: true, slug: true, displayName: true, isActive: true, lastSyncAt: true },
   });
 
   const where: Prisma.OrderWhereInput = {
     orderedAt: { gte: filters.startDate, lte: filters.endDate },
   };
+  if (filters.platformSlugs?.length) {
+    where.platform = { slug: { in: filters.platformSlugs } };
+  }
   if (filters.countries?.length) {
     where.country = { in: filters.countries };
   }
@@ -902,6 +910,9 @@ export async function getAffiliateDetail(
   }
   if (filters.countries?.length) {
     periodWhere.country = { in: filters.countries };
+  }
+  if (filters.productExternalIds?.length) {
+    periodWhere.product = { externalId: { in: filters.productExternalIds } };
   }
 
   const periodOrders = await db.order.findMany({
