@@ -1491,6 +1491,10 @@ function computeKPIs(orders: OrderWithJoins[]): OverviewKPIs {
   const totalCount = orders.length;
   const denominator = totalCount || 1;
 
+  // AOV é per-buyer (group), não per-order: total gross dividido pelo número
+  // de funnel sessions únicas. Cada session inclui FE + bumps + upsells +
+  // downsells do mesmo cliente. Métrica de negócio mais útil ("quanto cada
+  // cliente novo gastou") do que o AOV per-order que diluía o ticket médio.
   return {
     gross: round2(gross),
     net: round2(net),
@@ -1499,7 +1503,7 @@ function computeKPIs(orders: OrderWithJoins[]): OverviewKPIs {
     approvalRate: round4(approvedCount / denominator),
     refundRate: round4(refundedCount / denominator),
     cbRate: round4(chargebackCount / denominator),
-    aov: round2(approvedCount ? gross / approvedCount : 0),
+    aov: round2(groups.size ? gross / groups.size : 0),
     approvedCount,
     totalCount,
     orderGroups: groups.size,

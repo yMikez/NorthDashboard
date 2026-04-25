@@ -871,7 +871,7 @@ function FamilyGrid({ state, cur, onPick }) {
     <div className="page-in">
       <div className="page-head">
         <div className="lead">
-          <span className="eyebrow">CATÁLOGO · FAMÍLIAS DE PRODUTO</span>
+          <span className="eyebrow">CATÁLOGO · PRODUTOS</span>
           <h2>Performance <em>por família</em></h2>
           <span className="sub">{families.length} famílias no catálogo · clica em uma pra ver as variantes</span>
         </div>

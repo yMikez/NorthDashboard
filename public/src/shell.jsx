@@ -22,7 +22,7 @@ function Sidebar({ active, onNav }) {
     {
       label: 'Catálogo',
       items: [
-        { id: 'products', label: 'Produtos / Ofertas', icon: 'package' },
+        { id: 'products', label: 'Produtos', icon: 'package' },
         { id: 'transactions', label: 'Transações', icon: 'receipt' },
       ]
     },
@@ -302,28 +302,15 @@ function FilterBar({ filters, setFilters, options, route }) {
         swatch: p.id === 'digistore24' ? '#8B7FFF' : '#5BC8FF',
       }));
 
-  // Family options. When the user picks one or more families, the funnel
-  // (Oferta) dropdown is narrowed below to only its FE SKUs.
+  // "Oferta" agora é a família do produto (NeuroMindPro, GlycoPulse, etc.).
+  // Antes existia também um filtro per-SKU mas ele confundia a UX e não
+  // bate com o modelo mental do usuário ("ofertas" pensa em produto-pai,
+  // não em variantes individuais).
   const familyOpts = options?.families
     ? options.families.map((f) => ({
         id: f.id, label: f.label, meta: `${f.feSkuCount} FE`,
       }))
     : [];
-
-  const allFunnels = options?.funnels
-    ? options.funnels
-    : window.MOCK.PRODUCTS.filter((p) => p.type === 'frontend').map((p) => ({
-        id: p.funnel, label: p.name.split(' · ')[0],
-        platformSlug: 'unknown', orderCount: 0, family: null,
-      }));
-  // If a family is selected, hide funnels from other families so user can't
-  // accidentally pick conflicting filters that resolve to zero results.
-  const filteredFunnels = filters.families.size
-    ? allFunnels.filter((f) => f.family && filters.families.has(f.family))
-    : allFunnels;
-  const productOpts = filteredFunnels.map((f) => ({
-    id: f.id, label: f.label, meta: String(f.orderCount),
-  }));
 
   const countryOpts = options?.countries
     ? options.countries.map((c) => ({
@@ -376,23 +363,8 @@ function FilterBar({ filters, setFilters, options, route }) {
 
       <MultiSelect label="Plataforma" icon="plug" options={platformOpts} selected={filters.platforms}
         onChange={(s) => setFilters(f => ({ ...f, platforms: s }))}/>
-      {familyOpts.length > 0 && (
-        <MultiSelect label="Família" icon="layers" options={familyOpts} selected={filters.families}
-          onChange={(s) => setFilters(f => {
-            // Changing the family selection invalidates any per-funnel pick
-            // that no longer belongs to the new family set — clear those to
-            // avoid combos that resolve to zero results.
-            const allowedIds = s.size === 0
-              ? null
-              : new Set(allFunnels.filter((fn) => fn.family && s.has(fn.family)).map((fn) => fn.id));
-            const nextFunnels = allowedIds
-              ? new Set(Array.from(f.funnels).filter((id) => allowedIds.has(id)))
-              : f.funnels;
-            return { ...f, families: s, funnels: nextFunnels };
-          })}/>
-      )}
-      <MultiSelect label="Oferta" icon="package" options={productOpts} selected={filters.funnels}
-        onChange={(s) => setFilters(f => ({ ...f, funnels: s }))}/>
+      <MultiSelect label="Oferta" icon="package" options={familyOpts} selected={filters.families}
+        onChange={(s) => setFilters(f => ({ ...f, families: s }))}/>
       <MultiSelect label="País" icon="globe" options={countryOpts} selected={filters.countries}
         onChange={(s) => setFilters(f => ({ ...f, countries: s }))}/>
     </div>
