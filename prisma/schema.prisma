@@ -26,6 +26,7 @@ enum ProductType {
   UPSELL
   DOWNSELL
   BUMP
+  SMS_RECOVERY
 }
 
 model Product {
@@ -35,6 +36,23 @@ model Product {
   name            String
   productType     ProductType
   funnelPosition  Int?
+
+  // Catalog metadata seeded from Planilhas/Products - *.csv. Authoritative
+  // classification used by the dashboard's filters/grouping. The same SKU can
+  // appear under multiple vendor accounts; vendorAccount disambiguates pricing
+  // (catalogPriceUsd) but the unique key stays (platformId, externalId).
+  family          String?
+  variant         String?
+  bottles         Int?
+  vendorAccount   String?
+  catalogPriceUsd Decimal?    @db.Decimal(10, 2)
+  niche           String?
+  salesPageUrl    String?
+  checkoutUrl     String?
+  thanksPageUrl   String?
+  driveUrl        String?
+  catalogStatus   String?
+
   parentProductId String?
   costOfGoods     Decimal?    @db.Decimal(10, 2)
   currency        String      @default("USD")
@@ -47,6 +65,8 @@ model Product {
   orders   Order[]
 
   @@unique([platformId, externalId])
+  @@index([family])
+  @@index([family, productType])
 }
 
 model Affiliate {
