@@ -194,6 +194,7 @@ function Icon({ name, size = 16, stroke = 1.5, className = '' }) {
     'map': ['M1 6v16l7-4 8 4 7-4V2l-7 4-8-4-7 4Z','M8 2v16','M16 6v16'],
     'info': ['M12 22a10 10 0 1 0 0-20 10 10 0 0 0 0 20Z','M12 16v-4','M12 8h.01'],
     'sort': ['m7 15 5 5 5-5','m7 9 5-5 5 5'],
+    'layers': ['m12 2 9 5-9 5-9-5 9-5Z','m3 12 9 5 9-5','m3 17 9 5 9-5'],
   };
   const ps = paths[name] || paths['info'];
   return (

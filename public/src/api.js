@@ -43,6 +43,7 @@ async function fetchOverview(filters) {
     platforms: setToCSV(filters.platforms),
     countries: setToCSV(filters.countries),
     products: setToCSV(filters.funnels),
+    families: setToCSV(filters.families),
     compare: filters.compare ? '1' : null,
   };
   return fetchJSON('/api/metrics/overview', params);
@@ -63,6 +64,7 @@ async function fetchOrders(filters, options = {}) {
     platforms: setToCSV(filters.platforms),
     countries: setToCSV(filters.countries),
     products: setToCSV(filters.funnels),
+    families: setToCSV(filters.families),
     status: options.status && options.status !== 'all' ? options.status : null,
     search: options.search || null,
     limit: options.limit != null ? String(options.limit) : null,
@@ -86,6 +88,7 @@ async function fetchAffiliates(filters) {
     platforms: setToCSV(filters.platforms),
     countries: setToCSV(filters.countries),
     products: setToCSV(filters.funnels),
+    families: setToCSV(filters.families),
   };
   return fetchJSON('/api/metrics/affiliates', params);
 }
@@ -102,6 +105,7 @@ async function fetchPlatforms(filters) {
     end_date: toISODate(filters.dateRange.end),
     countries: setToCSV(filters.countries),
     products: setToCSV(filters.funnels),
+    families: setToCSV(filters.families),
   };
   return fetchJSON('/api/metrics/platforms', params);
 }
@@ -119,6 +123,7 @@ async function fetchProducts(filters) {
     platforms: setToCSV(filters.platforms),
     countries: setToCSV(filters.countries),
     products: setToCSV(filters.funnels),
+    families: setToCSV(filters.families),
   };
   return fetchJSON('/api/metrics/products', params);
 }
@@ -136,6 +141,7 @@ async function fetchAffiliateDetail(externalId, filters, platformHint) {
     platforms: setToCSV(filters.platforms),
     countries: setToCSV(filters.countries),
     products: setToCSV(filters.funnels),
+    families: setToCSV(filters.families),
     platform: platformHint || null,
   };
   return fetchJSON(`/api/metrics/affiliates/${encodeURIComponent(externalId)}`, params);
@@ -154,19 +160,32 @@ async function fetchFunnel(filters) {
     platforms: setToCSV(filters.platforms),
     countries: setToCSV(filters.countries),
     products: setToCSV(filters.funnels),
+    families: setToCSV(filters.families),
   };
   return fetchJSON('/api/metrics/funnel', params);
 }
 
 /**
  * Fetch /api/metrics/filters — universe of options for the FilterBar pickers
- * (real platforms, FE products, and countries derived from actual orders).
- *
- * Response: { platforms: [{id,label,isActive}], funnels: [{id,label,
- * platformSlug,orderCount}], countries: [{id,label,orderCount}] }.
+ * (real platforms, FE products, families, and countries derived from the catalog).
  */
 async function fetchFilterOptions() {
   return fetchJSON('/api/metrics/filters', {});
+}
+
+/**
+ * Fetch /api/metrics/families — per-ProductFamily aggregates for the
+ * FamilyGrid page. Returns catalog SKU counts + period metrics per family.
+ */
+async function fetchFamilies(filters) {
+  const params = {
+    start_date: toISODate(filters.dateRange.start),
+    end_date: toISODate(filters.dateRange.end),
+    platforms: setToCSV(filters.platforms),
+    countries: setToCSV(filters.countries),
+    families: setToCSV(filters.families),
+  };
+  return fetchJSON('/api/metrics/families', params);
 }
 
 window.NSApi = {
@@ -178,4 +197,5 @@ window.NSApi = {
   fetchProducts,
   fetchFunnel,
   fetchFilterOptions,
+  fetchFamilies,
 };

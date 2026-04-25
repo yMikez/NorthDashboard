@@ -95,6 +95,7 @@ function App() {
     compare: params.get('cmp') === '1',
     platforms: decodeSet(params.get('plat')),
     funnels: decodeSet(params.get('of')),
+    families: decodeSet(params.get('fam')),
     countries: decodeSet(params.get('co')),
     // Retained for backward-compat with pages still reading filters.trafficSources / filters.currency.
     // Both removed from FilterBar UI + URL persistence in Fase 2A cleanup.
@@ -113,6 +114,7 @@ function App() {
     if (filters.compare) p.set('cmp', '1');
     if (filters.platforms.size) p.set('plat', encodeSet(filters.platforms));
     if (filters.funnels.size) p.set('of', encodeSet(filters.funnels));
+    if (filters.families.size) p.set('fam', encodeSet(filters.families));
     if (filters.countries.size) p.set('co', encodeSet(filters.countries));
     const currentPath = hashState.route;
     const newHash = currentPath + (p.toString() ? '?' + p.toString() : '');
