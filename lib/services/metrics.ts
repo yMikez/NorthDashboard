@@ -7,6 +7,11 @@ export interface MetricsFilters {
   platformSlugs?: string[];
   countries?: string[];
   productExternalIds?: string[];
+  // Filter by ProductFamily (e.g., 'NeuroMindPro'). For most services this
+  // is an order-level filter via Product.family. For getFunnel it's applied
+  // at the GROUP level (group whose FE belongs to a selected family) — see
+  // the specific implementation in that function.
+  productFamilies?: string[];
 }
 
 export interface OverviewKPIs {
@@ -310,7 +315,7 @@ export async function getFunnel(
       funnelStep: true,
       productType: true,
       platform: { select: { slug: true } },
-      product: { select: { externalId: true, name: true } },
+      product: { select: { externalId: true, name: true, family: true } },
     },
   });
 
@@ -331,6 +336,7 @@ export async function getFunnel(
     downRevenue: number;
     feProductExternalId: string | null;
     feProductName: string | null;
+    feProductFamily: string | null;
     fePlatformSlug: string | null;
   }
 
@@ -353,6 +359,7 @@ export async function getFunnel(
         downRevenue: 0,
         feProductExternalId: null,
         feProductName: null,
+        feProductFamily: null,
         fePlatformSlug: null,
       };
       groups.set(groupKey, g);
@@ -367,6 +374,7 @@ export async function getFunnel(
       if (!g.feProductExternalId) {
         g.feProductExternalId = o.product.externalId;
         g.feProductName = o.product.name;
+        g.feProductFamily = o.product.family;
         g.fePlatformSlug = o.platform.slug;
       }
     } else if (t === 'BUMP') {
@@ -386,18 +394,22 @@ export async function getFunnel(
     }
   }
 
-  // When the user picks specific FE products, keep only groups whose FE order
-  // matches. This is a group-level filter — applying productExternalIds to the
-  // raw orders query would drop the upsell rows (they have different SKUs) and
-  // collapse the funnel. Groups with no FE in the period stay (they can't be
-  // matched anyway and would already be excluded from byFunnel below).
+  // When the user picks specific FE products or families, keep only groups
+  // whose FE matches. Group-level filter — applying productExternalIds/family
+  // to the raw orders query would drop upsell rows (different SKU/family) and
+  // collapse the funnel. Both filters AND together when both present.
   const productFilter = filters.productExternalIds?.length
     ? new Set(filters.productExternalIds)
     : null;
+  const familyFilter = filters.productFamilies?.length
+    ? new Set(filters.productFamilies)
+    : null;
   const allGroups = Array.from(groups.values()).filter((g) => {
-    if (!productFilter) return true;
-    if (!g.hasFE || !g.feProductExternalId) return false;
-    return productFilter.has(g.feProductExternalId);
+    if (!productFilter && !familyFilter) return true;
+    if (!g.hasFE) return false;
+    if (productFilter && (!g.feProductExternalId || !productFilter.has(g.feProductExternalId))) return false;
+    if (familyFilter && (!g.feProductFamily || !familyFilter.has(g.feProductFamily))) return false;
+    return true;
   });
   const global = aggregateGroups(allGroups, allGroups.length);
 
@@ -573,8 +585,11 @@ export async function getProducts(
   if (filters.countries?.length) {
     where.country = { in: filters.countries };
   }
-  if (filters.productExternalIds?.length) {
-    where.product = { externalId: { in: filters.productExternalIds } };
+  if (filters.productExternalIds?.length || filters.productFamilies?.length) {
+    where.product = {
+      ...(filters.productExternalIds?.length ? { externalId: { in: filters.productExternalIds } } : {}),
+      ...(filters.productFamilies?.length ? { family: { in: filters.productFamilies } } : {}),
+    };
   }
 
   const orders = await db.order.findMany({
@@ -748,8 +763,11 @@ export async function getPlatforms(
   if (filters.countries?.length) {
     where.country = { in: filters.countries };
   }
-  if (filters.productExternalIds?.length) {
-    where.product = { externalId: { in: filters.productExternalIds } };
+  if (filters.productExternalIds?.length || filters.productFamilies?.length) {
+    where.product = {
+      ...(filters.productExternalIds?.length ? { externalId: { in: filters.productExternalIds } } : {}),
+      ...(filters.productFamilies?.length ? { family: { in: filters.productFamilies } } : {}),
+    };
   }
 
   const orders = await db.order.findMany({
@@ -911,8 +929,11 @@ export async function getAffiliateDetail(
   if (filters.countries?.length) {
     periodWhere.country = { in: filters.countries };
   }
-  if (filters.productExternalIds?.length) {
-    periodWhere.product = { externalId: { in: filters.productExternalIds } };
+  if (filters.productExternalIds?.length || filters.productFamilies?.length) {
+    periodWhere.product = {
+      ...(filters.productExternalIds?.length ? { externalId: { in: filters.productExternalIds } } : {}),
+      ...(filters.productFamilies?.length ? { family: { in: filters.productFamilies } } : {}),
+    };
   }
 
   const periodOrders = await db.order.findMany({
@@ -1089,8 +1110,11 @@ export async function getAffiliates(
   if (filters.countries?.length) {
     whereInCoverage.country = { in: filters.countries };
   }
-  if (filters.productExternalIds?.length) {
-    whereInCoverage.product = { externalId: { in: filters.productExternalIds } };
+  if (filters.productExternalIds?.length || filters.productFamilies?.length) {
+    whereInCoverage.product = {
+      ...(filters.productExternalIds?.length ? { externalId: { in: filters.productExternalIds } } : {}),
+      ...(filters.productFamilies?.length ? { family: { in: filters.productFamilies } } : {}),
+    };
   }
 
   const orders = await db.order.findMany({
@@ -1290,8 +1314,11 @@ export async function getOrders(
   if (filters.countries?.length) {
     where.country = { in: filters.countries };
   }
-  if (filters.productExternalIds?.length) {
-    where.product = { externalId: { in: filters.productExternalIds } };
+  if (filters.productExternalIds?.length || filters.productFamilies?.length) {
+    where.product = {
+      ...(filters.productExternalIds?.length ? { externalId: { in: filters.productExternalIds } } : {}),
+      ...(filters.productFamilies?.length ? { family: { in: filters.productFamilies } } : {}),
+    };
   }
   if (options.search) {
     const q = options.search.trim();
@@ -1382,8 +1409,11 @@ async function fetchOrders(filters: MetricsFilters): Promise<OrderWithJoins[]> {
   if (filters.countries?.length) {
     where.country = { in: filters.countries };
   }
-  if (filters.productExternalIds?.length) {
-    where.product = { externalId: { in: filters.productExternalIds } };
+  if (filters.productExternalIds?.length || filters.productFamilies?.length) {
+    where.product = {
+      ...(filters.productExternalIds?.length ? { externalId: { in: filters.productExternalIds } } : {}),
+      ...(filters.productFamilies?.length ? { family: { in: filters.productFamilies } } : {}),
+    };
   }
 
   return db.order.findMany({

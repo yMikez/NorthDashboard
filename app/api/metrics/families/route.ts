@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { getOrders } from '@/lib/services/metrics';
+import { getFamilies } from '@/lib/services/families';
 import { logger } from '@/lib/logger';
 
 export const runtime = 'nodejs';
@@ -24,21 +24,19 @@ export async function GET(req: Request) {
 
   const platformSlugs = csvParam(searchParams.get('platforms'));
   const countries = csvParam(searchParams.get('countries'));
-  const productExternalIds = csvParam(searchParams.get('products'));
   const productFamilies = csvParam(searchParams.get('families'));
-  const status = searchParams.get('status') ?? undefined;
-  const search = searchParams.get('search') ?? undefined;
-  const limit = intParam(searchParams.get('limit'));
-  const offset = intParam(searchParams.get('offset'));
 
   try {
-    const data = await getOrders(
-      { startDate, endDate, platformSlugs, countries, productExternalIds, productFamilies },
-      { status, search, limit, offset },
-    );
+    const data = await getFamilies({
+      startDate,
+      endDate,
+      platformSlugs,
+      countries,
+      productFamilies,
+    });
     return NextResponse.json(data);
   } catch (err) {
-    logger.error({ err }, 'metrics/orders failed');
+    logger.error({ err }, 'metrics/families failed');
     return NextResponse.json({ error: 'query failed' }, { status: 500 });
   }
 }
@@ -47,10 +45,4 @@ function csvParam(raw: string | null): string[] | undefined {
   if (!raw) return undefined;
   const parts = raw.split(',').map((s) => s.trim()).filter(Boolean);
   return parts.length ? parts : undefined;
-}
-
-function intParam(raw: string | null): number | undefined {
-  if (!raw) return undefined;
-  const n = Number.parseInt(raw, 10);
-  return Number.isFinite(n) ? n : undefined;
 }

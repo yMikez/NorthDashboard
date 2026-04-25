@@ -31,11 +31,12 @@ export async function GET(req: Request) {
   const platformSlugs = csvParam(searchParams.get('platforms'));
   const countries = csvParam(searchParams.get('countries'));
   const productExternalIds = csvParam(searchParams.get('products'));
+  const productFamilies = csvParam(searchParams.get('families'));
   const compare = searchParams.get('compare') === '1';
 
   try {
     const data = await getOverview(
-      { startDate, endDate, platformSlugs, countries, productExternalIds },
+      { startDate, endDate, platformSlugs, countries, productExternalIds, productFamilies },
       compare,
     );
     return NextResponse.json(data);

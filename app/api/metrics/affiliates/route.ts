@@ -25,6 +25,7 @@ export async function GET(req: Request) {
   const platformSlugs = csvParam(searchParams.get('platforms'));
   const countries = csvParam(searchParams.get('countries'));
   const productExternalIds = csvParam(searchParams.get('products'));
+  const productFamilies = csvParam(searchParams.get('families'));
 
   try {
     const data = await getAffiliates({
@@ -33,6 +34,7 @@ export async function GET(req: Request) {
       platformSlugs,
       countries,
       productExternalIds,
+      productFamilies,
     });
     return NextResponse.json(data);
   } catch (err) {
