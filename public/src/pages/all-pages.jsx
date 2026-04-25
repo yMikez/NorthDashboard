@@ -775,7 +775,377 @@ function AllAffiliatesPage({ filters, onOpenAffiliate }) {
 }
 
 // ---------- PRODUCTS ----------
+// ProductsPage: 3-level UI (grid → drilldown → drawer).
+//   Level 1: FamilyGrid — cards per ProductFamily (NeuroMindPro, GlycoPulse, ...)
+//   Level 2: FamilyDrillDown — variants grouped by type (FE/UP/DW/RC) for one family
+//   Level 3: VariantDetailDrawer — single SKU detail with assets/links
 function ProductsPage({ filters }) {
+  // Drill-down state. Selecting a family transitions to L2; selecting a variant
+  // (sku externalId) opens the L3 drawer.
+  const [selectedFamily, setSelectedFamily] = useState(null);
+  const [selectedSku, setSelectedSku] = useState(null);
+
+  const familiesState = useFamilyData(filters);
+  // Lazy-load /products only when we drill down — avoids fetching all SKUs
+  // for the grid view since FamilyGrid uses /families aggregates.
+  const productsState = useProductsData(filters, selectedFamily !== null);
+  const cur = filters.currency || 'USD';
+
+  if (selectedFamily) {
+    return (
+      <FamilyDrillDown
+        family={selectedFamily}
+        familyAgg={(familiesState.data?.families || []).find((f) => f.family === selectedFamily)}
+        productsState={productsState}
+        cur={cur}
+        onBack={() => { setSelectedFamily(null); setSelectedSku(null); }}
+        onPickVariant={setSelectedSku}
+        selectedSku={selectedSku}
+        closeDrawer={() => setSelectedSku(null)}
+      />
+    );
+  }
+
+  return (
+    <FamilyGrid
+      state={familiesState}
+      cur={cur}
+      onPick={setSelectedFamily}
+    />
+  );
+}
+
+function useFamilyData(filters) {
+  const [state, setState] = useState({ status: 'loading', data: null, error: null });
+  useEffect(() => {
+    let cancelled = false;
+    setState((s) => ({ ...s, status: 'loading' }));
+    window.NSApi.fetchFamilies(filters)
+      .then((data) => { if (!cancelled) setState({ status: 'ready', data, error: null }); })
+      .catch((err) => {
+        if (cancelled) return;
+        console.error('fetchFamilies failed', err);
+        setState({ status: 'error', data: null, error: err.message });
+      });
+    return () => { cancelled = true; };
+  }, [filters.dateRange.start.getTime(), filters.dateRange.end.getTime(),
+      Array.from(filters.platforms).join(','), Array.from(filters.countries).join(','),
+      Array.from(filters.families).join(',')]);
+  return state;
+}
+
+function useProductsData(filters, enabled) {
+  const [state, setState] = useState({ status: 'idle', data: null, error: null });
+  useEffect(() => {
+    if (!enabled) return;
+    let cancelled = false;
+    setState((s) => ({ ...s, status: 'loading' }));
+    window.NSApi.fetchProducts(filters)
+      .then((data) => { if (!cancelled) setState({ status: 'ready', data, error: null }); })
+      .catch((err) => {
+        if (cancelled) return;
+        console.error('fetchProducts failed', err);
+        setState({ status: 'error', data: null, error: err.message });
+      });
+    return () => { cancelled = true; };
+  }, [enabled, filters.dateRange.start.getTime(), filters.dateRange.end.getTime(),
+      Array.from(filters.platforms).join(','), Array.from(filters.countries).join(','),
+      Array.from(filters.funnels).join(','),
+      Array.from(filters.families).join(',')]);
+  return state;
+}
+
+const FAMILY_ACCENT = {
+  NeuroMindPro: '#9B7BFF',
+  GlycoPulse: '#5BC8FF',
+  ThermoBurnPro: '#FF8B5B',
+  MaxVitalize: '#5BFFB7',
+};
+function familyAccent(family) {
+  return FAMILY_ACCENT[family] || '#5BC8FF';
+}
+
+function FamilyGrid({ state, cur, onPick }) {
+  const families = state.data?.families || [];
+  return (
+    <div className="page-in">
+      <div className="page-head">
+        <div className="lead">
+          <span className="eyebrow">CATÁLOGO · FAMÍLIAS DE PRODUTO</span>
+          <h2>Performance <em>por família</em></h2>
+          <span className="sub">{families.length} famílias no catálogo · clica em uma pra ver as variantes</span>
+        </div>
+      </div>
+
+      {state.status === 'error' && (
+        <div className="panel" style={{ color: 'var(--danger)' }}>Erro ao carregar: {state.error}</div>
+      )}
+      {state.status === 'loading' && (
+        <div className="panel" style={{ textAlign: 'center', padding: 32, opacity: 0.6 }}>Carregando...</div>
+      )}
+
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))', gap: 14 }}>
+        {families.map((f) => {
+          const accent = familyAccent(f.family);
+          const liftPct = f.upsellLiftPct;
+          const hasOrders = f.totalOrders > 0;
+          return (
+            <button
+              key={f.family}
+              onClick={() => onPick(f.family)}
+              className="prod-card"
+              style={{ cursor: 'pointer', textAlign: 'left', font: 'inherit', borderLeft: `3px solid ${accent}` }}
+              title={`Abrir variantes de ${f.family}`}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <div style={{ width: 8, height: 8, borderRadius: '50%', background: accent, boxShadow: `0 0 8px ${accent}` }}/>
+                  <div style={{ fontFamily: 'var(--f-display)', fontSize: 18, color: 'var(--white)' }}>{f.family}</div>
+                </div>
+                <div style={{ display: 'flex', gap: 6 }}>
+                  {f.niches.map((n) => (
+                    <span key={n} className="badge" style={{ background: `${accent}22`, color: accent, borderColor: `${accent}55`, fontSize: 9 }}>{n}</span>
+                  ))}
+                </div>
+              </div>
+
+              <div style={{ display: 'flex', alignItems: 'baseline', gap: 10, marginBottom: 12 }}>
+                <div style={{ fontFamily: 'var(--f-display)', fontSize: 28, color: 'var(--white)', letterSpacing: '-0.01em' }}>
+                  {hasOrders ? fmtCurrency(f.grossRevenue, cur, 0) : '—'}
+                </div>
+                {liftPct != null && (
+                  <div style={{ fontFamily: 'var(--f-mono)', fontSize: 11, color: liftPct > 0 ? 'var(--success)' : 'var(--navy-400)' }}>
+                    lift +{(liftPct * 100).toFixed(0)}%
+                  </div>
+                )}
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 8, marginBottom: 12 }}>
+                <div className="prod-stat"><div className="l">FE orders</div><div className="v sm">{fmtInt(f.feOrders)}</div></div>
+                <div className="prod-stat"><div className="l">Total orders</div><div className="v sm">{fmtInt(f.totalOrders)}</div></div>
+                <div className="prod-stat"><div className="l">AOV</div><div className="v sm">{hasOrders ? fmtCurrency(f.aov, cur, 0) : '—'}</div></div>
+              </div>
+
+              <div style={{ paddingTop: 10, borderTop: '1px solid rgba(91,200,255,0.15)', display: 'flex', justifyContent: 'space-between', fontSize: 11, color: 'var(--navy-300)', fontFamily: 'var(--f-mono)' }}>
+                <span>{f.feSkuCount} FE · {f.upSkuCount} UP · {f.dwSkuCount} DW · {f.rcSkuCount} RC</span>
+                <span style={{ color: accent }}>Abrir →</span>
+              </div>
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+const TYPE_COL_META = {
+  FRONTEND: { label: 'Frontend', accent: '#5BC8FF' },
+  UPSELL: { label: 'Upsell', accent: '#4A90FF' },
+  DOWNSELL: { label: 'Downsell', accent: '#FF8B5B' },
+  SMS_RECOVERY: { label: 'SMS Recovery', accent: '#9B7BFF' },
+};
+
+function FamilyDrillDown({ family, familyAgg, productsState, cur, onBack, onPickVariant, selectedSku, closeDrawer }) {
+  const accent = familyAccent(family);
+  const allVariants = (productsState.data?.products || []).filter((p) => p.family === family);
+
+  const grouped = { FRONTEND: [], UPSELL: [], DOWNSELL: [], SMS_RECOVERY: [] };
+  for (const v of allVariants) {
+    const t = grouped[v.productType] ? v.productType : 'UPSELL';
+    grouped[t].push(v);
+  }
+  // Sort each column by revenue desc
+  for (const k of Object.keys(grouped)) {
+    grouped[k].sort((a, b) => b.revenue - a.revenue);
+  }
+
+  const variantInDrawer = selectedSku
+    ? allVariants.find((v) => v.externalId === selectedSku)
+    : null;
+
+  return (
+    <div className="page-in">
+      <div className="page-head">
+        <div className="lead">
+          <button onClick={onBack} className="chip" style={{ marginBottom: 8 }}>
+            <Icon name="chevron-right" size={11}/> Famílias
+          </button>
+          <span className="eyebrow" style={{ color: accent }}>FAMÍLIA · {family.toUpperCase()}</span>
+          <h2>{family} <em>· variantes</em></h2>
+          <span className="sub">
+            {familyAgg
+              ? `${familyAgg.feOrders} FE · ${familyAgg.totalOrders} total · ${fmtCurrency(familyAgg.grossRevenue, cur, 0)} no período`
+              : 'Sem vendas no período'}
+          </span>
+        </div>
+      </div>
+
+      {productsState.status === 'loading' && (
+        <div className="panel" style={{ textAlign: 'center', padding: 32, opacity: 0.6 }}>Carregando variantes...</div>
+      )}
+      {productsState.status === 'error' && (
+        <div className="panel" style={{ color: 'var(--danger)' }}>Erro ao carregar: {productsState.error}</div>
+      )}
+
+      {productsState.status === 'ready' && (
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12 }}>
+          {Object.entries(grouped).map(([type, variants]) => {
+            const meta = TYPE_COL_META[type];
+            return (
+              <div key={type} className="panel" style={{ padding: 12, minHeight: 200 }}>
+                <div style={{ fontFamily: 'var(--f-mono)', fontSize: 10, letterSpacing: '0.12em', color: meta.accent, marginBottom: 12 }}>
+                  {meta.label.toUpperCase()} · {variants.length}
+                </div>
+                {variants.length === 0 && (
+                  <div style={{ fontSize: 11, color: 'var(--navy-400)', fontStyle: 'italic' }}>
+                    Sem variantes deste tipo no catálogo
+                  </div>
+                )}
+                <div style={{ display: 'grid', gap: 8 }}>
+                  {variants.map((v) => (
+                    <VariantRow
+                      key={`${v.platformSlug}:${v.externalId}`}
+                      variant={v}
+                      cur={cur}
+                      accent={meta.accent}
+                      onClick={() => onPickVariant(v.externalId)}
+                    />
+                  ))}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {variantInDrawer && (
+        <VariantDetailDrawer variant={variantInDrawer} cur={cur} onClose={closeDrawer}/>
+      )}
+    </div>
+  );
+}
+
+function VariantRow({ variant: v, cur, accent, onClick }) {
+  const platShort = v.platformSlug === 'digistore24' ? 'D24' : 'CB';
+  const platClass = v.platformSlug === 'digistore24' ? 'plat-d24' : 'plat-cb';
+  return (
+    <button
+      onClick={onClick}
+      style={{
+        textAlign: 'left', font: 'inherit', cursor: 'pointer',
+        background: 'rgba(91,200,255,0.04)', border: '1px solid var(--border-soft)',
+        borderRadius: 6, padding: 10,
+        display: 'grid', gap: 4,
+      }}
+      onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(91,200,255,0.1)'; }}
+      onMouseLeave={(e) => { e.currentTarget.style.background = 'rgba(91,200,255,0.04)'; }}
+    >
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 6 }}>
+        <span style={{ fontSize: 12, color: 'var(--white)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+          {v.name}
+        </span>
+        <span className={`plat ${platClass}`} style={{ flexShrink: 0 }}>{platShort}</span>
+      </div>
+      <div style={{ fontFamily: 'var(--f-mono)', fontSize: 10, color: 'var(--navy-400)', letterSpacing: '0.04em', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+        {v.externalId}{v.vendorAccount ? ` · ${v.vendorAccount}` : ''}
+      </div>
+      <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 4, fontFamily: 'var(--f-mono)', fontSize: 11 }}>
+        <span style={{ color: accent }}>{fmtInt(v.orders)} pedidos</span>
+        <span style={{ color: 'var(--white)' }}>{fmtCurrency(v.revenue, cur, 0)}</span>
+      </div>
+    </button>
+  );
+}
+
+function DrawerLink({ href, icon, label }) {
+  return (
+    <a href={href} target="_blank" rel="noopener noreferrer"
+       style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 8px', borderRadius: 4,
+                background: 'rgba(91,200,255,0.04)', color: 'var(--glow-cyan)', fontFamily: 'var(--f-mono)', fontSize: 11,
+                textDecoration: 'none', border: '1px solid var(--border-soft)' }}>
+      <Icon name={icon} size={12}/> {label}
+    </a>
+  );
+}
+
+function VariantDetailDrawer({ variant: v, cur, onClose }) {
+  const margin = v.net - v.cpa;
+  const marginPct = v.revenue ? margin / v.revenue : 0;
+  const aov = v.orders ? v.revenue / v.orders : 0;
+  return (
+    <>
+      <div className="drawer-backdrop" onClick={onClose}/>
+      <div className="drawer" style={{ width: 480 }}>
+        <div className="drawer-head">
+          <div>
+            <span className="eyebrow">VARIANTE · {v.platformSlug === 'digistore24' ? 'DIGISTORE24' : 'CLICKBANK'}</span>
+            <h3 style={{ margin: '4px 0', fontSize: 18, color: 'var(--white)' }}>{v.name}</h3>
+            <div style={{ fontFamily: 'var(--f-mono)', fontSize: 11, color: 'var(--navy-300)' }}>
+              {v.externalId} {v.vendorAccount && `· ${v.vendorAccount}`}
+            </div>
+          </div>
+          <button className="icon-btn" onClick={onClose} title="Fechar"><Icon name="x" size={14}/></button>
+        </div>
+
+        <div style={{ padding: 16, display: 'grid', gap: 14 }}>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+            {v.bottles != null && (
+              <span className="badge" style={{ background: 'rgba(91,200,255,0.15)', color: 'var(--glow-cyan)', borderColor: 'rgba(91,200,255,0.4)' }}>
+                {v.bottles} bottles
+              </span>
+            )}
+            {v.catalogPriceUsd != null && (
+              <span className="badge" style={{ background: 'rgba(255,255,255,0.05)', color: 'var(--white)' }}>
+                Catálogo: {fmtCurrency(v.catalogPriceUsd, cur, 0)}
+              </span>
+            )}
+            {v.variant && (
+              <span className="badge" style={{ background: 'rgba(155,123,255,0.15)', color: '#9B7BFF', borderColor: 'rgba(155,123,255,0.4)' }}>
+                Variant: {v.variant}
+              </span>
+            )}
+            {v.catalogStatus && v.catalogStatus !== 'Ativo' && (
+              <span className="badge" style={{ background: 'rgba(255,180,0,0.15)', color: 'var(--warning)', borderColor: 'rgba(255,180,0,0.4)' }}>
+                {v.catalogStatus}
+              </span>
+            )}
+          </div>
+
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 10 }}>
+            <div className="prod-stat"><div className="l">Pedidos</div><div className="v">{fmtInt(v.orders)}</div></div>
+            <div className="prod-stat"><div className="l">Receita</div><div className="v">{fmtCurrency(v.revenue, cur, 0)}</div></div>
+            <div className="prod-stat"><div className="l">AOV</div><div className="v sm">{fmtCurrency(aov, cur, 0)}</div></div>
+            <div className="prod-stat"><div className="l">Aprovação</div><div className="v sm">{v.allOrders ? (v.approvalRate * 100).toFixed(1) + '%' : '—'}</div></div>
+            <div className="prod-stat"><div className="l">Margem</div><div className="v sm" style={{ color: margin > 0 ? 'var(--success)' : 'var(--danger)' }}>{fmtCurrency(margin, cur, 0)}</div></div>
+            <div className="prod-stat"><div className="l">Margem %</div><div className="v sm">{(marginPct * 100).toFixed(1)}%</div></div>
+          </div>
+
+          {(v.firstSoldAt || v.lastSoldAt) && (
+            <div style={{ borderTop: '1px solid var(--border-soft)', paddingTop: 12, fontFamily: 'var(--f-mono)', fontSize: 11, color: 'var(--navy-300)', display: 'flex', justifyContent: 'space-between' }}>
+              <span>1ª venda: {v.firstSoldAt ? fmtDateShort(v.firstSoldAt) : '—'}</span>
+              <span>Última: {v.lastSoldAt ? fmtDateShort(v.lastSoldAt) : '—'}</span>
+            </div>
+          )}
+
+          {(v.salesPageUrl || v.checkoutUrl || v.thanksPageUrl || v.driveUrl) && (
+            <div style={{ borderTop: '1px solid var(--border-soft)', paddingTop: 12, display: 'grid', gap: 6 }}>
+              <div style={{ fontFamily: 'var(--f-mono)', fontSize: 10, color: 'var(--navy-400)', letterSpacing: '0.1em' }}>LINKS DO CATÁLOGO</div>
+              {v.salesPageUrl && <DrawerLink href={v.salesPageUrl} icon="globe" label="Sales Page"/>}
+              {v.checkoutUrl && <DrawerLink href={v.checkoutUrl} icon="credit-card" label="Checkout"/>}
+              {v.thanksPageUrl && <DrawerLink href={v.thanksPageUrl} icon="check" label="Thanks Page"/>}
+              {v.driveUrl && <DrawerLink href={v.driveUrl} icon="link" label="Drive (assets)"/>}
+            </div>
+          )}
+        </div>
+      </div>
+    </>
+  );
+}
+
+// ---------- Original ProductsPage (per-SKU card grid) — kept inline below
+// for reference but no longer routed. Remove in a future cleanup pass once
+// the FamilyGrid UI is validated in production.
+function _LegacyProductsPage({ filters }) {
   const [state, setProdState] = useState({ status: 'loading', data: null, error: null });
   const [typeFilter, setTypeFilter] = useState('all');
   const [view, setView] = useState('cards');

@@ -84,6 +84,15 @@ export interface ProductsResponse {
     externalId: string;
     name: string;
     productType: string;
+    family: string | null;
+    variant: string | null;
+    bottles: number | null;
+    catalogPriceUsd: number | null;
+    salesPageUrl: string | null;
+    checkoutUrl: string | null;
+    thanksPageUrl: string | null;
+    driveUrl: string | null;
+    catalogStatus: string | null;
     platformSlug: string;
     vendorAccount: string | null;
     revenue: number;
@@ -603,7 +612,12 @@ export async function getProducts(
       orderedAt: true,
       productType: true,
       product: {
-        select: { externalId: true, name: true, productType: true, id: true },
+        select: {
+          externalId: true, name: true, productType: true, id: true,
+          family: true, variant: true, bottles: true, catalogPriceUsd: true,
+          salesPageUrl: true, checkoutUrl: true, thanksPageUrl: true, driveUrl: true,
+          catalogStatus: true,
+        },
       },
       platform: { select: { slug: true } },
     },
@@ -617,6 +631,15 @@ export async function getProducts(
     // FRONTEND in some orders and UPSELL in others — the dominant role wins.
     productType: string;
     typeCounts: Record<string, number>;
+    family: string | null;
+    variant: string | null;
+    bottles: number | null;
+    catalogPriceUsd: number | null;
+    salesPageUrl: string | null;
+    checkoutUrl: string | null;
+    thanksPageUrl: string | null;
+    driveUrl: string | null;
+    catalogStatus: string | null;
     platformSlug: string;
     vendorAccount: string | null;
     revenue: number;
@@ -641,6 +664,15 @@ export async function getProducts(
         name: o.product.name,
         productType: o.product.productType,
         typeCounts: {},
+        family: o.product.family,
+        variant: o.product.variant,
+        bottles: o.product.bottles,
+        catalogPriceUsd: o.product.catalogPriceUsd ? Number(o.product.catalogPriceUsd) : null,
+        salesPageUrl: o.product.salesPageUrl,
+        checkoutUrl: o.product.checkoutUrl,
+        thanksPageUrl: o.product.thanksPageUrl,
+        driveUrl: o.product.driveUrl,
+        catalogStatus: o.product.catalogStatus,
         platformSlug: o.platform.slug,
         vendorAccount: o.vendorAccount,
         revenue: 0,
@@ -690,6 +722,15 @@ export async function getProducts(
       externalId: p.externalId,
       name: p.name,
       productType: p.productType,
+      family: p.family,
+      variant: p.variant,
+      bottles: p.bottles,
+      catalogPriceUsd: p.catalogPriceUsd,
+      salesPageUrl: p.salesPageUrl,
+      checkoutUrl: p.checkoutUrl,
+      thanksPageUrl: p.thanksPageUrl,
+      driveUrl: p.driveUrl,
+      catalogStatus: p.catalogStatus,
       platformSlug: p.platformSlug,
       vendorAccount: p.vendorAccount,
       revenue: round2(p.revenue),
