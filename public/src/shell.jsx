@@ -150,24 +150,27 @@ function MultiSelect({ label, options, selected, onChange, icon }) {
           <div style={{ maxHeight: 280, overflowY: 'auto' }}>
             {options.map(opt => {
               const on = selected.size === 0 ? true : selected.has(opt.id);
+              // Toggle handler. Empty selection means "all" (visual) — first
+              // click with empty state seeds the set with everything, then
+              // toggles the clicked item. If the user re-selects every item
+              // we collapse back to the empty "all" state for cleaner URLs.
+              const toggle = () => {
+                const effective = selected.size === 0 ? new Set(options.map(o => o.id)) : new Set(selected);
+                if (effective.has(opt.id)) effective.delete(opt.id);
+                else effective.add(opt.id);
+                onChange(effective.size === options.length ? new Set() : effective);
+              };
               return (
                 <label key={opt.id} style={{
                   display: 'flex', alignItems: 'center', gap: 8, padding: '6px 8px',
                   fontSize: 12, color: 'var(--navy-100)', cursor: 'pointer', borderRadius: 4,
-                  background: on ? 'rgba(91,200,255,0.06)' : 'transparent'
-                }}
-                  onMouseEnter={(e) => e.currentTarget.style.background = 'rgba(91,200,255,0.1)'}
-                  onMouseLeave={(e) => e.currentTarget.style.background = on ? 'rgba(91,200,255,0.06)' : 'transparent'}
-                >
-                  <input type="checkbox" checked={on} readOnly
-                    onClick={(e) => {
-                      e.preventDefault();
-                      // treat empty set as "all selected". Toggling a single item from "all" makes a singleton filter.
-                      const effective = selected.size === 0 ? new Set(options.map(o => o.id)) : new Set(selected);
-                      if (effective.has(opt.id)) effective.delete(opt.id);
-                      else effective.add(opt.id);
-                      onChange(effective.size === options.length ? new Set() : effective);
-                    }}
+                  background: on ? 'rgba(91,200,255,0.06)' : 'transparent',
+                  transition: 'background 120ms',
+                }}>
+                  <input
+                    type="checkbox"
+                    checked={on}
+                    onChange={toggle}
                     style={{ accentColor: 'var(--glow-cyan)' }}
                   />
                   {opt.swatch && <span style={{ width: 10, height: 10, borderRadius: 3, background: opt.swatch, flexShrink: 0 }}/>}
@@ -363,7 +366,7 @@ function FilterBar({ filters, setFilters, options, route }) {
 
       <MultiSelect label="Plataforma" icon="plug" options={platformOpts} selected={filters.platforms}
         onChange={(s) => setFilters(f => ({ ...f, platforms: s }))}/>
-      <MultiSelect label="Oferta" icon="package" options={familyOpts} selected={filters.families}
+      <MultiSelect label="Produto" icon="package" options={familyOpts} selected={filters.families}
         onChange={(s) => setFilters(f => ({ ...f, families: s }))}/>
       <MultiSelect label="País" icon="globe" options={countryOpts} selected={filters.countries}
         onChange={(s) => setFilters(f => ({ ...f, countries: s }))}/>

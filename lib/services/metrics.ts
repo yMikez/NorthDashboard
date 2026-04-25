@@ -59,13 +59,12 @@ export interface FunnelSummary {
 export interface FunnelResponse {
   stages: FunnelStage[];
   summary: FunnelSummary;
-  // Per-FE-product breakdown. Each entry has the same shape as the global
-  // stages/summary, but scoped to groups whose FE order is for that product.
-  // Groups with no FE order in the period are excluded from byFunnel.
-  byFunnel: Array<{
-    productExternalId: string;
-    productName: string;
-    platformSlug: string;
+  // Per-ProductFamily breakdown. One entry per family (NeuroMindPro,
+  // GlycoPulse, etc.). Each has the same shape as the global stages/summary
+  // but scoped to groups whose FE belongs to that family. Groups whose FE
+  // can't be classified (family=null) are excluded.
+  byFamily: Array<{
+    family: string;
     stages: FunnelStage[];
     summary: FunnelSummary;
   }>;
@@ -422,38 +421,29 @@ export async function getFunnel(
   });
   const global = aggregateGroups(allGroups, allGroups.length);
 
-  // Bucket groups by FE product. Groups without an FE order in the period are
-  // excluded — we can't attribute their upsells to a specific funnel.
-  interface FunnelBucket {
-    productExternalId: string;
-    productName: string;
-    platformSlug: string;
+  // Bucket groups by FE family. Groups without an FE order or whose FE
+  // belongs to an unclassified SKU (family=null) are excluded — we can't
+  // attribute their upsells to a known funnel.
+  interface FamilyBucket {
+    family: string;
     groups: Group[];
   }
-  const buckets = new Map<string, FunnelBucket>();
+  const buckets = new Map<string, FamilyBucket>();
   for (const g of allGroups) {
-    if (!g.hasFE || !g.feProductExternalId) continue;
-    const key = `${g.fePlatformSlug}:${g.feProductExternalId}`;
-    let b = buckets.get(key);
+    if (!g.hasFE || !g.feProductFamily) continue;
+    let b = buckets.get(g.feProductFamily);
     if (!b) {
-      b = {
-        productExternalId: g.feProductExternalId,
-        productName: g.feProductName ?? g.feProductExternalId,
-        platformSlug: g.fePlatformSlug ?? 'unknown',
-        groups: [],
-      };
-      buckets.set(key, b);
+      b = { family: g.feProductFamily, groups: [] };
+      buckets.set(g.feProductFamily, b);
     }
     b.groups.push(g);
   }
 
-  const byFunnel = Array.from(buckets.values())
+  const byFamily = Array.from(buckets.values())
     .map((b) => {
       const agg = aggregateGroups(b.groups, b.groups.length);
       return {
-        productExternalId: b.productExternalId,
-        productName: b.productName,
-        platformSlug: b.platformSlug,
+        family: b.family,
         stages: agg.stages,
         summary: agg.summary,
       };
@@ -463,7 +453,7 @@ export async function getFunnel(
   return {
     stages: global.stages,
     summary: global.summary,
-    byFunnel,
+    byFamily,
   };
 }
 

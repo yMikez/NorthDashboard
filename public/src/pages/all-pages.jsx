@@ -45,26 +45,26 @@ function FunnelPage({ filters }) {
       Array.from(filters.funnels).join(','),
       Array.from(filters.families).join(',')]);
 
-  // Reset selection if the chosen funnel no longer exists in the new dataset
+  // Reset selection if the chosen family no longer exists in the new dataset
   useEffect(() => {
     if (selected === 'all') return;
-    const list = state.data?.byFunnel || [];
-    if (!list.some((f) => f.productExternalId === selected)) setSelected('all');
+    const list = state.data?.byFamily || [];
+    if (!list.some((f) => f.family === selected)) setSelected('all');
   }, [state.data, selected]);
 
   const cur = filters.currency || 'USD';
-  const byFunnel = state.data?.byFunnel || [];
+  const byFamily = state.data?.byFamily || [];
   const emptySummary = {
     feGroups: 0, totalGroups: 0, totalRevenue: 0,
     aov: 0, aovFEOnly: 0, aovWithUpsell: 0, revenueLiftFromUpsells: 0,
   };
   const view = selected === 'all'
-    ? { stages: state.data?.stages || [], summary: state.data?.summary || emptySummary, name: null, platformSlug: null }
+    ? { stages: state.data?.stages || [], summary: state.data?.summary || emptySummary, name: null }
     : (() => {
-        const hit = byFunnel.find((f) => f.productExternalId === selected);
+        const hit = byFamily.find((f) => f.family === selected);
         return hit
-          ? { stages: hit.stages, summary: hit.summary, name: hit.productName, platformSlug: hit.platformSlug }
-          : { stages: [], summary: emptySummary, name: null, platformSlug: null };
+          ? { stages: hit.stages, summary: hit.summary, name: hit.family }
+          : { stages: [], summary: emptySummary, name: null };
       })();
   const stages = view.stages;
   const summary = view.summary;
@@ -81,7 +81,7 @@ function FunnelPage({ filters }) {
           <span className="sub">
             {selected === 'all'
               ? '100% = vendas iniciais · take rates relativas ao FE'
-              : `Funil isolado: ${view.name} · ${view.platformSlug}`}
+              : `Funil isolado: ${view.name}`}
           </span>
         </div>
       </div>
@@ -90,7 +90,7 @@ function FunnelPage({ filters }) {
         <div className="panel" style={{ color: 'var(--danger)' }}>Erro ao carregar: {state.error}</div>
       )}
 
-      {byFunnel.length > 0 && (
+      {byFamily.length > 0 && (
         <div style={{
           display: 'flex', gap: 6, marginBottom: 14, padding: 4,
           background: 'rgba(91,200,255,0.04)', border: '1px solid var(--border)',
@@ -104,19 +104,19 @@ function FunnelPage({ filters }) {
             Todos
             <span style={funnelTabPillStyle}>{fmtInt(state.data?.summary?.feGroups || 0)}</span>
           </button>
-          {byFunnel.map((f) => (
+          {byFamily.map((f) => (
             <button
-              key={f.productExternalId}
-              onClick={() => setSelected(f.productExternalId)}
-              className={selected === f.productExternalId ? 'is-active' : ''}
-              style={funnelTabStyle(selected === f.productExternalId)}
-              title={`${f.productName} · ${f.platformSlug}`}
+              key={f.family}
+              onClick={() => setSelected(f.family)}
+              className={selected === f.family ? 'is-active' : ''}
+              style={funnelTabStyle(selected === f.family)}
+              title={`Funil ${f.family}`}
             >
               <span style={{
                 width: 6, height: 6, borderRadius: '50%',
-                background: f.platformSlug === 'digistore24' ? '#8B7FFF' : '#5BC8FF',
+                background: familyAccent(f.family),
               }}/>
-              {truncFunnelName(f.productName)}
+              {f.family}
               <span style={funnelTabPillStyle}>{fmtInt(f.summary.feGroups)}</span>
             </button>
           ))}
