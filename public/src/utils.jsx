@@ -70,6 +70,11 @@ function rangeForPreset(preset, today = new Date()) {
   }
   return { start, end, preset };
 }
+// YYYY-MM-DD in UTC. Used to encode custom date ranges into URL params and
+// to populate <input type="date"> defaults (which expect this exact format).
+function isoDateOnly(d) {
+  return d.toISOString().slice(0, 10);
+}
 function previousRange(range) {
   const ms = range.end.getTime() - range.start.getTime();
   const end = new Date(range.start.getTime() - 1);
@@ -247,7 +252,7 @@ function FXLayers() {
 // export to window
 Object.assign(window, {
   fmtCurrency, fmtK, fmtInt, fmtPct, fmtDateShort, fmtDateLong, fmtDateTime,
-  initials, avatarColor, rangeForPreset, previousRange, dayIndexFromDate,
+  initials, avatarColor, rangeForPreset, previousRange, isoDateOnly, dayIndexFromDate,
   applyFilters, aggregateKPIs, bucketByDay,
   Icon, Sparkline, FXLayers,
 });

@@ -72,10 +72,26 @@ function App() {
 
   const params = hashState.params;
   const initialPreset = params.get('range') || '30d';
+  // For custom ranges, the preset is 'custom' and the actual dates come from
+  // 'from'/'to' params (YYYY-MM-DD). If they're missing or malformed, fall
+  // back to the 30d default so the page still loads.
+  const initialRange = (() => {
+    if (initialPreset === 'custom') {
+      const fromRaw = params.get('from');
+      const toRaw = params.get('to');
+      const start = fromRaw ? new Date(fromRaw + 'T00:00:00.000Z') : null;
+      const end = toRaw ? new Date(toRaw + 'T23:59:59.999Z') : null;
+      if (start && end && !Number.isNaN(start.getTime()) && !Number.isNaN(end.getTime()) && start <= end) {
+        return { start, end, preset: 'custom' };
+      }
+      return rangeForPreset('30d');
+    }
+    return rangeForPreset(initialPreset);
+  })();
 
   const [filters, setFilters] = useStateApp(() => ({
-    preset: initialPreset,
-    dateRange: rangeForPreset(initialPreset),
+    preset: initialRange.preset || initialPreset,
+    dateRange: initialRange,
     compare: params.get('cmp') === '1',
     platforms: decodeSet(params.get('plat')),
     funnels: decodeSet(params.get('of')),
@@ -90,6 +106,10 @@ function App() {
   useEffectApp(() => {
     const p = new URLSearchParams();
     if (filters.preset !== '30d') p.set('range', filters.preset);
+    if (filters.preset === 'custom') {
+      p.set('from', isoDateOnly(filters.dateRange.start));
+      p.set('to', isoDateOnly(filters.dateRange.end));
+    }
     if (filters.compare) p.set('cmp', '1');
     if (filters.platforms.size) p.set('plat', encodeSet(filters.platforms));
     if (filters.funnels.size) p.set('of', encodeSet(filters.funnels));

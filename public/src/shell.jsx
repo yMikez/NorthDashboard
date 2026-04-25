@@ -187,6 +187,101 @@ function MultiSelect({ label, options, selected, onChange, icon }) {
 // Other routes hide the toggle since flipping it would have no visible effect.
 const ROUTES_WITH_COMPARE = new Set(['overview']);
 
+// ---------- Date range chip with custom-range popover ----------
+function DateRangeChip({ range, onChange }) {
+  const [open, setOpen] = useStateS(false);
+  const [draft, setDraft] = useStateS({
+    from: isoDateOnly(range.start),
+    to: isoDateOnly(range.end),
+  });
+  const ref = useRefS(null);
+
+  // Re-seed draft whenever the external range changes (preset clicks etc.)
+  // so the popover never shows a stale leftover selection.
+  useEffectS(() => {
+    setDraft({ from: isoDateOnly(range.start), to: isoDateOnly(range.end) });
+  }, [range.start.getTime(), range.end.getTime()]);
+
+  useEffectS(() => {
+    function onDoc(e) { if (ref.current && !ref.current.contains(e.target)) setOpen(false); }
+    document.addEventListener('mousedown', onDoc);
+    return () => document.removeEventListener('mousedown', onDoc);
+  }, []);
+
+  function apply() {
+    const start = new Date(draft.from + 'T00:00:00.000Z');
+    const end = new Date(draft.to + 'T23:59:59.999Z');
+    if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) return;
+    if (start > end) return;
+    onChange(start, end);
+    setOpen(false);
+  }
+
+  return (
+    <div ref={ref} style={{ position: 'relative' }}>
+      <button
+        className="date-chip"
+        onClick={() => setOpen(v => !v)}
+        style={{ cursor: 'pointer', background: 'transparent', border: 'none', padding: 0, font: 'inherit', color: 'inherit' }}
+        title="Clique pra escolher datas customizadas"
+      >
+        <Icon name="calendar" size={12}/>
+        <span>{fmtDateShort(range.start)} → {fmtDateShort(range.end)}</span>
+      </button>
+      {open && (
+        <div style={{
+          position: 'absolute', top: 'calc(100% + 6px)', left: 0, minWidth: 280,
+          background: 'rgba(6,13,37,0.98)', border: '1px solid var(--border)',
+          borderRadius: 8, padding: 12, zIndex: 20,
+          boxShadow: '0 20px 60px -20px rgba(91,200,255,0.3)',
+          backdropFilter: 'blur(10px)',
+          display: 'grid', gap: 10,
+        }}>
+          <div style={{ fontFamily: 'var(--f-mono)', fontSize: 10, color: 'var(--navy-300)', letterSpacing: '0.08em' }}>
+            INTERVALO CUSTOMIZADO
+          </div>
+          <label style={{ display: 'grid', gap: 4, fontSize: 11, color: 'var(--navy-200)' }}>
+            <span>De</span>
+            <input
+              type="date"
+              value={draft.from}
+              onChange={(e) => setDraft(d => ({ ...d, from: e.target.value }))}
+              max={draft.to}
+              style={dateInputStyle}
+            />
+          </label>
+          <label style={{ display: 'grid', gap: 4, fontSize: 11, color: 'var(--navy-200)' }}>
+            <span>Até</span>
+            <input
+              type="date"
+              value={draft.to}
+              onChange={(e) => setDraft(d => ({ ...d, to: e.target.value }))}
+              min={draft.from}
+              max={isoDateOnly(new Date())}
+              style={dateInputStyle}
+            />
+          </label>
+          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 4 }}>
+            <button onClick={() => setOpen(false)} className="btn btn-ghost" style={{ fontSize: 11 }}>Cancelar</button>
+            <button onClick={apply} className="btn" style={{ fontSize: 11 }}>Aplicar</button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+const dateInputStyle = {
+  background: 'rgba(91,200,255,0.06)',
+  border: '1px solid var(--border)',
+  borderRadius: 4,
+  padding: '6px 8px',
+  color: 'var(--white)',
+  fontFamily: 'var(--f-mono)',
+  fontSize: 12,
+  colorScheme: 'dark',
+};
+
 // ---------- Filter bar ----------
 function FilterBar({ filters, setFilters, options, route }) {
   const DATE_PRESETS = [
@@ -237,11 +332,21 @@ function FilterBar({ filters, setFilters, options, route }) {
             onClick={() => setFilters(f => ({ ...f, preset: k, dateRange: rangeForPreset(k) }))}
           >{l}</button>
         ))}
+        <button className={filters.preset === 'custom' ? 'is-active' : ''}
+          onClick={() => {
+            // Opening the chip popover handles date selection — clicking
+            // "Custom" just seeds the preset with the current range so the
+            // chip shows it as active immediately.
+            setFilters(f => ({ ...f, preset: 'custom' }));
+          }}
+        >Custom</button>
       </div>
-      <div className="date-chip">
-        <Icon name="calendar" size={12}/>
-        <span>{fmtDateShort(filters.dateRange.start)} → {fmtDateShort(filters.dateRange.end)}</span>
-      </div>
+      <DateRangeChip
+        range={filters.dateRange}
+        onChange={(start, end) => setFilters(f => ({
+          ...f, preset: 'custom', dateRange: { start, end, preset: 'custom' },
+        }))}
+      />
       {showCompare && (
         <>
           <span className="f-label" style={{ marginLeft: 8 }}>COMPARAR</span>

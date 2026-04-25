@@ -1153,7 +1153,8 @@ function IntegrationsPage({ filters }) {
       });
     return () => { cancelled = true; };
   }, [filters.dateRange.start.getTime(), filters.dateRange.end.getTime(),
-      Array.from(filters.countries).join(',')]);
+      Array.from(filters.platforms).join(','), Array.from(filters.countries).join(','),
+      Array.from(filters.funnels).join(',')]);
 
   const cur = filters.currency || 'USD';
   const platforms = state.data?.platforms || [];
