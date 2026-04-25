@@ -20,14 +20,18 @@ export async function upsertOrder(normalized: NormalizedOrder): Promise<UpsertOr
     select: { id: true },
   });
 
-  // Classify SKU into family/variant/bottles using catalog-aware patterns.
-  // This runs on every upsert (cheap, pure regex), so newly-ingested products
-  // are classified at birth and existing ones get re-classified the next time
-  // they receive an order. Avoids dependency on a separate seed step.
+  // Classify SKU into family/variant/bottles via catalog-aware patterns.
+  // When the classifier matches (family != null), it's authoritative for
+  // Product.productType too — the catalog knows the SKU's role better than
+  // a single IPN payload, which can mark an UPSELL as FRONTEND if the first
+  // sale we observed of that SKU happened to be a frontend slot in some
+  // funnel. Per-order role still lives in Order.productType (untouched here).
   const classified = classifyProduct(
     normalized.productExternalId,
     normalized.productName || normalized.productExternalId,
   );
+  const catalogType: ProductType =
+    classified.family !== null ? classified.type : (normalized.productType as ProductType);
 
   const product = await db.product.upsert({
     where: {
@@ -40,16 +44,17 @@ export async function upsertOrder(normalized: NormalizedOrder): Promise<UpsertOr
       platformId: platform.id,
       externalId: normalized.productExternalId,
       name: normalized.productName || normalized.productExternalId,
-      productType: normalized.productType as ProductType,
+      productType: catalogType,
       family: classified.family,
       variant: classified.variant,
       bottles: classified.bottles,
     },
     update: {
       name: normalized.productName || undefined,
-      // Only fill family/variant/bottles when we have a non-null value AND the
-      // existing record doesn't already have it. Use Prisma's conditional
-      // update via undefined to skip when classifier returned null.
+      // Only override productType when the classifier had a confident match;
+      // otherwise leave whatever was there (avoids regressing rows for SKUs
+      // whose pattern we don't know yet).
+      productType: classified.family !== null ? catalogType : undefined,
       family: classified.family ?? undefined,
       variant: classified.variant ?? undefined,
       bottles: classified.bottles ?? undefined,
