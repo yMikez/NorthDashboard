@@ -17,6 +17,7 @@ export interface BackfillStats {
   scanned: number;
   classified: number;
   productTypeFixed: number;
+  ordersFixed: number;
   unrecognized: string[];
 }
 
@@ -29,15 +30,18 @@ export async function classifyExistingProducts(): Promise<BackfillStats> {
     scanned: products.length,
     classified: 0,
     productTypeFixed: 0,
+    ordersFixed: 0,
     unrecognized: [],
   };
+
+  // Track SKUs whose role the IPN clearly got wrong, so we can fix the
+  // historical Order.productType for them in a second pass below.
+  const productsToFixOrders: Array<{ id: string; toType: 'UPSELL' | 'DOWNSELL' | 'SMS_RECOVERY' }> = [];
 
   for (const p of products) {
     const c = classifyProduct(p.externalId, p.name);
     if (!c.family) {
-      // Classifier has no confident opinion — leave the row alone. We don't
-      // overwrite family with null nor productType with the fallback, so
-      // unknown SKUs keep whatever the IPN gave them.
+      // Classifier has no confident opinion — leave the row alone.
       if (!p.family) stats.unrecognized.push(p.externalId);
       continue;
     }
@@ -53,6 +57,23 @@ export async function classifyExistingProducts(): Promise<BackfillStats> {
     });
     stats.classified++;
     if (productTypeChanged) stats.productTypeFixed++;
+
+    // Mark for order-level fix when the catalog says this SKU is non-FE but
+    // the IPN historically marked some orders as FRONTEND. We're conservative:
+    // only fix the FE→non-FE direction, since the reverse (FE-marked SKU sold
+    // as upsell variant in some funnels) is a legitimate ambiguity we don't
+    // want to overwrite.
+    if (c.type === 'UPSELL' || c.type === 'DOWNSELL' || c.type === 'SMS_RECOVERY') {
+      productsToFixOrders.push({ id: p.id, toType: c.type });
+    }
+  }
+
+  for (const { id, toType } of productsToFixOrders) {
+    const result = await db.order.updateMany({
+      where: { productId: id, productType: 'FRONTEND' },
+      data: { productType: toType },
+    });
+    stats.ordersFixed += result.count;
   }
 
   return stats;
