@@ -30,8 +30,10 @@ COPY --from=builder /app/prisma ./prisma
 COPY --from=builder /app/node_modules/.prisma ./node_modules/.prisma
 COPY --from=builder /app/node_modules/@prisma ./node_modules/@prisma
 COPY --from=builder /app/node_modules/prisma ./node_modules/prisma
-# Catalog seed assets — script + CSV inputs + tsx + db client + classifier
-# need to be present in the runner image so the seed can run on startup.
+# Backfill assets — classifier + script + tsx need to be present in the
+# runner image so the startup backfill can classify existing Products.
+# CSVs are NOT required (classifier derives family from SKU pattern alone);
+# they only carry optional metadata for the manual seed:catalog command.
 COPY --from=builder /app/scripts ./scripts
 COPY --from=builder /app/Planilhas ./Planilhas
 COPY --from=builder /app/lib ./lib
@@ -44,7 +46,8 @@ EXPOSE 3000
 ENV PORT=3000
 ENV HOSTNAME=0.0.0.0
 
-# Startup chain: apply migrations → seed catalog (idempotent upsert) → start app.
-# Seed failure is non-fatal so the app comes up even if catalog files are
-# malformed; logs surface the issue without blocking the dashboard.
-CMD ["sh", "-c", "node node_modules/prisma/build/index.js migrate deploy && (node_modules/.bin/tsx scripts/seedCatalog.ts || echo '[startup] seed failed, continuing') && node server.js"]
+# Startup chain: migrate → backfill classification of existing Products → start app.
+# Backfill is idempotent (filters family IS NULL); logs results to stdout for
+# visibility via `docker logs`. Failure is non-fatal so a bad backfill doesn't
+# prevent the app from coming up.
+CMD ["sh", "-c", "node node_modules/prisma/build/index.js migrate deploy && (node_modules/.bin/tsx scripts/backfillClassification.ts || echo '[startup] backfill failed, continuing') && node server.js"]

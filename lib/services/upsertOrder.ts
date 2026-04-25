@@ -2,6 +2,7 @@ import type { OrderStatus, ProductType } from '@prisma/client';
 import { Prisma } from '@prisma/client';
 import { db } from '../db';
 import type { NormalizedOrder } from '../shared/types';
+import { classifyProduct } from './productClassification';
 
 export interface UpsertOrderResult {
   created: boolean;
@@ -19,6 +20,15 @@ export async function upsertOrder(normalized: NormalizedOrder): Promise<UpsertOr
     select: { id: true },
   });
 
+  // Classify SKU into family/variant/bottles using catalog-aware patterns.
+  // This runs on every upsert (cheap, pure regex), so newly-ingested products
+  // are classified at birth and existing ones get re-classified the next time
+  // they receive an order. Avoids dependency on a separate seed step.
+  const classified = classifyProduct(
+    normalized.productExternalId,
+    normalized.productName || normalized.productExternalId,
+  );
+
   const product = await db.product.upsert({
     where: {
       platformId_externalId: {
@@ -31,9 +41,18 @@ export async function upsertOrder(normalized: NormalizedOrder): Promise<UpsertOr
       externalId: normalized.productExternalId,
       name: normalized.productName || normalized.productExternalId,
       productType: normalized.productType as ProductType,
+      family: classified.family,
+      variant: classified.variant,
+      bottles: classified.bottles,
     },
     update: {
       name: normalized.productName || undefined,
+      // Only fill family/variant/bottles when we have a non-null value AND the
+      // existing record doesn't already have it. Use Prisma's conditional
+      // update via undefined to skip when classifier returned null.
+      family: classified.family ?? undefined,
+      variant: classified.variant ?? undefined,
+      bottles: classified.bottles ?? undefined,
     },
     select: { id: true },
   });
