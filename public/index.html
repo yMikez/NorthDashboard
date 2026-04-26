@@ -4,9 +4,9 @@
 <meta charset="utf-8"/>
 <meta name="viewport" content="width=1440"/>
 <title>Northscale · Operations Dashboard</title>
-<link rel="stylesheet" href="styles/colors_and_type.css"/>
-<link rel="stylesheet" href="styles/dashboard.css"/>
-<link rel="icon" href="assets/logo-mark-dark.svg"/>
+<link rel="stylesheet" href="/styles/colors_and_type.css"/>
+<link rel="stylesheet" href="/styles/dashboard.css"/>
+<link rel="icon" href="/assets/logo-mark-dark.svg"/>
 </head>
 <body>
 <div id="app"></div>
@@ -15,13 +15,13 @@
 <script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
 <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
 
-<script src="src/mock.js"></script>
-<script src="src/api.js"></script>
-<script type="text/babel" src="src/utils.jsx"></script>
-<script type="text/babel" src="src/charts.jsx"></script>
-<script type="text/babel" src="src/shell.jsx"></script>
-<script type="text/babel" src="src/pages/overview.jsx"></script>
-<script type="text/babel" src="src/pages/all-pages.jsx"></script>
+<script src="/src/mock.js"></script>
+<script src="/src/api.js"></script>
+<script type="text/babel" src="/src/utils.jsx"></script>
+<script type="text/babel" src="/src/charts.jsx"></script>
+<script type="text/babel" src="/src/shell.jsx"></script>
+<script type="text/babel" src="/src/pages/overview.jsx"></script>
+<script type="text/babel" src="/src/pages/all-pages.jsx"></script>
 
 <script type="text/babel" data-presets="react">
 const { useState: useStateApp, useEffect: useEffectApp } = React;
@@ -37,28 +37,54 @@ const ROUTES = {
   'platforms':      { title: 'Plataformas', em: 'conectadas',  crumbs: ['Sistema', 'Plataformas'] },
 };
 
-function readHash() {
-  const h = location.hash.replace(/^#/, '');
-  const [route, q] = h.split('?');
-  const params = new URLSearchParams(q || '');
-  return { route: ROUTES[route] ? route : 'overview', params };
+// Path-based routing via History API. Pathname is the route name (e.g.
+// "/leaderboard"); querystring carries filter state. We also accept the
+// legacy hash format ("#leaderboard?...") so old bookmarks keep working —
+// when detected, we silently rewrite the URL to the clean form on first
+// load.
+function readRoute() {
+  // Legacy hash bookmark: "/index.html#leaderboard?range=30d" or "/#funnel"
+  if (location.hash) {
+    const h = location.hash.replace(/^#/, '');
+    const [route, q] = h.split('?');
+    if (ROUTES[route]) {
+      const params = new URLSearchParams(q || '');
+      // Rewrite to the clean URL — keep the same browser entry, no reload.
+      const newUrl = '/' + route + (q ? '?' + q : '');
+      history.replaceState(null, '', newUrl);
+      return { route, params };
+    }
+  }
+  let path = location.pathname.replace(/^\//, '').replace(/\/$/, '');
+  // /index.html (legacy direct hit) redirects to clean root.
+  if (path === 'index.html') {
+    history.replaceState(null, '', '/' + location.search);
+    path = '';
+  }
+  const route = ROUTES[path] ? path : 'overview';
+  const params = new URLSearchParams(location.search);
+  return { route, params };
 }
-function writeHash(route, params) {
-  const s = params.toString();
-  location.hash = route + (s ? '?' + s : '');
+function writeRoute(route, params) {
+  const qs = params.toString();
+  const url = '/' + route + (qs ? '?' + qs : '');
+  history.pushState(null, '', url);
 }
 
 function decodeSet(s) { return new Set(s ? s.split(',').filter(Boolean) : []); }
 function encodeSet(set) { return Array.from(set).join(','); }
 
 function App() {
-  const [hashState, setHashState] = useStateApp(readHash());
+  const [hashState, setHashState] = useStateApp(readRoute());
   const [filterOptions, setFilterOptions] = useStateApp(null);
 
+  // popstate fires on browser back/forward. We re-read the URL and update
+  // route + filter state. Hash changes still get caught (legacy bookmarks)
+  // because readRoute() handles both forms.
   useEffectApp(() => {
-    const fn = () => setHashState(readHash());
-    window.addEventListener('hashchange', fn);
-    return () => window.removeEventListener('hashchange', fn);
+    const fn = () => setHashState(readRoute());
+    window.addEventListener('popstate', fn);
+    return () => window.removeEventListener('popstate', fn);
   }, []);
 
   // Load real filter options once on mount. We don't refresh on every
@@ -103,7 +129,8 @@ function App() {
     currency: 'USD',
   }));
 
-  // persist filters to URL
+  // persist filters to URL via replaceState (no new history entry — typing
+  // in a filter shouldn't litter back-button history).
   useEffectApp(() => {
     const p = new URLSearchParams();
     if (filters.preset !== '30d') p.set('range', filters.preset);
@@ -116,10 +143,11 @@ function App() {
     if (filters.funnels.size) p.set('of', encodeSet(filters.funnels));
     if (filters.families.size) p.set('fam', encodeSet(filters.families));
     if (filters.countries.size) p.set('co', encodeSet(filters.countries));
-    const currentPath = hashState.route;
-    const newHash = currentPath + (p.toString() ? '?' + p.toString() : '');
-    if (location.hash.replace(/^#/, '') !== newHash) {
-      history.replaceState(null, '', '#' + newHash);
+    const qs = p.toString();
+    const desiredUrl = '/' + hashState.route + (qs ? '?' + qs : '');
+    const currentUrl = location.pathname + location.search;
+    if (currentUrl !== desiredUrl) {
+      history.replaceState(null, '', desiredUrl);
     }
   }, [filters, hashState.route]);
 
@@ -127,7 +155,9 @@ function App() {
 
   function onNav(route) {
     setDrawerAff(null);
-    writeHash(route, new URLSearchParams(location.hash.split('?')[1] || ''));
+    // Preserve current querystring (filter state) when switching routes.
+    writeRoute(route, new URLSearchParams(location.search));
+    setHashState({ route, params: new URLSearchParams(location.search) });
   }
 
   const r = ROUTES[hashState.route];

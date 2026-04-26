@@ -36,7 +36,7 @@ function Sidebar({ active, onNav }) {
   return (
     <aside className="side">
       <div className="side-logo">
-        <img src="assets/logo-mark-dark.svg" alt="" style={{ width: 32, height: 32 }}/>
+        <img src="/assets/logo-mark-dark.svg" alt="" style={{ width: 32, height: 32 }}/>
         <div className="wm" style={{ width: 71, fontSize: 24 }}>north<em>scale</em></div>
       </div>
 
