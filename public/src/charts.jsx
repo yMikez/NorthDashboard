@@ -42,9 +42,13 @@ function LineChart({ buckets, compareBuckets, metric, height = 280, currency = '
   // y-axis ticks
   const ticks = 4;
   const yTicks = Array.from({ length: ticks + 1 }).map((_, i) => min + (max - min) * (i / ticks));
-  // x labels: pick ~6 evenly spaced
+  // x labels: pick ~6 evenly spaced. Guard nLabels===1 to avoid 0/0 → NaN
+  // index that crashes series[NaN].date (happens with the "today" preset when
+  // daily has a single bucket).
   const nLabels = Math.min(7, series.length);
-  const xLabelIdx = Array.from({ length: nLabels }).map((_, i) => Math.round((i / (nLabels - 1)) * (series.length - 1)));
+  const xLabelIdx = nLabels <= 1
+    ? (series.length > 0 ? [0] : [])
+    : Array.from({ length: nLabels }).map((_, i) => Math.round((i / (nLabels - 1)) * (series.length - 1)));
 
   function fmtYLabel(v) {
     if (metric === 'approvalRate') return (v * 100).toFixed(0) + '%';
