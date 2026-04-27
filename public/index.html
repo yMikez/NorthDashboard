@@ -35,6 +35,7 @@ const ROUTES = {
   'products':       { title: 'Produtos',     em: '',            crumbs: ['Catálogo', 'Produtos'] },
   'transactions':   { title: 'Transações',  em: 'do ledger',   crumbs: ['Catálogo', 'Transações'] },
   'platforms':      { title: 'Plataformas', em: 'conectadas',  crumbs: ['Sistema', 'Plataformas'] },
+  'health':         { title: 'Saúde',       em: 'do dado',     crumbs: ['Sistema', 'Saúde do dado'] },
 };
 
 // Path-based routing via History API. Pathname is the route name (e.g.
@@ -181,6 +182,7 @@ function App() {
           {hashState.route === 'products'       && <ProductsPage filters={filters}/>}
           {hashState.route === 'transactions'   && <TransactionsPage filters={filters}/>}
           {hashState.route === 'platforms'      && <IntegrationsPage filters={filters}/>}
+          {hashState.route === 'health'         && <HealthPage/>}
         </div>
       </div>
 

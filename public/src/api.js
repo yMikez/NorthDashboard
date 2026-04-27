@@ -188,6 +188,15 @@ async function fetchFamilies(filters) {
   return fetchJSON('/api/metrics/families', params);
 }
 
+/**
+ * Fetch /api/metrics/health — operational signals about ingestion freshness,
+ * approval/refund rates, and catalog classification coverage. No filters
+ * apply (it's "right now" data).
+ */
+async function fetchHealth() {
+  return fetchJSON('/api/metrics/health', {});
+}
+
 window.NSApi = {
   fetchOverview,
   fetchOrders,
@@ -198,4 +207,5 @@ window.NSApi = {
   fetchFunnel,
   fetchFilterOptions,
   fetchFamilies,
+  fetchHealth,
 };

@@ -1754,7 +1754,195 @@ function UsersPage() {
   );
 }
 
+// ---------- HEALTH (data quality + ingestion freshness) ----------
+function HealthPage() {
+  const [state, setH] = useState({ status: 'loading', data: null, error: null });
+  const [refreshTick, setRefreshTick] = useState(0);
+
+  useEffect(() => {
+    let cancelled = false;
+    setH((s) => ({ ...s, status: 'loading' }));
+    window.NSApi.fetchHealth()
+      .then((data) => { if (!cancelled) setH({ status: 'ready', data, error: null }); })
+      .catch((err) => {
+        if (cancelled) return;
+        console.error('fetchHealth failed', err);
+        setH({ status: 'error', data: null, error: err.message });
+      });
+    return () => { cancelled = true; };
+  }, [refreshTick]);
+
+  if (state.status === 'loading' && !state.data) {
+    return <div className="page-in"><div className="panel">Carregando saúde do dado...</div></div>;
+  }
+  if (state.status === 'error') {
+    return <div className="page-in"><div className="panel" style={{ color: 'var(--danger)' }}>Erro: {state.error}</div></div>;
+  }
+
+  const d = state.data;
+  const refundDelta = d.health.refundRate24h - d.health.refundRateBaseline30d;
+  const refundColor = refundDelta > 0.005 ? 'var(--danger)' : refundDelta > 0 ? 'var(--warning)' : 'var(--success)';
+
+  return (
+    <div className="page-in">
+      <div className="page-head">
+        <div className="lead">
+          <span className="eyebrow">SISTEMA · OBSERVABILIDADE</span>
+          <h2>Saúde <em>do dado</em></h2>
+          <span className="sub">
+            Atualizado {fmtDateTime(d.generatedAt)} · {d.metricsView.rowCount} linhas na MV daily_metrics
+          </span>
+        </div>
+        <div className="page-head-actions">
+          <button className="btn btn-ghost" onClick={() => setRefreshTick((t) => t + 1)}>
+            <Icon name="refresh" size={12}/> Atualizar
+          </button>
+        </div>
+      </div>
+
+      {/* Per-platform ingestion */}
+      <div className="panel" style={{ marginBottom: 14 }}>
+        <div className="panel-head">
+          <div className="panel-title">
+            <span className="panel-eyebrow">INGESTÃO POR PLATAFORMA · ÚLTIMAS 24H</span>
+            <div className="panel-sub">Recebido = IPNs aceitos · Falhados = parse/auth errors</div>
+          </div>
+        </div>
+        <div className="tbl-wrap">
+          <table className="tbl">
+            <thead>
+              <tr>
+                <th>Plataforma</th>
+                <th>Última ingestão</th>
+                <th className="num">Recebido 24h</th>
+                <th className="num">Falhados 24h</th>
+                <th className="num">Sucesso</th>
+                <th>Status</th>
+              </tr>
+            </thead>
+            <tbody>
+              {d.ingestion.perPlatform.map((p) => {
+                const stale = p.secondsAgo == null || p.secondsAgo > 6 * 3600;
+                const noTraffic = p.receivedCount24h === 0;
+                const failing = p.failedCount24h > 0;
+                const ok = !stale && !noTraffic && !failing;
+                const stateLabel = ok ? 'OK' : stale ? 'STALE' : noTraffic ? 'SEM TRÁFEGO' : 'FALHAS';
+                const stateColor = ok ? 'var(--success)' : 'var(--warning)';
+                return (
+                  <tr key={p.platform}>
+                    <td>{p.displayName}</td>
+                    <td className="cell-mono" style={{ color: stale ? 'var(--danger)' : 'var(--navy-100)' }}>
+                      {p.lastReceivedAt ? `${fmtAgo(p.secondsAgo)} atrás` : '—'}
+                    </td>
+                    <td className="num cell-mono">{fmtInt(p.receivedCount24h)}</td>
+                    <td className="num cell-mono" style={{ color: failing ? 'var(--danger)' : 'var(--navy-300)' }}>
+                      {fmtInt(p.failedCount24h)}
+                    </td>
+                    <td className="num cell-mono">{(p.successRate24h * 100).toFixed(1)}%</td>
+                    <td>
+                      <span className="badge" style={{ background: `${stateColor}22`, color: stateColor, borderColor: `${stateColor}55` }}>
+                        {stateLabel}
+                      </span>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      {/* Health rates */}
+      <div className="grid-2" style={{ marginBottom: 14 }}>
+        <div className="panel">
+          <div className="panel-head">
+            <div className="panel-title">
+              <span className="panel-eyebrow">TAXAS · 24H</span>
+              <div className="panel-sub">Status dos pedidos no último dia</div>
+            </div>
+          </div>
+          <div style={{ display: 'grid', gap: 12, padding: '6px 0' }}>
+            <HealthRate label="Aprovação" value={d.health.approvalRate24h} good="up" threshold={0.7}/>
+            <HealthRate label="Refund" value={d.health.refundRate24h} good="down" threshold={0.02}
+                       baseline={d.health.refundRateBaseline30d} baselineLabel="vs baseline 30d"
+                       deltaColor={refundColor}/>
+            <HealthRate label="Chargeback" value={d.health.chargebackRate24h} good="down" threshold={0.009}/>
+          </div>
+        </div>
+
+        <div className="panel">
+          <div className="panel-head">
+            <div className="panel-title">
+              <span className="panel-eyebrow">CATÁLOGO</span>
+              <div className="panel-sub">Cobertura de classificação SKU → família</div>
+            </div>
+          </div>
+          <div style={{ display: 'grid', gap: 12, padding: '6px 0' }}>
+            <div style={{ display: 'flex', alignItems: 'baseline', gap: 12 }}>
+              <span style={{ fontFamily: 'var(--f-display)', fontSize: 32, color: 'var(--white)' }}>
+                {d.catalog.productsWithFamily}
+              </span>
+              <span style={{ fontSize: 12, color: 'var(--navy-300)' }}>
+                de {d.catalog.totalProducts} produtos classificados
+                ({((d.catalog.productsWithFamily / Math.max(1, d.catalog.totalProducts)) * 100).toFixed(0)}%)
+              </span>
+            </div>
+            {d.catalog.productsWithoutFamily > 0 ? (
+              <>
+                <div style={{ fontFamily: 'var(--f-mono)', fontSize: 10, color: 'var(--warning)', letterSpacing: '0.1em' }}>
+                  {d.catalog.productsWithoutFamily} SEM FAMÍLIA
+                </div>
+                <div style={{ fontFamily: 'var(--f-mono)', fontSize: 11, color: 'var(--navy-300)', maxHeight: 180, overflowY: 'auto', display: 'grid', gap: 4 }}>
+                  {d.catalog.unknownSKUs.map((s, i) => (
+                    <div key={i} style={{ display: 'flex', justifyContent: 'space-between', gap: 8 }}>
+                      <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{s.externalId}</span>
+                      <span style={{ color: 'var(--navy-400)' }}>{s.platform}</span>
+                    </div>
+                  ))}
+                </div>
+              </>
+            ) : (
+              <div style={{ color: 'var(--success)', fontSize: 12 }}>
+                Todos produtos classificados ✓
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function HealthRate({ label, value, good, threshold, baseline, baselineLabel, deltaColor }) {
+  const pct = (value * 100).toFixed(2);
+  let color = 'var(--white)';
+  if (good === 'up') color = value >= threshold ? 'var(--success)' : value >= threshold * 0.7 ? 'var(--warning)' : 'var(--danger)';
+  if (good === 'down') color = value <= threshold ? 'var(--success)' : value <= threshold * 1.5 ? 'var(--warning)' : 'var(--danger)';
+  return (
+    <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 12 }}>
+      <span style={{ fontSize: 13, color: 'var(--navy-200)' }}>{label}</span>
+      <div style={{ textAlign: 'right' }}>
+        <div style={{ fontFamily: 'var(--f-display)', fontSize: 22, color }}>{pct}%</div>
+        {baseline != null && (
+          <div style={{ fontFamily: 'var(--f-mono)', fontSize: 10, color: deltaColor || 'var(--navy-400)' }}>
+            {(baseline * 100).toFixed(2)}% {baselineLabel}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function fmtAgo(seconds) {
+  if (seconds == null) return '—';
+  if (seconds < 60) return `${seconds}s`;
+  if (seconds < 3600) return `${Math.floor(seconds / 60)}min`;
+  if (seconds < 86400) return `${Math.floor(seconds / 3600)}h`;
+  return `${Math.floor(seconds / 86400)}d`;
+}
+
 Object.assign(window, {
   FunnelPage, LeaderboardPage, AffiliateDrawer, AllAffiliatesPage,
   ProductsPage, TransactionsPage, IntegrationsPage, FXPage, UsersPage,
+  HealthPage,
 });
