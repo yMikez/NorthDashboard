@@ -30,6 +30,7 @@ function Sidebar({ active, onNav }) {
       label: 'Sistema',
       items: [
         { id: 'platforms', label: 'Plataformas', icon: 'plug' },
+        { id: 'costs', label: 'Custos', icon: 'wallet' },
         { id: 'health', label: 'Saúde do dado', icon: 'alert-triangle' },
       ]
     }

@@ -207,6 +207,43 @@ async function fetchOrderDetail(externalId, platformSlug) {
   return fetchJSON(`/api/metrics/orders/${encodeURIComponent(externalId)}`, params);
 }
 
+/**
+ * Fetch current cost tables (read-only). For editing call adminSaveCosts()
+ * with the bearer token.
+ */
+async function fetchCosts() {
+  return fetchJSON('/api/metrics/costs', {});
+}
+
+async function adminSaveCosts(token, body) {
+  const res = await fetch('/api/admin/costs', {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${token}`,
+      'Content-Type': 'application/json',
+      Accept: 'application/json',
+    },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) {
+    const txt = await res.text().catch(() => '');
+    throw new Error(`${res.status} ${txt}`);
+  }
+  return res.json();
+}
+
+async function adminBackfillCogs(token) {
+  const res = await fetch('/api/admin/backfill-cogs', {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${token}`, Accept: 'application/json' },
+  });
+  if (!res.ok) {
+    const txt = await res.text().catch(() => '');
+    throw new Error(`${res.status} ${txt}`);
+  }
+  return res.json();
+}
+
 window.NSApi = {
   fetchOverview,
   fetchOrders,
@@ -219,4 +256,7 @@ window.NSApi = {
   fetchFamilies,
   fetchHealth,
   fetchOrderDetail,
+  fetchCosts,
+  adminSaveCosts,
+  adminBackfillCogs,
 };

@@ -2358,8 +2358,338 @@ function fmtAgo(seconds) {
   return `${Math.floor(seconds / 86400)}d`;
 }
 
+// ---------- COSTS (editable cost tables) ----------
+function CostsPage() {
+  const [state, setCostState] = useState({ status: 'loading', data: null, error: null });
+  const [draftFamilies, setDraftFamilies] = useState({}); // { [family]: number }
+  const [draftRates, setDraftRates] = useState({});       // { [bottlesMax]: number }
+  // Token persisted in sessionStorage so the user only enters it once per
+  // browser session. NOT localStorage — we don't want the secret to leak
+  // beyond this tab's lifetime.
+  const [token, setTokenState] = useState(() =>
+    typeof sessionStorage !== 'undefined' ? sessionStorage.getItem('ns-admin-token') || '' : '',
+  );
+  const [tokenInput, setTokenInput] = useState('');
+  const [saveState, setSaveState] = useState({ status: 'idle', message: null });
+
+  function setToken(t) {
+    setTokenState(t);
+    if (typeof sessionStorage !== 'undefined') {
+      if (t) sessionStorage.setItem('ns-admin-token', t);
+      else sessionStorage.removeItem('ns-admin-token');
+    }
+  }
+
+  function reload() {
+    setCostState((s) => ({ ...s, status: 'loading' }));
+    window.NSApi.fetchCosts()
+      .then((data) => setCostState({ status: 'ready', data, error: null }))
+      .catch((err) => setCostState({ status: 'error', data: null, error: err.message }));
+  }
+
+  useEffect(() => { reload(); }, []);
+
+  function valueForFamily(family) {
+    if (family in draftFamilies) return draftFamilies[family];
+    const f = state.data?.families.find((x) => x.family === family);
+    return f != null ? f.unitCostUsd : 0;
+  }
+  function valueForRate(bottlesMax) {
+    if (bottlesMax in draftRates) return draftRates[bottlesMax];
+    const r = state.data?.fulfillment.find((x) => x.bottlesMax === bottlesMax);
+    return r != null ? r.priceUsd : 0;
+  }
+  function familyDirty(family) {
+    if (!(family in draftFamilies)) return false;
+    const orig = state.data?.families.find((x) => x.family === family)?.unitCostUsd ?? 0;
+    return parseFloat(draftFamilies[family]) !== orig;
+  }
+  function rateDirty(bottlesMax) {
+    if (!(bottlesMax in draftRates)) return false;
+    const orig = state.data?.fulfillment.find((x) => x.bottlesMax === bottlesMax)?.priceUsd ?? 0;
+    return parseFloat(draftRates[bottlesMax]) !== orig;
+  }
+  function dirtyCount() {
+    let n = 0;
+    if (state.data) {
+      for (const f of state.data.families) if (familyDirty(f.family)) n++;
+      for (const r of state.data.fulfillment) if (rateDirty(r.bottlesMax)) n++;
+    }
+    return n;
+  }
+  function discardChanges() {
+    setDraftFamilies({});
+    setDraftRates({});
+  }
+
+  async function save() {
+    if (!token) {
+      setSaveState({ status: 'error', message: 'Token necessário pra salvar.' });
+      return;
+    }
+    const familyChanges = Object.entries(draftFamilies)
+      .map(([family, v]) => ({ family, unitCostUsd: parseFloat(v) }))
+      .filter((x) => Number.isFinite(x.unitCostUsd) && x.unitCostUsd >= 0);
+    const rateChanges = Object.entries(draftRates)
+      .map(([bm, v]) => ({ bottlesMax: parseInt(bm, 10), priceUsd: parseFloat(v) }))
+      .filter((x) => Number.isFinite(x.priceUsd) && x.priceUsd >= 0);
+    if (!familyChanges.length && !rateChanges.length) {
+      setSaveState({ status: 'idle', message: 'Sem mudanças' });
+      return;
+    }
+    setSaveState({ status: 'saving', message: null });
+    try {
+      const result = await window.NSApi.adminSaveCosts(token, {
+        families: familyChanges,
+        fulfillment: rateChanges,
+      });
+      setSaveState({ status: 'saved', message: `${result.updated.families} famílias + ${result.updated.fulfillment} brackets salvos.` });
+      setDraftFamilies({});
+      setDraftRates({});
+      reload();
+    } catch (err) {
+      setSaveState({ status: 'error', message: err.message });
+    }
+  }
+
+  async function recompute() {
+    if (!token) { setSaveState({ status: 'error', message: 'Token necessário' }); return; }
+    if (!confirm('Recalcular COGS + frete em TODAS orders existentes com os preços atuais? Vai sobrescrever os snapshots históricos.')) return;
+    setSaveState({ status: 'saving', message: 'Recomputando...' });
+    try {
+      const stats = await window.NSApi.adminBackfillCogs(token);
+      setSaveState({
+        status: 'saved',
+        message: `${stats.scanned} orders, ${stats.cogsUpdated} COGS atualizados, ${stats.sessionsRebalanced} sessões rebalanceadas.`,
+      });
+    } catch (err) {
+      setSaveState({ status: 'error', message: err.message });
+    }
+  }
+
+  if (state.status === 'loading' && !state.data) {
+    return <div className="page-in"><div className="panel">Carregando custos...</div></div>;
+  }
+  if (state.status === 'error') {
+    return <div className="page-in"><div className="panel" style={{ color: 'var(--danger)' }}>Erro: {state.error}</div></div>;
+  }
+
+  const dCount = dirtyCount();
+
+  return (
+    <div className="page-in">
+      <div className="page-head">
+        <div className="lead">
+          <span className="eyebrow">SISTEMA · CUSTOS DA OPERAÇÃO</span>
+          <h2>Custos <em>de produção e envio</em></h2>
+          <span className="sub">
+            Editar aqui altera os snapshots de orders FUTUROS · "Recalcular" reescreve histórico
+          </span>
+        </div>
+        <div className="page-head-actions">
+          {dCount > 0 && (
+            <button className="btn btn-ghost" onClick={discardChanges}>
+              Descartar {dCount} {dCount === 1 ? 'mudança' : 'mudanças'}
+            </button>
+          )}
+          <button
+            className="btn btn-primary"
+            disabled={dCount === 0 || saveState.status === 'saving'}
+            onClick={save}
+            style={{ opacity: dCount === 0 ? 0.5 : 1 }}
+          >
+            <Icon name="check" size={12}/> Salvar {dCount > 0 ? `(${dCount})` : ''}
+          </button>
+        </div>
+      </div>
+
+      {/* Token gate */}
+      {!token && (
+        <div className="panel" style={{ marginBottom: 14, background: 'rgba(255,180,0,0.06)', borderColor: 'rgba(255,180,0,0.4)' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+            <Icon name="alert-triangle" size={14} className="" />
+            <div style={{ flex: 1, minWidth: 200 }}>
+              <div style={{ fontSize: 12, color: 'var(--white)', marginBottom: 4 }}>
+                Token de admin necessário pra editar
+              </div>
+              <div style={{ fontSize: 11, color: 'var(--navy-300)' }}>
+                Bearer secret (mesmo INGEST_SECRET). Ficará na sessionStorage até fechar a aba.
+              </div>
+            </div>
+            <input
+              type="password"
+              value={tokenInput}
+              onChange={(e) => setTokenInput(e.target.value)}
+              placeholder="bearer secret"
+              style={{
+                background: 'rgba(91,200,255,0.06)', border: '1px solid var(--border)',
+                borderRadius: 4, padding: '6px 10px', color: 'var(--white)',
+                fontFamily: 'var(--f-mono)', fontSize: 12, minWidth: 240,
+              }}
+            />
+            <button className="btn btn-primary" onClick={() => { setToken(tokenInput); setTokenInput(''); }}>
+              Autenticar
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Save status */}
+      {saveState.message && (
+        <div className="panel" style={{
+          marginBottom: 14,
+          background: saveState.status === 'error' ? 'rgba(239,68,68,0.06)' : 'rgba(40,200,120,0.06)',
+          borderColor: saveState.status === 'error' ? 'rgba(239,68,68,0.4)' : 'rgba(40,200,120,0.4)',
+          color: saveState.status === 'error' ? 'var(--danger)' : 'var(--success)',
+          fontSize: 12,
+        }}>
+          {saveState.message}
+        </div>
+      )}
+
+      <div className="grid-2">
+        {/* Per-family unit cost */}
+        <div className="panel">
+          <div className="panel-head">
+            <div className="panel-title">
+              <span className="panel-eyebrow">CUSTO POR POTE · POR FAMÍLIA</span>
+              <div className="panel-sub">Custo de produção que pagamos pro fornecedor por bottle</div>
+            </div>
+          </div>
+          <div className="tbl-wrap">
+            <table className="tbl">
+              <thead>
+                <tr>
+                  <th>Família</th>
+                  <th className="num">Custo / pote (USD)</th>
+                  <th>Atualizado</th>
+                </tr>
+              </thead>
+              <tbody>
+                {state.data.families.map((f) => {
+                  const dirty = familyDirty(f.family);
+                  return (
+                    <tr key={f.family}>
+                      <td>
+                        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                          <span style={{ width: 6, height: 6, borderRadius: '50%', background: familyAccent(f.family) }}/>
+                          {f.family}
+                        </span>
+                      </td>
+                      <td className="num">
+                        <input
+                          type="number"
+                          step="0.01"
+                          min="0"
+                          disabled={!token}
+                          value={valueForFamily(f.family)}
+                          onChange={(e) => setDraftFamilies((d) => ({ ...d, [f.family]: e.target.value }))}
+                          style={costInputStyle(dirty, !token)}
+                        />
+                      </td>
+                      <td className="cell-mono" style={{ color: 'var(--navy-300)' }}>{fmtDateShort(f.updatedAt)}</td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        {/* Fulfillment brackets */}
+        <div className="panel">
+          <div className="panel-head">
+            <div className="panel-title">
+              <span className="panel-eyebrow">FRETE · POR BRACKET DE BOTTLES</span>
+              <div className="panel-sub">Custo de envio que pagamos pelo total de bottles na sessão</div>
+            </div>
+          </div>
+          <div className="tbl-wrap" style={{ maxHeight: 420, overflowY: 'auto' }}>
+            <table className="tbl">
+              <thead>
+                <tr>
+                  <th>Bracket</th>
+                  <th className="num">Bottles ≤</th>
+                  <th className="num">Preço (USD)</th>
+                </tr>
+              </thead>
+              <tbody>
+                {state.data.fulfillment.map((r) => {
+                  const dirty = rateDirty(r.bottlesMax);
+                  return (
+                    <tr key={r.bottlesMax}>
+                      <td className="cell-mono" style={{ color: 'var(--navy-300)', fontSize: 11 }}>{r.label}</td>
+                      <td className="num cell-mono">{r.bottlesMax}</td>
+                      <td className="num">
+                        <input
+                          type="number"
+                          step="0.01"
+                          min="0"
+                          disabled={!token}
+                          value={valueForRate(r.bottlesMax)}
+                          onChange={(e) => setDraftRates((d) => ({ ...d, [r.bottlesMax]: e.target.value }))}
+                          style={costInputStyle(dirty, !token)}
+                        />
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      {/* Recompute */}
+      <div className="panel" style={{ marginTop: 14 }}>
+        <div className="panel-head">
+          <div className="panel-title">
+            <span className="panel-eyebrow">RECALCULAR HISTÓRICO</span>
+            <div className="panel-sub">
+              Reescreve cogsUsd + fulfillmentUsd em TODAS orders existentes usando os preços atuais.
+              Use após mudar custos pra refletir nos KPIs/lucros do passado.
+            </div>
+          </div>
+          <div className="page-head-actions">
+            <button
+              className="btn btn-ghost"
+              disabled={!token || saveState.status === 'saving'}
+              onClick={recompute}
+            >
+              <Icon name="refresh" size={12}/> Recalcular orders existentes
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {/* Token clear */}
+      {token && (
+        <div style={{ marginTop: 18, fontSize: 11, color: 'var(--navy-400)', textAlign: 'right' }}>
+          Token autenticado nesta sessão · <button onClick={() => setToken('')} style={{ background: 'none', border: 0, color: 'var(--glow-cyan)', cursor: 'pointer', textDecoration: 'underline', font: 'inherit' }}>esquecer</button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function costInputStyle(dirty, disabled) {
+  return {
+    background: dirty ? 'rgba(91,200,255,0.15)' : 'rgba(91,200,255,0.06)',
+    border: '1px solid ' + (dirty ? 'var(--glow-cyan)' : 'var(--border)'),
+    borderRadius: 4,
+    padding: '4px 8px',
+    color: 'var(--white)',
+    fontFamily: 'var(--f-mono)',
+    fontSize: 12,
+    width: 90,
+    textAlign: 'right',
+    opacity: disabled ? 0.5 : 1,
+    cursor: disabled ? 'not-allowed' : 'text',
+  };
+}
+
 Object.assign(window, {
   FunnelPage, LeaderboardPage, AffiliateDrawer, AllAffiliatesPage,
   ProductsPage, TransactionsPage, IntegrationsPage, FXPage, UsersPage,
-  HealthPage,
+  HealthPage, CostsPage,
 });
