@@ -502,19 +502,15 @@ async function kpisFromRows(
 }
 
 async function orderGroupsCount(filters: MetricsFilters): Promise<number> {
-  const where: Prisma.OrderWhereInput = {
-    orderedAt: { gte: filters.startDate, lte: filters.endDate },
-  };
-  if (filters.platformSlugs?.length) where.platform = { slug: { in: filters.platformSlugs } };
-  if (filters.countries?.length) where.country = { in: filters.countries };
-  if (filters.productFamilies?.length) {
-    where.product = { family: { in: filters.productFamilies } };
-  }
-  // Distinct count via raw query — Prisma doesn't expose distinct + COUNT
-  // in a single round-trip otherwise.
+  // Counts distinct sessions (parent_external_id) that have at least one
+  // APPROVED FRONTEND order — same definition as Funnel's `feGroups`. This
+  // is the canonical denominator for AOV ("revenue per buyer who entered
+  // the funnel"), so Overview AOV matches Funnel AOV.
   const conds: Prisma.Sql[] = [
     Prisma.sql`o."orderedAt" >= ${filters.startDate}`,
     Prisma.sql`o."orderedAt" <= ${filters.endDate}`,
+    Prisma.sql`o."status" = 'APPROVED'`,
+    Prisma.sql`o."productType" = 'FRONTEND'`,
   ];
   if (filters.platformSlugs?.length) {
     conds.push(Prisma.sql`pl."slug" = ANY(${filters.platformSlugs})`);

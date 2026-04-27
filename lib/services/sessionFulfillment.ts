@@ -6,10 +6,14 @@
 // overcounts: a session with FE (6 bottles) + UP (2 bottles) ships once
 // with bracket(8), not bracket(6) + bracket(2).
 //
-// To make aggregations correct (sum over orders = total real shipping),
-// we assign the entire session's fulfillment to ONE designated "primary"
-// order — preferring the FE if present, else the earliest one — and set
-// fulfillmentUsd = 0 on the rest.
+// We compute the session's total shipping cost once and distribute it
+// PRO-RATA across orders by bottle count. So an order's fulfillmentUsd
+// is its fair share of the session's actual shipping spend:
+//   order.fulfillmentUsd = session_shipping × order_bottles / session_bottles
+//
+// Sum across orders = real shipping cost (modulo penny rounding) ✓
+// AND the drawer for any single order shows a meaningful non-zero number
+// representing what that order "cost" to ship as part of the package.
 //
 // COGS is per-order (each order's bottles × per-bottle cost) and stays
 // untouched by this rebalance.
@@ -60,17 +64,35 @@ export async function rebalanceSessionFulfillment(
     0,
   );
 
-  // Pick the bearer of the session-wide cost: FE preferred, else earliest.
-  const primary =
-    sessionOrders.find((o) => o.productType === 'FRONTEND') ?? sessionOrders[0];
+  // Distribute pro-rata by bottle count. Penny rounding is absorbed by the
+  // last order so the sum equals totalFulfillment exactly.
+  if (totalBottles <= 0) {
+    // Nothing to distribute (orders without bottles classified yet).
+    for (const o of sessionOrders) {
+      if (o.fulfillmentUsd && Number(o.fulfillmentUsd) !== 0) {
+        await db.order.update({
+          where: { id: o.id },
+          data: { fulfillmentUsd: new Prisma.Decimal(0) },
+        });
+      }
+    }
+    return;
+  }
 
-  for (const o of sessionOrders) {
-    const target = o.id === primary.id ? totalFulfillment : 0;
+  let allocated = 0;
+  for (let i = 0; i < sessionOrders.length; i++) {
+    const o = sessionOrders[i];
+    const orderBottles = (o.product.bottles ?? 0) + (o.product.bonusBottles ?? 0);
+    const isLast = i === sessionOrders.length - 1;
+    const share = isLast
+      ? Math.round((totalFulfillment - allocated) * 100) / 100
+      : Math.round((totalFulfillment * orderBottles / totalBottles) * 100) / 100;
+    allocated += share;
     const current = o.fulfillmentUsd ? Number(o.fulfillmentUsd) : null;
-    if (current === target) continue;
+    if (current === share) continue;
     await db.order.update({
       where: { id: o.id },
-      data: { fulfillmentUsd: new Prisma.Decimal(target) },
+      data: { fulfillmentUsd: new Prisma.Decimal(share) },
     });
   }
 }

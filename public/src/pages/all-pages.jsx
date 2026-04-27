@@ -1675,7 +1675,15 @@ function TransactionDrawer({ externalId, platformSlug, cur, onClose, onPickOrder
             <FinRow label="Cliente pagou" value={o.grossAmountUsd} cur={cur} bold/>
             <FinRow label="Imposto / IVA" value={-o.taxAmount} cur={cur} muted/>
             <FinRow label="Plataforma reteve" value={-o.platformRetention} cur={cur} muted />
-            <FinRow label="Afiliado recebeu (CPA)" value={-o.cpaPaidUsd} cur={cur} accent="var(--glow-cyan)"/>
+            <FinRow
+              label={o.cpaPaidUsd > 0
+                ? 'Afiliado recebeu (CPA)'
+                : `Afiliado recebeu (CPA) — sem CPA neste ${o.productType === 'UPSELL' ? 'upsell' : o.productType === 'DOWNSELL' ? 'downsell' : 'pedido'}`}
+              value={-o.cpaPaidUsd}
+              cur={cur}
+              accent={o.cpaPaidUsd > 0 ? 'var(--glow-cyan)' : 'var(--navy-400)'}
+              muted={o.cpaPaidUsd === 0}
+            />
             <div style={{ height: 1, background: 'var(--border)', margin: '8px 0' }}/>
             <FinRow label={o.status === 'APPROVED' ? 'Empresa recebeu' : 'Empresa receberia (refund/cb)'}
                     value={o.companyKept} cur={cur}
