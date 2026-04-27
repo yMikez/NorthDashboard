@@ -18,20 +18,23 @@ export interface ProductClassification {
   funnelStep: number | null;
   variant: string | null;
   bottles: number | null;
+  // Bonus bottles in combo SKUs (RC "6 + 2 Bottles" → bonusBottles=2,
+  // CB "NeuroMindPro-2e1-RC" → bonusBottles=1). We pay COGS + fulfillment
+  // for the total (bottles + bonusBottles).
+  bonusBottles: number | null;
 }
 
 // "2e1" / "3e1" / "6e2" formats appear on RC (recovery) SKUs in the CB CSV.
 // They mean "{primary} bottles + {bonus} bottles" as one combo offer. We
-// surface the primary count as `bottles`; the bonus is dropped since downstream
-// analytics treat the SKU as a single unit anyway.
+// capture both so COGS calc can charge for the total bottles shipped.
 const CB_SKU_RE =
-  /^(?<family>[A-Za-z]+)-(?<bottles>\d+)(?:e\d+)?-(?<type>FE|UP1|UP2|DW1|DS1|RC)(?:-(?<variant>[A-Za-z0-9]+))?$/i;
+  /^(?<family>[A-Za-z]+)-(?<bottles>\d+)(?:e(?<bonus>\d+))?-(?<type>FE|UP1|UP2|DW1|DS1|RC)(?:-(?<variant>[A-Za-z0-9]+))?$/i;
 
 // DigiStore name pattern. Accepts type variants like "UP1-V1" or "UP1-vsnova"
-// and also the recovery format "RC - Glyco Pulse (6 + 2 Bottles)" where bottle
-// count uses the first number.
+// and also the recovery format "RC - Glyco Pulse (6 + 2 Bottles)" where the
+// "+ 2" is the bonus bottle count.
 const D24_NAME_RE =
-  /^(?<typeFull>M[123]|UP[12](?:-[A-Za-z0-9]+)?|DW1|DS1|RC)\s*-\s*(?<family>[A-Za-z][A-Za-z ]+?)\s*\((?<bottles>\d+)(?:\s*\+\s*\d+)?\s*Bottles?\)$/i;
+  /^(?<typeFull>M[123]|UP[12](?:-[A-Za-z0-9]+)?|DW1|DS1|RC)\s*-\s*(?<family>[A-Za-z][A-Za-z ]+?)\s*\((?<bottles>\d+)(?:\s*\+\s*(?<bonus>\d+))?\s*Bottles?\)$/i;
 
 const FAMILY_NORMALIZATIONS: Array<[RegExp, string]> = [
   [/^glycopulse$/i, 'GlycoPulse'],
@@ -90,6 +93,7 @@ export function classifyProduct(
       funnelStep: t.step,
       variant: cb.groups.variant ?? null,
       bottles: parseInt(cb.groups.bottles, 10),
+      bonusBottles: cb.groups.bonus ? parseInt(cb.groups.bonus, 10) : null,
     };
   }
 
@@ -110,6 +114,7 @@ export function classifyProduct(
         funnelStep: t.step,
         variant,
         bottles: parseInt(d24.groups.bottles, 10),
+        bonusBottles: d24.groups.bonus ? parseInt(d24.groups.bonus, 10) : null,
       };
     }
   }
@@ -124,5 +129,6 @@ export function classifyProduct(
     funnelStep: null,
     variant: null,
     bottles: null,
+    bonusBottles: null,
   };
 }

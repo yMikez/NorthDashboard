@@ -3,6 +3,7 @@ import { Prisma } from '@prisma/client';
 import { db } from '../db';
 import type { NormalizedOrder } from '../shared/types';
 import { classifyProduct } from './productClassification';
+import { calcCogs } from './cogs';
 
 export interface UpsertOrderResult {
   created: boolean;
@@ -48,6 +49,7 @@ export async function upsertOrder(normalized: NormalizedOrder): Promise<UpsertOr
       family: classified.family,
       variant: classified.variant,
       bottles: classified.bottles,
+      bonusBottles: classified.bonusBottles,
     },
     update: {
       name: normalized.productName || undefined,
@@ -58,9 +60,18 @@ export async function upsertOrder(normalized: NormalizedOrder): Promise<UpsertOr
       family: classified.family ?? undefined,
       variant: classified.variant ?? undefined,
       bottles: classified.bottles ?? undefined,
+      bonusBottles: classified.bonusBottles ?? undefined,
     },
     select: { id: true },
   });
+
+  // Snapshot COGS at ingest. Reads cached cost tables; refreshing the cache
+  // happens after admin edits via invalidateCogsCache().
+  const cogs = await calcCogs(
+    classified.family,
+    classified.bottles,
+    classified.bonusBottles,
+  );
 
   let affiliateId: string | null = null;
   if (normalized.affiliateExternalId) {
@@ -164,6 +175,9 @@ export async function upsertOrder(normalized: NormalizedOrder): Promise<UpsertOr
     chargebackAt: normalized.status === 'CHARGEBACK' ? normalized.orderedAt : null,
 
     rawMetadata: normalized.rawMetadata as Prisma.InputJsonValue,
+
+    cogsUsd: new Prisma.Decimal(cogs.cogsUsd),
+    fulfillmentUsd: new Prisma.Decimal(cogs.fulfillmentUsd),
   };
 
   const existing = await db.order.findUnique({

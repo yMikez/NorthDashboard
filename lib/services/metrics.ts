@@ -276,6 +276,14 @@ export interface OrderDetailResponse {
     // Computed: company keeps gross - tax - fees - cpa (= netAmountUsd in
     // theory, exposed separately for clarity).
     companyKept: number;
+    // Snapshot at ingest. Null for orders before the COGS feature shipped
+    // (until backfill runs).
+    cogsUsd: number | null;
+    fulfillmentUsd: number | null;
+    // Computed: estimated profit. For APPROVED: companyKept - cogs - fulfillment.
+    // For REFUNDED/CHARGEBACK: 0 - cogs - fulfillment (we still paid both).
+    estimatedProfit: number | null;
+    estimatedMarginPct: number | null;
     clickId: string | null;
     trackingId: string | null;
     campaignKey: string | null;
@@ -1900,6 +1908,19 @@ export async function getOrderDetail(
   const platformRetention = round2(grossUsd - netUsd - cpaUsd - taxUsd);
   const companyKept = round2(netUsd);
 
+  // Profit calc: refunded/chargeback orders eat the COGS+fulfillment we paid.
+  const cogsUsd = o.cogsUsd != null ? Number(o.cogsUsd) : null;
+  const fulfillmentUsd = o.fulfillmentUsd != null ? Number(o.fulfillmentUsd) : null;
+  let estimatedProfit: number | null = null;
+  let estimatedMarginPct: number | null = null;
+  if (cogsUsd != null && fulfillmentUsd != null) {
+    const revenueAfterRefund = o.status === 'APPROVED' ? companyKept : 0;
+    estimatedProfit = round2(revenueAfterRefund - cogsUsd - fulfillmentUsd);
+    estimatedMarginPct = grossUsd > 0
+      ? Math.round((estimatedProfit / grossUsd) * 10000) / 100
+      : null;
+  }
+
   return {
     order: {
       externalId: o.externalId,
@@ -1927,6 +1948,10 @@ export async function getOrderDetail(
       cpaPaidUsd: round2(cpaUsd),
       platformRetention,
       companyKept,
+      cogsUsd,
+      fulfillmentUsd,
+      estimatedProfit,
+      estimatedMarginPct,
       clickId: o.clickId,
       trackingId: o.trackingId,
       campaignKey: o.campaignKey,

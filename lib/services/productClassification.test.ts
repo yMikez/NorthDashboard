@@ -29,6 +29,7 @@ describe('classifyProduct (ClickBank SKU patterns)', () => {
       funnelStep: 1,
       variant: null,
       bottles: 6,
+      bonusBottles: null,
     });
   });
 
@@ -61,17 +62,24 @@ describe('classifyProduct (ClickBank SKU patterns)', () => {
     expect(r.variant).toBe('V1');
   });
 
-  it('RC SKU with "{N}e{M}" combo bottles → SMS_RECOVERY, primary count', () => {
+  it('RC SKU with "{N}e{M}" combo bottles → SMS_RECOVERY, primary + bonus', () => {
     const r = classifyProduct('NeuroMindPro-2e1-RC');
     expect(r.family).toBe('NeuroMindPro');
     expect(r.type).toBe('SMS_RECOVERY');
     expect(r.bottles).toBe(2); // primary count from "2e1"
+    expect(r.bonusBottles).toBe(1); // bonus count from "2e1"
   });
 
-  it('RC SKU with "6e2" combo', () => {
+  it('RC SKU with "6e2" combo (6 primary + 2 bonus)', () => {
     const r = classifyProduct('NeuroMindPro-6e2-RC');
     expect(r.bottles).toBe(6);
+    expect(r.bonusBottles).toBe(2);
     expect(r.type).toBe('SMS_RECOVERY');
+  });
+
+  it('non-RC SKU has bonusBottles=null', () => {
+    const r = classifyProduct('NeuroMindPro-6-FE');
+    expect(r.bonusBottles).toBeNull();
   });
 });
 
@@ -84,6 +92,7 @@ describe('classifyProduct (DigiStore name patterns)', () => {
       funnelStep: 1,
       variant: null,
       bottles: 6,
+      bonusBottles: null,
     });
   });
 
@@ -107,10 +116,11 @@ describe('classifyProduct (DigiStore name patterns)', () => {
     expect(r.family).toBe('NeuroMindPro');
   });
 
-  it('parses RC with "6 + 2 Bottles" → SMS_RECOVERY (uses first bottle count)', () => {
+  it('parses RC with "6 + 2 Bottles" → SMS_RECOVERY with bonusBottles', () => {
     const r = classifyProduct('685067', 'RC - Glyco Pulse (6 + 2 Bottles)');
     expect(r.type).toBe('SMS_RECOVERY');
     expect(r.bottles).toBe(6);
+    expect(r.bonusBottles).toBe(2);
     expect(r.family).toBe('GlycoPulse');
   });
 });

@@ -44,6 +44,9 @@ model Product {
   family          String?
   variant         String?
   bottles         Int?
+  // RC SKUs ship combo offers like "6 + 2 Bottles" where 2 are bonus. We
+  // pay COGS + fulfillment for the total (bottles + bonusBottles).
+  bonusBottles    Int?
   vendorAccount   String?
   catalogPriceUsd Decimal?    @db.Decimal(10, 2)
   niche           String?
@@ -175,6 +178,12 @@ model Order {
 
   rawMetadata Json?
 
+  // Cost-of-goods snapshot at ingest time. Stored to preserve historical
+  // accuracy: if pricing changes later, old orders still show the cost
+  // they actually had. Computed via lib/services/cogs.ts.
+  cogsUsd        Decimal? @db.Decimal(10, 2)
+  fulfillmentUsd Decimal? @db.Decimal(10, 2)
+
   platform  Platform   @relation(fields: [platformId], references: [id])
   product   Product    @relation(fields: [productId], references: [id])
   affiliate Affiliate? @relation(fields: [affiliateId], references: [id])
@@ -216,4 +225,24 @@ model IngestLog {
   @@index([platformSlug, receivedAt])
   @@index([processedOk])
   @@index([externalId])
+}
+
+// Per-family cost-of-goods. Editable via /api/admin/costs (and eventually a
+// UI). Snapshot is captured into Order.cogsUsd at ingest time, so changing
+// values here only affects future orders — historical numbers are preserved.
+model ProductFamilyCost {
+  family       String   @id  // 'NeuroMindPro', 'GlycoPulse', etc.
+  unitCostUsd  Decimal  @db.Decimal(10, 4)
+  updatedAt    DateTime @updatedAt
+}
+
+// Fulfillment (shipping) brackets. Lookup is "first row whose maxBottles
+// >= order.totalBottles, ordered by maxBottles ASC". Weight isn't tracked
+// — the supplier prices already account for our specific bottle weights,
+// so we map bottle count directly to bracket.
+model FulfillmentRate {
+  bottlesMax  Int      @id        // largest bottle count covered (e.g. 2, 3, 4, ...)
+  priceUsd    Decimal  @db.Decimal(10, 2)
+  label       String              // human display ("0 to 2.99 oz", etc.)
+  updatedAt   DateTime @updatedAt
 }

@@ -1662,7 +1662,36 @@ function TransactionDrawer({ externalId, platformSlug, cur, onClose, onPickOrder
             <FinRow label="Plataforma reteve" value={-o.platformRetention} cur={cur} muted />
             <FinRow label="Afiliado recebeu (CPA)" value={-o.cpaPaidUsd} cur={cur} accent="var(--glow-cyan)"/>
             <div style={{ height: 1, background: 'var(--border)', margin: '8px 0' }}/>
-            <FinRow label="Empresa recebeu (líquido)" value={o.companyKept} cur={cur} bold accent={o.companyKept > 0 ? 'var(--success)' : 'var(--danger)'}/>
+            <FinRow label={o.status === 'APPROVED' ? 'Empresa recebeu' : 'Empresa receberia (refund/cb)'}
+                    value={o.companyKept} cur={cur}
+                    accent={o.status === 'APPROVED' ? (o.companyKept > 0 ? 'var(--success)' : 'var(--danger)') : 'var(--navy-400)'}/>
+            {o.cogsUsd != null && o.fulfillmentUsd != null && (
+              <>
+                <FinRow label="Custo do produto" value={-o.cogsUsd} cur={cur} muted/>
+                <FinRow label="Frete" value={-o.fulfillmentUsd} cur={cur} muted/>
+                <div style={{ height: 1, background: 'var(--border)', margin: '8px 0' }}/>
+                <FinRow
+                  label={o.status === 'APPROVED' ? 'LUCRO LÍQUIDO' : 'PREJUÍZO (refund/cb)'}
+                  value={o.estimatedProfit ?? 0}
+                  cur={cur}
+                  bold
+                  accent={(o.estimatedProfit ?? 0) > 0 ? 'var(--success)' : 'var(--danger)'}
+                />
+                {o.estimatedMarginPct != null && (
+                  <div style={{ textAlign: 'right', fontFamily: 'var(--f-mono)', fontSize: 11,
+                                color: o.estimatedMarginPct > 10 ? 'var(--success)'
+                                     : o.estimatedMarginPct > 0  ? 'var(--warning)'
+                                     :                              'var(--danger)' }}>
+                    margem {o.estimatedMarginPct.toFixed(1)}%
+                  </div>
+                )}
+              </>
+            )}
+            {o.cogsUsd == null && (
+              <div style={{ marginTop: 8, fontSize: 11, color: 'var(--navy-400)', fontStyle: 'italic' }}>
+                COGS não calculado pra este pedido — rode /api/admin/backfill-cogs.
+              </div>
+            )}
             {o.currencyOriginal !== 'USD' && (
               <div style={{ marginTop: 6, fontFamily: 'var(--f-mono)', fontSize: 10, color: 'var(--navy-400)' }}>
                 Original: {fmtCurrency(o.grossAmountOrig, o.currencyOriginal, 2)} ({o.currencyOriginal})
