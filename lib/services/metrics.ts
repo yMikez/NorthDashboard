@@ -388,7 +388,7 @@ async function orderGroupsCount(filters: MetricsFilters): Promise<number> {
   return Number(count);
 }
 
-function dailyFromRows(
+export function dailyFromRows(
   rows: DailyMetricsRow[],
   startDate: Date,
   endDate: Date,
@@ -414,7 +414,7 @@ function dailyFromRows(
   return Array.from(buckets.values()).sort((a, b) => a.date.localeCompare(b.date));
 }
 
-function byCountryFromRows(
+export function byCountryFromRows(
   rows: DailyMetricsRow[],
 ): Array<{ code: string; value: number; orders: number }> {
   const map = new Map<string, { code: string; value: number; orders: number }>();
@@ -431,7 +431,7 @@ function byCountryFromRows(
     .slice(0, 8);
 }
 
-function byProductTypeFromRows(
+export function byProductTypeFromRows(
   rows: DailyMetricsRow[],
 ): Array<{ label: string; value: number }> {
   const totals: Record<string, number> = {
@@ -721,7 +721,7 @@ export async function getFunnel(
   };
 }
 
-interface FunnelGroupAgg {
+export interface FunnelGroupAgg {
   hasFE: boolean;
   hasBump: boolean;
   hasU1: boolean;
@@ -734,7 +734,7 @@ interface FunnelGroupAgg {
   downRevenue: number;
 }
 
-function aggregateGroups(
+export function aggregateGroups(
   groupList: FunnelGroupAgg[],
   totalGroups: number,
 ): { stages: FunnelStage[]; summary: FunnelSummary } {
