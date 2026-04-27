@@ -1,5 +1,10 @@
 import { Prisma } from '@prisma/client';
 import { db } from '../db';
+import {
+  refreshDailyMetricsIfStale,
+  queryDailyMetrics,
+  type DailyMetricsRow,
+} from './dailyMetrics';
 
 export interface MetricsFilters {
   startDate: Date;
@@ -263,14 +268,22 @@ export async function getOverview(
   filters: MetricsFilters,
   compare = false,
 ): Promise<OverviewResponse> {
-  const orders = await fetchOrders(filters);
+  // SKU-level filtering isn't supported by the MV (keyed on family). Fall
+  // back to the legacy path on those filter combinations — accuracy wins
+  // over speed when the user explicitly picks SKUs.
+  if (filters.productExternalIds?.length) {
+    return getOverviewLegacy(filters, compare);
+  }
 
-  const kpis = computeKPIs(orders);
-  const daily = computeDaily(orders, filters.startDate, filters.endDate);
-  const byCountry = computeByCountry(orders);
-  const byProductType = computeByProductType(orders);
-  const topAffiliates = computeTopAffiliates(orders, 5);
-  const platformHealth = await computePlatformHealth(orders);
+  await refreshDailyMetricsIfStale();
+  const rows = await queryDailyMetrics(filters);
+
+  const kpis = await kpisFromRows(rows, filters);
+  const daily = dailyFromRows(rows, filters.startDate, filters.endDate);
+  const byCountry = byCountryFromRows(rows);
+  const byProductType = byProductTypeFromRows(rows);
+  const platformHealth = await platformHealthFromRows(rows);
+  const topAffiliates = await topAffiliatesQuery(filters, 5);
 
   const response: OverviewResponse = {
     range: {
@@ -289,14 +302,265 @@ export async function getOverview(
     const span = filters.endDate.getTime() - filters.startDate.getTime();
     const prevEnd = new Date(filters.startDate.getTime() - 1);
     const prevStart = new Date(prevEnd.getTime() - span);
-    const prevOrders = await fetchOrders({
-      ...filters,
-      startDate: prevStart,
-      endDate: prevEnd,
-    });
-    response.previous = computeKPIs(prevOrders);
+    const prevFilters = { ...filters, startDate: prevStart, endDate: prevEnd };
+    const prevRows = await queryDailyMetrics(prevFilters);
+    response.previous = await kpisFromRows(prevRows, prevFilters);
   }
 
+  return response;
+}
+
+// ---------- MV-backed helpers for getOverview ----------
+// Each takes pre-fetched DailyMetricsRow[] (already filtered by date range
+// + dimensions) and reduces them to the response field. No DB I/O except
+// where catalog joins are needed (platformHealth → Platform.lastSyncAt,
+// topAffiliates → Affiliate table).
+
+async function kpisFromRows(
+  rows: DailyMetricsRow[],
+  filters: MetricsFilters,
+): Promise<OverviewKPIs> {
+  let gross = 0, net = 0, cpa = 0;
+  let approvedCount = 0, refundedCount = 0, chargebackCount = 0;
+  for (const r of rows) {
+    gross += r.gross;
+    net += r.net;
+    cpa += r.cpa;
+    approvedCount += r.approved_count;
+    refundedCount += r.refunded_count;
+    chargebackCount += r.chargeback_count;
+  }
+  const totalCount = rows.reduce((s, r) => s + r.total_count, 0);
+  const denom = totalCount || 1;
+  // orderGroups (distinct buyer sessions) doesn't aggregate from MV cleanly
+  // because the same parent_external_id can appear in multiple rows (FE +
+  // upsell). Run a focused COUNT DISTINCT on the base table instead — fast
+  // because we only project two columns.
+  const orderGroups = await orderGroupsCount(filters);
+
+  return {
+    gross: round2(gross),
+    net: round2(net),
+    cpa: round2(cpa),
+    netProfit: round2(net - cpa),
+    approvalRate: round4(approvedCount / denom),
+    refundRate: round4(refundedCount / denom),
+    cbRate: round4(chargebackCount / denom),
+    aov: round2(orderGroups ? gross / orderGroups : 0),
+    approvedCount,
+    totalCount,
+    orderGroups,
+  };
+}
+
+async function orderGroupsCount(filters: MetricsFilters): Promise<number> {
+  const where: Prisma.OrderWhereInput = {
+    orderedAt: { gte: filters.startDate, lte: filters.endDate },
+  };
+  if (filters.platformSlugs?.length) where.platform = { slug: { in: filters.platformSlugs } };
+  if (filters.countries?.length) where.country = { in: filters.countries };
+  if (filters.productFamilies?.length) {
+    where.product = { family: { in: filters.productFamilies } };
+  }
+  // Distinct count via raw query — Prisma doesn't expose distinct + COUNT
+  // in a single round-trip otherwise.
+  const conds: Prisma.Sql[] = [
+    Prisma.sql`o."orderedAt" >= ${filters.startDate}`,
+    Prisma.sql`o."orderedAt" <= ${filters.endDate}`,
+  ];
+  if (filters.platformSlugs?.length) {
+    conds.push(Prisma.sql`pl."slug" = ANY(${filters.platformSlugs})`);
+  }
+  if (filters.countries?.length) {
+    conds.push(Prisma.sql`o."country" = ANY(${filters.countries})`);
+  }
+  if (filters.productFamilies?.length) {
+    conds.push(Prisma.sql`pr."family" = ANY(${filters.productFamilies})`);
+  }
+  const whereSql = Prisma.join(conds, ' AND ');
+  const [{ count }] = await db.$queryRaw<{ count: bigint }[]>(Prisma.sql`
+    SELECT COUNT(DISTINCT COALESCE(o."parentExternalId", o."externalId"))::bigint AS count
+    FROM "Order" o
+    JOIN "Platform" pl ON o."platformId" = pl.id
+    JOIN "Product" pr ON o."productId" = pr.id
+    WHERE ${whereSql}
+  `);
+  return Number(count);
+}
+
+function dailyFromRows(
+  rows: DailyMetricsRow[],
+  startDate: Date,
+  endDate: Date,
+): DailyBucket[] {
+  const buckets = new Map<string, DailyBucket>();
+  for (let d = startOfDay(startDate); d <= endDate; d = addDays(d, 1)) {
+    const key = isoDate(d);
+    buckets.set(key, {
+      date: key, gross: 0, net: 0, cpa: 0, orders: 0, approvedOrders: 0, allOrders: 0,
+    });
+  }
+  for (const r of rows) {
+    const key = isoDate(r.day);
+    const b = buckets.get(key);
+    if (!b) continue;
+    b.gross = round2(b.gross + r.gross);
+    b.net = round2(b.net + r.net);
+    b.cpa = round2(b.cpa + r.cpa);
+    b.allOrders += r.total_count;
+    b.approvedOrders += r.approved_count;
+    b.orders = b.approvedOrders;
+  }
+  return Array.from(buckets.values()).sort((a, b) => a.date.localeCompare(b.date));
+}
+
+function byCountryFromRows(
+  rows: DailyMetricsRow[],
+): Array<{ code: string; value: number; orders: number }> {
+  const map = new Map<string, { code: string; value: number; orders: number }>();
+  for (const r of rows) {
+    if (r.country === '_unknown') continue;
+    const e = map.get(r.country) ?? { code: r.country, value: 0, orders: 0 };
+    e.value += r.gross;
+    e.orders += r.approved_count;
+    map.set(r.country, e);
+  }
+  return Array.from(map.values())
+    .map((e) => ({ ...e, value: round2(e.value) }))
+    .sort((a, b) => b.value - a.value)
+    .slice(0, 8);
+}
+
+function byProductTypeFromRows(
+  rows: DailyMetricsRow[],
+): Array<{ label: string; value: number }> {
+  const totals: Record<string, number> = {
+    FRONTEND: 0, UPSELL: 0, DOWNSELL: 0, BUMP: 0, SMS_RECOVERY: 0,
+  };
+  for (const r of rows) {
+    totals[r.product_type] = (totals[r.product_type] ?? 0) + r.gross;
+  }
+  return Object.entries(totals)
+    .filter(([, v]) => v > 0)
+    .map(([label, value]) => ({ label, value: round2(value) }));
+}
+
+async function platformHealthFromRows(
+  rows: DailyMetricsRow[],
+): Promise<OverviewResponse['platformHealth']> {
+  const platforms = await db.platform.findMany({
+    select: { slug: true, displayName: true, lastSyncAt: true },
+  });
+  const bySlug = new Map<string, { totalOrders: number; totalRevenue: number }>();
+  for (const r of rows) {
+    const e = bySlug.get(r.platform) ?? { totalOrders: 0, totalRevenue: 0 };
+    e.totalOrders += r.approved_count;
+    e.totalRevenue += r.gross;
+    bySlug.set(r.platform, e);
+  }
+  return platforms.map((p) => {
+    const agg = bySlug.get(p.slug) ?? { totalOrders: 0, totalRevenue: 0 };
+    return {
+      slug: p.slug,
+      displayName: p.displayName,
+      lastSyncAt: p.lastSyncAt?.toISOString() ?? null,
+      totalOrders: agg.totalOrders,
+      totalRevenue: round2(agg.totalRevenue),
+    };
+  });
+}
+
+async function topAffiliatesQuery(
+  filters: MetricsFilters,
+  limit: number,
+): Promise<OverviewResponse['topAffiliates']> {
+  // Single GROUP BY query with the same filter shape — no full Order rows.
+  const conds: Prisma.Sql[] = [
+    Prisma.sql`o."orderedAt" >= ${filters.startDate}`,
+    Prisma.sql`o."orderedAt" <= ${filters.endDate}`,
+    Prisma.sql`o."affiliateId" IS NOT NULL`,
+  ];
+  if (filters.platformSlugs?.length) {
+    conds.push(Prisma.sql`pl."slug" = ANY(${filters.platformSlugs})`);
+  }
+  if (filters.countries?.length) {
+    conds.push(Prisma.sql`o."country" = ANY(${filters.countries})`);
+  }
+  if (filters.productFamilies?.length) {
+    conds.push(Prisma.sql`pr."family" = ANY(${filters.productFamilies})`);
+  }
+  const whereSql = Prisma.join(conds, ' AND ');
+  const aggRows = await db.$queryRaw<Array<{
+    affiliate_id: string;
+    external_id: string;
+    nickname: string | null;
+    platform_slug: string;
+    revenue: Prisma.Decimal;
+    net: Prisma.Decimal;
+    cpa: Prisma.Decimal;
+    orders: bigint;
+    approved_orders: bigint;
+  }>>(Prisma.sql`
+    SELECT
+      a."id"             AS affiliate_id,
+      a."externalId"     AS external_id,
+      a."nickname"       AS nickname,
+      pl."slug"          AS platform_slug,
+      COALESCE(SUM(o."grossAmountUsd") FILTER (WHERE o."status"='APPROVED'), 0)::numeric(14,2) AS revenue,
+      COALESCE(SUM(o."netAmountUsd")   FILTER (WHERE o."status"='APPROVED'), 0)::numeric(14,2) AS net,
+      COALESCE(SUM(o."cpaPaidUsd"), 0)::numeric(14,2)                                       AS cpa,
+      COUNT(*)::bigint                                                                       AS orders,
+      COUNT(*) FILTER (WHERE o."status"='APPROVED')::bigint                                  AS approved_orders
+    FROM "Order" o
+    JOIN "Platform"  pl ON o."platformId"  = pl.id
+    JOIN "Product"   pr ON o."productId"   = pr.id
+    JOIN "Affiliate" a  ON o."affiliateId" = a.id
+    WHERE ${whereSql}
+    GROUP BY a."id", a."externalId", a."nickname", pl."slug"
+    ORDER BY revenue DESC
+    LIMIT ${limit}
+  `);
+  return aggRows.map((r) => {
+    const orders = Number(r.orders);
+    const approved = Number(r.approved_orders);
+    const net = Number(r.net);
+    const cpa = Number(r.cpa);
+    return {
+      externalId: r.external_id,
+      nickname: r.nickname,
+      platformSlug: r.platform_slug,
+      revenue: round2(Number(r.revenue)),
+      orders,
+      approvalRate: round4(orders ? approved / orders : 0),
+      netMargin: round2(net - cpa),
+    };
+  });
+}
+
+// Legacy path — used only when productExternalIds filter is set, since the
+// daily_metrics MV is grouped by family, not SKU. Slower but more flexible.
+async function getOverviewLegacy(
+  filters: MetricsFilters,
+  compare: boolean,
+): Promise<OverviewResponse> {
+  const orders = await fetchOrders(filters);
+  const kpis = computeKPIs(orders);
+  const daily = computeDaily(orders, filters.startDate, filters.endDate);
+  const byCountry = computeByCountry(orders);
+  const byProductType = computeByProductType(orders);
+  const topAffiliates = computeTopAffiliates(orders, 5);
+  const platformHealth = await computePlatformHealth(orders);
+  const response: OverviewResponse = {
+    range: { start: filters.startDate.toISOString(), end: filters.endDate.toISOString() },
+    kpis, daily, byCountry, byProductType, topAffiliates, platformHealth,
+  };
+  if (compare) {
+    const span = filters.endDate.getTime() - filters.startDate.getTime();
+    const prevEnd = new Date(filters.startDate.getTime() - 1);
+    const prevStart = new Date(prevEnd.getTime() - span);
+    const prevOrders = await fetchOrders({ ...filters, startDate: prevStart, endDate: prevEnd });
+    response.previous = computeKPIs(prevOrders);
+  }
   return response;
 }
 
