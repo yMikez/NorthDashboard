@@ -243,6 +243,92 @@ export interface OrdersOptions {
   offset?: number;
 }
 
+export interface OrderDetailResponse {
+  order: {
+    externalId: string;
+    parentExternalId: string | null;
+    platformSlug: string;
+    platformDisplayName: string;
+    vendorAccount: string | null;
+    productType: string;
+    funnelStep: number | null;
+    status: string;
+    eventType: string;
+    billingType: string;
+    paySequenceNo: number | null;
+    numberOfInstallments: number | null;
+    paymentMethod: string | null;
+    country: string | null;
+    state: string | null;
+    city: string | null;
+    currencyOriginal: string;
+    grossAmountOrig: number;
+    grossAmountUsd: number;
+    taxAmount: number;
+    fees: number;
+    netAmountUsd: number;
+    cpaPaidUsd: number;
+    // Computed: residual the platform actually keeps =
+    //   gross - net (vendor) - cpa (affiliate) - tax (gov't pass-through)
+    // Approximate; may diverge slightly from platform's internal accounting
+    // when fee tiers compound differently. Negative values flagged in UI.
+    platformRetention: number;
+    // Computed: company keeps gross - tax - fees - cpa (= netAmountUsd in
+    // theory, exposed separately for clarity).
+    companyKept: number;
+    clickId: string | null;
+    trackingId: string | null;
+    campaignKey: string | null;
+    trafficSource: string | null;
+    deviceType: string | null;
+    browser: string | null;
+    detailsUrl: string | null;
+    orderedAt: string;
+    approvedAt: string | null;
+    refundedAt: string | null;
+    chargebackAt: string | null;
+  };
+  product: {
+    externalId: string;
+    name: string;
+    productType: string;
+    family: string | null;
+    variant: string | null;
+    bottles: number | null;
+    catalogPriceUsd: number | null;
+    salesPageUrl: string | null;
+    checkoutUrl: string | null;
+  };
+  affiliate: {
+    externalId: string;
+    nickname: string | null;
+  } | null;
+  customer: {
+    externalId: string | null;
+    email: string | null;
+    firstName: string | null;
+    lastName: string | null;
+    country: string | null;
+    language: string | null;
+  } | null;
+  // Other orders from the same buyer's session (parent_external_id match).
+  // Sorted by orderedAt ASC. The current order is included for context.
+  session: Array<{
+    externalId: string;
+    productType: string;
+    productName: string;
+    productFamily: string | null;
+    funnelStep: number | null;
+    grossAmountUsd: number;
+    status: string;
+    orderedAt: string;
+    isSelf: boolean;
+    isCrossSell: boolean;
+  }>;
+  // Convenience flag: this order's family ≠ session FE's family.
+  isCrossSell: boolean;
+}
+
 export interface OverviewResponse {
   range: { start: string; end: string };
   kpis: OverviewKPIs;
@@ -1737,6 +1823,160 @@ export async function getAffiliates(
       totalRevenue: round2(totalRevenue),
     },
     affiliates,
+  };
+}
+
+export async function getOrderDetail(
+  externalId: string,
+  platformSlug?: string,
+): Promise<OrderDetailResponse | null> {
+  const candidates = await db.order.findMany({
+    where: {
+      externalId,
+      ...(platformSlug ? { platform: { slug: platformSlug } } : {}),
+    },
+    include: {
+      platform: { select: { slug: true, displayName: true } },
+      product: {
+        select: {
+          externalId: true, name: true, productType: true,
+          family: true, variant: true, bottles: true,
+          catalogPriceUsd: true, salesPageUrl: true, checkoutUrl: true,
+        },
+      },
+      affiliate: { select: { externalId: true, nickname: true } },
+      customer: {
+        select: {
+          externalId: true, email: true, firstName: true, lastName: true,
+          country: true, language: true,
+        },
+      },
+    },
+  });
+  if (candidates.length === 0) return null;
+  // If externalId collides across platforms (rare — both CB and D24 IDs
+  // happen to match), pick the most recent.
+  const o = candidates.sort((a, b) => b.orderedAt.getTime() - a.orderedAt.getTime())[0];
+
+  // Session: all orders sharing the same parent_external_id, scoped to
+  // platform (parent ids aren't globally unique). For a FE order whose
+  // parent_external_id equals its own external_id (Digistore) this still
+  // works. For ClickBank legacy where FE parent_external_id is null, fall
+  // back to grouping by external_id of FE.
+  const sessionKey = o.parentExternalId ?? o.externalId;
+  const sessionOrders = await db.order.findMany({
+    where: {
+      platformId: o.platformId,
+      OR: [
+        { parentExternalId: sessionKey },
+        { externalId: sessionKey },
+      ],
+    },
+    include: {
+      product: { select: { name: true, family: true } },
+    },
+    orderBy: { orderedAt: 'asc' },
+  });
+
+  const feFamily =
+    sessionOrders.find((s) => s.productType === 'FRONTEND')?.product.family ?? null;
+
+  // Financial breakdown:
+  //   gross  = total customer paid
+  //   tax    = pass-through to government
+  //   net    = vendor (we) received
+  //   cpa    = paid to affiliate
+  //   fees   = stored field (platform processor fees, may be partial)
+  //
+  // platformRetention = what platform itself kept (residual). Computed as
+  // gross - net - cpa - tax. This is the *true* platform take — `fees`
+  // alone often understates it for CB/D24. Negative values are unusual and
+  // surfaced as warnings.
+  const grossUsd = toNumber(o.grossAmountUsd);
+  const netUsd = toNumber(o.netAmountUsd);
+  const taxUsd = toNumber(o.taxAmount);
+  const cpaUsd = toNumber(o.cpaPaidUsd);
+  const feesUsd = toNumber(o.fees);
+  const platformRetention = round2(grossUsd - netUsd - cpaUsd - taxUsd);
+  const companyKept = round2(netUsd);
+
+  return {
+    order: {
+      externalId: o.externalId,
+      parentExternalId: o.parentExternalId,
+      platformSlug: o.platform.slug,
+      platformDisplayName: o.platform.displayName,
+      vendorAccount: o.vendorAccount,
+      productType: o.productType,
+      funnelStep: o.funnelStep,
+      status: o.status,
+      eventType: o.eventType,
+      billingType: o.billingType,
+      paySequenceNo: o.paySequenceNo,
+      numberOfInstallments: o.numberOfInstallments,
+      paymentMethod: o.paymentMethod,
+      country: o.country,
+      state: o.state,
+      city: o.city,
+      currencyOriginal: o.currencyOriginal,
+      grossAmountOrig: round2(toNumber(o.grossAmountOrig)),
+      grossAmountUsd: round2(grossUsd),
+      taxAmount: round2(taxUsd),
+      fees: round2(feesUsd),
+      netAmountUsd: round2(netUsd),
+      cpaPaidUsd: round2(cpaUsd),
+      platformRetention,
+      companyKept,
+      clickId: o.clickId,
+      trackingId: o.trackingId,
+      campaignKey: o.campaignKey,
+      trafficSource: o.trafficSource,
+      deviceType: o.deviceType,
+      browser: o.browser,
+      detailsUrl: o.detailsUrl,
+      orderedAt: o.orderedAt.toISOString(),
+      approvedAt: o.approvedAt?.toISOString() ?? null,
+      refundedAt: o.refundedAt?.toISOString() ?? null,
+      chargebackAt: o.chargebackAt?.toISOString() ?? null,
+    },
+    product: {
+      externalId: o.product.externalId,
+      name: o.product.name,
+      productType: o.product.productType,
+      family: o.product.family,
+      variant: o.product.variant,
+      bottles: o.product.bottles,
+      catalogPriceUsd: o.product.catalogPriceUsd ? Number(o.product.catalogPriceUsd) : null,
+      salesPageUrl: o.product.salesPageUrl,
+      checkoutUrl: o.product.checkoutUrl,
+    },
+    affiliate: o.affiliate
+      ? { externalId: o.affiliate.externalId, nickname: o.affiliate.nickname }
+      : null,
+    customer: o.customer
+      ? {
+          externalId: o.customer.externalId,
+          email: o.customer.email,
+          firstName: o.customer.firstName,
+          lastName: o.customer.lastName,
+          country: o.customer.country,
+          language: o.customer.language,
+        }
+      : null,
+    session: sessionOrders.map((s) => ({
+      externalId: s.externalId,
+      productType: s.productType,
+      productName: s.product.name,
+      productFamily: s.product.family,
+      funnelStep: s.funnelStep,
+      grossAmountUsd: round2(toNumber(s.grossAmountUsd)),
+      status: s.status,
+      orderedAt: s.orderedAt.toISOString(),
+      isSelf: s.externalId === o.externalId,
+      isCrossSell: feFamily != null && s.product.family != null && s.product.family !== feFamily,
+    })),
+    isCrossSell:
+      feFamily != null && o.product.family != null && o.product.family !== feFamily,
   };
 }
 

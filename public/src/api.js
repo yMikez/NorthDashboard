@@ -197,6 +197,16 @@ async function fetchHealth() {
   return fetchJSON('/api/metrics/health', {});
 }
 
+/**
+ * Fetch /api/metrics/orders/:externalId — full detail for one order.
+ * Returns order + product + affiliate + customer + session siblings,
+ * plus computed financial breakdown (platform retention, company kept).
+ */
+async function fetchOrderDetail(externalId, platformSlug) {
+  const params = platformSlug ? { platform: platformSlug } : {};
+  return fetchJSON(`/api/metrics/orders/${encodeURIComponent(externalId)}`, params);
+}
+
 window.NSApi = {
   fetchOverview,
   fetchOrders,
@@ -208,4 +218,5 @@ window.NSApi = {
   fetchFilterOptions,
   fetchFamilies,
   fetchHealth,
+  fetchOrderDetail,
 };

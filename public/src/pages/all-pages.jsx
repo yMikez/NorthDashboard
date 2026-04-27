@@ -1442,6 +1442,7 @@ function TransactionsPage({ filters }) {
   const [statusFilter, setStatusFilter] = useState('all');
   const [debouncedQuery, setDebouncedQuery] = useState('');
   const [state, setStateTx] = useState({ status: 'loading', data: null, error: null });
+  const [drawer, setDrawer] = useState(null); // { externalId, platformSlug } | null
 
   // Debounce search input so we don't hammer the endpoint on every keystroke.
   useEffect(() => {
@@ -1537,7 +1538,9 @@ function TransactionsPage({ filters }) {
                 const platShort = o.platformSlug === 'digistore24' ? 'D24' : 'CB';
                 const statusLc = o.status.toLowerCase();
                 return (
-                  <tr key={`${o.platformSlug}:${o.externalId}`}>
+                  <tr key={`${o.platformSlug}:${o.externalId}`}
+                      onClick={() => setDrawer({ externalId: o.externalId, platformSlug: o.platformSlug })}
+                      style={{ cursor: 'pointer' }}>
                     <td className="cell-mono">{fmtDateTime(o.orderedAt)}</td>
                     <td className="cell-mono">{o.externalId}</td>
                     <td><span className={`plat ${platClass}`}>{platShort}</span></td>
@@ -1557,8 +1560,322 @@ function TransactionsPage({ filters }) {
           </table>
         </div>
       </div>
+
+      {drawer && (
+        <TransactionDrawer
+          externalId={drawer.externalId}
+          platformSlug={drawer.platformSlug}
+          cur={cur}
+          onClose={() => setDrawer(null)}
+          onPickOrder={(o) => setDrawer({ externalId: o.externalId, platformSlug: drawer.platformSlug })}
+        />
+      )}
     </div>
   );
+}
+
+// ---------- TRANSACTION DRAWER (per-order detail) ----------
+function TransactionDrawer({ externalId, platformSlug, cur, onClose, onPickOrder }) {
+  const [state, setState] = useState({ status: 'loading', data: null, error: null });
+
+  useEffect(() => {
+    let cancelled = false;
+    setState({ status: 'loading', data: null, error: null });
+    window.NSApi.fetchOrderDetail(externalId, platformSlug)
+      .then((data) => { if (!cancelled) setState({ status: 'ready', data, error: null }); })
+      .catch((err) => {
+        if (cancelled) return;
+        console.error('fetchOrderDetail failed', err);
+        setState({ status: 'error', data: null, error: err.message });
+      });
+    return () => { cancelled = true; };
+  }, [externalId, platformSlug]);
+
+  if (state.status === 'loading') {
+    return (
+      <>
+        <div className="drawer-backdrop" onClick={onClose}/>
+        <div className="drawer" style={{ width: 540 }}>
+          <div className="drawer-head">
+            <span style={{ color: 'var(--navy-300)' }}>Carregando pedido {externalId}...</span>
+            <button className="icon-btn" onClick={onClose}><Icon name="x" size={14}/></button>
+          </div>
+        </div>
+      </>
+    );
+  }
+  if (state.status === 'error' || !state.data) {
+    return (
+      <>
+        <div className="drawer-backdrop" onClick={onClose}/>
+        <div className="drawer" style={{ width: 540 }}>
+          <div className="drawer-head">
+            <span style={{ color: 'var(--danger)' }}>Erro: {state.error || 'pedido não encontrado'}</span>
+            <button className="icon-btn" onClick={onClose}><Icon name="x" size={14}/></button>
+          </div>
+        </div>
+      </>
+    );
+  }
+
+  const { order: o, product, affiliate, customer, session, isCrossSell } = state.data;
+  const platShort = o.platformSlug === 'digistore24' ? 'D24' : 'CB';
+  const platClass = o.platformSlug === 'digistore24' ? 'plat-d24' : 'plat-cb';
+  const typeLabel = txTypeLabel(o.productType, o.funnelStep);
+  const typeColor = txTypeColor(o.productType);
+  const statusLc = o.status.toLowerCase();
+  const sumSession = session.reduce((s, x) => x.status === 'APPROVED' ? s + x.grossAmountUsd : s, 0);
+
+  return (
+    <>
+      <div className="drawer-backdrop" onClick={onClose}/>
+      <div className="drawer" style={{ width: 540 }}>
+        <div className="drawer-head">
+          <div>
+            <span className="eyebrow">PEDIDO · {o.platformDisplayName.toUpperCase()}</span>
+            <h3 style={{ margin: '4px 0', fontSize: 18, color: 'var(--white)' }}>{o.externalId}</h3>
+            <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
+              <span className={`plat ${platClass}`}>{platShort}</span>
+              <span className="badge" style={{ background: `${typeColor}22`, color: typeColor, borderColor: `${typeColor}55` }}>
+                {typeLabel}
+              </span>
+              <span className={`st st-${statusLc}`}>{statusLc}</span>
+              {isCrossSell && (
+                <span className="badge" style={{ background: 'rgba(255,140,0,0.15)', color: 'var(--warning)', borderColor: 'rgba(255,140,0,0.4)' }}>
+                  CROSS-SELL
+                </span>
+              )}
+            </div>
+          </div>
+          <button className="icon-btn" onClick={onClose}><Icon name="x" size={14}/></button>
+        </div>
+
+        <div style={{ padding: 16, display: 'grid', gap: 16, maxHeight: 'calc(100vh - 100px)', overflowY: 'auto' }}>
+
+          {/* Financial breakdown */}
+          <div>
+            <div style={{ fontFamily: 'var(--f-mono)', fontSize: 10, color: 'var(--navy-300)', letterSpacing: '0.1em', marginBottom: 8 }}>
+              FLUXO FINANCEIRO
+            </div>
+            <FinRow label="Cliente pagou" value={o.grossAmountUsd} cur={cur} bold/>
+            <FinRow label="Imposto / IVA" value={-o.taxAmount} cur={cur} muted/>
+            <FinRow label="Plataforma reteve" value={-o.platformRetention} cur={cur} muted />
+            <FinRow label="Afiliado recebeu (CPA)" value={-o.cpaPaidUsd} cur={cur} accent="var(--glow-cyan)"/>
+            <div style={{ height: 1, background: 'var(--border)', margin: '8px 0' }}/>
+            <FinRow label="Empresa recebeu (líquido)" value={o.companyKept} cur={cur} bold accent={o.companyKept > 0 ? 'var(--success)' : 'var(--danger)'}/>
+            {o.currencyOriginal !== 'USD' && (
+              <div style={{ marginTop: 6, fontFamily: 'var(--f-mono)', fontSize: 10, color: 'var(--navy-400)' }}>
+                Original: {fmtCurrency(o.grossAmountOrig, o.currencyOriginal, 2)} ({o.currencyOriginal})
+              </div>
+            )}
+          </div>
+
+          {/* Product */}
+          <div>
+            <div style={{ fontFamily: 'var(--f-mono)', fontSize: 10, color: 'var(--navy-300)', letterSpacing: '0.1em', marginBottom: 8 }}>
+              PRODUTO
+            </div>
+            <div style={{ fontFamily: 'var(--f-display)', fontSize: 16, color: 'var(--white)' }}>{product.name}</div>
+            <div style={{ fontFamily: 'var(--f-mono)', fontSize: 11, color: 'var(--navy-300)', marginTop: 2 }}>
+              SKU: {product.externalId}
+            </div>
+            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 8 }}>
+              {product.family && <Pill label={product.family} color={familyAccent(product.family)}/>}
+              {product.bottles != null && <Pill label={`${product.bottles} bottles`}/>}
+              {product.variant && <Pill label={`var: ${product.variant}`}/>}
+              {product.catalogPriceUsd != null && (
+                <Pill label={`Catálogo: ${fmtCurrency(product.catalogPriceUsd, cur, 0)}`}/>
+              )}
+              {o.vendorAccount && <Pill label={`Vendor: ${o.vendorAccount}`}/>}
+            </div>
+          </div>
+
+          {/* Affiliate */}
+          {affiliate ? (
+            <div>
+              <div style={{ fontFamily: 'var(--f-mono)', fontSize: 10, color: 'var(--navy-300)', letterSpacing: '0.1em', marginBottom: 8 }}>
+                AFILIADO
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                <div className="av" style={{ background: avatarColor(affiliate.externalId) }}>
+                  {initials(affiliate.nickname || affiliate.externalId)}
+                </div>
+                <div>
+                  <div style={{ color: 'var(--white)' }}>{affiliate.nickname || '(sem nickname)'}</div>
+                  <div style={{ fontFamily: 'var(--f-mono)', fontSize: 11, color: 'var(--navy-300)' }}>{affiliate.externalId}</div>
+                </div>
+              </div>
+            </div>
+          ) : (
+            <div>
+              <div style={{ fontFamily: 'var(--f-mono)', fontSize: 10, color: 'var(--navy-300)', letterSpacing: '0.1em', marginBottom: 8 }}>
+                AFILIADO
+              </div>
+              <div style={{ fontSize: 12, color: 'var(--navy-400)', fontStyle: 'italic' }}>
+                Venda direta (sem afiliado atribuído)
+              </div>
+            </div>
+          )}
+
+          {/* Customer */}
+          {customer && (
+            <div>
+              <div style={{ fontFamily: 'var(--f-mono)', fontSize: 10, color: 'var(--navy-300)', letterSpacing: '0.1em', marginBottom: 8 }}>
+                CLIENTE
+              </div>
+              <div style={{ color: 'var(--white)' }}>
+                {[customer.firstName, customer.lastName].filter(Boolean).join(' ') || '(nome n/d)'}
+              </div>
+              <div style={{ fontFamily: 'var(--f-mono)', fontSize: 11, color: 'var(--navy-300)' }}>
+                {customer.email || '—'} · {o.country || customer.country || '—'} · {customer.language || 'n/d'}
+              </div>
+            </div>
+          )}
+
+          {/* Session */}
+          {session.length > 1 && (
+            <div>
+              <div style={{ fontFamily: 'var(--f-mono)', fontSize: 10, color: 'var(--navy-300)', letterSpacing: '0.1em', marginBottom: 8, display: 'flex', justifyContent: 'space-between' }}>
+                <span>SESSÃO COMPLETA · {session.length} pedidos</span>
+                <span style={{ color: 'var(--success)' }}>{fmtCurrency(sumSession, cur, 2)}</span>
+              </div>
+              <div style={{ display: 'grid', gap: 4 }}>
+                {session.map((s) => {
+                  const sStatusLc = s.status.toLowerCase();
+                  const sType = txTypeLabel(s.productType, s.funnelStep);
+                  const sColor = txTypeColor(s.productType);
+                  return (
+                    <button
+                      key={s.externalId}
+                      onClick={() => !s.isSelf && onPickOrder(s)}
+                      disabled={s.isSelf}
+                      style={{
+                        textAlign: 'left', font: 'inherit', padding: '6px 8px', borderRadius: 4,
+                        background: s.isSelf ? 'rgba(91,200,255,0.1)' : 'rgba(91,200,255,0.04)',
+                        border: '1px solid var(--border-soft)', cursor: s.isSelf ? 'default' : 'pointer',
+                        display: 'grid', gridTemplateColumns: '64px 1fr auto auto', gap: 8, alignItems: 'center',
+                      }}
+                    >
+                      <span className="badge" style={{ background: `${sColor}22`, color: sColor, borderColor: `${sColor}55`, fontSize: 9, justifySelf: 'start' }}>
+                        {sType}
+                      </span>
+                      <span style={{ fontSize: 12, color: 'var(--navy-100)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                        {s.productName}
+                        {s.isCrossSell && <span style={{ color: 'var(--warning)', marginLeft: 6, fontSize: 10 }}>cross</span>}
+                      </span>
+                      <span className={`st st-${sStatusLc}`} style={{ fontSize: 9 }}>{sStatusLc}</span>
+                      <span style={{ fontFamily: 'var(--f-mono)', fontSize: 11, color: 'var(--white)' }}>
+                        {fmtCurrency(s.grossAmountUsd, cur, 2)}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
+          {/* Tracking */}
+          {(o.clickId || o.trackingId || o.campaignKey || o.trafficSource) && (
+            <div>
+              <div style={{ fontFamily: 'var(--f-mono)', fontSize: 10, color: 'var(--navy-300)', letterSpacing: '0.1em', marginBottom: 8 }}>
+                ORIGEM DO TRÁFEGO
+              </div>
+              <div style={{ display: 'grid', gap: 4, fontFamily: 'var(--f-mono)', fontSize: 11 }}>
+                {o.trafficSource && <KV k="source" v={o.trafficSource}/>}
+                {o.campaignKey && <KV k="campaign" v={o.campaignKey}/>}
+                {o.clickId && <KV k="click_id" v={o.clickId}/>}
+                {o.trackingId && <KV k="tracking_id" v={o.trackingId}/>}
+              </div>
+            </div>
+          )}
+
+          {/* Timeline */}
+          <div>
+            <div style={{ fontFamily: 'var(--f-mono)', fontSize: 10, color: 'var(--navy-300)', letterSpacing: '0.1em', marginBottom: 8 }}>
+              TIMELINE
+            </div>
+            <div style={{ display: 'grid', gap: 4, fontFamily: 'var(--f-mono)', fontSize: 11 }}>
+              <KV k="ordered" v={fmtDateTime(o.orderedAt)}/>
+              {o.approvedAt && <KV k="approved" v={fmtDateTime(o.approvedAt)}/>}
+              {o.refundedAt && <KV k="refunded" v={fmtDateTime(o.refundedAt)} color="var(--danger)"/>}
+              {o.chargebackAt && <KV k="chargeback" v={fmtDateTime(o.chargebackAt)} color="var(--danger)"/>}
+              {o.paymentMethod && <KV k="method" v={o.paymentMethod}/>}
+              {o.billingType && o.billingType !== 'UNKNOWN' && <KV k="billing" v={o.billingType}/>}
+            </div>
+          </div>
+
+          {o.detailsUrl && (
+            <a href={o.detailsUrl} target="_blank" rel="noopener noreferrer"
+               style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 12px',
+                        borderRadius: 4, background: 'rgba(91,200,255,0.06)', color: 'var(--glow-cyan)',
+                        border: '1px solid var(--border-soft)', textDecoration: 'none',
+                        fontFamily: 'var(--f-mono)', fontSize: 11 }}>
+              <Icon name="link" size={12}/> Abrir receipt na plataforma
+            </a>
+          )}
+        </div>
+      </div>
+    </>
+  );
+}
+
+function FinRow({ label, value, cur, bold, muted, accent }) {
+  return (
+    <div style={{
+      display: 'flex', justifyContent: 'space-between', padding: '4px 0',
+      fontSize: 12, color: muted ? 'var(--navy-400)' : 'var(--navy-100)',
+    }}>
+      <span>{label}</span>
+      <span style={{
+        fontFamily: 'var(--f-mono)',
+        color: accent || (bold ? 'var(--white)' : 'inherit'),
+        fontWeight: bold ? 600 : 400,
+      }}>
+        {fmtCurrency(value, cur, 2)}
+      </span>
+    </div>
+  );
+}
+
+function Pill({ label, color }) {
+  return (
+    <span className="badge" style={{
+      background: color ? `${color}22` : 'rgba(255,255,255,0.05)',
+      color: color || 'var(--navy-100)',
+      borderColor: color ? `${color}55` : 'var(--border-soft)',
+      fontSize: 10,
+    }}>{label}</span>
+  );
+}
+
+function KV({ k, v, color }) {
+  return (
+    <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12 }}>
+      <span style={{ color: 'var(--navy-400)' }}>{k}</span>
+      <span style={{ color: color || 'var(--white)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+        {v}
+      </span>
+    </div>
+  );
+}
+
+function txTypeLabel(productType, funnelStep) {
+  if (productType === 'FRONTEND') return 'FRONTEND';
+  if (productType === 'BUMP') return 'ORDER BUMP';
+  if (productType === 'DOWNSELL') return 'DOWNSELL';
+  if (productType === 'SMS_RECOVERY') return 'SMS RECOVERY';
+  if (productType === 'UPSELL') return funnelStep && funnelStep >= 2 ? 'UPSELL 2' : 'UPSELL 1';
+  return productType;
+}
+function txTypeColor(productType) {
+  switch (productType) {
+    case 'FRONTEND': return '#5BC8FF';
+    case 'UPSELL': return '#4A90FF';
+    case 'BUMP': return '#8B7FFF';
+    case 'DOWNSELL': return '#FF8B5B';
+    case 'SMS_RECOVERY': return '#9B7BFF';
+    default: return '#8CA1C8';
+  }
 }
 
 // ---------- SETTINGS (integrations, FX, users) ----------
