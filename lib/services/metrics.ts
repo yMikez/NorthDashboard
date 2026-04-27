@@ -471,13 +471,13 @@ async function kpisFromRows(
   const denom = totalCount || 1;
   const orderGroups = await orderGroupsCount(filters);
 
-  // Profit = approved net revenue − CPA we paid out − COGS − shipping.
-  // Note: CPA is already netted out of `net` for some platforms but not
-  // others; in our model `netAmountUsd` is what the platform paid us
-  // BEFORE deducting CPA (Digistore amount_vendor) so subtracting cpa
-  // here is correct. Refunds: we still paid cogs + fulfillment + cpa
-  // (some platforms claw CPA back, but we conservatively assume no).
-  const estimatedProfit = round2(net - cpa - cogs - fulfillment);
+  // Profit = vendor revenue − COGS − shipping.
+  // CPA is NOT subtracted again — it's already excluded from `net`. Both
+  // platforms pay the affiliate first and then credit the vendor account
+  // with the residual: ClickBank totalAccountAmount and Digistore
+  // amount_vendor are both post-CPA. The order-detail drawer uses the
+  // same formula (companyKept - cogs - fulfillment, no CPA term).
+  const estimatedProfit = round2(net - cogs - fulfillment);
   const estimatedMarginPct = gross > 0
     ? Math.round((estimatedProfit / gross) * 10000) / 100
     : 0;
@@ -562,10 +562,11 @@ export function dailyFromRows(
     b.approvedOrders += r.approved_count;
     b.orders = b.approvedOrders;
   }
-  // Compute profit after all rows aggregated. Net is approved-only revenue;
-  // CPA + COGS + fulfillment subtract regardless of status.
+  // Compute profit after all rows aggregated. Net is the vendor's actual
+  // payout (already post-CPA); we subtract only the costs we incur on
+  // top of the platform deduction: COGS + shipping.
   for (const b of buckets.values()) {
-    b.profit = round2(b.net - b.cpa - b.cogs - b.fulfillment);
+    b.profit = round2(b.net - b.cogs - b.fulfillment);
   }
   return Array.from(buckets.values()).sort((a, b) => a.date.localeCompare(b.date));
 }
@@ -1280,9 +1281,10 @@ export async function getProducts(
       cpa: round2(p.cpa),
       cogs: round2(p.cogs),
       fulfillment: round2(p.fulfillment),
-      estimatedProfit: round2(p.net - p.cpa - p.cogs - p.fulfillment),
+      // Profit = net − COGS − fulfillment. CPA already excluded from net.
+      estimatedProfit: round2(p.net - p.cogs - p.fulfillment),
       estimatedMarginPct: p.revenue > 0
-        ? Math.round(((p.net - p.cpa - p.cogs - p.fulfillment) / p.revenue) * 10000) / 100
+        ? Math.round(((p.net - p.cogs - p.fulfillment) / p.revenue) * 10000) / 100
         : 0,
       approvalRate: p.allOrders ? round4(p.orders / p.allOrders) : 0,
       firstSoldAt: p.firstSoldAt?.toISOString() ?? null,
@@ -1874,10 +1876,12 @@ export async function getAffiliates(
       netMargin: round2((a?.net ?? 0) - (a?.cpa ?? 0)),
       cogs: round2(a?.cogs ?? 0),
       fulfillment: round2(a?.fulfillment ?? 0),
-      // Real net profit: approved revenue (net) - CPA - COGS - shipping.
-      // Negative numbers flag affiliates whose volume isn't profitable.
+      // Real net profit per affiliate: vendor revenue − COGS − shipping.
+      // CPA is already excluded from `net` (platform paid it before
+      // crediting our account). Negative values surface affiliates whose
+      // volume costs more in production+shipping than they bring in.
       estimatedProfit: round2(
-        (a?.net ?? 0) - (a?.cpa ?? 0) - (a?.cogs ?? 0) - (a?.fulfillment ?? 0),
+        (a?.net ?? 0) - (a?.cogs ?? 0) - (a?.fulfillment ?? 0),
       ),
       topCountry,
       ltvRevenue: round2(ltv?.revenue ?? 0),
@@ -2223,7 +2227,8 @@ function computeKPIs(orders: OrderWithJoins[]): OverviewKPIs {
 
   const totalCount = orders.length;
   const denominator = totalCount || 1;
-  const estimatedProfit = round2(net - cpa - cogs - fulfillment);
+  // Profit = net − COGS − fulfillment. CPA already excluded from net.
+  const estimatedProfit = round2(net - cogs - fulfillment);
   const estimatedMarginPct = gross > 0
     ? Math.round((estimatedProfit / gross) * 10000) / 100
     : 0;
@@ -2286,7 +2291,7 @@ function computeDaily(
     b.cpa = round2(b.cpa);
     b.cogs = round2(b.cogs);
     b.fulfillment = round2(b.fulfillment);
-    b.profit = round2(b.net - b.cpa - b.cogs - b.fulfillment);
+    b.profit = round2(b.net - b.cogs - b.fulfillment);
   }
 
   return Array.from(buckets.values());
