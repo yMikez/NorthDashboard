@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import fixturePayment from './__fixtures__/glyco-on-payment.json';
-import { parseDigistoreIngest, parseDigistoreTimestamp } from './ingest';
+import { parseDigistoreIngest, parseDigistoreTimestamp, deriveBaseOrderId } from './ingest';
 import type { DigistorePayload } from './types';
 
 const payment = fixturePayment as unknown as DigistorePayload;
@@ -117,5 +117,38 @@ describe('parseDigistoreIngest — upsell detection', () => {
     expect(n.productType).toBe('UPSELL');
     expect(n.funnelStep).toBe(1);
     expect(n.previousTransactionId).toBe('T1');
+  });
+});
+
+describe('deriveBaseOrderId', () => {
+  it('returns orderId unchanged when upsellNo is 0 (FE)', () => {
+    expect(deriveBaseOrderId('SAJ39K7J', 0)).toBe('SAJ39K7J');
+    expect(deriveBaseOrderId('YP7TYT29', 0)).toBe('YP7TYT29'); // even ending in digit
+  });
+
+  it('strips single-digit upsell suffix', () => {
+    expect(deriveBaseOrderId('SAJ39K7J1', 1)).toBe('SAJ39K7J');
+    expect(deriveBaseOrderId('SAJ39K7J2', 2)).toBe('SAJ39K7J');
+    expect(deriveBaseOrderId('YP7TYT291', 1)).toBe('YP7TYT29');
+  });
+
+  it('strips multi-digit upsell suffix', () => {
+    expect(deriveBaseOrderId('ABC12310', 10)).toBe('ABC123');
+    expect(deriveBaseOrderId('XYZ4599', 99)).toBe('XYZ45');
+  });
+
+  it('returns orderId unchanged when suffix does not match (defensive)', () => {
+    // Real-world malformed payload: upsell_no=2 but order_id ends in "1"
+    expect(deriveBaseOrderId('ABC1', 2)).toBe('ABC1');
+    expect(deriveBaseOrderId('ABC', 1)).toBe('ABC'); // too short to strip
+  });
+
+  it('FE and its upsells share the same base id', () => {
+    const fe = deriveBaseOrderId('C74PNZH5', 0);
+    const up1 = deriveBaseOrderId('C74PNZH51', 1);
+    const up2 = deriveBaseOrderId('C74PNZH52', 2);
+    expect(fe).toBe(up1);
+    expect(fe).toBe(up2);
+    expect(fe).toBe('C74PNZH5');
   });
 });

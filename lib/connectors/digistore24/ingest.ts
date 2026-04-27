@@ -15,6 +15,12 @@ export function parseDigistoreIngest(payload: DigistorePayload): NormalizedOrder
 
   const upsellNo = numberOrNull(payload.upsell_no) ?? 0;
   const productType: NormalizedProductType = upsellNo === 0 ? 'FRONTEND' : 'UPSELL';
+  // Digistore Order ID is per-step, not per-session: FE = "ABC123", UP1 =
+  // "ABC1231", UP2 = "ABC1232". Strip the upsell_no suffix to recover the
+  // session's "base" order id — the value all steps of one buyer's funnel
+  // share. We use this as parentExternalId for both FE (= itself) and the
+  // upsells, so the metrics layer can group them under the same key.
+  const baseOrderId = deriveBaseOrderId(orderId, upsellNo);
 
   const currency = payload.currency || 'USD';
   const gross = decimal(payload.amount_brutto);
@@ -25,7 +31,7 @@ export function parseDigistoreIngest(payload: DigistorePayload): NormalizedOrder
   return {
     platformSlug: 'digistore24',
     externalId: transactionId,
-    parentExternalId: orderId === transactionId ? null : orderId,
+    parentExternalId: baseOrderId,
     previousTransactionId: parentTransactionId,
     vendorAccount: payload.merchant_name || payload.merchant_id || null,
 
@@ -137,6 +143,26 @@ function numberOrNull(raw: string | undefined): number | null {
   if (raw === undefined || raw === null || raw === '') return null;
   const parsed = Number.parseInt(raw, 10);
   return Number.isFinite(parsed) ? parsed : null;
+}
+
+/**
+ * Strip the upsell_no suffix from a Digistore order_id to recover the
+ * session's base id (= FE order_id). Pure function — exported for backfill
+ * + tests.
+ *
+ *   FE   (upsellNo=0): "ABC123"  → "ABC123"
+ *   UP1  (upsellNo=1): "ABC1231" → "ABC123"
+ *   UP2  (upsellNo=2): "ABC1232" → "ABC123"
+ *   UP10 (upsellNo=10):"ABC12310"→ "ABC123"
+ *
+ * If the suffix doesn't actually appear at the end (defensive fallback for
+ * unexpected payload shapes), returns orderId unchanged so we don't corrupt
+ * data for edge cases.
+ */
+export function deriveBaseOrderId(orderId: string, upsellNo: number): string {
+  if (!upsellNo || upsellNo <= 0) return orderId;
+  const suffix = String(upsellNo);
+  return orderId.endsWith(suffix) ? orderId.slice(0, -suffix.length) : orderId;
 }
 
 /**
