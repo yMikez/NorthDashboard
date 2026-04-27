@@ -73,6 +73,18 @@ export interface FunnelResponse {
     stages: FunnelStage[];
     summary: FunnelSummary;
   }>;
+  // Cross-sell: when a session entered via family A's FE but bought a
+  // backend offer from family B (e.g., NeuroMindPro vendor selling a
+  // GlycoPulse-UP2 in the same checkout). Backend orders whose family
+  // ≠ session's FE family are excluded from the per-family stages above
+  // (so take rates aren't inflated by foreign products) and aggregated
+  // here instead.
+  crossSell: Array<{
+    fromFamily: string;
+    toFamily: string;
+    sessions: number;   // distinct groups where this cross-sell happened
+    revenue: number;    // total gross revenue of the cross-sell orders
+  }>;
 }
 
 export interface ProductsResponse {
@@ -614,42 +626,81 @@ export async function getFunnel(
 
   const groups = new Map<string, Group>();
 
-  for (const o of orders) {
-    const groupKey = `${o.platform.slug}:${o.parentExternalId ?? o.externalId}`;
-    let g = groups.get(groupKey);
+  // Two-pass: first identify the FE family per group, then classify each
+  // backend order as either a same-family upsell (counts toward stage) or a
+  // cross-sell (tracked separately, doesn't inflate take rates).
+  // Single-pass would be wrong because IPN ordering doesn't guarantee the FE
+  // arrives before its upsells.
+  function getOrInit(key: string, slug: string): Group {
+    let g = groups.get(key);
     if (!g) {
       g = {
-        hasFE: false,
-        hasBump: false,
-        hasU1: false,
-        hasU2: false,
-        hasDown: false,
-        feRevenue: 0,
-        bumpRevenue: 0,
-        u1Revenue: 0,
-        u2Revenue: 0,
-        downRevenue: 0,
-        feProductExternalId: null,
-        feProductName: null,
-        feProductFamily: null,
-        fePlatformSlug: null,
+        hasFE: false, hasBump: false, hasU1: false, hasU2: false, hasDown: false,
+        feRevenue: 0, bumpRevenue: 0, u1Revenue: 0, u2Revenue: 0, downRevenue: 0,
+        feProductExternalId: null, feProductName: null, feProductFamily: null,
+        fePlatformSlug: slug,
       };
-      groups.set(groupKey, g);
+      groups.set(key, g);
     }
+    return g;
+  }
+
+  // Pass 1: FE orders only — establish each group's funnel identity.
+  for (const o of orders) {
+    if (o.productType !== 'FRONTEND') continue;
+    const groupKey = `${o.platform.slug}:${o.parentExternalId ?? o.externalId}`;
+    const g = getOrInit(groupKey, o.platform.slug);
+    g.hasFE = true;
+    g.feRevenue += toNumber(o.grossAmountUsd);
+    if (!g.feProductExternalId) {
+      g.feProductExternalId = o.product.externalId;
+      g.feProductName = o.product.name;
+      g.feProductFamily = o.product.family;
+      g.fePlatformSlug = o.platform.slug;
+    }
+  }
+
+  // Cross-sell flow tracking: groups whose backend order family ≠ FE family.
+  // Sessions counts distinct groups (not orders) per (fromFamily → toFamily)
+  // pair so a session with two cross-sells to the same family doesn't double-
+  // count.
+  const crossSellMap = new Map<
+    string,
+    { fromFamily: string; toFamily: string; sessions: Set<string>; revenue: number }
+  >();
+
+  // Pass 2: non-FE orders — same-family vs cross-sell.
+  for (const o of orders) {
+    if (o.productType === 'FRONTEND') continue;
+    const groupKey = `${o.platform.slug}:${o.parentExternalId ?? o.externalId}`;
+    const g = getOrInit(groupKey, o.platform.slug);
     const gross = toNumber(o.grossAmountUsd);
     const t = o.productType;
     const step = o.funnelStep ?? 0;
-    if (t === 'FRONTEND') {
-      g.hasFE = true;
-      g.feRevenue += gross;
-      // First FE wins as the funnel identity for this group.
-      if (!g.feProductExternalId) {
-        g.feProductExternalId = o.product.externalId;
-        g.feProductName = o.product.name;
-        g.feProductFamily = o.product.family;
-        g.fePlatformSlug = o.platform.slug;
-      }
-    } else if (t === 'BUMP') {
+    const orderFamily = o.product.family;
+    const cls = classifyOrderInGroup(t, g.feProductFamily, orderFamily);
+
+    if (cls === 'CROSS_SELL') {
+      // CROSS_SELL implies both families are non-null (per classifier).
+      const fromFamily = g.feProductFamily as string;
+      const toFamily = orderFamily as string;
+      const key = `${fromFamily}→${toFamily}`;
+      const existing = crossSellMap.get(key);
+      const entry = existing ?? {
+        fromFamily,
+        toFamily,
+        sessions: new Set<string>(),
+        revenue: 0,
+      };
+      if (!existing) crossSellMap.set(key, entry);
+      entry.sessions.add(groupKey);
+      entry.revenue += gross;
+      // Skip stage accounting — cross-sell doesn't count toward FE family's
+      // take rate.
+      continue;
+    }
+
+    if (t === 'BUMP') {
       g.hasBump = true;
       g.bumpRevenue += gross;
     } else if (t === 'UPSELL') {
@@ -714,11 +765,43 @@ export async function getFunnel(
     })
     .sort((a, b) => b.summary.totalRevenue - a.summary.totalRevenue);
 
+  // Build cross-sell flow list, sorted by sessions desc.
+  const crossSell = Array.from(crossSellMap.values())
+    .map((e) => ({
+      fromFamily: e.fromFamily,
+      toFamily: e.toFamily,
+      sessions: e.sessions.size,
+      revenue: round2(e.revenue),
+    }))
+    .sort((a, b) => b.sessions - a.sessions);
+
   return {
     stages: global.stages,
     summary: global.summary,
     byFamily,
+    crossSell,
   };
+}
+
+/**
+ * Classify an order's relationship to its session's FE family. Pure helper
+ * — pulled out so the funnel cross-sell rule has a single source of truth
+ * (and is unit-testable without spinning up a DB).
+ *
+ *   SAME_FAMILY  → counts toward the FE family's funnel stage.
+ *   CROSS_SELL   → tracked separately in FunnelResponse.crossSell.
+ *   UNKNOWN      → either side missing classification; backend conservatively
+ *                  treats UNKNOWN as same-family (legacy behavior) so we
+ *                  don't lose orders to unclassified SKUs.
+ */
+export function classifyOrderInGroup(
+  productType: string,
+  feFamily: string | null,
+  orderFamily: string | null,
+): 'SAME_FAMILY' | 'CROSS_SELL' | 'UNKNOWN' {
+  if (productType === 'FRONTEND') return 'SAME_FAMILY';
+  if (feFamily == null || orderFamily == null) return 'UNKNOWN';
+  return feFamily === orderFamily ? 'SAME_FAMILY' : 'CROSS_SELL';
 }
 
 export interface FunnelGroupAgg {

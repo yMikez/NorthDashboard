@@ -256,6 +256,54 @@ function FunnelPage({ filters }) {
           )}
         </div>
       </div>
+
+      {selected === 'all' && (state.data?.crossSell?.length > 0) && (
+        <div className="panel" style={{ marginTop: 14 }}>
+          <div className="panel-head">
+            <div className="panel-title">
+              <span className="panel-eyebrow">CROSS-SELL · ENTRE FAMÍLIAS</span>
+              <div className="panel-sub">
+                Sessões que entraram via FE de uma família e compraram backend de outra ·
+                não infla as take rates da família origem
+              </div>
+            </div>
+          </div>
+          <div className="tbl-wrap">
+            <table className="tbl">
+              <thead>
+                <tr>
+                  <th>Origem (FE)</th>
+                  <th></th>
+                  <th>Destino (UP/DW)</th>
+                  <th className="num">Sessões</th>
+                  <th className="num">Receita</th>
+                </tr>
+              </thead>
+              <tbody>
+                {state.data.crossSell.map((c, i) => (
+                  <tr key={i}>
+                    <td>
+                      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                        <span style={{ width: 6, height: 6, borderRadius: '50%', background: familyAccent(c.fromFamily) }}/>
+                        {c.fromFamily}
+                      </span>
+                    </td>
+                    <td style={{ color: 'var(--navy-400)', textAlign: 'center', fontFamily: 'var(--f-mono)' }}>→</td>
+                    <td>
+                      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                        <span style={{ width: 6, height: 6, borderRadius: '50%', background: familyAccent(c.toFamily) }}/>
+                        {c.toFamily}
+                      </span>
+                    </td>
+                    <td className="num cell-mono">{fmtInt(c.sessions)}</td>
+                    <td className="num cell-mono">{fmtCurrency(c.revenue, cur, 0)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

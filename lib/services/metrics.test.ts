@@ -231,3 +231,30 @@ describe('aggregateGroups', () => {
     expect(out.summary.revenueLiftFromUpsells).toBe(1);
   });
 });
+
+// ------------ Cross-sell classification (pure helper) ------------
+
+import { classifyOrderInGroup } from './metrics';
+
+describe('classifyOrderInGroup', () => {
+  it('FE order is never cross-sell (it defines the family)', () => {
+    expect(classifyOrderInGroup('FRONTEND', 'NeuroMindPro', 'NeuroMindPro')).toBe('SAME_FAMILY');
+    expect(classifyOrderInGroup('FRONTEND', 'NeuroMindPro', null)).toBe('SAME_FAMILY');
+  });
+
+  it('backend order with same family is SAME_FAMILY', () => {
+    expect(classifyOrderInGroup('UPSELL', 'NeuroMindPro', 'NeuroMindPro')).toBe('SAME_FAMILY');
+    expect(classifyOrderInGroup('DOWNSELL', 'GlycoPulse', 'GlycoPulse')).toBe('SAME_FAMILY');
+  });
+
+  it('backend order with different family is CROSS_SELL', () => {
+    expect(classifyOrderInGroup('UPSELL', 'NeuroMindPro', 'GlycoPulse')).toBe('CROSS_SELL');
+    expect(classifyOrderInGroup('DOWNSELL', 'GlycoPulse', 'ThermoBurnPro')).toBe('CROSS_SELL');
+  });
+
+  it('returns UNKNOWN when either family is null (cant classify)', () => {
+    expect(classifyOrderInGroup('UPSELL', null, 'GlycoPulse')).toBe('UNKNOWN');
+    expect(classifyOrderInGroup('UPSELL', 'NeuroMindPro', null)).toBe('UNKNOWN');
+    expect(classifyOrderInGroup('UPSELL', null, null)).toBe('UNKNOWN');
+  });
+});
