@@ -16,12 +16,14 @@ function LineChart({ buckets, compareBuckets, metric, height = 280, currency = '
     date: b.date,
     gross: b.gross,
     net: b.net,
+    profit: b.profit ?? 0,
     orders: b.approvedOrders,
     aov: b.approvedOrders ? b.gross / b.approvedOrders : 0,
     approvalRate: b.allOrders ? b.approvedOrders / b.allOrders : 0,
   }));
   const compareSeries = compareBuckets ? compareBuckets.map(b => ({
     date: b.date, gross: b.gross, net: b.net,
+    profit: b.profit ?? 0,
     orders: b.approvedOrders,
     aov: b.approvedOrders ? b.gross / b.approvedOrders : 0,
     approvalRate: b.allOrders ? b.approvedOrders / b.allOrders : 0,
@@ -29,8 +31,9 @@ function LineChart({ buckets, compareBuckets, metric, height = 280, currency = '
 
   const vals = series.map(s => s[metric]);
   const cmpVals = compareSeries ? compareSeries.map(s => s[metric]) : [];
+  // Profit can go negative (loss days); allow chart min < 0 only for that metric.
   const max = Math.max(1, ...vals, ...cmpVals);
-  const min = 0;
+  const min = metric === 'profit' ? Math.min(0, ...vals, ...cmpVals) : 0;
 
   const xFor = (i) => PAD_L + (series.length <= 1 ? 0 : (i / (series.length - 1)) * innerW);
   const yFor = (v) => PAD_T + innerH - ((v - min) / (max - min)) * innerH;

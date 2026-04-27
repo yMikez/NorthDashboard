@@ -20,6 +20,8 @@ function row(overrides: Partial<DailyMetricsRow> = {}): DailyMetricsRow {
     family: 'NeuroMindPro',
     country: 'US',
     product_type: 'FRONTEND',
+    cogs: 0,
+    fulfillment: 0,
     total_count: 10,
     approved_count: 9,
     refunded_count: 1,

@@ -338,6 +338,7 @@ function LeaderboardPage({ filters, onOpenAffiliate }) {
     switch (sortBy) {
       case 'orders': return b.orders - a.orders;
       case 'netMargin': return b.netMargin - a.netMargin;
+      case 'profit': return (b.estimatedProfit ?? 0) - (a.estimatedProfit ?? 0);
       case 'approvalRate': return b.approvalRate - a.approvalRate;
       case 'refundRate': return a.refundRate - b.refundRate;
       case 'chargebackRate': return a.cbRate - b.cbRate;
@@ -391,7 +392,7 @@ function LeaderboardPage({ filters, onOpenAffiliate }) {
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '4px 0 12px', flexWrap: 'wrap' }}>
         <span className="f-label">ORDENAR POR</span>
         <div className="seg">
-          {[['revenue','Receita'],['orders','Pedidos'],['netMargin','Margem'],['approvalRate','Aprovação'],['refundRate','Reembolsos'],['chargebackRate','Chargebacks']].map(([k,l]) => (
+          {[['revenue','Receita'],['profit','Lucro'],['orders','Pedidos'],['netMargin','Margem'],['approvalRate','Aprovação'],['refundRate','Reembolsos'],['chargebackRate','Chargebacks']].map(([k,l]) => (
             <button key={k} className={sortBy === k ? 'is-active' : ''} onClick={() => setSortBy(k)}>{l}</button>
           ))}
         </div>
@@ -422,16 +423,17 @@ function LeaderboardPage({ filters, onOpenAffiliate }) {
                 <th className="num">Chargeback</th>
                 <th className="num">CPA pago</th>
                 <th className="num">Margem</th>
+                <th className="num">Lucro real</th>
                 <th>País principal</th>
                 <th>Tendência 30d</th>
               </tr>
             </thead>
             <tbody>
               {state.status === 'loading' && (
-                <tr><td colSpan={12} style={{ textAlign: 'center', padding: 24, opacity: 0.6 }}>Carregando...</td></tr>
+                <tr><td colSpan={13} style={{ textAlign: 'center', padding: 24, opacity: 0.6 }}>Carregando...</td></tr>
               )}
               {state.status === 'ready' && rows.length === 0 && (
-                <tr><td colSpan={12} style={{ textAlign: 'center', padding: 24, opacity: 0.6 }}>
+                <tr><td colSpan={13} style={{ textAlign: 'center', padding: 24, opacity: 0.6 }}>
                   Nenhum afiliado com pelo menos {minOrders} pedido{minOrders > 1 ? 's' : ''} no período
                 </td></tr>
               )}
@@ -467,6 +469,9 @@ function LeaderboardPage({ filters, onOpenAffiliate }) {
                     <td className={`num cell-mono ${cbClass}`}>{(r.cbRate * 100).toFixed(2)}%</td>
                     <td className="num cell-mono">{fmtCurrency(r.cpa, cur, 0)}</td>
                     <td className="num cell-mono" style={{ color: r.netMargin > 0 ? 'var(--success)' : 'var(--danger)' }}>{fmtCurrency(r.netMargin, cur, 0)}</td>
+                    <td className="num cell-mono" style={{ color: (r.estimatedProfit ?? 0) > 0 ? 'var(--success)' : 'var(--danger)', fontWeight: 600 }}>
+                      {r.estimatedProfit != null ? fmtCurrency(r.estimatedProfit, cur, 0) : '—'}
+                    </td>
                     <td className="cell-mono">{r.topCountry || '—'}</td>
                     <td><Sparkline data={r.sparkline && r.sparkline.length ? r.sparkline : [0,0]} width={80} height={18} fill={false}/></td>
                   </tr>
@@ -1101,6 +1106,16 @@ function VariantRow({ variant: v, cur, accent, onClick }) {
         <span style={{ color: accent }}>{fmtInt(v.orders)} pedidos</span>
         <span style={{ color: 'var(--white)' }}>{fmtCurrency(v.revenue, cur, 0)}</span>
       </div>
+      {v.estimatedMarginPct != null && v.revenue > 0 && (
+        <div style={{ display: 'flex', justifyContent: 'space-between', fontFamily: 'var(--f-mono)', fontSize: 10 }}>
+          <span style={{ color: 'var(--navy-400)' }}>lucro</span>
+          <span style={{
+            color: v.estimatedProfit > 0 ? 'var(--success)' : 'var(--danger)',
+          }}>
+            {fmtCurrency(v.estimatedProfit, cur, 0)} ({v.estimatedMarginPct.toFixed(0)}%)
+          </span>
+        </div>
+      )}
     </button>
   );
 }

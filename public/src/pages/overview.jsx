@@ -105,6 +105,9 @@ function OverviewPage({ filters }) {
     gross: b.gross,
     net: b.net,
     cpa: b.cpa,
+    cogs: b.cogs ?? 0,
+    fulfillment: b.fulfillment ?? 0,
+    profit: b.profit ?? 0,
     orders: b.approvedOrders,
     approvedOrders: b.approvedOrders,
     allOrders: b.allOrders,
@@ -178,9 +181,13 @@ function OverviewPage({ filters }) {
           {...deltaFor(kpis.cbRate, prev.cbRate)}
           trend={kpis.cbRate > (prev.cbRate ?? 0) ? 'down' : 'up'}
           hint={kpis.cbRate > 0.009 ? 'acima do limite' : 'vs anterior'}/>
-        <KpiCard label="LUCRO LÍQUIDO" icon="target"
-          value={fmtCurrency(kpis.netProfit, cur, 0)}
-          {...deltaFor(kpis.netProfit, prev.netProfit)}/>
+        <KpiCard label="LUCRO ESTIMADO" icon="target"
+          alert={kpis.estimatedProfit < 0}
+          value={fmtCurrency(kpis.estimatedProfit ?? kpis.netProfit, cur, 0)}
+          {...deltaFor(kpis.estimatedProfit ?? kpis.netProfit, prev.estimatedProfit ?? prev.netProfit)}
+          hint={kpis.estimatedMarginPct != null
+            ? `margem ${kpis.estimatedMarginPct.toFixed(1)}%`
+            : 'inclui COGS + frete'}/>
       </div>
 
       <div className="panel" style={{ marginBottom: 14 }}>
@@ -202,7 +209,7 @@ function OverviewPage({ filters }) {
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
             <div className="metric-seg">
-              {[['gross','Bruto'],['net','Líquido'],['orders','Pedidos'],['aov','AOV'],['approvalRate','Aprovação']].map(([k, l]) => (
+              {[['gross','Bruto'],['net','Líquido'],['profit','Lucro'],['orders','Pedidos'],['aov','AOV'],['approvalRate','Aprovação']].map(([k, l]) => (
                 <button key={k} className={`metric-opt ${metric === k ? 'is-active' : ''}`} onClick={() => setMetric(k)}>{l}</button>
               ))}
             </div>

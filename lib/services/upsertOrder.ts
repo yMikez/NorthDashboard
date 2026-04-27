@@ -4,6 +4,7 @@ import { db } from '../db';
 import type { NormalizedOrder } from '../shared/types';
 import { classifyProduct } from './productClassification';
 import { calcCogs } from './cogs';
+import { rebalanceSessionFulfillment } from './sessionFulfillment';
 
 export interface UpsertOrderResult {
   created: boolean;
@@ -187,11 +188,21 @@ export async function upsertOrder(normalized: NormalizedOrder): Promise<UpsertOr
     select: { id: true },
   });
 
+  let result: UpsertOrderResult;
   if (existing) {
     await db.order.update({ where: { id: existing.id }, data: orderData });
-    return { created: false, orderId: existing.id };
+    result = { created: false, orderId: existing.id };
+  } else {
+    const created = await db.order.create({ data: orderData, select: { id: true } });
+    result = { created: true, orderId: created.id };
   }
 
-  const created = await db.order.create({ data: orderData, select: { id: true } });
-  return { created: true, orderId: created.id };
+  // Session shipping is paid once per package, not per item. After saving
+  // the order, recompute the session's total fulfillment and assign it
+  // to a single primary order (FE preferred). Per-order fulfillmentUsd
+  // values from the orderData snapshot get rewritten here for correctness.
+  const sessionKey = normalized.parentExternalId ?? normalized.externalId;
+  await rebalanceSessionFulfillment(platform.id, sessionKey);
+
+  return result;
 }

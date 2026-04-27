@@ -10,22 +10,30 @@
 
 import { db } from '../db';
 import { calcCogs, invalidateCogsCache } from './cogs';
+import { backfillSessionFulfillment } from './sessionFulfillment';
 import { Prisma } from '@prisma/client';
 
 export interface CogsBackfillStats {
   scanned: number;
-  updated: number;
+  cogsUpdated: number;
   skippedNoFamily: number;
+  sessionsRebalanced: number;
 }
 
 export async function backfillCogs(): Promise<CogsBackfillStats> {
   invalidateCogsCache();
-  const stats: CogsBackfillStats = { scanned: 0, updated: 0, skippedNoFamily: 0 };
+  const stats: CogsBackfillStats = {
+    scanned: 0,
+    cogsUpdated: 0,
+    skippedNoFamily: 0,
+    sessionsRebalanced: 0,
+  };
+
+  // Pass 1 — per-order COGS (each order's own bottles × per-bottle cost).
   const orders = await db.order.findMany({
     select: {
       id: true,
       cogsUsd: true,
-      fulfillmentUsd: true,
       product: {
         select: { family: true, bottles: true, bonusBottles: true },
       },
@@ -44,18 +52,20 @@ export async function backfillCogs(): Promise<CogsBackfillStats> {
       o.product.bonusBottles,
     );
     const currentCogs = o.cogsUsd ? Number(o.cogsUsd) : null;
-    const currentFulfillment = o.fulfillmentUsd ? Number(o.fulfillmentUsd) : null;
-    if (currentCogs === cogs.cogsUsd && currentFulfillment === cogs.fulfillmentUsd) {
-      continue; // already correct
-    }
+    if (currentCogs === cogs.cogsUsd) continue;
     await db.order.update({
       where: { id: o.id },
-      data: {
-        cogsUsd: new Prisma.Decimal(cogs.cogsUsd),
-        fulfillmentUsd: new Prisma.Decimal(cogs.fulfillmentUsd),
-      },
+      data: { cogsUsd: new Prisma.Decimal(cogs.cogsUsd) },
     });
-    stats.updated++;
+    stats.cogsUpdated++;
   }
+
+  // Pass 2 — rebalance fulfillment per session so the sum across orders =
+  // real shipping cost (not N × per-item shipping). Assigns the bracket
+  // for total session bottles to one designated primary order; zeros the
+  // rest. See lib/services/sessionFulfillment.ts.
+  const fulfillStats = await backfillSessionFulfillment();
+  stats.sessionsRebalanced = fulfillStats.sessionsScanned;
+
   return stats;
 }

@@ -68,9 +68,11 @@ export interface DailyMetricsRow {
   approved_count: number;
   refunded_count: number;
   chargeback_count: number;
-  gross: number;
-  net: number;
-  cpa: number;
+  gross: number;       // approved gross only
+  net: number;         // approved net only
+  cpa: number;         // CPA paid (across all statuses)
+  cogs: number;        // production cost (across all statuses — we paid even on refunds)
+  fulfillment: number; // shipping cost (across all statuses)
 }
 
 interface RawDailyMetricsRow {
@@ -86,6 +88,8 @@ interface RawDailyMetricsRow {
   gross: Prisma.Decimal;
   net: Prisma.Decimal;
   cpa: Prisma.Decimal;
+  cogs: Prisma.Decimal;
+  fulfillment: Prisma.Decimal;
 }
 
 function toNum(v: bigint | number): number {
@@ -129,7 +133,7 @@ export async function queryDailyMetrics(
   const rows = await db.$queryRaw<RawDailyMetricsRow[]>(Prisma.sql`
     SELECT day, platform, family, country, product_type,
            total_count, approved_count, refunded_count, chargeback_count,
-           gross, net, cpa
+           gross, net, cpa, cogs, fulfillment
     FROM daily_metrics
     WHERE ${where}
     ORDER BY day ASC
@@ -148,6 +152,8 @@ export async function queryDailyMetrics(
     gross: toDec(r.gross),
     net: toDec(r.net),
     cpa: toDec(r.cpa),
+    cogs: toDec(r.cogs),
+    fulfillment: toDec(r.fulfillment),
   }));
 }
 

@@ -31,6 +31,13 @@ export interface OverviewKPIs {
   approvedCount: number;
   totalCount: number;
   orderGroups: number;
+  // Real-cost lens: COGS + shipping spent across all orders (incl. refunds
+  // — we ate the cost). Profit is net (approved revenue) minus CPA minus
+  // these. Margin = profit / gross.
+  cogs: number;
+  fulfillment: number;
+  estimatedProfit: number;
+  estimatedMarginPct: number;
 }
 
 export interface DailyBucket {
@@ -38,6 +45,9 @@ export interface DailyBucket {
   gross: number;
   net: number;
   cpa: number;
+  cogs: number;
+  fulfillment: number;
+  profit: number; // net - cpa - cogs - fulfillment
   orders: number;
   approvedOrders: number;
   allOrders: number;
@@ -118,6 +128,10 @@ export interface ProductsResponse {
     chargebacks: number;
     net: number;
     cpa: number;
+    cogs: number;
+    fulfillment: number;
+    estimatedProfit: number;
+    estimatedMarginPct: number;
     approvalRate: number;
     firstSoldAt: string | null;
     lastSoldAt: string | null;
@@ -202,6 +216,9 @@ export interface AffiliatesResponse {
     cbRate: number;
     cpa: number;
     netMargin: number;
+    cogs: number;
+    fulfillment: number;
+    estimatedProfit: number;
     topCountry: string | null;
     ltvRevenue: number;
     ltvOrders: number;
@@ -438,23 +455,32 @@ async function kpisFromRows(
   rows: DailyMetricsRow[],
   filters: MetricsFilters,
 ): Promise<OverviewKPIs> {
-  let gross = 0, net = 0, cpa = 0;
+  let gross = 0, net = 0, cpa = 0, cogs = 0, fulfillment = 0;
   let approvedCount = 0, refundedCount = 0, chargebackCount = 0;
   for (const r of rows) {
     gross += r.gross;
     net += r.net;
     cpa += r.cpa;
+    cogs += r.cogs;
+    fulfillment += r.fulfillment;
     approvedCount += r.approved_count;
     refundedCount += r.refunded_count;
     chargebackCount += r.chargeback_count;
   }
   const totalCount = rows.reduce((s, r) => s + r.total_count, 0);
   const denom = totalCount || 1;
-  // orderGroups (distinct buyer sessions) doesn't aggregate from MV cleanly
-  // because the same parent_external_id can appear in multiple rows (FE +
-  // upsell). Run a focused COUNT DISTINCT on the base table instead — fast
-  // because we only project two columns.
   const orderGroups = await orderGroupsCount(filters);
+
+  // Profit = approved net revenue − CPA we paid out − COGS − shipping.
+  // Note: CPA is already netted out of `net` for some platforms but not
+  // others; in our model `netAmountUsd` is what the platform paid us
+  // BEFORE deducting CPA (Digistore amount_vendor) so subtracting cpa
+  // here is correct. Refunds: we still paid cogs + fulfillment + cpa
+  // (some platforms claw CPA back, but we conservatively assume no).
+  const estimatedProfit = round2(net - cpa - cogs - fulfillment);
+  const estimatedMarginPct = gross > 0
+    ? Math.round((estimatedProfit / gross) * 10000) / 100
+    : 0;
 
   return {
     gross: round2(gross),
@@ -468,6 +494,10 @@ async function kpisFromRows(
     approvedCount,
     totalCount,
     orderGroups,
+    cogs: round2(cogs),
+    fulfillment: round2(fulfillment),
+    estimatedProfit,
+    estimatedMarginPct,
   };
 }
 
@@ -515,7 +545,8 @@ export function dailyFromRows(
   for (let d = startOfDay(startDate); d <= endDate; d = addDays(d, 1)) {
     const key = isoDate(d);
     buckets.set(key, {
-      date: key, gross: 0, net: 0, cpa: 0, orders: 0, approvedOrders: 0, allOrders: 0,
+      date: key, gross: 0, net: 0, cpa: 0, cogs: 0, fulfillment: 0, profit: 0,
+      orders: 0, approvedOrders: 0, allOrders: 0,
     });
   }
   for (const r of rows) {
@@ -525,9 +556,16 @@ export function dailyFromRows(
     b.gross = round2(b.gross + r.gross);
     b.net = round2(b.net + r.net);
     b.cpa = round2(b.cpa + r.cpa);
+    b.cogs = round2(b.cogs + r.cogs);
+    b.fulfillment = round2(b.fulfillment + r.fulfillment);
     b.allOrders += r.total_count;
     b.approvedOrders += r.approved_count;
     b.orders = b.approvedOrders;
+  }
+  // Compute profit after all rows aggregated. Net is approved-only revenue;
+  // CPA + COGS + fulfillment subtract regardless of status.
+  for (const b of buckets.values()) {
+    b.profit = round2(b.net - b.cpa - b.cogs - b.fulfillment);
   }
   return Array.from(buckets.values()).sort((a, b) => a.date.localeCompare(b.date));
 }
@@ -1100,6 +1138,8 @@ export async function getProducts(
       grossAmountUsd: true,
       netAmountUsd: true,
       cpaPaidUsd: true,
+      cogsUsd: true,
+      fulfillmentUsd: true,
       vendorAccount: true,
       orderedAt: true,
       productType: true,
@@ -1141,6 +1181,8 @@ export async function getProducts(
     chargebacks: number;
     net: number;
     cpa: number;
+    cogs: number;
+    fulfillment: number;
     firstSoldAt: Date | null;
     lastSoldAt: Date | null;
   }
@@ -1174,6 +1216,8 @@ export async function getProducts(
         chargebacks: 0,
         net: 0,
         cpa: 0,
+        cogs: 0,
+        fulfillment: 0,
         firstSoldAt: null,
         lastSoldAt: null,
       };
@@ -1183,6 +1227,8 @@ export async function getProducts(
     p.typeCounts[o.productType] = (p.typeCounts[o.productType] ?? 0) + 1;
     p.net += toNumber(o.netAmountUsd);
     p.cpa += toNumber(o.cpaPaidUsd);
+    p.cogs += toNumber(o.cogsUsd ?? 0);
+    p.fulfillment += toNumber(o.fulfillmentUsd ?? 0);
     if (o.status === 'APPROVED') {
       p.orders++;
       p.revenue += toNumber(o.grossAmountUsd);
@@ -1232,6 +1278,12 @@ export async function getProducts(
       chargebacks: p.chargebacks,
       net: round2(p.net),
       cpa: round2(p.cpa),
+      cogs: round2(p.cogs),
+      fulfillment: round2(p.fulfillment),
+      estimatedProfit: round2(p.net - p.cpa - p.cogs - p.fulfillment),
+      estimatedMarginPct: p.revenue > 0
+        ? Math.round(((p.net - p.cpa - p.cogs - p.fulfillment) / p.revenue) * 10000) / 100
+        : 0,
       approvalRate: p.allOrders ? round4(p.orders / p.allOrders) : 0,
       firstSoldAt: p.firstSoldAt?.toISOString() ?? null,
       lastSoldAt: p.lastSoldAt?.toISOString() ?? null,
@@ -1657,6 +1709,8 @@ export async function getAffiliates(
       grossAmountUsd: true,
       netAmountUsd: true,
       cpaPaidUsd: true,
+      cogsUsd: true,
+      fulfillmentUsd: true,
       country: true,
       orderedAt: true,
       affiliate: { select: { externalId: true, nickname: true, platformId: true } },
@@ -1703,6 +1757,8 @@ export async function getAffiliates(
     chargebacks: number;
     cpa: number;
     net: number;
+    cogs: number;
+    fulfillment: number;
     byCountry: Map<string, number>;
     sparkline: number[];
   }
@@ -1740,6 +1796,8 @@ export async function getAffiliates(
           chargebacks: 0,
           cpa: 0,
           net: 0,
+          cogs: 0,
+          fulfillment: 0,
           byCountry: new Map(),
           sparkline: new Array(SPARK_DAYS).fill(0),
         };
@@ -1748,6 +1806,8 @@ export async function getAffiliates(
       a.allOrders++;
       a.cpa += toNumber(o.cpaPaidUsd);
       a.net += toNumber(o.netAmountUsd);
+      a.cogs += toNumber(o.cogsUsd ?? 0);
+      a.fulfillment += toNumber(o.fulfillmentUsd ?? 0);
       if (o.status === 'APPROVED') {
         a.revenue += toNumber(o.grossAmountUsd);
         a.orders++;
@@ -1812,6 +1872,13 @@ export async function getAffiliates(
       cbRate: allOrders ? round4(chargebacks / denom) : 0,
       cpa: round2(a?.cpa ?? 0),
       netMargin: round2((a?.net ?? 0) - (a?.cpa ?? 0)),
+      cogs: round2(a?.cogs ?? 0),
+      fulfillment: round2(a?.fulfillment ?? 0),
+      // Real net profit: approved revenue (net) - CPA - COGS - shipping.
+      // Negative numbers flag affiliates whose volume isn't profitable.
+      estimatedProfit: round2(
+        (a?.net ?? 0) - (a?.cpa ?? 0) - (a?.cogs ?? 0) - (a?.fulfillment ?? 0),
+      ),
       topCountry,
       ltvRevenue: round2(ltv?.revenue ?? 0),
       ltvOrders: ltv?.orders ?? 0,
@@ -2132,32 +2199,35 @@ async function fetchOrders(filters: MetricsFilters): Promise<OrderWithJoins[]> {
 }
 
 function computeKPIs(orders: OrderWithJoins[]): OverviewKPIs {
-  let gross = 0;
-  let net = 0;
-  let cpa = 0;
+  let gross = 0, net = 0, cpa = 0, cogs = 0, fulfillment = 0;
   let approvedCount = 0;
   let refundedCount = 0;
   let chargebackCount = 0;
   const groups = new Set<string>();
 
   for (const o of orders) {
-    gross += toNumber(o.grossAmountUsd);
-    net += toNumber(o.netAmountUsd);
-    cpa += toNumber(o.cpaPaidUsd);
-    groups.add(o.parentExternalId ?? o.externalId);
-
-    if (o.status === 'APPROVED') approvedCount++;
-    else if (o.status === 'REFUNDED') refundedCount++;
+    if (o.status === 'APPROVED') {
+      gross += toNumber(o.grossAmountUsd);
+      net += toNumber(o.netAmountUsd);
+      approvedCount++;
+    } else if (o.status === 'REFUNDED') refundedCount++;
     else if (o.status === 'CHARGEBACK') chargebackCount++;
+
+    // CPA + COGS + fulfillment counted across ALL statuses — we paid these
+    // upfront regardless of whether the customer later refunded.
+    cpa += toNumber(o.cpaPaidUsd);
+    cogs += toNumber(o.cogsUsd ?? 0);
+    fulfillment += toNumber(o.fulfillmentUsd ?? 0);
+    groups.add(o.parentExternalId ?? o.externalId);
   }
 
   const totalCount = orders.length;
   const denominator = totalCount || 1;
+  const estimatedProfit = round2(net - cpa - cogs - fulfillment);
+  const estimatedMarginPct = gross > 0
+    ? Math.round((estimatedProfit / gross) * 10000) / 100
+    : 0;
 
-  // AOV é per-buyer (group), não per-order: total gross dividido pelo número
-  // de funnel sessions únicas. Cada session inclui FE + bumps + upsells +
-  // downsells do mesmo cliente. Métrica de negócio mais útil ("quanto cada
-  // cliente novo gastou") do que o AOV per-order que diluía o ticket médio.
   return {
     gross: round2(gross),
     net: round2(net),
@@ -2170,6 +2240,10 @@ function computeKPIs(orders: OrderWithJoins[]): OverviewKPIs {
     approvedCount,
     totalCount,
     orderGroups: groups.size,
+    cogs: round2(cogs),
+    fulfillment: round2(fulfillment),
+    estimatedProfit,
+    estimatedMarginPct,
   };
 }
 
@@ -2184,12 +2258,8 @@ function computeDaily(
     const key = isoDate(d);
     buckets.set(key, {
       date: key,
-      gross: 0,
-      net: 0,
-      cpa: 0,
-      orders: 0,
-      approvedOrders: 0,
-      allOrders: 0,
+      gross: 0, net: 0, cpa: 0, cogs: 0, fulfillment: 0, profit: 0,
+      orders: 0, approvedOrders: 0, allOrders: 0,
     });
   }
 
@@ -2197,20 +2267,26 @@ function computeDaily(
     const key = isoDate(o.orderedAt);
     const b = buckets.get(key);
     if (!b) continue;
-    b.gross += toNumber(o.grossAmountUsd);
-    b.net += toNumber(o.netAmountUsd);
-    b.cpa += toNumber(o.cpaPaidUsd);
     b.allOrders++;
     if (o.status === 'APPROVED') {
+      b.gross += toNumber(o.grossAmountUsd);
+      b.net += toNumber(o.netAmountUsd);
       b.approvedOrders++;
       b.orders++;
     }
+    // CPA + COGS + fulfillment counted across all statuses (we paid them).
+    b.cpa += toNumber(o.cpaPaidUsd);
+    b.cogs += toNumber(o.cogsUsd ?? 0);
+    b.fulfillment += toNumber(o.fulfillmentUsd ?? 0);
   }
 
   for (const b of buckets.values()) {
     b.gross = round2(b.gross);
     b.net = round2(b.net);
     b.cpa = round2(b.cpa);
+    b.cogs = round2(b.cogs);
+    b.fulfillment = round2(b.fulfillment);
+    b.profit = round2(b.net - b.cpa - b.cogs - b.fulfillment);
   }
 
   return Array.from(buckets.values());
