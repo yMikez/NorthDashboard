@@ -215,6 +215,19 @@ function OverviewPage({ filters }) {
           metric={metric} currency={cur} height={260}/>
       </div>
 
+      <div className="panel" style={{ marginBottom: 14 }}>
+        <div className="panel-head">
+          <div className="panel-title">
+            <span className="panel-eyebrow">PADRÃO DE COMPRA · HORA × DIA DA SEMANA</span>
+            <div className="panel-sub">Pedidos aprovados · UTC · hover pra ver detalhe</div>
+          </div>
+          <div className="panel-legend">
+            <span className="legend-dot cyan"><span/>intensidade = volume</span>
+          </div>
+        </div>
+        <HourHeatmap data={state.data?.hourlyHeatmap || []} metric="orders" currency={cur}/>
+      </div>
+
       <div className="grid-2">
         <div className="panel">
           <div className="panel-head">

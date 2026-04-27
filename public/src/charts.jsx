@@ -262,4 +262,99 @@ function FunnelChart({ stages }) {
   );
 }
 
-Object.assign(window, { LineChart, Donut, CountryBars, FunnelChart });
+// ---------- Hour-of-day × Day-of-week heatmap ----------
+// data: Array<{ dow:0..6 (Sun-Sat), hour:0..23, orders:number, gross:number }>
+// Renders a 7×24 grid in Mon-first order (business convention) with cell
+// intensity proportional to orders (or gross via the metric prop).
+function HourHeatmap({ data, metric = 'orders', currency = 'USD' }) {
+  const [hover, setHover] = useStateC(null);
+
+  // Pivot input rows into a Mon..Sun × hour matrix. dow 0=Sun → row index 6;
+  // dow 1=Mon → row 0.
+  const matrix = Array.from({ length: 7 }, () =>
+    Array.from({ length: 24 }, () => ({ orders: 0, gross: 0 })),
+  );
+  for (const r of (data || [])) {
+    const row = (r.dow + 6) % 7; // Sun(0)→6, Mon(1)→0, ..., Sat(6)→5
+    matrix[row][r.hour] = { orders: r.orders, gross: r.gross };
+  }
+
+  const values = matrix.flat().map((c) => c[metric]);
+  const max = Math.max(1, ...values);
+
+  const ROWS = ['Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb', 'Dom'];
+  // Show subset of hour labels (every 3h) to avoid clutter.
+  const HOUR_TICK = (h) => h % 3 === 0;
+
+  function cellColor(v) {
+    if (v <= 0) return 'rgba(91,200,255,0.04)';
+    const t = Math.min(1, v / max);
+    // Cyan ramp matching the dashboard palette.
+    return `rgba(91,200,255,${0.08 + t * 0.82})`;
+  }
+
+  function fmtCellValue(c) {
+    if (metric === 'orders') return fmtInt(c.orders);
+    return fmtCurrency(c.gross, currency, 0);
+  }
+
+  return (
+    <div style={{ display: 'grid', gridTemplateColumns: 'auto 1fr', gap: 6, padding: '8px 0' }}>
+      <div/>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(24, 1fr)', gap: 2, fontFamily: 'var(--f-mono)', fontSize: 9, color: 'var(--navy-400)', marginBottom: 4 }}>
+        {Array.from({ length: 24 }, (_, h) => (
+          <div key={h} style={{ textAlign: 'center' }}>{HOUR_TICK(h) ? String(h).padStart(2, '0') : ''}</div>
+        ))}
+      </div>
+
+      {ROWS.map((label, r) => (
+        <React.Fragment key={r}>
+          <div style={{ fontFamily: 'var(--f-mono)', fontSize: 10, color: 'var(--navy-300)', letterSpacing: '0.04em', alignSelf: 'center', paddingRight: 6, textAlign: 'right' }}>
+            {label}
+          </div>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(24, 1fr)', gap: 2 }}>
+            {matrix[r].map((c, h) => {
+              const isHover = hover && hover.r === r && hover.h === h;
+              return (
+                <div
+                  key={h}
+                  onMouseEnter={() => setHover({ r, h, c })}
+                  onMouseLeave={() => setHover(null)}
+                  style={{
+                    aspectRatio: '1.4',
+                    minHeight: 20,
+                    background: cellColor(c[metric]),
+                    border: isHover ? '1px solid var(--glow-cyan)' : '1px solid transparent',
+                    borderRadius: 3,
+                    cursor: 'default',
+                    transition: 'background 120ms',
+                  }}
+                />
+              );
+            })}
+          </div>
+        </React.Fragment>
+      ))}
+
+      {hover && (
+        <div style={{
+          gridColumn: '2 / 3',
+          marginTop: 8,
+          padding: '6px 10px',
+          background: 'rgba(6,13,37,0.95)',
+          border: '1px solid var(--border)',
+          borderRadius: 4,
+          fontFamily: 'var(--f-mono)', fontSize: 11, color: 'var(--navy-100)',
+          display: 'flex', justifyContent: 'space-between', gap: 12,
+        }}>
+          <span>{ROWS[hover.r]} · {String(hover.h).padStart(2, '0')}:00 UTC</span>
+          <span style={{ color: 'var(--white)' }}>
+            {fmtInt(hover.c.orders)} pedidos · {fmtCurrency(hover.c.gross, currency, 0)}
+          </span>
+        </div>
+      )}
+    </div>
+  );
+}
+
+Object.assign(window, { LineChart, Donut, CountryBars, FunnelChart, HourHeatmap });

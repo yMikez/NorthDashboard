@@ -266,6 +266,16 @@ export interface OverviewResponse {
     totalOrders: number;
     totalRevenue: number;
   }>;
+  // Hour-of-day × day-of-week heatmap, in UTC. Only cells with activity are
+  // returned; the UI fills missing (dow, hour) combinations with zeros.
+  // dow: Postgres convention — 0=Sunday, 6=Saturday. The UI relabels to
+  // Mon-first for business presentation.
+  hourlyHeatmap: Array<{
+    dow: number;     // 0..6
+    hour: number;    // 0..23
+    orders: number;  // approved order count
+    gross: number;   // approved gross revenue USD
+  }>;
 }
 
 type OrderWithJoins = Prisma.OrderGetPayload<{
@@ -296,6 +306,7 @@ export async function getOverview(
   const byProductType = byProductTypeFromRows(rows);
   const platformHealth = await platformHealthFromRows(rows);
   const topAffiliates = await topAffiliatesQuery(filters, 5);
+  const hourlyHeatmap = await hourlyHeatmapQuery(filters);
 
   const response: OverviewResponse = {
     range: {
@@ -308,6 +319,7 @@ export async function getOverview(
     byProductType,
     topAffiliates,
     platformHealth,
+    hourlyHeatmap,
   };
 
   if (compare) {
@@ -482,6 +494,54 @@ async function platformHealthFromRows(
   });
 }
 
+async function hourlyHeatmapQuery(
+  filters: MetricsFilters,
+): Promise<OverviewResponse['hourlyHeatmap']> {
+  // Single aggregate query against base Order table — DOW/HOUR extraction
+  // can't go through daily_metrics MV (granularity mismatch). Cheap because
+  // it's a one-shot scan; for large data volumes we could add an
+  // hourly_metrics MV later, but at current scale this is sub-100ms.
+  const conds: Prisma.Sql[] = [
+    Prisma.sql`o."orderedAt" >= ${filters.startDate}`,
+    Prisma.sql`o."orderedAt" <= ${filters.endDate}`,
+  ];
+  if (filters.platformSlugs?.length) {
+    conds.push(Prisma.sql`pl."slug" = ANY(${filters.platformSlugs})`);
+  }
+  if (filters.countries?.length) {
+    conds.push(Prisma.sql`o."country" = ANY(${filters.countries})`);
+  }
+  if (filters.productFamilies?.length) {
+    conds.push(Prisma.sql`pr."family" = ANY(${filters.productFamilies})`);
+  }
+  const whereSql = Prisma.join(conds, ' AND ');
+  const rows = await db.$queryRaw<Array<{
+    dow: number;
+    hour: number;
+    orders: bigint;
+    gross: Prisma.Decimal;
+  }>>(Prisma.sql`
+    SELECT
+      EXTRACT(DOW FROM o."orderedAt")::int AS dow,
+      EXTRACT(HOUR FROM o."orderedAt")::int AS hour,
+      COUNT(*) FILTER (WHERE o."status" = 'APPROVED')::bigint AS orders,
+      COALESCE(SUM(o."grossAmountUsd") FILTER (WHERE o."status"='APPROVED'), 0)::numeric(14,2) AS gross
+    FROM "Order" o
+    JOIN "Platform" pl ON o."platformId" = pl.id
+    JOIN "Product" pr ON o."productId" = pr.id
+    WHERE ${whereSql}
+    GROUP BY 1, 2
+    HAVING COUNT(*) FILTER (WHERE o."status" = 'APPROVED') > 0
+    ORDER BY 1, 2
+  `);
+  return rows.map((r) => ({
+    dow: r.dow,
+    hour: r.hour,
+    orders: Number(r.orders),
+    gross: round2(Number(r.gross)),
+  }));
+}
+
 async function topAffiliatesQuery(
   filters: MetricsFilters,
   limit: number,
@@ -562,9 +622,10 @@ async function getOverviewLegacy(
   const byProductType = computeByProductType(orders);
   const topAffiliates = computeTopAffiliates(orders, 5);
   const platformHealth = await computePlatformHealth(orders);
+  const hourlyHeatmap = await hourlyHeatmapQuery(filters);
   const response: OverviewResponse = {
     range: { start: filters.startDate.toISOString(), end: filters.endDate.toISOString() },
-    kpis, daily, byCountry, byProductType, topAffiliates, platformHealth,
+    kpis, daily, byCountry, byProductType, topAffiliates, platformHealth, hourlyHeatmap,
   };
   if (compare) {
     const span = filters.endDate.getTime() - filters.startDate.getTime();
