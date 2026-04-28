@@ -10,6 +10,7 @@ function Sidebar({ active, onNav }) {
       items: [
         { id: 'overview', label: 'Visão geral', icon: 'layout-dashboard' },
         { id: 'funnel',   label: 'Funil', icon: 'bar-chart-3' },
+        { id: 'insights', label: 'Insights', icon: 'zap' },
       ]
     },
     {

@@ -17,6 +17,7 @@ const nextConfig = {
       { source: '/platforms', destination: '/index.html' },
       { source: '/health', destination: '/index.html' },
       { source: '/costs', destination: '/index.html' },
+      { source: '/insights', destination: '/index.html' },
     ];
   },
 };

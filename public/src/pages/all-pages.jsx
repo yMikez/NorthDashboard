@@ -2688,8 +2688,199 @@ function costInputStyle(dirty, disabled) {
   };
 }
 
+// ---------- INSIGHTS (narrative cards generated daily) ----------
+function InsightsPage() {
+  const [state, setInsState] = useState({ status: 'loading', data: null, error: null });
+  const [layout, setLayout] = useState('tabs'); // 'tabs' (B) | 'feed' (C)
+  const [activeCategory, setActiveCategory] = useState('all');
+
+  useEffect(() => {
+    let cancelled = false;
+    setInsState((s) => ({ ...s, status: 'loading' }));
+    window.NSApi.fetchInsights()
+      .then((data) => { if (!cancelled) setInsState({ status: 'ready', data, error: null }); })
+      .catch((err) => {
+        if (cancelled) return;
+        console.error('fetchInsights failed', err);
+        setInsState({ status: 'error', data: null, error: err.message });
+      });
+    return () => { cancelled = true; };
+  }, []);
+
+  if (state.status === 'loading' && !state.data) {
+    return <div className="page-in"><div className="panel">Computando insights...</div></div>;
+  }
+  if (state.status === 'error') {
+    return <div className="page-in"><div className="panel" style={{ color: 'var(--danger)' }}>Erro: {state.error}</div></div>;
+  }
+
+  const insights = state.data?.insights || [];
+  const generatedAt = state.data?.generatedAt;
+  const windowDays = state.data?.windowDays || 30;
+
+  const categories = [
+    { id: 'profit', label: 'Lucro', icon: 'dollar' },
+    { id: 'affiliates', label: 'Afiliados', icon: 'users' },
+    { id: 'funnel', label: 'Funil', icon: 'bar-chart-3' },
+    { id: 'operations', label: 'Operação', icon: 'plug' },
+  ];
+  const counts = categories.reduce((acc, c) => {
+    acc[c.id] = insights.filter((i) => i.category === c.id).length;
+    return acc;
+  }, {});
+  const alertCount = insights.filter((i) => i.severity === 'alert').length;
+
+  const visible = layout === 'feed'
+    ? insights
+    : (activeCategory === 'all' ? insights : insights.filter((i) => i.category === activeCategory));
+
+  return (
+    <div className="page-in">
+      <div className="page-head">
+        <div className="lead">
+          <span className="eyebrow">ANÁLISE · INSIGHTS · ÚLTIMOS {windowDays}D</span>
+          <h2>O que a operação <em>está te dizendo</em></h2>
+          <span className="sub">
+            {insights.length} {insights.length === 1 ? 'insight' : 'insights'}
+            {alertCount > 0 && <> · <span style={{ color: 'var(--danger)' }}>{alertCount} {alertCount === 1 ? 'alerta' : 'alertas'}</span></>}
+            {generatedAt && <> · gerado {fmtDateTime(generatedAt)}</>}
+          </span>
+        </div>
+        <div className="page-head-actions">
+          <div className="seg">
+            <button className={layout === 'tabs' ? 'is-active' : ''} onClick={() => setLayout('tabs')}>
+              <Icon name="layout-dashboard" size={11}/> Por categoria
+            </button>
+            <button className={layout === 'feed' ? 'is-active' : ''} onClick={() => setLayout('feed')}>
+              <Icon name="bar-chart-3" size={11}/> Feed
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {/* Tabs (when layout=tabs) */}
+      {layout === 'tabs' && (
+        <div style={{ display: 'flex', gap: 6, marginBottom: 14, padding: 4,
+                      background: 'rgba(91,200,255,0.04)', border: '1px solid var(--border)', borderRadius: 8 }}>
+          <InsightTab id="all" label="Todos" count={insights.length}
+                      active={activeCategory === 'all'} onClick={() => setActiveCategory('all')}/>
+          {categories.map((c) => (
+            <InsightTab key={c.id} id={c.id} label={c.label} count={counts[c.id] || 0} icon={c.icon}
+                        active={activeCategory === c.id} onClick={() => setActiveCategory(c.id)}/>
+          ))}
+        </div>
+      )}
+
+      {/* Insights list */}
+      {visible.length === 0 && (
+        <div className="panel" style={{ textAlign: 'center', padding: 32, color: 'var(--navy-300)' }}>
+          {layout === 'tabs' && activeCategory !== 'all'
+            ? `Nenhum insight ativo nesta categoria. Tudo OK por aqui.`
+            : `Nenhum insight ativo. Operação saudável neste período.`}
+        </div>
+      )}
+      <div style={{ display: 'grid', gap: 10 }}>
+        {visible.map((insight) => <InsightCard key={insight.id} insight={insight}/>)}
+      </div>
+
+      {/* Empty state by severity stats — celebrate green */}
+      {insights.length > 0 && alertCount === 0 && layout === 'tabs' && activeCategory === 'all' && (
+        <div className="panel" style={{ marginTop: 14, background: 'rgba(40,200,120,0.05)', borderColor: 'rgba(40,200,120,0.4)' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, color: 'var(--success)' }}>
+            <Icon name="check" size={14}/>
+            <span>Sem alertas críticos. Os insights acima são oportunidades, não problemas.</span>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function InsightTab({ id, label, count, icon, active, onClick }) {
+  return (
+    <button
+      onClick={onClick}
+      className={active ? 'is-active' : ''}
+      style={{
+        display: 'inline-flex', alignItems: 'center', gap: 6,
+        padding: '6px 12px', whiteSpace: 'nowrap',
+        background: active ? 'rgba(91,200,255,0.15)' : 'transparent',
+        border: active ? '1px solid rgba(91,200,255,0.4)' : '1px solid transparent',
+        borderRadius: 6, cursor: 'pointer',
+        fontFamily: 'var(--f-mono)', fontSize: 11, letterSpacing: '0.04em',
+        color: active ? 'var(--white)' : 'var(--navy-200)',
+      }}
+    >
+      {icon && <Icon name={icon} size={11}/>}
+      {label}
+      <span style={{
+        fontSize: 10, fontFamily: 'var(--f-mono)',
+        background: 'rgba(91,200,255,0.1)', color: 'var(--glow-cyan)',
+        padding: '1px 5px', borderRadius: 3,
+      }}>{count}</span>
+    </button>
+  );
+}
+
+function InsightCard({ insight }) {
+  const sevColor = insight.severity === 'alert' ? 'var(--danger)'
+    : insight.severity === 'good' ? 'var(--success)' : 'var(--glow-cyan)';
+  const sevIcon = insight.severity === 'alert' ? 'alert-triangle'
+    : insight.severity === 'good' ? 'check' : 'info';
+  const catLabel = ({
+    profit: 'LUCRO', affiliates: 'AFILIADOS', funnel: 'FUNIL', operations: 'OPERAÇÃO',
+  })[insight.category] || insight.category;
+
+  function onCta(e) {
+    e.preventDefault();
+    if (!insight.cta) return;
+    history.pushState(null, '', insight.cta.href);
+    window.dispatchEvent(new PopStateEvent('popstate'));
+  }
+
+  return (
+    <div className="panel" style={{ borderLeft: `3px solid ${sevColor}` }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12, marginBottom: 8 }}>
+        <div style={{ flex: 1 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
+            <span style={{ color: sevColor }}><Icon name={sevIcon} size={14}/></span>
+            <span style={{ fontFamily: 'var(--f-mono)', fontSize: 9, color: sevColor, letterSpacing: '0.16em' }}>
+              {catLabel}
+            </span>
+          </div>
+          <div style={{ fontFamily: 'var(--f-display)', fontSize: 16, color: 'var(--white)', letterSpacing: '-0.01em', lineHeight: 1.3 }}>
+            {insight.headline}
+          </div>
+          {insight.body && (
+            <div style={{ marginTop: 6, fontSize: 12, color: 'var(--navy-200)', lineHeight: 1.5 }}>
+              {insight.body}
+            </div>
+          )}
+        </div>
+        {insight.cta && (
+          <button onClick={onCta} className="btn btn-ghost" style={{ flexShrink: 0, fontSize: 11 }}>
+            {insight.cta.label} <Icon name="chevron-right" size={11}/>
+          </button>
+        )}
+      </div>
+      {insight.metrics && insight.metrics.length > 0 && (
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 8, marginTop: 10, paddingTop: 10, borderTop: '1px solid var(--border-soft)' }}>
+          {insight.metrics.map((m, i) => (
+            <div key={i}>
+              <div style={{ fontFamily: 'var(--f-mono)', fontSize: 9, color: 'var(--navy-400)', letterSpacing: '0.1em', marginBottom: 2 }}>
+                {m.label.toUpperCase()}
+              </div>
+              <div style={{ fontSize: 12, color: 'var(--navy-100)' }}>{m.value}</div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 Object.assign(window, {
   FunnelPage, LeaderboardPage, AffiliateDrawer, AllAffiliatesPage,
   ProductsPage, TransactionsPage, IntegrationsPage, FXPage, UsersPage,
-  HealthPage, CostsPage,
+  HealthPage, CostsPage, InsightsPage,
 });

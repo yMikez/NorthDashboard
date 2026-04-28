@@ -215,6 +215,14 @@ async function fetchCosts() {
   return fetchJSON('/api/metrics/costs', {});
 }
 
+/**
+ * Fetch /api/metrics/insights — daily snapshot of curated narrative cards.
+ * Cached server-side per day; pass refresh=1 to force recompute.
+ */
+async function fetchInsights() {
+  return fetchJSON('/api/metrics/insights', {});
+}
+
 async function adminSaveCosts(token, body) {
   const res = await fetch('/api/admin/costs', {
     method: 'POST',
@@ -259,4 +267,5 @@ window.NSApi = {
   fetchCosts,
   adminSaveCosts,
   adminBackfillCogs,
+  fetchInsights,
 };
