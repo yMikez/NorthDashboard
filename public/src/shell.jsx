@@ -37,10 +37,16 @@ function Sidebar({ active, onNav, user }) {
     }
   ];
   // Admin vê tudo; MEMBER só vê o que está em allowedTabs.
+  // 'users' é admin-only (não está em AVAILABLE_TABS) — adicionado a parte
+  // só pra admin.
   const isAdmin = user?.role === 'ADMIN';
   const allowed = new Set(user?.allowedTabs || []);
+  const adminOnly = {
+    label: 'Admin',
+    items: [{ id: 'users', label: 'Usuários', icon: 'user-plus' }],
+  };
   const groups = isAdmin
-    ? allGroups
+    ? [...allGroups, adminOnly]
     : allGroups
         .map((g) => ({ ...g, items: g.items.filter((it) => allowed.has(it.id)) }))
         .filter((g) => g.items.length > 0);

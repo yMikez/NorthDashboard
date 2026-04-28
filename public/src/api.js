@@ -223,6 +223,57 @@ async function fetchInsights() {
   return fetchJSON('/api/metrics/insights', {});
 }
 
+/* -------- Admin: Users -------- */
+
+async function adminListUsers() {
+  const res = await fetch('/api/admin/users', { headers: { Accept: 'application/json' } });
+  if (!res.ok) throw new Error(`${res.status} listUsers`);
+  return res.json();
+}
+
+async function adminCreateUser(body) {
+  const res = await fetch('/api/admin/users', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+    body: JSON.stringify(body),
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.error || `${res.status}`);
+  return data;
+}
+
+async function adminPatchUser(id, body) {
+  const res = await fetch(`/api/admin/users/${encodeURIComponent(id)}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+    body: JSON.stringify(body),
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.error || `${res.status}`);
+  return data;
+}
+
+async function adminResetUserPassword(id, password) {
+  const res = await fetch(`/api/admin/users/${encodeURIComponent(id)}/reset-password`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+    body: JSON.stringify({ password }),
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.error || `${res.status}`);
+  return data;
+}
+
+async function adminDeleteUser(id) {
+  const res = await fetch(`/api/admin/users/${encodeURIComponent(id)}`, {
+    method: 'DELETE',
+    headers: { Accept: 'application/json' },
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.error || `${res.status}`);
+  return data;
+}
+
 async function adminSaveCosts(token, body) {
   const res = await fetch('/api/admin/costs', {
     method: 'POST',
@@ -268,4 +319,9 @@ window.NSApi = {
   adminSaveCosts,
   adminBackfillCogs,
   fetchInsights,
+  adminListUsers,
+  adminCreateUser,
+  adminPatchUser,
+  adminResetUserPassword,
+  adminDeleteUser,
 };

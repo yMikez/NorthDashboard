@@ -2174,50 +2174,505 @@ function FXPage({ filters }) {
   );
 }
 
-function UsersPage() {
-  const users = [
-    { name: 'Luiza Mendes', role: 'OWNER · ADMIN', email: 'luiza@northscale.io', last: '2 min ago' },
-    { name: 'Marcelo Dias', role: 'FINANCE', email: 'marcelo@northscale.io', last: '1 hr ago' },
-    { name: 'Ana Ruiz',     role: 'AFFILIATE MANAGER', email: 'ana@northscale.io', last: '3 hr ago' },
-    { name: 'Theo Park',    role: 'ANALYST', email: 'theo@northscale.io', last: 'Yesterday' },
-    { name: 'Juno Vale',    role: 'ANALYST · READ-ONLY', email: 'juno@northscale.io', last: '3 days ago' },
-  ];
+// Catálogo de tabs no client (espelha lib/auth/tabs.ts). Pra renderizar
+// os checkboxes na criação/edição de Member. Mantenha em sincronia com
+// o backend — se adicionar uma tab nova, atualize os DOIS lados.
+const TAB_CATALOG = [
+  { group: 'Análise',   id: 'overview',       label: 'Visão geral' },
+  { group: 'Análise',   id: 'funnel',         label: 'Funil' },
+  { group: 'Análise',   id: 'insights',       label: 'Insights' },
+  { group: 'Afiliados', id: 'leaderboard',    label: 'Ranking' },
+  { group: 'Afiliados', id: 'all-affiliates', label: 'Todos os afiliados' },
+  { group: 'Catálogo',  id: 'products',       label: 'Produtos' },
+  { group: 'Catálogo',  id: 'transactions',   label: 'Transações' },
+  { group: 'Sistema',   id: 'platforms',      label: 'Plataformas' },
+  { group: 'Sistema',   id: 'costs',          label: 'Custos' },
+  { group: 'Sistema',   id: 'health',         label: 'Saúde do dado' },
+];
+const TAB_GROUPS = ['Análise', 'Afiliados', 'Catálogo', 'Sistema'];
+
+function UsersPage({ currentUser }) {
+  const [state, setState] = useState({ status: 'loading', users: [], error: null });
+  const [editing, setEditing] = useState(null);   // user being edited, or null
+  const [creating, setCreating] = useState(false);
+  const [bumpRefresh, setBumpRefresh] = useState(0);
+
+  useEffect(() => {
+    let cancelled = false;
+    setState((s) => ({ ...s, status: 'loading' }));
+    window.NSApi.adminListUsers()
+      .then((data) => { if (!cancelled) setState({ status: 'ready', users: data.users, error: null }); })
+      .catch((err) => {
+        if (cancelled) return;
+        console.error('adminListUsers failed', err);
+        setState({ status: 'error', users: [], error: err.message });
+      });
+    return () => { cancelled = true; };
+  }, [bumpRefresh]);
+
+  function reload() { setBumpRefresh((n) => n + 1); }
+
   return (
     <div className="page-in">
       <div className="page-head">
         <div className="lead">
-          <span className="eyebrow">SETTINGS · USERS & PERMISSIONS</span>
-          <h2>Team <em>access</em></h2>
-          <span className="sub">5 members · role-based permissions</span>
+          <span className="eyebrow">ADMIN · USUÁRIOS DO DASHBOARD</span>
+          <h2>Quem tem <em>acesso</em></h2>
+          <span className="sub">
+            {state.users.length} {state.users.length === 1 ? 'usuário' : 'usuários'}
+            {' · '}admin vê tudo, member vê só as abas marcadas
+          </span>
         </div>
         <div className="page-head-actions">
-          <button className="btn btn-primary"><Icon name="plus" size={12}/> Invite member</button>
+          <button className="btn btn-primary" onClick={() => setCreating(true)}>
+            <Icon name="user-plus" size={12}/> Novo usuário
+          </button>
         </div>
       </div>
-      <div className="panel">
-        <div className="tbl-wrap">
+
+      {state.status === 'error' && (
+        <div className="panel" style={{ color: 'var(--danger)' }}>Erro: {state.error}</div>
+      )}
+
+      <div className="panel" style={{ padding: 0 }}>
+        <div className="tbl-wrap" style={{ margin: 0, padding: '0 4px' }}>
           <table className="tbl">
-            <thead><tr><th>Member</th><th>Role</th><th>Email</th><th>Last active</th><th></th></tr></thead>
+            <thead>
+              <tr>
+                <th>Usuário</th>
+                <th>Papel</th>
+                <th>Acesso</th>
+                <th>Último login</th>
+                <th>Status</th>
+                <th></th>
+              </tr>
+            </thead>
             <tbody>
-              {users.map(u => (
-                <tr key={u.email}>
-                  <td>
-                    <span className="cell-aff">
-                      <span className="av" style={{ background: avatarColor(u.email) }}>{initials(u.name)}</span>
-                      <span className="meta"><span className="nm">{u.name}</span></span>
-                    </span>
-                  </td>
-                  <td><span className="badge">{u.role}</span></td>
-                  <td className="cell-mono" style={{ color: 'var(--navy-200)' }}>{u.email}</td>
-                  <td className="cell-mono" style={{ color: 'var(--navy-400)' }}>{u.last}</td>
-                  <td><button className="btn btn-ghost">Manage</button></td>
-                </tr>
-              ))}
+              {state.status === 'loading' && (
+                <tr><td colSpan={6} style={{ textAlign: 'center', padding: 24, opacity: 0.6 }}>Carregando...</td></tr>
+              )}
+              {state.status === 'ready' && state.users.map((u) => {
+                const isSelf = currentUser && u.id === currentUser.id;
+                const display = u.name || u.email;
+                return (
+                  <tr key={u.id} onClick={() => setEditing(u)} style={{ cursor: 'pointer' }}>
+                    <td>
+                      <span className="cell-aff">
+                        <span className="av" style={{ background: avatarColor(u.email) }}>{initials(display)}</span>
+                        <span className="meta">
+                          <span className="nm">
+                            {display}
+                            {isSelf && (
+                              <span style={{ marginLeft: 6, fontFamily: 'var(--f-mono)', fontSize: 9, color: 'var(--glow-cyan)', letterSpacing: '0.1em' }}>
+                                VOCÊ
+                              </span>
+                            )}
+                          </span>
+                          <span className="id">{u.email}</span>
+                        </span>
+                      </span>
+                    </td>
+                    <td>
+                      <span className="badge" style={{
+                        background: u.role === 'ADMIN' ? 'rgba(91,200,255,0.15)' : 'rgba(155,123,255,0.15)',
+                        color: u.role === 'ADMIN' ? 'var(--glow-cyan)' : '#9B7BFF',
+                        borderColor: u.role === 'ADMIN' ? 'rgba(91,200,255,0.4)' : 'rgba(155,123,255,0.4)',
+                      }}>
+                        {u.role}
+                      </span>
+                    </td>
+                    <td>
+                      {u.role === 'ADMIN' ? (
+                        <span style={{ fontFamily: 'var(--f-mono)', fontSize: 11, color: 'var(--glow-cyan)' }}>todas as abas</span>
+                      ) : (
+                        <span style={{ fontFamily: 'var(--f-mono)', fontSize: 11, color: u.allowedTabs.length === 0 ? 'var(--danger)' : 'var(--navy-200)' }}>
+                          {u.allowedTabs.length === 0 ? 'nenhuma aba' : `${u.allowedTabs.length} ${u.allowedTabs.length === 1 ? 'aba' : 'abas'}`}
+                        </span>
+                      )}
+                    </td>
+                    <td className="cell-mono" style={{ color: 'var(--navy-300)', fontSize: 11 }}>
+                      {u.lastLoginAt ? fmtRelative(u.lastLoginAt) : '—'}
+                    </td>
+                    <td>
+                      <span className="badge" style={{
+                        background: u.active ? 'rgba(16,185,129,0.15)' : 'rgba(239,68,68,0.15)',
+                        color: u.active ? 'var(--success)' : 'var(--danger)',
+                        borderColor: u.active ? 'rgba(16,185,129,0.4)' : 'rgba(239,68,68,0.4)',
+                      }}>
+                        {u.active ? 'ATIVO' : 'INATIVO'}
+                      </span>
+                    </td>
+                    <td onClick={(e) => e.stopPropagation()}>
+                      <button className="btn btn-ghost" onClick={() => setEditing(u)}>
+                        <Icon name="edit" size={11}/> Editar
+                      </button>
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </div>
       </div>
+
+      {creating && (
+        <UserFormDrawer
+          mode="create"
+          onClose={() => setCreating(false)}
+          onSaved={() => { setCreating(false); reload(); }}
+        />
+      )}
+      {editing && (
+        <UserFormDrawer
+          mode="edit"
+          initial={editing}
+          isSelf={currentUser && editing.id === currentUser.id}
+          onClose={() => setEditing(null)}
+          onSaved={() => { setEditing(null); reload(); }}
+        />
+      )}
     </div>
+  );
+}
+
+function fmtRelative(iso) {
+  const ms = Date.now() - new Date(iso).getTime();
+  if (ms < 60000) return 'agora';
+  const min = Math.floor(ms / 60000);
+  if (min < 60) return `há ${min}min`;
+  const hr = Math.floor(min / 60);
+  if (hr < 24) return `há ${hr}h`;
+  const d = Math.floor(hr / 24);
+  if (d < 30) return `há ${d}d`;
+  return new Date(iso).toLocaleDateString('pt-BR');
+}
+
+function UserFormDrawer({ mode, initial, isSelf, onClose, onSaved }) {
+  const isCreate = mode === 'create';
+  const [email, setEmail] = useState(initial?.email || '');
+  const [name, setName] = useState(initial?.name || '');
+  const [password, setPassword] = useState('');
+  const [role, setRole] = useState(initial?.role || 'MEMBER');
+  const [allowedTabs, setAllowedTabs] = useState(new Set(initial?.allowedTabs || []));
+  const [active, setActive] = useState(initial?.active ?? true);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState(null);
+  const [showResetField, setShowResetField] = useState(false);
+
+  function toggleTab(id) {
+    setAllowedTabs((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  }
+  function selectAllInGroup(group) {
+    setAllowedTabs((prev) => {
+      const next = new Set(prev);
+      for (const t of TAB_CATALOG) if (t.group === group) next.add(t.id);
+      return next;
+    });
+  }
+  function clearGroup(group) {
+    setAllowedTabs((prev) => {
+      const next = new Set(prev);
+      for (const t of TAB_CATALOG) if (t.group === group) next.delete(t.id);
+      return next;
+    });
+  }
+  function selectAllTabs() {
+    setAllowedTabs(new Set(TAB_CATALOG.map((t) => t.id)));
+  }
+
+  async function save() {
+    setBusy(true);
+    setError(null);
+    try {
+      if (isCreate) {
+        await window.NSApi.adminCreateUser({
+          email,
+          name: name || undefined,
+          password,
+          role,
+          allowedTabs: role === 'MEMBER' ? Array.from(allowedTabs) : [],
+        });
+      } else {
+        await window.NSApi.adminPatchUser(initial.id, {
+          name: name || null,
+          role,
+          allowedTabs: role === 'MEMBER' ? Array.from(allowedTabs) : [],
+          active,
+        });
+        if (showResetField && password) {
+          await window.NSApi.adminResetUserPassword(initial.id, password);
+        }
+      }
+      onSaved();
+    } catch (err) {
+      setError(err.message || 'erro');
+      setBusy(false);
+    }
+  }
+
+  async function deleteUser() {
+    if (!confirm(`Desativar ${initial.email}? Sessões ativas serão derrubadas. (Pode reativar depois.)`)) return;
+    setBusy(true);
+    try {
+      await window.NSApi.adminDeleteUser(initial.id);
+      onSaved();
+    } catch (err) {
+      setError(err.message || 'erro');
+      setBusy(false);
+    }
+  }
+
+  function genPassword() {
+    const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789';
+    let out = '';
+    const arr = new Uint32Array(14);
+    crypto.getRandomValues(arr);
+    for (let i = 0; i < 14; i++) out += chars[arr[i] % chars.length];
+    setPassword(out);
+    if (!isCreate) setShowResetField(true);
+  }
+
+  return (
+    <>
+      <div className="drawer-backdrop" onClick={onClose}/>
+      <div className="drawer" style={{ width: 520 }}>
+        <div className="drawer-head">
+          <div>
+            <span className="eyebrow">{isCreate ? 'NOVO USUÁRIO' : 'EDITAR USUÁRIO'}</span>
+            <h3 style={{ margin: '4px 0', fontSize: 18, color: 'var(--white)' }}>
+              {isCreate ? 'Convidar pro dashboard' : (initial.name || initial.email)}
+            </h3>
+            {!isCreate && (
+              <div style={{ fontFamily: 'var(--f-mono)', fontSize: 11, color: 'var(--navy-300)' }}>
+                {initial.email}{isSelf && ' · você'}
+              </div>
+            )}
+          </div>
+          <button className="icon-btn" onClick={onClose} title="Fechar"><Icon name="x" size={14}/></button>
+        </div>
+
+        <div style={{ padding: 16, display: 'grid', gap: 14, maxHeight: 'calc(100vh - 100px)', overflowY: 'auto' }}>
+          {isCreate && (
+            <UserField label="E-mail" value={email} onChange={setEmail} type="email" required/>
+          )}
+          <UserField label="Nome (opcional)" value={name} onChange={setName} type="text"/>
+
+          {isCreate && (
+            <div style={{ display: 'grid', gap: 6 }}>
+              <UserField label="Senha (mín. 10 caracteres)" value={password} onChange={setPassword} type="text"/>
+              <button
+                onClick={genPassword}
+                style={{
+                  justifySelf: 'start', padding: '4px 10px', fontFamily: 'var(--f-mono)', fontSize: 10,
+                  color: 'var(--glow-cyan)', background: 'rgba(91,200,255,0.08)',
+                  border: '1px solid rgba(91,200,255,0.3)', borderRadius: 4, cursor: 'pointer',
+                  letterSpacing: '0.08em',
+                }}
+              >
+                <Icon name="key" size={10}/> GERAR
+              </button>
+            </div>
+          )}
+
+          <div style={{ display: 'grid', gap: 6 }}>
+            <span style={{ fontFamily: 'var(--f-mono)', fontSize: 10, letterSpacing: '0.12em', color: 'var(--navy-300)' }}>PAPEL</span>
+            <div className="seg" style={{ width: 'fit-content' }}>
+              {[['MEMBER', 'Member'], ['ADMIN', 'Admin']].map(([k, l]) => (
+                <button
+                  key={k}
+                  className={role === k ? 'is-active' : ''}
+                  onClick={() => setRole(k)}
+                  disabled={isSelf && initial?.role === 'ADMIN' && k === 'MEMBER'}
+                  title={isSelf && initial?.role === 'ADMIN' && k === 'MEMBER' ? 'admin não pode se rebaixar' : ''}
+                >
+                  {l}
+                </button>
+              ))}
+            </div>
+            <div style={{ fontSize: 11, color: 'var(--navy-400)', fontFamily: 'var(--f-mono)' }}>
+              {role === 'ADMIN'
+                ? 'Admin acessa todas as abas + gerencia outros usuários.'
+                : 'Member acessa só as abas marcadas abaixo.'}
+            </div>
+          </div>
+
+          {role === 'MEMBER' && (
+            <div style={{ display: 'grid', gap: 8 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <span style={{ fontFamily: 'var(--f-mono)', fontSize: 10, letterSpacing: '0.12em', color: 'var(--navy-300)' }}>
+                  ABAS LIBERADAS · {allowedTabs.size}
+                </span>
+                <button
+                  onClick={selectAllTabs}
+                  style={{ background: 'transparent', border: 0, color: 'var(--glow-cyan)',
+                           fontFamily: 'var(--f-mono)', fontSize: 10, letterSpacing: '0.08em',
+                           cursor: 'pointer' }}
+                >
+                  TUDO
+                </button>
+              </div>
+              {TAB_GROUPS.map((group) => {
+                const tabs = TAB_CATALOG.filter((t) => t.group === group);
+                const checked = tabs.filter((t) => allowedTabs.has(t.id)).length;
+                return (
+                  <div key={group} style={{ border: '1px solid var(--border-soft)', borderRadius: 6, padding: 10 }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+                      <span style={{ fontFamily: 'var(--f-mono)', fontSize: 10, color: 'var(--navy-300)', letterSpacing: '0.1em' }}>
+                        {group.toUpperCase()} · {checked}/{tabs.length}
+                      </span>
+                      <span style={{ display: 'flex', gap: 4 }}>
+                        <button
+                          onClick={() => selectAllInGroup(group)}
+                          style={{ background: 'transparent', border: 0, color: 'var(--glow-cyan)',
+                                   fontFamily: 'var(--f-mono)', fontSize: 9, letterSpacing: '0.08em', cursor: 'pointer' }}
+                        >TODOS</button>
+                        <button
+                          onClick={() => clearGroup(group)}
+                          style={{ background: 'transparent', border: 0, color: 'var(--navy-400)',
+                                   fontFamily: 'var(--f-mono)', fontSize: 9, letterSpacing: '0.08em', cursor: 'pointer' }}
+                        >NENHUM</button>
+                      </span>
+                    </div>
+                    <div style={{ display: 'grid', gap: 4 }}>
+                      {tabs.map((t) => (
+                        <label key={t.id} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, color: 'var(--white)', cursor: 'pointer' }}>
+                          <input
+                            type="checkbox"
+                            checked={allowedTabs.has(t.id)}
+                            onChange={() => toggleTab(t.id)}
+                            style={{ accentColor: 'var(--glow-cyan)' }}
+                          />
+                          {t.label}
+                        </label>
+                      ))}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+
+          {!isCreate && (
+            <div style={{ display: 'grid', gap: 6, paddingTop: 6, borderTop: '1px solid var(--border-soft)' }}>
+              <span style={{ fontFamily: 'var(--f-mono)', fontSize: 10, letterSpacing: '0.12em', color: 'var(--navy-300)' }}>STATUS</span>
+              <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, color: 'var(--white)', cursor: isSelf ? 'not-allowed' : 'pointer', opacity: isSelf ? 0.6 : 1 }}>
+                <input
+                  type="checkbox"
+                  checked={active}
+                  disabled={isSelf}
+                  onChange={(e) => setActive(e.target.checked)}
+                  style={{ accentColor: 'var(--glow-cyan)' }}
+                />
+                Conta ativa {isSelf && '(você não pode desativar a si mesmo)'}
+              </label>
+            </div>
+          )}
+
+          {!isCreate && (
+            <div style={{ display: 'grid', gap: 6, paddingTop: 6, borderTop: '1px solid var(--border-soft)' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <span style={{ fontFamily: 'var(--f-mono)', fontSize: 10, letterSpacing: '0.12em', color: 'var(--navy-300)' }}>SENHA</span>
+                {!showResetField && (
+                  <button
+                    onClick={() => setShowResetField(true)}
+                    style={{ background: 'rgba(255,180,0,0.08)', border: '1px solid rgba(255,180,0,0.3)',
+                             color: 'var(--warning)', fontFamily: 'var(--f-mono)', fontSize: 10,
+                             letterSpacing: '0.08em', padding: '4px 10px', borderRadius: 4, cursor: 'pointer' }}
+                  >
+                    <Icon name="key" size={10}/> RESETAR SENHA
+                  </button>
+                )}
+              </div>
+              {showResetField && (
+                <div style={{ display: 'grid', gap: 6 }}>
+                  <UserField label="Nova senha (mín. 10)" value={password} onChange={setPassword} type="text"/>
+                  <div style={{ display: 'flex', gap: 6 }}>
+                    <button
+                      onClick={genPassword}
+                      style={{ padding: '4px 10px', fontFamily: 'var(--f-mono)', fontSize: 10,
+                               color: 'var(--glow-cyan)', background: 'rgba(91,200,255,0.08)',
+                               border: '1px solid rgba(91,200,255,0.3)', borderRadius: 4,
+                               cursor: 'pointer', letterSpacing: '0.08em' }}
+                    ><Icon name="key" size={10}/> GERAR</button>
+                    <button
+                      onClick={() => { setShowResetField(false); setPassword(''); }}
+                      style={{ padding: '4px 10px', fontFamily: 'var(--f-mono)', fontSize: 10,
+                               color: 'var(--navy-400)', background: 'transparent',
+                               border: '1px solid var(--border-soft)', borderRadius: 4,
+                               cursor: 'pointer', letterSpacing: '0.08em' }}
+                    >CANCELAR</button>
+                  </div>
+                  <div style={{ fontSize: 10, color: 'var(--warning)', fontFamily: 'var(--f-mono)' }}>
+                    Ao salvar, sessões ativas deste usuário serão derrubadas.
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          {error && (
+            <div style={{ fontSize: 12, color: 'var(--danger)', background: 'rgba(239,68,68,0.08)',
+                          border: '1px solid rgba(239,68,68,0.25)', padding: '8px 10px', borderRadius: 6,
+                          fontFamily: 'var(--f-mono)' }}>
+              {error}
+            </div>
+          )}
+
+          <div style={{ display: 'flex', gap: 8, marginTop: 8, paddingTop: 12, borderTop: '1px solid var(--border-soft)' }}>
+            <button
+              className="btn btn-primary"
+              onClick={save}
+              disabled={busy || (isCreate && (!email || !password))}
+              style={{ flex: 1 }}
+            >
+              {busy ? 'SALVANDO...' : (isCreate ? 'CRIAR USUÁRIO' : 'SALVAR ALTERAÇÕES')}
+            </button>
+            {!isCreate && !isSelf && (
+              <button
+                onClick={deleteUser}
+                disabled={busy || !initial.active}
+                style={{
+                  padding: '8px 12px', fontFamily: 'var(--f-mono)', fontSize: 11, letterSpacing: '0.08em',
+                  color: 'var(--danger)', background: 'rgba(239,68,68,0.08)',
+                  border: '1px solid rgba(239,68,68,0.3)', borderRadius: 6,
+                  cursor: busy ? 'not-allowed' : 'pointer',
+                }}
+                title={!initial.active ? 'já está inativo' : 'desativa + derruba sessões'}
+              >
+                <Icon name="trash" size={11}/> DESATIVAR
+              </button>
+            )}
+          </div>
+        </div>
+      </div>
+    </>
+  );
+}
+
+function UserField({ label, value, onChange, type, required }) {
+  return (
+    <label style={{ display: 'grid', gap: 6 }}>
+      <span style={{ fontFamily: 'var(--f-mono)', fontSize: 10, letterSpacing: '0.12em', color: 'var(--navy-300)' }}>
+        {label.toUpperCase()}
+      </span>
+      <input
+        type={type}
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        required={required}
+        style={{
+          padding: '9px 12px', fontSize: 13, color: 'var(--white)',
+          background: 'rgba(91,200,255,0.05)', border: '1px solid rgba(91,200,255,0.2)',
+          borderRadius: 6, outline: 'none', fontFamily: 'inherit',
+        }}
+        onFocus={(e) => { e.currentTarget.style.borderColor = 'var(--glow-cyan)'; }}
+        onBlur={(e) => { e.currentTarget.style.borderColor = 'rgba(91,200,255,0.2)'; }}
+      />
+    </label>
   );
 }
 
