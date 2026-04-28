@@ -164,6 +164,7 @@ function Topbar({ title, titleEm, crumbs, onToggleCurrency, currency }) {
       </div>
       <div className="top-spacer"/>
       <div className="top-actions">
+        <ThemeToggle/>
         <button className="btn btn-ghost" title="Atualizar dados">
           <Icon name="refresh" size={13}/> Sincronizado há 2 min
         </button>
@@ -174,11 +175,33 @@ function Topbar({ title, titleEm, crumbs, onToggleCurrency, currency }) {
           <Icon name="bell" size={14}/>
           <span className="pip"/>
         </button>
-        <div className="user-chip" style={{ padding: '4px 8px 4px 4px', borderRadius: 6, margin: 0 }}>
-          <div className="av" style={{ width: 26, height: 26, fontSize: 11 }}>NS</div>
-        </div>
       </div>
     </header>
+  );
+}
+
+function ThemeToggle() {
+  const [theme, setTheme] = useStateS(() => {
+    const cur = document.documentElement.getAttribute('data-theme');
+    return cur === 'light' ? 'light' : 'dark';
+  });
+  function toggle() {
+    const next = theme === 'dark' ? 'light' : 'dark';
+    document.documentElement.setAttribute('data-theme', next);
+    try { localStorage.setItem('ns-theme', next); } catch (e) {}
+    setTheme(next);
+  }
+  return (
+    <button
+      className="theme-toggle"
+      onClick={toggle}
+      title={theme === 'dark' ? 'Mudar pra modo claro' : 'Mudar pra modo escuro'}
+      aria-label="Alternar tema"
+    >
+      <span className="knob">
+        <Icon name={theme === 'dark' ? 'moon' : 'sun'} size={12}/>
+      </span>
+    </button>
   );
 }
 

@@ -1,31 +1,18 @@
 /* ============================================================
-   Northscale Design System — Colors & Type
-   Single source of truth for CSS tokens + base type styles.
-   Import this file FIRST before any component styles.
+   Northscale Design System — Colors & Type (v3.2 + light theme)
+   Single source of truth. Import this FIRST.
    ============================================================ */
 
-/* Local brand fonts — Fraunces (display). Variable axes: opsz 9–144, SOFT 0–100, wght 300–900.
-   Geist + Geist Mono still loaded via Google Fonts (no local files provided). */
-@import url('https://fonts.googleapis.com/css2?family=Geist:wght@300..700&family=Geist+Mono:wght@400;500;600&display=swap');
+/* v3.2 Direction A — Clinical Grotesk
+   Display + Body = Space Grotesk (grotesk geométrico, peso 700 nos headlines)
+   Mono           = JetBrains Mono (HUD pesado, eyebrows/CTAs/labels)
+   Italic accent  = Space Grotesk italic, cor cyan, sotaque pontual.
+   Fraunces / Geist removidos — Direction A consolida em uma só família grotesk. */
+@import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap');
 
-@font-face {
-  font-family: 'Fraunces';
-  font-style: normal;
-  font-weight: 300 900;
-  font-display: swap;
-  src: url('./fonts/Fraunces-VariableFont_SOFTWONKopszwght.ttf') format('truetype-variations'),
-       url('./fonts/Fraunces-VariableFont_SOFTWONKopszwght.ttf') format('truetype');
-  font-variation-settings: 'opsz' 144;
-}
-@font-face {
-  font-family: 'Fraunces';
-  font-style: italic;
-  font-weight: 300 900;
-  font-display: swap;
-  src: url('./fonts/Fraunces-Italic-VariableFont_SOFTWONKopszwght.ttf') format('truetype-variations'),
-       url('./fonts/Fraunces-Italic-VariableFont_SOFTWONKopszwght.ttf') format('truetype');
-}
-
+/* ============================================================
+   ROOT — DARK (default) tokens
+   ============================================================ */
 :root {
   /* ---------- NAVY (primary) ---------- */
   --navy-50:  #F4F6FB;
@@ -34,16 +21,16 @@
   --navy-300: #8CA1C8;
   --navy-400: #5B78AA;
   --navy-500: #3956A1;
-  --navy-600: #1E3A8A;   /* official navy — links, filled states */
+  --navy-600: #1E3A8A;
   --navy-700: #152A66;
   --navy-800: #0F1F4D;
   --navy-900: #060D25;
-  --navy-950: #030617;   /* app background */
+  --navy-950: #030617;
 
-  /* ---------- GLOW (accents) ---------- */
-  --glow-cyan:     #5BC8FF;   /* CTAs, highlights, focus state */
-  --glow-electric: #4A90FF;   /* gradients, hover states */
-  --glow-violet:   #8B7FFF;   /* auroras, secondary accent */
+  /* ---------- GLOW (accents — invariant across themes) ---------- */
+  --glow-cyan:     #5BC8FF;
+  --glow-electric: #4A90FF;
+  --glow-violet:   #8B7FFF;
 
   /* ---------- NEUTRALS ---------- */
   --white:    #FFFFFF;
@@ -63,19 +50,49 @@
   --warning: #F59E0B;
   --danger:  #EF4444;
 
-  /* ---------- FOREGROUND / BACKGROUND aliases ---------- */
-  --bg:      var(--navy-950);
-  --bg-raised: rgba(15, 31, 77, 0.3);   /* cards over dark */
-  --bg-elev: rgba(6, 13, 37, 0.6);       /* elevated panels */
-  --fg1:     var(--white);               /* primary text on dark */
-  --fg2:     var(--navy-100);
-  --fg3:     var(--navy-200);            /* body text on dark */
-  --fg4:     var(--navy-300);            /* secondary text */
-  --fg5:     var(--navy-400);            /* hint / meta */
-  --border-soft: rgba(91, 200, 255, 0.08);
-  --border:      rgba(91, 200, 255, 0.15);
-  --border-strong: rgba(91, 200, 255, 0.4);
-  --accent:  var(--glow-cyan);
+  /* ---------- THEME-AWARE: dark defaults ---------- */
+  --bg:         var(--navy-950);
+  --bg-deep:    var(--navy-900);
+  --bg-raised:  rgba(15, 31, 77, 0.30);
+  --bg-elev:    rgba(6, 13, 37, 0.60);
+
+  --fg1:        var(--white);
+  --fg2:        var(--navy-100);
+  --fg3:        var(--navy-200);
+  --fg4:        var(--navy-300);
+  --fg5:        var(--navy-400);
+
+  --border-soft:    rgba(91, 200, 255, 0.08);
+  --border:         rgba(91, 200, 255, 0.15);
+  --border-strong:  rgba(91, 200, 255, 0.40);
+  --accent:         var(--glow-cyan);
+
+  /* ---------- SHADOWS ---------- */
+  --shadow-sm: 0 1px 2px rgba(0,0,0,0.20);
+  --shadow-md: 0 4px 12px rgba(0,0,0,0.30);
+  --shadow-lg: 0 20px 60px -20px rgba(91, 200, 255, 0.30);
+  --shadow-glow:        0 0 40px -10px rgba(91, 200, 255, 0.30);
+  --shadow-glow-strong: 0 10px 40px -10px rgba(74, 144, 255, 0.80);
+
+  /* ---------- LIQUID GLASS (dark) ---------- */
+  --glass-tint:       rgba(255, 255, 255, 0.04);
+  --glass-tint-warm:  rgba(91, 200, 255, 0.05);
+  --glass-tint-elev:  rgba(255, 255, 255, 0.07);
+  --glass-border:     rgba(255, 255, 255, 0.12);
+  --glass-border-top: rgba(255, 255, 255, 0.22);
+  --glass-blur:       20px;
+  --glass-blur-sm:    12px;
+  --glass-blur-lg:    32px;
+  --glass-saturate:   180%;
+  --glass-sheen-top:    rgba(255,255,255,0.55);
+  --glass-sheen-mid:    rgba(255,255,255,0.18);
+  --glass-rim-cyan:     rgba(91,200,255,0.45);
+  --glass-rim-violet:   rgba(139,127,255,0.20);
+  --glass-spec:         rgba(255,255,255,0.30);
+  --glass-inset-top:    rgba(255,255,255,0.35);
+  --glass-inset-bot:    rgba(255,255,255,0.10);
+  --glass-inset-rim:    rgba(91,200,255,0.18);
+  --glass-shadow:       0 8px 32px rgba(0,0,0,0.35), inset 0 1px 0 rgba(255,255,255,0.18), inset 0 -1px 0 rgba(0,0,0,0.15);
 
   /* ---------- SPACING (4px grid) ---------- */
   --s-1: 4px;   --s-2: 8px;   --s-3: 12px;
@@ -87,30 +104,24 @@
   --r-sm: 4px;  --r-md: 8px;  --r-lg: 12px;
   --r-xl: 20px; --r-full: 999px;
 
-  /* ---------- SHADOWS ---------- */
-  --shadow-sm: 0 1px 2px rgba(0,0,0,0.2);
-  --shadow-md: 0 4px 12px rgba(0,0,0,0.3);
-  --shadow-lg: 0 20px 60px -20px rgba(91, 200, 255, 0.3);
-  --shadow-glow: 0 0 40px -10px rgba(91, 200, 255, 0.3);
-  --shadow-glow-strong: 0 10px 40px -10px rgba(74, 144, 255, 0.8);
+  /* ---------- FONTS (v3.2 Clinical Grotesk) ---------- */
+  --f-display: 'Space Grotesk', system-ui, sans-serif;
+  --f-body:    'Space Grotesk', system-ui, -apple-system, sans-serif;
+  --f-mono:    'JetBrains Mono', 'SF Mono', Menlo, monospace;
 
-  /* ---------- FONTS ---------- */
-  --f-display: 'Fraunces', 'Times New Roman', serif;
-  --f-body:    'Geist', system-ui, -apple-system, sans-serif;
-  --f-mono:    'Geist Mono', 'SF Mono', Menlo, monospace;
-
-  /* Fraunces variable axes presets */
-  --fvs-hero:    'opsz' 144, 'SOFT' 30, 'wght' 500;
-  --fvs-hero-em: 'opsz' 144, 'SOFT' 80, 'wght' 400;  /* italic accent */
-  --fvs-display: 'opsz' 144, 'SOFT' 20, 'wght' 500;
-  --fvs-h3:      'opsz' 48,  'SOFT' 30, 'wght' 500;
+  /* Variation settings — Space Grotesk só tem wght (mantemos
+     a API --fvs-* pra retrocompat com componentes antigos). */
+  --fvs-hero:    'wght' 700;
+  --fvs-hero-em: 'wght' 500;
+  --fvs-display: 'wght' 700;
+  --fvs-h3:      'wght' 600;
 
   /* ---------- MOTION ---------- */
   --ease-smooth: cubic-bezier(0.22, 1, 0.36, 1);
   --ease-out:    cubic-bezier(0.33, 1, 0.68, 1);
-  --dur-fast:   150ms;
-  --dur-base:   250ms;
-  --dur-slow:   400ms;
+  --dur-fast: 150ms;
+  --dur-base: 250ms;
+  --dur-slow: 400ms;
 
   /* ---------- TYPE TOKENS ---------- */
   --t-hero-size:       clamp(48px, 8vw, 88px);
@@ -131,9 +142,53 @@
 }
 
 /* ============================================================
-   BASE TYPE — semantic elements get brand defaults
+   LIGHT THEME — opt-in via [data-theme="light"]
+   Brand identity preserved: cyan stays as accent, navy becomes ink.
    ============================================================ */
+[data-theme="light"] {
+  --bg:         #F2F5FB;                   /* slightly cooler than navy-50 */
+  --bg-deep:    #E4EAF5;
+  --bg-raised:  rgba(255, 255, 255, 0.70);
+  --bg-elev:    rgba(255, 255, 255, 0.92);
 
+  --fg1:        #060D25;                   /* navy-900 = primary ink */
+  --fg2:        #0F1F4D;
+  --fg3:        #152A66;
+  --fg4:        #3956A1;
+  --fg5:        #5B78AA;
+
+  --border-soft:    rgba(30, 58, 138, 0.08);
+  --border:         rgba(30, 58, 138, 0.18);
+  --border-strong:  rgba(30, 58, 138, 0.45);
+
+  --shadow-sm: 0 1px 2px rgba(15, 31, 77, 0.08);
+  --shadow-md: 0 4px 14px rgba(15, 31, 77, 0.10);
+  --shadow-lg: 0 20px 50px -20px rgba(30, 58, 138, 0.25);
+  --shadow-glow:        0 0 40px -12px rgba(91, 200, 255, 0.55);
+  --shadow-glow-strong: 0 10px 40px -10px rgba(74, 144, 255, 0.55);
+
+  /* Liquid glass — flipped orientation:
+     em fundo claro o "highlight" vira sombra suave + tint cyan.
+     Mantemos a API --glass-* mas com valores apropriados pra light. */
+  --glass-tint:       rgba(255, 255, 255, 0.60);
+  --glass-tint-warm:  rgba(91, 200, 255, 0.10);
+  --glass-tint-elev:  rgba(255, 255, 255, 0.85);
+  --glass-border:     rgba(30, 58, 138, 0.12);
+  --glass-border-top: rgba(255, 255, 255, 0.95);
+  --glass-sheen-top:    rgba(255,255,255,0.85);
+  --glass-sheen-mid:    rgba(255,255,255,0.30);
+  --glass-rim-cyan:     rgba(91,200,255,0.35);
+  --glass-rim-violet:   rgba(139,127,255,0.18);
+  --glass-spec:         rgba(255,255,255,0.55);
+  --glass-inset-top:    rgba(255,255,255,0.85);
+  --glass-inset-bot:    rgba(30,58,138,0.06);
+  --glass-inset-rim:    rgba(91,200,255,0.12);
+  --glass-shadow:       0 8px 32px rgba(15,31,77,0.10), inset 0 1px 0 rgba(255,255,255,0.85), inset 0 -1px 0 rgba(30,58,138,0.06);
+}
+
+/* ============================================================
+   BASE TYPE
+   ============================================================ */
 html { -webkit-text-size-adjust: 100%; }
 
 body {
@@ -164,6 +219,7 @@ h1 {
 h1 em, h2 em, h3 em {
   font-style: italic;
   color: var(--glow-cyan);
+  font-weight: 500;
   font-variation-settings: var(--fvs-hero-em);
   text-shadow: 0 0 40px rgba(91, 200, 255, 0.25);
 }
@@ -187,7 +243,6 @@ p {
 }
 
 strong, b { font-weight: 600; color: var(--fg1); }
-
 small { font-size: var(--t-body-sm-size); color: var(--fg4); }
 
 code, pre, kbd, samp {
@@ -195,7 +250,7 @@ code, pre, kbd, samp {
   font-size: var(--t-mono-tag-size);
 }
 code {
-  background: rgba(91, 200, 255, 0.1);
+  background: rgba(91, 200, 255, 0.10);
   color: var(--glow-cyan);
   padding: 2px 6px;
   border-radius: var(--r-sm);
@@ -206,7 +261,7 @@ a {
   text-decoration: none;
   transition: color var(--dur-base) var(--ease-smooth);
 }
-a:hover { color: var(--white); }
+a:hover { color: var(--fg1); }
 
 hr {
   border: none;
@@ -216,14 +271,12 @@ hr {
 
 ::selection {
   background: rgba(91, 200, 255, 0.35);
-  color: var(--white);
+  color: var(--fg1);
 }
 
 /* ============================================================
    UTILITY TYPE CLASSES
-   Apply directly for inline usage.
    ============================================================ */
-
 .t-hero {
   font-family: var(--f-display);
   font-size: var(--t-hero-size);
@@ -285,9 +338,225 @@ hr {
   text-transform: uppercase;
   color: var(--glow-cyan);
 }
-
 .t-italic-accent {
   font-style: italic;
   color: var(--glow-cyan);
+  font-weight: 500;
   font-variation-settings: var(--fvs-hero-em);
+}
+
+/* ============================================================
+   LIQUID GLASS — utility classes (Apple-style, gelatinous)
+   - ::before  = top sheen (curved highlight)
+   - ::after   = bottom rim refraction (cyan/violet)
+   - inset shadows = thickness of slab
+   - dual-stroke border = bevel
+   Tokens via --glass-* — light/dark redefinem via [data-theme].
+   ============================================================ */
+.lg-pane,
+.lg-deep,
+.lg-thin {
+  position: relative;
+  background: var(--glass-tint);
+  backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
+  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
+  border: 1px solid var(--glass-border);
+  border-top-color: var(--glass-border-top);
+  border-radius: var(--r-lg);
+  box-shadow:
+    0 14px 40px -10px rgba(0,0,0,0.30),
+    0 4px 14px -4px rgba(0,0,0,0.18),
+    inset 0 1px 0 var(--glass-inset-top),
+    inset 0 -1px 0 var(--glass-inset-bot),
+    inset 0 0 0 1px rgba(255,255,255,0.04),
+    inset 0 -20px 40px -20px var(--glass-inset-rim);
+  isolation: isolate;
+  overflow: hidden;
+}
+[data-theme="light"] .lg-pane,
+[data-theme="light"] .lg-deep,
+[data-theme="light"] .lg-thin {
+  box-shadow:
+    0 14px 40px -10px rgba(15, 31, 77, 0.12),
+    0 4px 14px -4px rgba(15, 31, 77, 0.08),
+    inset 0 1px 0 var(--glass-inset-top),
+    inset 0 -1px 0 var(--glass-inset-bot),
+    inset 0 0 0 1px rgba(255,255,255,0.50),
+    inset 0 -20px 40px -20px var(--glass-inset-rim);
+}
+
+.lg-deep {
+  background: linear-gradient(135deg,
+    var(--glass-tint-elev) 0%,
+    rgba(91,200,255,0.05) 60%,
+    rgba(139,127,255,0.04) 100%);
+  backdrop-filter: blur(var(--glass-blur-lg)) saturate(var(--glass-saturate));
+  -webkit-backdrop-filter: blur(var(--glass-blur-lg)) saturate(var(--glass-saturate));
+  border-radius: var(--r-xl);
+}
+
+.lg-thin {
+  background: var(--glass-tint);
+  backdrop-filter: blur(var(--glass-blur-sm)) saturate(140%);
+  -webkit-backdrop-filter: blur(var(--glass-blur-sm)) saturate(140%);
+  border-radius: var(--r-md);
+  box-shadow:
+    0 6px 18px -6px rgba(0,0,0,0.25),
+    inset 0 1px 0 var(--glass-inset-top),
+    inset 0 -1px 0 var(--glass-inset-bot);
+}
+[data-theme="light"] .lg-thin {
+  box-shadow:
+    0 6px 18px -6px rgba(15, 31, 77, 0.08),
+    inset 0 1px 0 var(--glass-inset-top),
+    inset 0 -1px 0 var(--glass-inset-bot);
+}
+
+/* ::before — top sheen (curved droplet highlight along upper edge) */
+.lg-pane::before,
+.lg-deep::before,
+.lg-thin::before {
+  content: '';
+  position: absolute; inset: 0;
+  pointer-events: none; z-index: 1;
+  border-radius: inherit;
+  background:
+    radial-gradient(ellipse 140% 60% at 50% -20%,
+      var(--glass-sheen-top) 0%,
+      var(--glass-sheen-mid) 18%,
+      rgba(255,255,255,0.04) 34%,
+      transparent 50%),
+    linear-gradient(180deg,
+      rgba(255,255,255,0.28) 0%,
+      rgba(255,255,255,0.06) 4%,
+      transparent 12%);
+  mix-blend-mode: screen;
+}
+[data-theme="light"] .lg-pane::before,
+[data-theme="light"] .lg-deep::before,
+[data-theme="light"] .lg-thin::before {
+  mix-blend-mode: normal;
+  opacity: 0.6;
+}
+
+/* ::after — bottom rim refraction (cyan/violet curved glow) */
+.lg-pane::after,
+.lg-deep::after {
+  content: '';
+  position: absolute; inset: 0;
+  pointer-events: none; z-index: 1;
+  border-radius: inherit;
+  background:
+    radial-gradient(ellipse 120% 70% at 50% 130%,
+      var(--glass-rim-cyan) 0%,
+      var(--glass-rim-violet) 25%,
+      transparent 55%),
+    radial-gradient(circle 90px at 18% 14%,
+      var(--glass-spec) 0%,
+      transparent 70%),
+    linear-gradient(115deg,
+      transparent 30%,
+      rgba(255,255,255,0.08) 45%,
+      rgba(255,255,255,0.0) 60%);
+  mix-blend-mode: screen;
+}
+[data-theme="light"] .lg-pane::after,
+[data-theme="light"] .lg-deep::after {
+  mix-blend-mode: normal;
+  opacity: 0.55;
+}
+
+.lg-pane > *,
+.lg-deep > *,
+.lg-thin > * { position: relative; z-index: 2; }
+
+/* ---------- Liquid pill — tactile, gelatinous chip ---------- */
+.lg-pill {
+  position: relative;
+  background:
+    linear-gradient(180deg,
+      rgba(255,255,255,0.22) 0%,
+      rgba(255,255,255,0.06) 50%,
+      rgba(255,255,255,0.02) 100%);
+  backdrop-filter: blur(14px) saturate(180%);
+  -webkit-backdrop-filter: blur(14px) saturate(180%);
+  border: 1px solid var(--glass-border);
+  border-top-color: var(--glass-border-top);
+  border-bottom-color: rgba(255,255,255,0.10);
+  border-radius: var(--r-full);
+  box-shadow:
+    inset 0 1px 0 rgba(255,255,255,0.55),
+    inset 0 -1px 0 rgba(0,0,0,0.15),
+    inset 0 -6px 12px -6px rgba(91,200,255,0.30),
+    0 6px 16px -4px rgba(0,0,0,0.25);
+  isolation: isolate;
+  overflow: hidden;
+}
+[data-theme="light"] .lg-pill {
+  background:
+    linear-gradient(180deg,
+      rgba(255,255,255,0.85) 0%,
+      rgba(255,255,255,0.55) 50%,
+      rgba(255,255,255,0.40) 100%);
+  border-bottom-color: rgba(30,58,138,0.10);
+  box-shadow:
+    inset 0 1px 0 rgba(255,255,255,0.95),
+    inset 0 -1px 0 rgba(30,58,138,0.05),
+    inset 0 -6px 12px -6px rgba(91,200,255,0.20),
+    0 6px 16px -4px rgba(15,31,77,0.10);
+}
+.lg-pill::before {
+  content: '';
+  position: absolute; inset: 0;
+  border-radius: inherit;
+  background: radial-gradient(ellipse 100% 80% at 50% -30%,
+    rgba(255,255,255,0.65) 0%,
+    rgba(255,255,255,0.12) 35%,
+    transparent 60%);
+  pointer-events: none;
+  mix-blend-mode: screen;
+}
+[data-theme="light"] .lg-pill::before {
+  mix-blend-mode: normal;
+  opacity: 0.6;
+}
+.lg-pill::after {
+  content: '';
+  position: absolute; inset: 0;
+  border-radius: inherit;
+  background: radial-gradient(ellipse 120% 70% at 50% 130%,
+    rgba(91,200,255,0.40) 0%,
+    transparent 60%);
+  pointer-events: none;
+  mix-blend-mode: screen;
+}
+[data-theme="light"] .lg-pill::after {
+  mix-blend-mode: normal;
+  opacity: 0.5;
+}
+.lg-pill > * { position: relative; z-index: 1; }
+
+/* ---------- Cyan-tinted glass — primary CTAs / hero accents ---------- */
+.lg-cyan {
+  background: linear-gradient(135deg, rgba(91,200,255,0.22) 0%, rgba(74,144,255,0.12) 100%);
+  border-color: rgba(91,200,255,0.40);
+  border-top-color: rgba(255,255,255,0.55);
+  box-shadow:
+    0 14px 40px -10px rgba(0,0,0,0.45),
+    0 0 50px -10px rgba(91,200,255,0.55),
+    inset 0 1px 0 rgba(255,255,255,0.50),
+    inset 0 -1px 0 rgba(255,255,255,0.12),
+    inset 0 -20px 40px -20px rgba(74,144,255,0.35);
+}
+[data-theme="light"] .lg-cyan {
+  background: linear-gradient(135deg, rgba(91,200,255,0.85) 0%, rgba(74,144,255,0.75) 100%);
+  border-color: rgba(91,200,255,0.5);
+  border-top-color: rgba(255,255,255,0.95);
+  color: var(--white);
+  box-shadow:
+    0 14px 40px -10px rgba(15,31,77,0.20),
+    0 0 50px -10px rgba(91,200,255,0.55),
+    inset 0 1px 0 rgba(255,255,255,0.85),
+    inset 0 -1px 0 rgba(15,31,77,0.10),
+    inset 0 -20px 40px -20px rgba(74,144,255,0.45);
 }

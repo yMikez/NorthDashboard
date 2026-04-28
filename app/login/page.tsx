@@ -36,26 +36,46 @@ export default function LoginPage() {
   return (
     <>
       <link rel="stylesheet" href="/styles/colors_and_type.css" />
+      <link rel="stylesheet" href="/styles/dashboard.css" />
       <main
         style={{
           minHeight: '100vh',
-          background: 'var(--navy-950)',
-          color: 'var(--white)',
+          background: 'var(--bg)',
+          color: 'var(--fg1)',
           display: 'grid',
           placeItems: 'center',
           padding: 24,
           fontFamily: 'var(--f-body, system-ui, -apple-system, sans-serif)',
+          position: 'relative',
+          overflow: 'hidden',
         }}
       >
+        {/* Aurora blobs por trás do card pra dar profundidade no liquid glass */}
+        <div aria-hidden style={{
+          position: 'absolute', inset: 0, pointerEvents: 'none', zIndex: 0,
+        }}>
+          <div style={{
+            position: 'absolute', top: '-15%', left: '-10%',
+            width: 700, height: 700, borderRadius: '50%',
+            background: 'radial-gradient(circle, var(--glow-cyan), transparent 60%)',
+            filter: 'blur(80px)', opacity: 0.35,
+          }}/>
+          <div style={{
+            position: 'absolute', bottom: '-20%', right: '-15%',
+            width: 700, height: 700, borderRadius: '50%',
+            background: 'radial-gradient(circle, var(--glow-violet), transparent 60%)',
+            filter: 'blur(80px)', opacity: 0.30,
+          }}/>
+        </div>
+
         <div
+          className="lg-deep"
           style={{
+            position: 'relative',
+            zIndex: 1,
             width: '100%',
             maxWidth: 380,
-            background: 'rgba(15,31,77,0.45)',
-            border: '1px solid rgba(91,200,255,0.18)',
-            borderRadius: 12,
             padding: 32,
-            boxShadow: '0 30px 80px rgba(0,0,0,0.55), 0 0 0 1px rgba(91,200,255,0.05) inset',
           }}
         >
           <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 28 }}>
@@ -70,7 +90,7 @@ export default function LoginPage() {
               fontFamily: 'var(--f-mono, ui-monospace, monospace)',
               fontSize: 10,
               letterSpacing: '0.15em',
-              color: 'var(--navy-300)',
+              color: 'var(--fg4)',
               marginBottom: 6,
             }}
           >
@@ -116,18 +136,18 @@ export default function LoginPage() {
             <button
               type="submit"
               disabled={busy}
+              className="lg-cyan"
               style={{
                 marginTop: 6,
                 padding: '12px 16px',
-                borderRadius: 6,
+                borderRadius: 999,
                 fontFamily: 'var(--f-mono, ui-monospace, monospace)',
                 fontSize: 12,
                 letterSpacing: '0.08em',
                 fontWeight: 600,
-                background: busy ? 'rgba(91,200,255,0.4)' : 'var(--glow-cyan)',
-                color: 'var(--navy-950)',
-                border: 0,
+                color: '#fff',
                 cursor: busy ? 'wait' : 'pointer',
+                opacity: busy ? 0.7 : 1,
                 transition: 'opacity 0.15s',
               }}
             >
@@ -139,7 +159,7 @@ export default function LoginPage() {
             style={{
               marginTop: 22,
               fontSize: 11,
-              color: 'var(--navy-400)',
+              color: 'var(--fg5)',
               fontFamily: 'var(--f-mono, ui-monospace, monospace)',
               lineHeight: 1.5,
             }}
@@ -174,7 +194,7 @@ function Field({
           fontFamily: 'var(--f-mono, ui-monospace, monospace)',
           fontSize: 10,
           letterSpacing: '0.12em',
-          color: 'var(--navy-300)',
+          color: 'var(--fg4)',
         }}
       >
         {label.toUpperCase()}
@@ -189,20 +209,23 @@ function Field({
         style={{
           padding: '10px 12px',
           fontSize: 13,
-          color: 'var(--white)',
-          background: 'rgba(91,200,255,0.05)',
-          border: '1px solid rgba(91,200,255,0.2)',
-          borderRadius: 6,
+          color: 'var(--fg1)',
+          background: 'var(--glass-tint)',
+          backdropFilter: 'blur(10px)',
+          WebkitBackdropFilter: 'blur(10px)',
+          border: '1px solid var(--glass-border)',
+          borderRadius: 8,
           outline: 'none',
           fontFamily: 'inherit',
+          transition: 'border-color 150ms, background 150ms',
         }}
         onFocus={(e) => {
           e.currentTarget.style.borderColor = 'var(--glow-cyan)';
-          e.currentTarget.style.background = 'rgba(91,200,255,0.1)';
+          e.currentTarget.style.background = 'var(--glass-tint-elev)';
         }}
         onBlur={(e) => {
-          e.currentTarget.style.borderColor = 'rgba(91,200,255,0.2)';
-          e.currentTarget.style.background = 'rgba(91,200,255,0.05)';
+          e.currentTarget.style.borderColor = 'var(--glass-border)';
+          e.currentTarget.style.background = 'var(--glass-tint)';
         }}
       />
     </label>

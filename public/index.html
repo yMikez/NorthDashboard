@@ -7,6 +7,19 @@
 <link rel="stylesheet" href="/styles/colors_and_type.css"/>
 <link rel="stylesheet" href="/styles/dashboard.css"/>
 <link rel="icon" href="/assets/logo-mark-dark.svg"/>
+<script>
+  // Aplica o tema antes do React montar pra evitar flash do tema errado.
+  // Persistido em localStorage; default = dark (preserva identidade da marca).
+  (function() {
+    try {
+      var saved = localStorage.getItem('ns-theme');
+      var theme = saved === 'light' || saved === 'dark' ? saved : 'dark';
+      document.documentElement.setAttribute('data-theme', theme);
+    } catch (e) {
+      document.documentElement.setAttribute('data-theme', 'dark');
+    }
+  })();
+</script>
 </head>
 <body>
 <div id="app"></div>
