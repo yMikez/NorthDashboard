@@ -219,6 +219,20 @@ export interface AffiliatesResponse {
     cogs: number;
     fulfillment: number;
     estimatedProfit: number;
+    // Session-attribution lens: every order in a funnel session is credited
+    // to the affiliate who brought the FE lead. Captures the full economic
+    // value an affiliate generates — high-volume affiliates whose leads
+    // also convert in upsells look very different here vs the per-order
+    // estimatedProfit above.
+    attributedSessions: number;
+    attributedOrders: number;
+    attributedRevenue: number;
+    attributedNet: number;
+    attributedCpa: number;
+    attributedCogs: number;
+    attributedFulfillment: number;
+    attributedProfit: number;       // = net − cogs − fulfillment (attributed)
+    attributedMarginPct: number;
     topCountry: string | null;
     ltvRevenue: number;
     ltvOrders: number;
@@ -1716,6 +1730,103 @@ export async function getAffiliates(
     },
   });
 
+  // ---------------- Session attribution pass ----------------
+  // Fetch ALL orders in the period (no affiliate filter) so we can build
+  // session siblings even when an upsell row has affiliateId = null. Then
+  // attribute every order in a session to the FE affiliate of that session.
+  // Captures the full economic value an affiliate's lead generates.
+  const periodWhere: Prisma.OrderWhereInput = {
+    orderedAt: { gte: filters.startDate, lte: filters.endDate },
+  };
+  if (filters.platformSlugs?.length) periodWhere.platform = { slug: { in: filters.platformSlugs } };
+  if (filters.countries?.length) periodWhere.country = { in: filters.countries };
+  // Note: productFamilies filter NOT applied here. We want full session
+  // (FE + cross-sells/bumps from other families) attributed to the FE
+  // affiliate. Filtering by family at this level would drop sessions
+  // whose FE is the chosen family but has cross-family upsells, breaking
+  // attribution math.
+  const periodOrders = await db.order.findMany({
+    where: periodWhere,
+    select: {
+      status: true,
+      grossAmountUsd: true,
+      netAmountUsd: true,
+      cpaPaidUsd: true,
+      cogsUsd: true,
+      fulfillmentUsd: true,
+      productType: true,
+      parentExternalId: true,
+      externalId: true,
+      orderedAt: true,
+      affiliate: { select: { externalId: true, nickname: true } },
+      platform: { select: { slug: true } },
+    },
+  });
+
+  interface SessAtt {
+    feAffKey: string | null;
+    feAffData: { externalId: string; nickname: string | null; platformSlug: string } | null;
+    feSeenAtMs: number;
+    orders: typeof periodOrders;
+  }
+  const sessions = new Map<string, SessAtt>();
+  for (const o of periodOrders) {
+    const key = `${o.platform.slug}:${o.parentExternalId ?? o.externalId}`;
+    let s = sessions.get(key);
+    if (!s) {
+      s = { feAffKey: null, feAffData: null, feSeenAtMs: Number.POSITIVE_INFINITY, orders: [] };
+      sessions.set(key, s);
+    }
+    s.orders.push(o);
+    if (o.productType === 'FRONTEND' && o.affiliate && o.orderedAt.getTime() < s.feSeenAtMs) {
+      s.feAffKey = `${o.platform.slug}:${o.affiliate.externalId}`;
+      s.feAffData = {
+        externalId: o.affiliate.externalId,
+        nickname: o.affiliate.nickname,
+        platformSlug: o.platform.slug,
+      };
+      s.feSeenAtMs = o.orderedAt.getTime();
+    }
+  }
+
+  interface AttAgg {
+    externalId: string;
+    nickname: string | null;
+    platformSlug: string;
+    sessions: number;
+    orders: number;
+    revenue: number;
+    net: number;
+    cpa: number;
+    cogs: number;
+    fulfillment: number;
+  }
+  const attByAff = new Map<string, AttAgg>();
+  for (const s of sessions.values()) {
+    if (!s.feAffKey || !s.feAffData) continue;
+    let a = attByAff.get(s.feAffKey);
+    if (!a) {
+      a = {
+        ...s.feAffData,
+        sessions: 0, orders: 0,
+        revenue: 0, net: 0, cpa: 0, cogs: 0, fulfillment: 0,
+      };
+      attByAff.set(s.feAffKey, a);
+    }
+    a.sessions++;
+    for (const o of s.orders) {
+      a.orders++;
+      if (o.status === 'APPROVED') {
+        a.revenue += toNumber(o.grossAmountUsd);
+        a.net += toNumber(o.netAmountUsd);
+      }
+      a.cpa += toNumber(o.cpaPaidUsd);
+      a.cogs += toNumber(o.cogsUsd ?? 0);
+      a.fulfillment += toNumber(o.fulfillmentUsd ?? 0);
+    }
+  }
+  // ---------------- /attribution pass ----------------
+
   const ltvByAff = await db.order.groupBy({
     by: ['affiliateId'],
     where: { affiliateId: { not: null }, status: 'APPROVED' },
@@ -1840,6 +1951,7 @@ export async function getAffiliates(
   const affiliates = affiliatesAll.map((aff) => {
     const key = `${aff.platform.slug}:${aff.externalId}`;
     const a = inPeriod.get(key);
+    const att = attByAff.get(key);
     const ltv = ltvMap.get(aff.id);
     let topCountry: string | null = null;
     if (a) {
@@ -1872,13 +1984,31 @@ export async function getAffiliates(
       netMargin: round2((a?.net ?? 0) - (a?.cpa ?? 0)),
       cogs: round2(a?.cogs ?? 0),
       fulfillment: round2(a?.fulfillment ?? 0),
-      // Real net profit per affiliate: vendor revenue − COGS − shipping.
-      // CPA is already excluded from `net` (platform paid it before
-      // crediting our account). Negative values surface affiliates whose
-      // volume costs more in production+shipping than they bring in.
+      // Per-order profit: only counts orders where this affiliate is on the
+      // affiliateId (direct platform credit). Misses upsells from their leads
+      // when the platform attributes UP to a different affiliate or null.
       estimatedProfit: round2(
         (a?.net ?? 0) - (a?.cogs ?? 0) - (a?.fulfillment ?? 0),
       ),
+      // Session-attributed profit: includes the full funnel from this
+      // affiliate's leads (FE + bumps + UPs + DWs), regardless of who
+      // platform credited on backend orders. The "real economic value"
+      // their traffic generated.
+      attributedSessions: att?.sessions ?? 0,
+      attributedOrders: att?.orders ?? 0,
+      attributedRevenue: round2(att?.revenue ?? 0),
+      attributedNet: round2(att?.net ?? 0),
+      attributedCpa: round2(att?.cpa ?? 0),
+      attributedCogs: round2(att?.cogs ?? 0),
+      attributedFulfillment: round2(att?.fulfillment ?? 0),
+      attributedProfit: round2(
+        (att?.net ?? 0) - (att?.cogs ?? 0) - (att?.fulfillment ?? 0),
+      ),
+      attributedMarginPct: (att?.revenue ?? 0) > 0
+        ? Math.round(
+            (((att!.net) - (att!.cogs) - (att!.fulfillment)) / att!.revenue) * 10000,
+          ) / 100
+        : 0,
       topCountry,
       ltvRevenue: round2(ltv?.revenue ?? 0),
       ltvOrders: ltv?.orders ?? 0,

@@ -339,6 +339,7 @@ function LeaderboardPage({ filters, onOpenAffiliate }) {
       case 'orders': return b.orders - a.orders;
       case 'netMargin': return b.netMargin - a.netMargin;
       case 'profit': return (b.estimatedProfit ?? 0) - (a.estimatedProfit ?? 0);
+      case 'attributedProfit': return (b.attributedProfit ?? 0) - (a.attributedProfit ?? 0);
       case 'approvalRate': return b.approvalRate - a.approvalRate;
       case 'refundRate': return a.refundRate - b.refundRate;
       case 'chargebackRate': return a.cbRate - b.cbRate;
@@ -392,7 +393,7 @@ function LeaderboardPage({ filters, onOpenAffiliate }) {
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '4px 0 12px', flexWrap: 'wrap' }}>
         <span className="f-label">ORDENAR POR</span>
         <div className="seg">
-          {[['revenue','Receita'],['profit','Lucro'],['orders','Pedidos'],['netMargin','Margem'],['approvalRate','Aprovação'],['refundRate','Reembolsos'],['chargebackRate','Chargebacks']].map(([k,l]) => (
+          {[['revenue','Receita'],['attributedProfit','Lucro atribuído'],['profit','Lucro direto'],['orders','Pedidos'],['netMargin','Margem'],['approvalRate','Aprovação'],['refundRate','Reembolsos'],['chargebackRate','Chargebacks']].map(([k,l]) => (
             <button key={k} className={sortBy === k ? 'is-active' : ''} onClick={() => setSortBy(k)}>{l}</button>
           ))}
         </div>
@@ -423,17 +424,18 @@ function LeaderboardPage({ filters, onOpenAffiliate }) {
                 <th className="num">Chargeback</th>
                 <th className="num">CPA pago</th>
                 <th className="num">Margem</th>
-                <th className="num">Lucro real</th>
+                <th className="num" title="Lucro contando só pedidos onde este afiliado está no affiliateId (sem upsells)">Lucro direto</th>
+                <th className="num" title="Lucro contando o funil COMPLETO da sessão trazida por este afiliado (FE + UPs + DWs + bumps)">Lucro atribuído</th>
                 <th>País principal</th>
                 <th>Tendência 30d</th>
               </tr>
             </thead>
             <tbody>
               {state.status === 'loading' && (
-                <tr><td colSpan={13} style={{ textAlign: 'center', padding: 24, opacity: 0.6 }}>Carregando...</td></tr>
+                <tr><td colSpan={14} style={{ textAlign: 'center', padding: 24, opacity: 0.6 }}>Carregando...</td></tr>
               )}
               {state.status === 'ready' && rows.length === 0 && (
-                <tr><td colSpan={13} style={{ textAlign: 'center', padding: 24, opacity: 0.6 }}>
+                <tr><td colSpan={14} style={{ textAlign: 'center', padding: 24, opacity: 0.6 }}>
                   Nenhum afiliado com pelo menos {minOrders} pedido{minOrders > 1 ? 's' : ''} no período
                 </td></tr>
               )}
@@ -469,8 +471,16 @@ function LeaderboardPage({ filters, onOpenAffiliate }) {
                     <td className={`num cell-mono ${cbClass}`}>{(r.cbRate * 100).toFixed(2)}%</td>
                     <td className="num cell-mono">{fmtCurrency(r.cpa, cur, 0)}</td>
                     <td className="num cell-mono" style={{ color: r.netMargin > 0 ? 'var(--success)' : 'var(--danger)' }}>{fmtCurrency(r.netMargin, cur, 0)}</td>
-                    <td className="num cell-mono" style={{ color: (r.estimatedProfit ?? 0) > 0 ? 'var(--success)' : 'var(--danger)', fontWeight: 600 }}>
+                    <td className="num cell-mono" style={{ color: (r.estimatedProfit ?? 0) > 0 ? 'var(--success)' : 'var(--danger)', opacity: 0.75 }}>
                       {r.estimatedProfit != null ? fmtCurrency(r.estimatedProfit, cur, 0) : '—'}
+                    </td>
+                    <td className="num cell-mono" style={{ color: (r.attributedProfit ?? 0) > 0 ? 'var(--success)' : 'var(--danger)', fontWeight: 600 }}>
+                      {r.attributedProfit != null ? fmtCurrency(r.attributedProfit, cur, 0) : '—'}
+                      {r.attributedSessions > 0 && (
+                        <span style={{ display: 'block', fontSize: 9, color: 'var(--navy-400)', fontWeight: 400, marginTop: 1 }}>
+                          {r.attributedSessions} sessões
+                        </span>
+                      )}
                     </td>
                     <td className="cell-mono">{r.topCountry || '—'}</td>
                     <td><Sparkline data={r.sparkline && r.sparkline.length ? r.sparkline : [0,0]} width={80} height={18} fill={false}/></td>

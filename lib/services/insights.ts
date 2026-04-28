@@ -110,56 +110,61 @@ async function computeAll(): Promise<InsightsResponse> {
 
 // ============================================================
 // A1 — Top afiliado por receita ≠ top por lucro
+//      Usa session-attribution: o lucro inclui o funil completo
+//      (FE + UPs/DWs/bumps) das sessões trazidas pelo afiliado, não
+//      só os pedidos onde ele está no affiliateId.
 // ============================================================
 function insightA1(aff: AffiliatesResponse): Insight[] {
-  const withProfit = aff.affiliates.filter((a) => a.allOrders >= 5);
+  const withProfit = aff.affiliates.filter((a) => a.attributedSessions >= 5);
   if (withProfit.length < 2) return [];
 
-  const byRev = [...withProfit].sort((a, b) => b.revenue - a.revenue);
-  const byProfit = [...withProfit].sort((a, b) => b.estimatedProfit - a.estimatedProfit);
+  const byRev = [...withProfit].sort((a, b) => b.attributedRevenue - a.attributedRevenue);
+  const byProfit = [...withProfit].sort((a, b) => b.attributedProfit - a.attributedProfit);
   const topRev = byRev[0];
   const topProfit = byProfit[0];
   if (topRev.externalId === topProfit.externalId) return [];
 
-  // How much margin gap matters?
-  const revMargin = topRev.revenue > 0 ? topRev.estimatedProfit / topRev.revenue : 0;
-  const profitMargin = topProfit.revenue > 0 ? topProfit.estimatedProfit / topProfit.revenue : 0;
-  if (Math.abs(profitMargin - revMargin) < 0.05) return []; // <5pp gap: not interesting
+  const revMargin = topRev.attributedRevenue > 0 ? topRev.attributedProfit / topRev.attributedRevenue : 0;
+  const profitMargin = topProfit.attributedRevenue > 0 ? topProfit.attributedProfit / topProfit.attributedRevenue : 0;
+  if (Math.abs(profitMargin - revMargin) < 0.05) return [];
 
   return [{
     id: 'a1-rank-mismatch',
     category: 'profit',
     severity: 'insight',
-    headline: `Top afiliado por receita não é o top por lucro`,
-    body: `${topRev.nickname || topRev.externalId} faz ${fmt(topRev.revenue)} em receita mas só ${fmt(topRev.estimatedProfit)} de lucro (margem ${pct(revMargin)}). Comparativamente ${topProfit.nickname || topProfit.externalId} gera ${fmt(topProfit.revenue)} → ${fmt(topProfit.estimatedProfit)} (margem ${pct(profitMargin)}).`,
+    headline: `Top afiliado por receita não é o top por lucro (atribuído à sessão)`,
+    body: `Considerando o funil completo das sessões: ${topRev.nickname || topRev.externalId} traz ${fmt(topRev.attributedRevenue)} em receita mas gera ${fmt(topRev.attributedProfit)} de lucro (margem ${pct(revMargin)}). Comparativamente ${topProfit.nickname || topProfit.externalId} gera ${fmt(topProfit.attributedRevenue)} → ${fmt(topProfit.attributedProfit)} (margem ${pct(profitMargin)}).`,
     metrics: [
-      { label: `Top receita`, value: `${topRev.nickname || topRev.externalId} · ${fmt(topRev.revenue)} · ${pct(revMargin)} margem` },
-      { label: `Top lucro`, value: `${topProfit.nickname || topProfit.externalId} · ${fmt(topProfit.estimatedProfit)} · ${pct(profitMargin)} margem` },
+      { label: `Top receita atribuída`, value: `${topRev.nickname || topRev.externalId} · ${fmt(topRev.attributedRevenue)} · ${pct(revMargin)} margem` },
+      { label: `Top lucro atribuído`, value: `${topProfit.nickname || topProfit.externalId} · ${fmt(topProfit.attributedProfit)} · ${pct(profitMargin)} margem` },
     ],
     cta: { label: 'Abrir Ranking', href: '/leaderboard' },
   }];
 }
 
 // ============================================================
-// B1 — Afiliados dando prejuízo
+// B1 — Afiliados dando prejuízo (visão atribuída à sessão)
+//      Conta a sessão completa do lead: se o afiliado traz volume mas
+//      o lead converte bem em UPs, ele pode ser rentável apesar do CPA
+//      alto. Só sinaliza prejuízo quando o funil INTEIRO é negativo.
 // ============================================================
 function insightB1(aff: AffiliatesResponse): Insight[] {
   const losers = aff.affiliates
-    .filter((a) => a.allOrders >= 5 && a.estimatedProfit < 0)
-    .sort((a, b) => a.estimatedProfit - b.estimatedProfit);
+    .filter((a) => a.attributedSessions >= 5 && a.attributedProfit < 0)
+    .sort((a, b) => a.attributedProfit - b.attributedProfit);
   if (losers.length === 0) return [];
 
-  const totalLoss = losers.reduce((s, a) => s + a.estimatedProfit, 0);
+  const totalLoss = losers.reduce((s, a) => s + a.attributedProfit, 0);
   const top3 = losers.slice(0, 3).map((a) =>
-    `${a.nickname || a.externalId} (${fmt(a.estimatedProfit)} em ${a.allOrders} pedidos)`
+    `${a.nickname || a.externalId} (${fmt(a.attributedProfit)} em ${a.attributedSessions} sessões / ${a.attributedOrders} pedidos)`,
   ).join(' · ');
 
   return [{
     id: 'b1-affiliates-losing',
     category: 'affiliates',
     severity: 'alert',
-    headline: `${losers.length} ${losers.length === 1 ? 'afiliado dá' : 'afiliados dão'} prejuízo nos últimos ${WINDOW_DAYS}d`,
-    body: `Total de prejuízo absorvido: ${fmt(totalLoss)}. Considerar reduzir CPA ou pausar tráfego.`,
+    headline: `${losers.length} ${losers.length === 1 ? 'afiliado dá' : 'afiliados dão'} prejuízo no funil completo (${WINDOW_DAYS}d)`,
+    body: `Mesmo contando as conversões em UPs/DWs trazidas pelos leads, esses afiliados ficam negativos. Total absorvido: ${fmt(totalLoss)}. Considerar reduzir CPA ou pausar tráfego.`,
     metrics: [
       { label: 'Top deficitários', value: top3 },
       { label: 'Prejuízo total', value: fmt(totalLoss) },
