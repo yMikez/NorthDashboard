@@ -332,23 +332,45 @@ async function insightB5(filters: MetricsFilters): Promise<Insight[]> {
 
 // ============================================================
 // C4 — SKU com margem ruim
+//      Pra SKUs FE: usa attributedMarginPct (funil completo da sessão).
+//      Um FE pode parecer prejuízo standalone mas recuperar com os
+//      upsells trazidos pelo lead — só sinaliza quando o funil INTEIRO
+//      ainda fica negativo.
+//      Pra SKUs backend (UP/DW/RC): usa direct (são partes da sessão,
+//      não a originam).
 // ============================================================
 function insightC4(prod: ProductsResponse): Insight[] {
   const losers = prod.products
-    .filter((p) => p.orders >= 5 && p.estimatedMarginPct < 0)
-    .sort((a, b) => a.estimatedMarginPct - b.estimatedMarginPct);
+    .filter((p) => {
+      if (p.orders < 5) return false;
+      // FE: julga pelo lucro atribuído (funil completo)
+      if (p.productType === 'FRONTEND' && p.attributedSessions >= 3) {
+        return p.attributedMarginPct < 0;
+      }
+      // Backend: julga pelo lucro direto (sua própria contribuição)
+      return p.estimatedMarginPct < 0;
+    })
+    .sort((a, b) => {
+      const am = a.productType === 'FRONTEND' ? a.attributedMarginPct : a.estimatedMarginPct;
+      const bm = b.productType === 'FRONTEND' ? b.attributedMarginPct : b.estimatedMarginPct;
+      return am - bm;
+    });
   if (losers.length === 0) return [];
 
-  const top = losers.slice(0, 3).map((p) =>
-    `${p.name} (${p.estimatedMarginPct.toFixed(1)}% margem · ${fmt(p.estimatedProfit)} em ${p.orders} pedidos)`
-  ).join(' · ');
+  const top = losers.slice(0, 3).map((p) => {
+    const isFE = p.productType === 'FRONTEND';
+    const margin = isFE ? p.attributedMarginPct : p.estimatedMarginPct;
+    const profit = isFE ? p.attributedProfit : p.estimatedProfit;
+    const note = isFE ? ' (funil completo)' : '';
+    return `${p.name} (${margin.toFixed(1)}% margem · ${fmt(profit)} em ${p.orders} pedidos${note})`;
+  }).join(' · ');
 
   return [{
     id: 'c4-sku-loss',
     category: 'funnel',
     severity: 'alert',
     headline: `${losers.length} ${losers.length === 1 ? 'SKU está' : 'SKUs estão'} com margem negativa`,
-    body: `Esses produtos custam mais (CPA + COGS + frete) do que rendem em receita líquida. Revisar preço ou retirar do funil.`,
+    body: `Pra SKUs FE, a margem conta o funil INTEIRO (FE + UPs/DWs trazidos pelo lead). Mesmo assim ficam negativos — algo no preço, CPA ou conversão de upsell precisa de revisão. Considerar ajustar preço, reduzir CPA ou retirar do funil.`,
     metrics: [
       { label: 'Casos', value: top },
     ],

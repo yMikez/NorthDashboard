@@ -1091,6 +1091,13 @@ function FamilyDrillDown({ family, familyAgg, productsState, cur, onBack, onPick
 function VariantRow({ variant: v, cur, accent, onClick }) {
   const platShort = v.platformSlug === 'digistore24' ? 'D24' : 'CB';
   const platClass = v.platformSlug === 'digistore24' ? 'plat-d24' : 'plat-cb';
+  // FE absorbs the CPA for the whole session; standalone profit understates
+  // its real economics. When we have enough sessions to be statistically
+  // honest (≥3), show the attributed view (full funnel credited to FE SKU).
+  const useAttributed = v.productType === 'FRONTEND' && (v.attributedSessions ?? 0) >= 3;
+  const profit = useAttributed ? v.attributedProfit : v.estimatedProfit;
+  const marginPct = useAttributed ? v.attributedMarginPct : v.estimatedMarginPct;
+  const profitLabel = useAttributed ? 'lucro atrib.' : 'lucro';
   return (
     <button
       onClick={onClick}
@@ -1116,13 +1123,13 @@ function VariantRow({ variant: v, cur, accent, onClick }) {
         <span style={{ color: accent }}>{fmtInt(v.orders)} pedidos</span>
         <span style={{ color: 'var(--white)' }}>{fmtCurrency(v.revenue, cur, 0)}</span>
       </div>
-      {v.estimatedMarginPct != null && v.revenue > 0 && (
+      {marginPct != null && v.revenue > 0 && (
         <div style={{ display: 'flex', justifyContent: 'space-between', fontFamily: 'var(--f-mono)', fontSize: 10 }}>
-          <span style={{ color: 'var(--navy-400)' }}>lucro</span>
+          <span style={{ color: 'var(--navy-400)' }}>{profitLabel}</span>
           <span style={{
-            color: v.estimatedProfit > 0 ? 'var(--success)' : 'var(--danger)',
+            color: profit > 0 ? 'var(--success)' : 'var(--danger)',
           }}>
-            {fmtCurrency(v.estimatedProfit, cur, 0)} ({v.estimatedMarginPct.toFixed(0)}%)
+            {fmtCurrency(profit, cur, 0)} ({marginPct.toFixed(0)}%)
           </span>
         </div>
       )}
@@ -1142,9 +1149,10 @@ function DrawerLink({ href, icon, label }) {
 }
 
 function VariantDetailDrawer({ variant: v, cur, onClose }) {
-  const margin = v.net - v.cpa;
-  const marginPct = v.revenue ? margin / v.revenue : 0;
+  const profit = v.estimatedProfit ?? 0;
+  const marginPct = v.estimatedMarginPct ?? 0;
   const aov = v.orders ? v.revenue / v.orders : 0;
+  const showAttributed = v.productType === 'FRONTEND' && (v.attributedSessions ?? 0) >= 3;
   return (
     <>
       <div className="drawer-backdrop" onClick={onClose}/>
@@ -1189,9 +1197,31 @@ function VariantDetailDrawer({ variant: v, cur, onClose }) {
             <div className="prod-stat"><div className="l">Receita</div><div className="v">{fmtCurrency(v.revenue, cur, 0)}</div></div>
             <div className="prod-stat"><div className="l">AOV</div><div className="v sm">{fmtCurrency(aov, cur, 0)}</div></div>
             <div className="prod-stat"><div className="l">Aprovação</div><div className="v sm">{v.allOrders ? (v.approvalRate * 100).toFixed(1) + '%' : '—'}</div></div>
-            <div className="prod-stat"><div className="l">Margem</div><div className="v sm" style={{ color: margin > 0 ? 'var(--success)' : 'var(--danger)' }}>{fmtCurrency(margin, cur, 0)}</div></div>
-            <div className="prod-stat"><div className="l">Margem %</div><div className="v sm">{(marginPct * 100).toFixed(1)}%</div></div>
+            <div className="prod-stat"><div className="l">Lucro direto</div><div className="v sm" style={{ color: profit > 0 ? 'var(--success)' : 'var(--danger)' }}>{fmtCurrency(profit, cur, 0)}</div></div>
+            <div className="prod-stat"><div className="l">Margem direta</div><div className="v sm">{marginPct.toFixed(1)}%</div></div>
           </div>
+
+          {showAttributed && (
+            <div style={{ borderTop: '1px solid var(--border-soft)', paddingTop: 12, display: 'grid', gap: 8 }}>
+              <div style={{ fontFamily: 'var(--f-mono)', fontSize: 10, color: 'var(--navy-400)', letterSpacing: '0.1em' }}>
+                LUCRO ATRIBUÍDO · funil completo da sessão
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 10 }}>
+                <div className="prod-stat"><div className="l">Sessões</div><div className="v sm">{fmtInt(v.attributedSessions)}</div></div>
+                <div className="prod-stat"><div className="l">Receita atrib.</div><div className="v sm">{fmtCurrency(v.attributedRevenue, cur, 0)}</div></div>
+                <div className="prod-stat">
+                  <div className="l">Lucro atrib.</div>
+                  <div className="v sm" style={{ color: v.attributedProfit > 0 ? 'var(--success)' : 'var(--danger)' }}>
+                    {fmtCurrency(v.attributedProfit, cur, 0)}
+                  </div>
+                </div>
+                <div className="prod-stat"><div className="l">Margem atrib.</div><div className="v sm">{v.attributedMarginPct.toFixed(1)}%</div></div>
+              </div>
+              <div style={{ fontSize: 10, color: 'var(--navy-300)', lineHeight: 1.4 }}>
+                Inclui UPs, DWs e bumps comprados na mesma sessão deste FE — mostra a economia real do funil que este SKU traz.
+              </div>
+            </div>
+          )}
 
           {(v.firstSoldAt || v.lastSoldAt) && (
             <div style={{ borderTop: '1px solid var(--border-soft)', paddingTop: 12, fontFamily: 'var(--f-mono)', fontSize: 11, color: 'var(--navy-300)', display: 'flex', justifyContent: 'space-between' }}>

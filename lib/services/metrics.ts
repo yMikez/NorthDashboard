@@ -132,6 +132,21 @@ export interface ProductsResponse {
     fulfillment: number;
     estimatedProfit: number;
     estimatedMarginPct: number;
+    // Session-attribution: only meaningful for FE SKUs. Aggregates the
+    // entire session (FE + bumps + UPs + DWs) brought in by this FE and
+    // attributes the full economics to it. Captures the lead's complete
+    // economic value — high-CPA FE products that look unprofitable
+    // standalone often turn positive once upsells are counted.
+    // For non-FE SKUs (UPs, DWs, RC, BUMP), these fields stay 0.
+    attributedSessions: number;
+    attributedOrders: number;
+    attributedRevenue: number;
+    attributedNet: number;
+    attributedCpa: number;
+    attributedCogs: number;
+    attributedFulfillment: number;
+    attributedProfit: number;
+    attributedMarginPct: number;
     approvalRate: number;
     firstSoldAt: string | null;
     lastSoldAt: string | null;
@@ -1252,6 +1267,72 @@ export async function getProducts(
     }
   }
 
+  // ---------- Session attribution to FE SKU ----------
+  // For each session (parent_external_id), find the FE order's SKU and
+  // attribute the full session (FE + bumps + UPs + DWs) to it. Captures
+  // the FE's "real" profit including the upsells brought by its lead —
+  // FE SKUs with high CPA often look unprofitable standalone but recover
+  // margin via the funnel.
+  interface SkuAttAgg {
+    sessions: number;
+    orders: number;
+    revenue: number;
+    net: number;
+    cpa: number;
+    cogs: number;
+    fulfillment: number;
+  }
+  const attBySku = new Map<string, SkuAttAgg>();
+  // We need to fetch parent_external_id and external_id which weren't in
+  // the prior select. Re-query with just session-grouping fields — cheap.
+  const sessionRows = await db.order.findMany({
+    where,
+    select: {
+      status: true,
+      grossAmountUsd: true,
+      netAmountUsd: true,
+      cpaPaidUsd: true,
+      cogsUsd: true,
+      fulfillmentUsd: true,
+      productType: true,
+      parentExternalId: true,
+      externalId: true,
+      product: { select: { externalId: true } },
+      platform: { select: { slug: true } },
+    },
+  });
+  // Group by session
+  const sessionGroups = new Map<string, typeof sessionRows>();
+  for (const o of sessionRows) {
+    const key = `${o.platform.slug}:${o.parentExternalId ?? o.externalId}`;
+    let arr = sessionGroups.get(key);
+    if (!arr) { arr = []; sessionGroups.set(key, arr); }
+    arr.push(o);
+  }
+  // Attribute each session to its FE SKU
+  for (const sessOrders of sessionGroups.values()) {
+    const fe = sessOrders.find((o) => o.productType === 'FRONTEND');
+    if (!fe) continue;
+    const skuKey = `${fe.platform.slug}:${fe.product.externalId}`;
+    let agg = attBySku.get(skuKey);
+    if (!agg) {
+      agg = { sessions: 0, orders: 0, revenue: 0, net: 0, cpa: 0, cogs: 0, fulfillment: 0 };
+      attBySku.set(skuKey, agg);
+    }
+    agg.sessions++;
+    for (const o of sessOrders) {
+      agg.orders++;
+      if (o.status === 'APPROVED') {
+        agg.revenue += toNumber(o.grossAmountUsd);
+        agg.net += toNumber(o.netAmountUsd);
+      }
+      agg.cpa += toNumber(o.cpaPaidUsd);
+      agg.cogs += toNumber(o.cogsUsd ?? 0);
+      agg.fulfillment += toNumber(o.fulfillmentUsd ?? 0);
+    }
+  }
+  // ---------- /attribution ----------
+
   // Resolve per-SKU display productType: pick the most-frequent per-order
   // classification. Catalog Product.productType is fallback when no orders.
   for (const p of byProduct.values()) {
@@ -1267,7 +1348,12 @@ export async function getProducts(
   }
 
   const products = Array.from(byProduct.values())
-    .map((p) => ({
+    .map((p) => {
+      const skuKey = `${p.platformSlug}:${p.externalId}`;
+      const att = attBySku.get(skuKey);
+      const attRevenue = att?.revenue ?? 0;
+      const attProfit = (att?.net ?? 0) - (att?.cogs ?? 0) - (att?.fulfillment ?? 0);
+      return {
       externalId: p.externalId,
       name: p.name,
       productType: p.productType,
@@ -1299,7 +1385,19 @@ export async function getProducts(
       approvalRate: p.allOrders ? round4(p.orders / p.allOrders) : 0,
       firstSoldAt: p.firstSoldAt?.toISOString() ?? null,
       lastSoldAt: p.lastSoldAt?.toISOString() ?? null,
-    }))
+      attributedSessions: att?.sessions ?? 0,
+      attributedOrders: att?.orders ?? 0,
+      attributedRevenue: round2(attRevenue),
+      attributedNet: round2(att?.net ?? 0),
+      attributedCpa: round2(att?.cpa ?? 0),
+      attributedCogs: round2(att?.cogs ?? 0),
+      attributedFulfillment: round2(att?.fulfillment ?? 0),
+      attributedProfit: round2(attProfit),
+      attributedMarginPct: attRevenue > 0
+        ? Math.round((attProfit / attRevenue) * 10000) / 100
+        : 0,
+      };
+    })
     .sort((a, b) => b.revenue - a.revenue);
 
   // byType bucket aggregates from per-ORDER productType (not per-SKU display),
