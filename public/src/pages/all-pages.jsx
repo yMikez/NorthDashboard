@@ -618,9 +618,13 @@ function AffiliateDrawer({ affiliateId, filters, onClose }) {
               <div className="s">net − CPA</div>
             </div>
             <div className="mini-kpi">
-              <div className="l">AOV</div>
+              <div className="l">AOV global</div>
               <div className="v">{fmtCurrency(k.aov, cur, 0)}</div>
-              <div className="s">ticket médio aprovado</div>
+              <div className="s">
+                {k.attributedSessions > 0
+                  ? `funil completo · ${fmtInt(k.attributedSessions)} sessões`
+                  : 'sem sessões FE no período'}
+              </div>
             </div>
             <div className="mini-kpi">
               <div className="l">LTV total</div>
@@ -1151,8 +1155,14 @@ function DrawerLink({ href, icon, label }) {
 function VariantDetailDrawer({ variant: v, cur, onClose }) {
   const profit = v.estimatedProfit ?? 0;
   const marginPct = v.estimatedMarginPct ?? 0;
-  const aov = v.orders ? v.revenue / v.orders : 0;
   const showAttributed = v.productType === 'FRONTEND' && (v.attributedSessions ?? 0) >= 3;
+  // AOV global: pra FE SKUs com sessões suficientes, usa
+  // attributedRevenue/attributedSessions (funil completo). Pra
+  // backend (UP/DW/RC) cai no AOV por pedido — eles não ancoram sessão.
+  const aov = showAttributed
+    ? v.attributedRevenue / v.attributedSessions
+    : v.orders ? v.revenue / v.orders : 0;
+  const aovLabel = showAttributed ? 'AOV global' : 'AOV';
   return (
     <>
       <div className="drawer-backdrop" onClick={onClose}/>
@@ -1195,7 +1205,7 @@ function VariantDetailDrawer({ variant: v, cur, onClose }) {
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 10 }}>
             <div className="prod-stat"><div className="l">Pedidos</div><div className="v">{fmtInt(v.orders)}</div></div>
             <div className="prod-stat"><div className="l">Receita</div><div className="v">{fmtCurrency(v.revenue, cur, 0)}</div></div>
-            <div className="prod-stat"><div className="l">AOV</div><div className="v sm">{fmtCurrency(aov, cur, 0)}</div></div>
+            <div className="prod-stat"><div className="l">{aovLabel}</div><div className="v sm">{fmtCurrency(aov, cur, 0)}</div></div>
             <div className="prod-stat"><div className="l">Aprovação</div><div className="v sm">{v.allOrders ? (v.approvalRate * 100).toFixed(1) + '%' : '—'}</div></div>
             <div className="prod-stat"><div className="l">Lucro direto</div><div className="v sm" style={{ color: profit > 0 ? 'var(--success)' : 'var(--danger)' }}>{fmtCurrency(profit, cur, 0)}</div></div>
             <div className="prod-stat"><div className="l">Margem direta</div><div className="v sm">{marginPct.toFixed(1)}%</div></div>

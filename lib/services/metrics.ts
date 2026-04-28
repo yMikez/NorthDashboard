@@ -191,6 +191,11 @@ export interface AffiliateDetailResponse {
     cpa: number;
     netMargin: number;
     aov: number;
+    // Session-AOV: full-funnel revenue (FE + UPs + DWs + bumps) per FE
+    // session brought by this affiliate. This is the canonical "average
+    // ticket per buyer" metric — same definition Overview/Funnel use.
+    attributedSessions: number;
+    attributedRevenue: number;
   };
   ltv: {
     revenue: number;
@@ -1671,6 +1676,50 @@ export async function getAffiliateDetail(
   }
   const allOrders = periodOrders.length;
   const denom = allOrders || 1;
+
+  // Session-AOV: pull all orders sharing parent_external_ids of this
+  // affiliate's FE orders, sum APPROVED gross, divide by FE-session count.
+  // Matches the Overview/Funnel "AOV global per buyer" definition — captures
+  // upsells/downsells/bumps the same buyer purchased after entering via
+  // this affiliate's FE.
+  const feSessionKeys = await db.order.findMany({
+    where: {
+      affiliateId: aff.id,
+      productType: 'FRONTEND',
+      orderedAt: { gte: filters.startDate, lte: filters.endDate },
+    },
+    select: { parentExternalId: true, externalId: true, platformId: true },
+  });
+  let attributedRevenue = 0;
+  let attributedSessions = 0;
+  if (feSessionKeys.length > 0) {
+    const keysByPlatform = new Map<string, Set<string>>();
+    for (const r of feSessionKeys) {
+      const set = keysByPlatform.get(r.platformId) ?? new Set<string>();
+      set.add(r.parentExternalId ?? r.externalId);
+      keysByPlatform.set(r.platformId, set);
+    }
+    attributedSessions = Array.from(keysByPlatform.values())
+      .reduce((sum, s) => sum + s.size, 0);
+    for (const [platformId, keys] of keysByPlatform.entries()) {
+      const keysArr = Array.from(keys);
+      const sessionOrders = await db.order.findMany({
+        where: {
+          platformId,
+          status: 'APPROVED',
+          OR: [
+            { parentExternalId: { in: keysArr } },
+            { externalId: { in: keysArr } },
+          ],
+        },
+        select: { grossAmountUsd: true },
+      });
+      for (const o of sessionOrders) {
+        attributedRevenue += toNumber(o.grossAmountUsd);
+      }
+    }
+  }
+
   const kpis = {
     revenue: round2(revenue),
     orders,
@@ -1682,7 +1731,17 @@ export async function getAffiliateDetail(
     cbRate: round4(chargebacks / denom),
     cpa: round2(cpa),
     netMargin: round2(net - cpa),
-    aov: round2(orders ? revenue / orders : 0),
+    // AOV is now session-AOV (global, full funnel) instead of per-order
+    // average. Falls back to per-order avg when affiliate has no FE
+    // sessions in the period (rare — they may have been forwarded only
+    // upsells, e.g., second-touch attribution).
+    aov: round2(
+      attributedSessions > 0
+        ? attributedRevenue / attributedSessions
+        : orders ? revenue / orders : 0,
+    ),
+    attributedSessions,
+    attributedRevenue: round2(attributedRevenue),
   };
 
   // Daily series (only days within range)
