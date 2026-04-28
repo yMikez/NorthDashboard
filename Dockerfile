@@ -46,8 +46,8 @@ EXPOSE 3000
 ENV PORT=3000
 ENV HOSTNAME=0.0.0.0
 
-# Startup chain: migrate → backfill classification of existing Products → start app.
-# Backfill is idempotent (filters family IS NULL); logs results to stdout for
-# visibility via `docker logs`. Failure is non-fatal so a bad backfill doesn't
-# prevent the app from coming up.
-CMD ["sh", "-c", "node node_modules/prisma/build/index.js migrate deploy && (node_modules/.bin/tsx scripts/backfillClassification.ts || echo '[startup] backfill failed, continuing') && node server.js"]
+# Startup chain: migrate → backfill classification → seed admin (idempotente,
+# requer ADMIN_SEED_EMAIL/PASSWORD em env) → start app.
+# Cada passo é idempotente; falhas em backfill/seed loggam mas não derrubam
+# o container — o app sobe mesmo se um deles tropeçar.
+CMD ["sh", "-c", "node node_modules/prisma/build/index.js migrate deploy && (node_modules/.bin/tsx scripts/backfillClassification.ts || echo '[startup] backfill failed, continuing') && (node_modules/.bin/tsx scripts/seedAdmin.ts || echo '[startup] seedAdmin failed, continuing') && node server.js"]

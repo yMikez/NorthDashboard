@@ -14,7 +14,8 @@
     "prisma:studio": "prisma studio",
     "seed:catalog": "tsx scripts/seedCatalog.ts",
     "backfill:classify": "tsx scripts/backfillClassification.ts",
-    "create:admin": "tsx scripts/createAdmin.ts"
+    "create:admin": "tsx scripts/createAdmin.ts",
+    "seed:admin": "tsx scripts/seedAdmin.ts"
   },
   "dependencies": {
     "@prisma/client": "^5.22.0",
