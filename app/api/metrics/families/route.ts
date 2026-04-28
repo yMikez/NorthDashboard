@@ -1,11 +1,14 @@
 import { NextResponse } from 'next/server';
 import { getFamilies } from '@/lib/services/families';
+import { requireTab } from '@/lib/auth/guard';
 import { logger } from '@/lib/logger';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
 export async function GET(req: Request) {
+  const auth = await requireTab('products');
+  if (!auth.ok) return auth.response;
   const { searchParams } = new URL(req.url);
 
   const startRaw = searchParams.get('start_date');

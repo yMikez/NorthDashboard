@@ -3,8 +3,8 @@
 
 const { useState: useStateS, useEffect: useEffectS, useRef: useRefS } = React;
 
-function Sidebar({ active, onNav }) {
-  const groups = [
+function Sidebar({ active, onNav, user }) {
+  const allGroups = [
     {
       label: 'Análise',
       items: [
@@ -36,6 +36,14 @@ function Sidebar({ active, onNav }) {
       ]
     }
   ];
+  // Admin vê tudo; MEMBER só vê o que está em allowedTabs.
+  const isAdmin = user?.role === 'ADMIN';
+  const allowed = new Set(user?.allowedTabs || []);
+  const groups = isAdmin
+    ? allGroups
+    : allGroups
+        .map((g) => ({ ...g, items: g.items.filter((it) => allowed.has(it.id)) }))
+        .filter((g) => g.items.length > 0);
   return (
     <aside className="side">
       <div className="side-logo">
@@ -70,15 +78,65 @@ function Sidebar({ active, onNav }) {
             LIVE
           </span>
         </div>
-        <div className="user-chip">
-          <div className="av">NS</div>
-          <div className="who">
-            <span className="nm">NorthScale Admin</span>
-            <span className="rl">OWNER · ADMIN</span>
-          </div>
-        </div>
+        <UserChip user={user}/>
       </div>
     </aside>
+  );
+}
+
+function UserChip({ user }) {
+  const [open, setOpen] = useStateS(false);
+  const ref = useRefS(null);
+  useEffectS(() => {
+    function onDoc(e) { if (ref.current && !ref.current.contains(e.target)) setOpen(false); }
+    document.addEventListener('mousedown', onDoc);
+    return () => document.removeEventListener('mousedown', onDoc);
+  }, []);
+  if (!user) return null;
+  const display = user.name || user.email;
+  const initials = (user.name || user.email)
+    .split(/[\s@.]+/).filter(Boolean).slice(0, 2)
+    .map((p) => p[0]?.toUpperCase()).join('') || '?';
+  async function logout() {
+    try { await fetch('/api/auth/signout', { method: 'POST' }); } catch (e) {}
+    window.location.href = '/login';
+  }
+  return (
+    <div ref={ref} style={{ position: 'relative' }}>
+      <button
+        className="user-chip"
+        onClick={() => setOpen((v) => !v)}
+        style={{ width: '100%', textAlign: 'left', cursor: 'pointer', background: open ? 'rgba(91,200,255,0.06)' : 'transparent', border: 0, font: 'inherit' }}
+      >
+        <div className="av">{initials}</div>
+        <div className="who">
+          <span className="nm">{display}</span>
+          <span className="rl">{user.role === 'ADMIN' ? 'ADMIN · acesso total' : `MEMBER · ${user.allowedTabs.length} ${user.allowedTabs.length === 1 ? 'aba' : 'abas'}`}</span>
+        </div>
+      </button>
+      {open && (
+        <div style={{
+          position: 'absolute', bottom: 'calc(100% + 6px)', left: 0, right: 0,
+          background: 'rgba(6,13,37,0.98)', border: '1px solid var(--border)',
+          borderRadius: 8, padding: 4, zIndex: 30,
+          boxShadow: '0 -10px 40px -10px rgba(91,200,255,0.25)', backdropFilter: 'blur(10px)',
+        }}>
+          <button
+            onClick={logout}
+            style={{
+              width: '100%', textAlign: 'left', padding: '8px 10px', borderRadius: 4,
+              background: 'transparent', border: 0, cursor: 'pointer',
+              fontFamily: 'var(--f-mono)', fontSize: 11, color: 'var(--white)',
+              display: 'flex', alignItems: 'center', gap: 8,
+            }}
+            onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(239,68,68,0.1)'; e.currentTarget.style.color = 'var(--danger)'; }}
+            onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = 'var(--white)'; }}
+          >
+            <Icon name="log-out" size={12}/> Sair
+          </button>
+        </div>
+      )}
+    </div>
   );
 }
 

@@ -246,3 +246,38 @@ model FulfillmentRate {
   label       String              // human display ("0 to 2.99 oz", etc.)
   updatedAt   DateTime @updatedAt
 }
+
+enum UserRole {
+  ADMIN
+  MEMBER
+}
+
+// Dashboard users. ADMIN sees everything and can manage other users.
+// MEMBER sees only the tabs listed in allowedTabs (validated against
+// AVAILABLE_TABS in lib/auth/tabs.ts at write time, not at the DB level).
+model User {
+  id            String    @id @default(cuid())
+  email         String    @unique
+  passwordHash  String
+  name          String?
+  role          UserRole  @default(MEMBER)
+  allowedTabs   String[]  @default([])
+  active        Boolean   @default(true)
+  lastLoginAt   DateTime?
+  createdAt     DateTime  @default(now())
+  createdById   String?
+  sessions      Session[]
+}
+
+model Session {
+  id         String   @id   // random hex token; IS the cookie value
+  userId     String
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  expiresAt  DateTime
+  createdAt  DateTime @default(now())
+  ipAddress  String?
+  userAgent  String?
+
+  @@index([userId])
+  @@index([expiresAt])
+}

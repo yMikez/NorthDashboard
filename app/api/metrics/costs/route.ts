@@ -4,12 +4,15 @@
 
 import { NextResponse } from 'next/server';
 import { db } from '@/lib/db';
+import { requireTab } from '@/lib/auth/guard';
 import { logger } from '@/lib/logger';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
 export async function GET() {
+  const auth = await requireTab('costs');
+  if (!auth.ok) return auth.response;
   try {
     const [families, rates] = await Promise.all([
       db.productFamilyCost.findMany({ orderBy: { family: 'asc' } }),

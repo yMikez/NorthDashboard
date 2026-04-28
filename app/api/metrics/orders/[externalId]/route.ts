@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { getOrderDetail } from '@/lib/services/metrics';
+import { requireTab } from '@/lib/auth/guard';
 import { logger } from '@/lib/logger';
 
 export const runtime = 'nodejs';
@@ -9,6 +10,8 @@ export async function GET(
   req: Request,
   { params }: { params: Promise<{ externalId: string }> },
 ) {
+  const auth = await requireTab('transactions');
+  if (!auth.ok) return auth.response;
   const { externalId } = await params;
   if (!externalId) {
     return NextResponse.json({ error: 'externalId is required' }, { status: 400 });

@@ -77,8 +77,19 @@ function writeRoute(route, params) {
 function decodeSet(s) { return new Set(s ? s.split(',').filter(Boolean) : []); }
 function encodeSet(set) { return Array.from(set).join(','); }
 
-function App() {
-  const [hashState, setHashState] = useStateApp(readRoute());
+function App({ user }) {
+  // Resolve a default route a partir do allowedTabs, pra MEMBER cair em
+  // alguma tab que ele tenha acesso (em vez de cair em 'overview' e ver
+  // página em branco).
+  const isAdminApp = user?.role === 'ADMIN';
+  const allowedRoutesApp = isAdminApp ? Object.keys(ROUTES) : (user?.allowedTabs || []);
+  const initialState = (() => {
+    const r = readRoute();
+    if (isAdminApp || allowedRoutesApp.includes(r.route)) return r;
+    const fallback = allowedRoutesApp[0] || 'overview';
+    return { route: fallback, params: r.params };
+  })();
+  const [hashState, setHashState] = useStateApp(initialState);
   const [filterOptions, setFilterOptions] = useStateApp(null);
 
   // popstate fires on browser back/forward. We re-read the URL and update
@@ -168,7 +179,7 @@ function App() {
   return (
     <div className="app">
       <FXLayers/>
-      <Sidebar active={hashState.route} onNav={onNav}/>
+      <Sidebar active={hashState.route} onNav={onNav} user={user}/>
       <div className="main">
         <Topbar
           title={r.title} titleEm={r.em} crumbs={r.crumbs}
@@ -195,8 +206,34 @@ function App() {
   );
 }
 
-const root = ReactDOM.createRoot(document.getElementById('app'));
-root.render(<App/>);
+// Bootstrap: fetch session info before rendering. 401 → /login. Em qualquer
+// caso de sucesso, passa o user pro App pra filtrar sidebar + topbar.
+async function bootstrap() {
+  let user = null;
+  try {
+    const res = await fetch('/api/me', { credentials: 'same-origin' });
+    if (res.status === 401) {
+      const next = encodeURIComponent(location.pathname + location.search);
+      window.location.href = '/login' + (next !== '%2F' ? '?next=' + next : '');
+      return;
+    }
+    if (!res.ok) {
+      console.error('GET /api/me returned', res.status);
+    } else {
+      const data = await res.json();
+      user = data.user;
+    }
+  } catch (err) {
+    console.error('GET /api/me failed', err);
+  }
+  if (!user) {
+    window.location.href = '/login';
+    return;
+  }
+  const root = ReactDOM.createRoot(document.getElementById('app'));
+  root.render(<App user={user}/>);
+}
+bootstrap();
 </script>
 </body>
 </html>

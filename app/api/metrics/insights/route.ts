@@ -5,12 +5,15 @@
 
 import { NextResponse } from 'next/server';
 import { getInsights } from '@/lib/services/insights';
+import { requireTab } from '@/lib/auth/guard';
 import { logger } from '@/lib/logger';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
 export async function GET(req: Request) {
+  const auth = await requireTab('insights');
+  if (!auth.ok) return auth.response;
   const { searchParams } = new URL(req.url);
   const force = searchParams.get('refresh') === '1';
   try {

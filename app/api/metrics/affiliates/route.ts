@@ -1,11 +1,15 @@
 import { NextResponse } from 'next/server';
 import { getAffiliates } from '@/lib/services/metrics';
+import { requireAnyTab } from '@/lib/auth/guard';
 import { logger } from '@/lib/logger';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
 export async function GET(req: Request) {
+  // Tanto Ranking quanto "Todos os afiliados" puxam deste endpoint.
+  const auth = await requireAnyTab(['leaderboard', 'all-affiliates']);
+  if (!auth.ok) return auth.response;
   const { searchParams } = new URL(req.url);
 
   const startRaw = searchParams.get('start_date');
