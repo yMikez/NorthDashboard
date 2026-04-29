@@ -1454,29 +1454,9 @@ body { overflow-x: hidden; }
 
 /* Drawer — glass profundo com sheen no topo (fica BEHIND do conteúdo
    via z-index negativo + isolation, pra não interferir nos forms). */
-.drawer { isolation: isolate; }
-.drawer::before {
-  content: '';
-  position: absolute; inset: 0;
-  pointer-events: none;
-  z-index: -1;
-  background:
-    radial-gradient(ellipse 80% 30% at 50% 0%,
-      rgba(91,200,255,0.10) 0%,
-      transparent 60%),
-    radial-gradient(ellipse 100% 50% at 50% 100%,
-      rgba(139,127,255,0.08) 0%,
-      transparent 60%);
-}
-[data-theme="light"] .drawer::before {
-  background:
-    radial-gradient(ellipse 80% 30% at 50% 0%,
-      rgba(91,200,255,0.20) 0%,
-      transparent 60%),
-    radial-gradient(ellipse 100% 50% at 50% 100%,
-      rgba(139,127,255,0.12) 0%,
-      transparent 60%);
-}
+/* Drawer pseudo desativado: estava causando overlay sobre o form (mesmo
+   com z-index: -1, em alguns layouts cobria os inputs internos). O gradient
+   do bg principal já dá identidade visual suficiente. */
 
 /* Sidebar — top sheen sutil pra dar peso "vidro" */
 .side { isolation: isolate; overflow: hidden; }
