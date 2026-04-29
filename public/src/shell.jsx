@@ -388,11 +388,103 @@ const dateInputStyle = {
 };
 
 // ---------- Filter bar ----------
+// Presets ordenados de mais curto pra mais longo, com nomes amigáveis
+// (a UI do dropdown mostra essa label completa; o chip de range mostra
+// só o intervalo curto).
+const DATE_PRESETS = [
+  { id: 'today',     label: 'Hoje' },
+  { id: 'yesterday', label: 'Ontem' },
+  { id: '7d',        label: 'Últimos 7 dias' },
+  { id: '30d',       label: 'Últimos 30 dias' },
+  { id: '90d',       label: 'Últimos 90 dias' },
+  { id: 'mtd',       label: 'Este mês' },
+  { id: 'qtd',       label: 'Este trimestre' },
+  { id: 'ytd',       label: 'Este ano' },
+];
+const PRESET_LABEL = Object.fromEntries(DATE_PRESETS.map((p) => [p.id, p.label]));
+PRESET_LABEL.custom = 'Personalizado';
+
+function PeriodDropdown({ filters, setFilters }) {
+  const [open, setOpen] = useStateS(false);
+  const ref = useRefS(null);
+  useEffectS(() => {
+    function onDoc(e) { if (ref.current && !ref.current.contains(e.target)) setOpen(false); }
+    document.addEventListener('mousedown', onDoc);
+    return () => document.removeEventListener('mousedown', onDoc);
+  }, []);
+  function pick(id) {
+    setFilters((f) => ({ ...f, preset: id, dateRange: rangeForPreset(id) }));
+    setOpen(false);
+  }
+  const activeLabel = PRESET_LABEL[filters.preset] || 'Selecionar';
+  return (
+    <div ref={ref} style={{ position: 'relative' }}>
+      <button
+        className="select-btn"
+        onClick={() => setOpen((v) => !v)}
+        style={{ minWidth: 180, justifyContent: 'space-between' }}
+        aria-haspopup="listbox"
+        aria-expanded={open}
+      >
+        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
+          <Icon name="calendar" size={12}/> {activeLabel}
+        </span>
+        <Icon name="chevron-down" size={12}/>
+      </button>
+      {open && (
+        <div role="listbox" style={{
+          position: 'absolute', top: 'calc(100% + 6px)', left: 0, minWidth: 220,
+          background: 'var(--bg-elev)', border: '1px solid var(--border)',
+          borderRadius: 8, padding: 4, zIndex: 20,
+          boxShadow: '0 20px 60px -20px rgba(91,200,255,0.30)',
+          backdropFilter: 'blur(20px) saturate(180%)',
+          WebkitBackdropFilter: 'blur(20px) saturate(180%)',
+        }}>
+          {DATE_PRESETS.map((p) => (
+            <button
+              key={p.id}
+              role="option"
+              aria-selected={filters.preset === p.id}
+              onClick={() => pick(p.id)}
+              style={{
+                display: 'block', width: '100%', textAlign: 'left',
+                padding: '8px 12px', fontSize: 12,
+                color: filters.preset === p.id ? 'var(--glow-cyan)' : 'var(--fg2)',
+                background: filters.preset === p.id ? 'rgba(91,200,255,0.08)' : 'transparent',
+                border: 0, borderRadius: 4, cursor: 'pointer',
+                fontFamily: 'inherit',
+              }}
+              onMouseEnter={(e) => { if (filters.preset !== p.id) e.currentTarget.style.background = 'rgba(91,200,255,0.04)'; }}
+              onMouseLeave={(e) => { if (filters.preset !== p.id) e.currentTarget.style.background = 'transparent'; }}
+            >
+              {p.label}
+            </button>
+          ))}
+          <div style={{ height: 1, background: 'var(--border-soft)', margin: '4px 0' }}/>
+          <button
+            role="option"
+            aria-selected={filters.preset === 'custom'}
+            onClick={() => { setFilters((f) => ({ ...f, preset: 'custom' })); setOpen(false); }}
+            style={{
+              display: 'block', width: '100%', textAlign: 'left',
+              padding: '8px 12px', fontSize: 12,
+              color: filters.preset === 'custom' ? 'var(--glow-cyan)' : 'var(--fg2)',
+              background: filters.preset === 'custom' ? 'rgba(91,200,255,0.08)' : 'transparent',
+              border: 0, borderRadius: 4, cursor: 'pointer',
+              fontFamily: 'inherit',
+            }}
+            onMouseEnter={(e) => { if (filters.preset !== 'custom') e.currentTarget.style.background = 'rgba(91,200,255,0.04)'; }}
+            onMouseLeave={(e) => { if (filters.preset !== 'custom') e.currentTarget.style.background = 'transparent'; }}
+          >
+            Personalizado…
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function FilterBar({ filters, setFilters, options, route }) {
-  const DATE_PRESETS = [
-    ['today', 'Hoje'], ['yesterday', 'Ontem'], ['7d', '7D'], ['30d', '30D'],
-    ['mtd', 'Mês'], ['qtd', 'Trimestre'], ['ytd', 'Ano'], ['90d', '90D']
-  ];
 
   // Real options come from /api/metrics/filters (loaded async by App). Fall
   // back to MOCK universe while loading so the bar isn't blank on first paint.
@@ -431,21 +523,7 @@ function FilterBar({ filters, setFilters, options, route }) {
     <div className="filters">
       <Icon name="filter" size={12} className="f-icon" />
       <span className="f-label">PERÍODO</span>
-      <div className="seg">
-        {DATE_PRESETS.map(([k, l]) => (
-          <button key={k} className={filters.preset === k ? 'is-active' : ''}
-            onClick={() => setFilters(f => ({ ...f, preset: k, dateRange: rangeForPreset(k) }))}
-          >{l}</button>
-        ))}
-        <button className={filters.preset === 'custom' ? 'is-active' : ''}
-          onClick={() => {
-            // Opening the chip popover handles date selection — clicking
-            // "Custom" just seeds the preset with the current range so the
-            // chip shows it as active immediately.
-            setFilters(f => ({ ...f, preset: 'custom' }));
-          }}
-        >Custom</button>
-      </div>
+      <PeriodDropdown filters={filters} setFilters={setFilters}/>
       <DateRangeChip
         range={filters.dateRange}
         onChange={(start, end) => setFilters(f => ({
