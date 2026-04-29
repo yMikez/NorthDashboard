@@ -1715,7 +1715,7 @@ function TransactionDrawer({ externalId, platformSlug, cur, onClose, onPickOrder
           <button className="icon-btn" onClick={onClose}><Icon name="x" size={14}/></button>
         </div>
 
-        <div style={{ padding: 16, display: 'grid', gap: 16, maxHeight: 'calc(100vh - 100px)', overflowY: 'auto' }}>
+        <div style={{ padding: '16px 18px 32px', display: 'grid', gap: 16 }}>
 
           {/* Financial breakdown */}
           <div>
@@ -2455,7 +2455,7 @@ function UserFormDrawer({ mode, initial, isSelf, onClose, onSaved }) {
           <button className="icon-btn" onClick={onClose} title="Fechar"><Icon name="x" size={14}/></button>
         </div>
 
-        <div style={{ padding: 16, display: 'grid', gap: 14, maxHeight: 'calc(100vh - 100px)', overflowY: 'auto' }}>
+        <div style={{ padding: '16px 18px 32px', display: 'grid', gap: 14 }}>
           {isCreate && (
             <UserField label="E-mail" value={email} onChange={setEmail} type="email" required/>
           )}
