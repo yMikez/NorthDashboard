@@ -6,19 +6,31 @@ import type { DigistorePayload } from './types';
 const payment = fixturePayment as unknown as DigistorePayload;
 
 describe('parseDigistoreTimestamp', () => {
-  it('parses "YYYY-MM-DD HH:MM:SS" format as UTC', () => {
+  // Digistore manda timestamps em wall-clock de Europe/Berlin (CET no
+  // inverno, CEST no verão). Fora de boundary de DST, Apr-Out = CEST = UTC+2.
+  it('parses "YYYY-MM-DD HH:MM:SS" como Europe/Berlin (CEST em abril → −2h pra UTC)', () => {
     const d = parseDigistoreTimestamp('2026-04-24 03:56:47');
-    expect(d.toISOString()).toBe('2026-04-24T03:56:47.000Z');
+    expect(d.toISOString()).toBe('2026-04-24T01:56:47.000Z');
   });
 
-  it('falls back to transaction_date + transaction_time', () => {
+  it('falls back to transaction_date + transaction_time (CEST)', () => {
     const d = parseDigistoreTimestamp(undefined, '2026-04-24', '03:56:54');
-    expect(d.toISOString()).toBe('2026-04-24T03:56:54.000Z');
+    expect(d.toISOString()).toBe('2026-04-24T01:56:54.000Z');
   });
 
-  it('falls back to server_time', () => {
+  it('falls back to server_time (CEST)', () => {
     const d = parseDigistoreTimestamp(undefined, undefined, undefined, '2026-04-24 03:44:09');
-    expect(d.toISOString()).toBe('2026-04-24T03:44:09.000Z');
+    expect(d.toISOString()).toBe('2026-04-24T01:44:09.000Z');
+  });
+
+  it('handles CET (winter — Janeiro = UTC+1)', () => {
+    const d = parseDigistoreTimestamp('2026-01-15 12:00:00');
+    expect(d.toISOString()).toBe('2026-01-15T11:00:00.000Z');
+  });
+
+  it('respeita timezone explícito quando presente (Z)', () => {
+    const d = parseDigistoreTimestamp('2026-04-24T03:56:47Z');
+    expect(d.toISOString()).toBe('2026-04-24T03:56:47.000Z');
   });
 });
 

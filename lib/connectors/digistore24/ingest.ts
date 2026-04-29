@@ -191,7 +191,36 @@ export function parseDigistoreTimestamp(
 }
 
 function parseDigistoreDateString(raw: string): Date | null {
-  const iso = raw.trim().replace(' ', 'T') + (raw.includes('Z') || raw.includes('+') ? '' : 'Z');
-  const d = new Date(iso);
+  const trimmed = raw.trim();
+  // Quando o payload já trouxe timezone explícito (Z, +HH:MM, -HH:MM no fim),
+  // o motor JS resolve corretamente — só normalizamos espaço pra T.
+  if (trimmed.includes('Z') || /[+-]\d{2}:?\d{2}$/.test(trimmed)) {
+    const d = new Date(trimmed.replace(' ', 'T'));
+    return Number.isNaN(d.getTime()) ? null : d;
+  }
+  // Sem TZ explícito — Digistore manda wall-clock em Europe/Berlin (CET no
+  // inverno, CEST no verão). ANTES tratávamos como UTC, o que causava bug
+  // de +1h ou +2h em todos os orderedAt.
+  const m = trimmed.match(/^(\d{4})-(\d{2})-(\d{2})[T\s]+(\d{2}):(\d{2}):(\d{2})/);
+  if (!m) return null;
+  const [, Y, M, D, h, mi, s] = m.map(Number);
+  // Itera 2x no máximo: faz uma estimativa UTC, descobre a wall-clock que
+  // ela representaria em Berlin, ajusta pelo offset, refaz. Converge em
+  // 1 iteração mesmo cruzando borda de DST.
+  let utcMs = Date.UTC(Y, M - 1, D, h, mi, s);
+  for (let i = 0; i < 2; i++) {
+    const parts = new Intl.DateTimeFormat('en-CA', {
+      timeZone: 'Europe/Berlin', hour12: false,
+      year: 'numeric', month: '2-digit', day: '2-digit',
+      hour: '2-digit', minute: '2-digit', second: '2-digit',
+    }).formatToParts(new Date(utcMs));
+    const get = (t: string) => Number(parts.find((p) => p.type === t)?.value);
+    const berlinH = get('hour');
+    const berlinMi = get('minute');
+    const diffMin = (berlinH - h) * 60 + (berlinMi - mi);
+    if (diffMin === 0) break;
+    utcMs -= diffMin * 60 * 1000;
+  }
+  const d = new Date(utcMs);
   return Number.isNaN(d.getTime()) ? null : d;
 }
