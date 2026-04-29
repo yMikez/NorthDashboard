@@ -239,8 +239,8 @@ function MultiSelect({ label, options, selected, onChange, icon }) {
       {open && (
         <div style={{
           position: 'absolute', top: 'calc(100% + 6px)', left: 0, minWidth: 220,
-          background: 'rgba(6,13,37,0.98)', border: '1px solid var(--border)',
-          borderRadius: 8, padding: 6, zIndex: 20, boxShadow: '0 20px 60px -20px rgba(91,200,255,0.3)',
+          background: 'var(--bg-elev)', border: '1px solid var(--border)',
+          backdropFilter: 'blur(20px) saturate(180%)', WebkitBackdropFilter: 'blur(20px) saturate(180%)',          borderRadius: 8, padding: 6, zIndex: 20, boxShadow: '0 20px 60px -20px rgba(91,200,255,0.3)',
           backdropFilter: 'blur(10px)'
         }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', padding: '4px 8px', marginBottom: 4 }}>
@@ -336,8 +336,8 @@ function DateRangeChip({ range, onChange }) {
       {open && (
         <div style={{
           position: 'absolute', top: 'calc(100% + 6px)', left: 0, minWidth: 280,
-          background: 'rgba(6,13,37,0.98)', border: '1px solid var(--border)',
-          borderRadius: 8, padding: 12, zIndex: 20,
+          background: 'var(--bg-elev)', border: '1px solid var(--border)',
+          backdropFilter: 'blur(20px) saturate(180%)', WebkitBackdropFilter: 'blur(20px) saturate(180%)',          borderRadius: 8, padding: 12, zIndex: 20,
           boxShadow: '0 20px 60px -20px rgba(91,200,255,0.3)',
           backdropFilter: 'blur(10px)',
           display: 'grid', gap: 10,

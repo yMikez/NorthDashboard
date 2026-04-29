@@ -346,7 +346,7 @@ function HourHeatmap({ data, metric = 'orders', currency = 'USD' }) {
           gridColumn: '2 / 3',
           marginTop: 8,
           padding: '6px 10px',
-          background: 'rgba(6,13,37,0.95)',
+          background: 'var(--bg-elev)', backdropFilter: 'blur(14px) saturate(180%)', WebkitBackdropFilter: 'blur(14px) saturate(180%)',
           border: '1px solid var(--border)',
           borderRadius: 4,
           fontFamily: 'var(--f-mono)', fontSize: 11, color: 'var(--fg2)',

@@ -1613,9 +1613,9 @@ function TransactionsPage({ filters }) {
                     <td className="cell-mono">{o.affiliateNickname || o.affiliateExternalId || '—'}</td>
                     <td className="cell-mono">{o.country || '—'}</td>
                     <td className="cell-mono">{o.paymentMethod || '—'}</td>
-                    <td className="num cell-mono">{fmtCurrency(o.grossAmountUsd, cur, 2)}</td>
+                    <td className="num cell-mono" style={{ color: o.grossAmountUsd < 0 ? 'var(--danger)' : 'var(--fg1)' }}>{fmtCurrency(o.grossAmountUsd, cur, 2)}</td>
                     <td className="num cell-mono" style={{ color: 'var(--fg5)' }}>{fmtCurrency(o.fees, cur, 2)}</td>
-                    <td className="num cell-mono">{fmtCurrency(o.netAmountUsd, cur, 2)}</td>
+                    <td className="num cell-mono" style={{ color: o.netAmountUsd < 0 ? 'var(--danger)' : 'var(--fg1)' }}>{fmtCurrency(o.netAmountUsd, cur, 2)}</td>
                     <td><span className={`st st-${statusLc}`}>{statusLc}</span></td>
                     <td className="num cell-mono">{fmtCurrency(o.cpaPaidUsd, cur, 2)}</td>
                   </tr>
