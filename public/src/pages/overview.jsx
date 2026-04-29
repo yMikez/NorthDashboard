@@ -56,8 +56,21 @@ const PLATFORM_VARIANTS = {
 
 function deltaFor(cur, prev) {
   if (prev === undefined || prev === null) return { delta: '—', trend: 'flat' };
-  if (prev === 0) return cur === 0 ? { delta: '0%', trend: 'flat' } : { delta: '+∞', trend: 'up' };
+  if (prev === 0) {
+    if (cur === 0) return { delta: '0%', trend: 'flat' };
+    // Sem baseline pra comparar — mostra "novo" em vez de infinito.
+    return { delta: 'novo', trend: 'up' };
+  }
   const d = (cur - prev) / prev;
+  // Cap em ±999% pra não poluir a UI com valores estratosféricos
+  // quando o período anterior teve volume residual (ex.: 2 pedidos
+  // virando 200 = +9900% que estoura visualmente).
+  if (Math.abs(d) > 9.99) {
+    return {
+      delta: (d > 0 ? '>+999%' : '<-999%'),
+      trend: d > 0 ? 'up' : 'down',
+    };
+  }
   return {
     delta: (d >= 0 ? '+' : '') + (d * 100).toFixed(1) + '%',
     trend: d >= 0.002 ? 'up' : d <= -0.002 ? 'down' : 'flat',
