@@ -917,10 +917,15 @@ body { overflow-x: hidden; }
 .tbl-wrap::-webkit-scrollbar-thumb, .drawer::-webkit-scrollbar-thumb { background: rgba(91,200,255,0.15); border-radius: 4px; }
 .tbl-wrap::-webkit-scrollbar-thumb:hover, .drawer::-webkit-scrollbar-thumb:hover { background: rgba(91,200,255,0.3); }
 
-/* ---------- page enter ---------- */
+/* ---------- page enter ----------
+   IMPORTANTE: NUNCA usar transform aqui. Drawers (.drawer) usam
+   position: fixed e renderizam dentro de .page-in. Qualquer transform
+   neste elemento — mesmo translateY(0) — cria um novo containing block
+   que captura o fixed do drawer e quebra o full-viewport. Ficamos só
+   com fade de opacity, suficiente como entrada visual. */
 @keyframes pageIn {
-  from { opacity: 0; transform: translateY(8px); }
-  to { opacity: 1; transform: translateY(0); }
+  from { opacity: 0; }
+  to { opacity: 1; }
 }
 .page-in {
   animation: pageIn 300ms var(--ease-smooth);
