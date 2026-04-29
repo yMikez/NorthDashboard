@@ -572,7 +572,14 @@ export function dailyFromRows(
   endDate: Date,
 ): DailyBucket[] {
   const buckets = new Map<string, DailyBucket>();
-  for (let d = startOfDay(startDate); d <= endDate; d = addDays(d, 1)) {
+  // Iteração por DIA BRT (não UTC). MV.day já vem em America/Sao_Paulo, e
+  // o frontend manda start/end como BRT day boundaries em UTC. Pra gerar
+  // os keys '2026-04-XX' BRT, deslocamos -3h e iteramos UTC dates do
+  // resultado — equivale a iterar dias BRT.
+  const TZ_SHIFT_MS = 3 * 60 * 60 * 1000; // BRT = UTC-3 (sem DST)
+  const startBrt = new Date(startDate.getTime() - TZ_SHIFT_MS);
+  const endBrt = new Date(endDate.getTime() - TZ_SHIFT_MS);
+  for (let d = startOfDay(startBrt); d <= endBrt; d = addDays(d, 1)) {
     const key = isoDate(d);
     buckets.set(key, {
       date: key, gross: 0, net: 0, cpa: 0, cogs: 0, fulfillment: 0, profit: 0,
@@ -2541,8 +2548,12 @@ function computeDaily(
   endDate: Date,
 ): DailyBucket[] {
   const buckets = new Map<string, DailyBucket>();
-
-  for (let d = startOfDay(startDate); d <= endDate; d = addDays(d, 1)) {
+  // Iteração por dia BRT (espelha dailyFromRows). orders.orderedAt é UTC;
+  // shift -3h pra cair no dia BRT correto antes de gerar a key.
+  const TZ_SHIFT_MS = 3 * 60 * 60 * 1000;
+  const startBrt = new Date(startDate.getTime() - TZ_SHIFT_MS);
+  const endBrt = new Date(endDate.getTime() - TZ_SHIFT_MS);
+  for (let d = startOfDay(startBrt); d <= endBrt; d = addDays(d, 1)) {
     const key = isoDate(d);
     buckets.set(key, {
       date: key,
@@ -2552,7 +2563,7 @@ function computeDaily(
   }
 
   for (const o of orders) {
-    const key = isoDate(o.orderedAt);
+    const key = isoDate(new Date(o.orderedAt.getTime() - TZ_SHIFT_MS));
     const b = buckets.get(key);
     if (!b) continue;
     b.allOrders++;

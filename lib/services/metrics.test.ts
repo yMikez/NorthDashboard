@@ -36,9 +36,13 @@ function row(overrides: Partial<DailyMetricsRow> = {}): DailyMetricsRow {
 // ------------ dailyFromRows ------------
 
 describe('dailyFromRows', () => {
+  // Start/end vêm do frontend como BRT day boundaries em UTC:
+  // - BRT day X start = UTC X 03:00:00
+  // - BRT day X end   = UTC X+1 02:59:59.999
+  // Iteração interna gera keys em BRT day ('2026-04-XX').
   it('produces one bucket per day in the range, even with no data', () => {
-    const start = new Date('2026-04-20T00:00:00.000Z');
-    const end = new Date('2026-04-22T23:59:59.999Z');
+    const start = new Date('2026-04-20T03:00:00.000Z'); // BRT day Apr 20 start
+    const end = new Date('2026-04-23T02:59:59.999Z');   // BRT day Apr 22 end
     const buckets = dailyFromRows([], start, end);
     expect(buckets).toHaveLength(3);
     expect(buckets.map((b) => b.date)).toEqual(['2026-04-20', '2026-04-21', '2026-04-22']);
@@ -49,8 +53,8 @@ describe('dailyFromRows', () => {
   });
 
   it('aggregates rows from multiple dimensions into one bucket per day', () => {
-    const start = new Date('2026-04-20T00:00:00.000Z');
-    const end = new Date('2026-04-20T23:59:59.999Z');
+    const start = new Date('2026-04-20T03:00:00.000Z');
+    const end = new Date('2026-04-21T02:59:59.999Z');
     const rows = [
       row({ family: 'NeuroMindPro', country: 'US', product_type: 'FRONTEND', gross: 500, approved_count: 5, total_count: 5 }),
       row({ family: 'NeuroMindPro', country: 'AU', product_type: 'FRONTEND', gross: 200, approved_count: 2, total_count: 3 }),
@@ -67,8 +71,8 @@ describe('dailyFromRows', () => {
   });
 
   it('orders the resulting buckets ascending by date', () => {
-    const start = new Date('2026-04-20T00:00:00.000Z');
-    const end = new Date('2026-04-22T23:59:59.999Z');
+    const start = new Date('2026-04-20T03:00:00.000Z');
+    const end = new Date('2026-04-23T02:59:59.999Z');
     const rows = [
       row({ day: new Date('2026-04-22T00:00:00.000Z'), gross: 30 }),
       row({ day: new Date('2026-04-20T00:00:00.000Z'), gross: 10 }),

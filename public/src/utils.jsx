@@ -55,25 +55,36 @@ function avatarColor(id) {
 }
 
 // ---------- date range utils ----------
-function rangeForPreset(preset, today = new Date()) {
-  const end = new Date(today);
-  end.setUTCHours(23,59,59,999);
-  let start = new Date(today);
-  start.setUTCHours(0,0,0,0);
+// Toda lógica de range é em dia BRT (America/Sao_Paulo, UTC-3 sem DST).
+// "Hoje" = dia do calendário BRT no momento de agora; o range termina às
+// 23:59:59 BRT = 02:59:59 UTC do dia seguinte.
+function rangeForPreset(preset, now = new Date()) {
+  // Pega componentes do dia BRT atual via Intl (handle correto de TZ).
+  const fmt = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'America/Sao_Paulo',
+    year: 'numeric', month: '2-digit', day: '2-digit',
+  });
+  const [Y, M, D] = fmt.format(now).split('-').map(Number);
+
+  // BRT day X em UTC: [X 03:00:00, X+1 03:00:00). Ou: end = X+1 02:59:59.999.
+  const brtDayStart = (y, m, d) => new Date(Date.UTC(y, m - 1, d, 3, 0, 0, 0));
+  const brtDayEnd   = (y, m, d) => new Date(Date.UTC(y, m - 1, d, 26, 59, 59, 999));
+
+  let start = brtDayStart(Y, M, D);
+  let end = brtDayEnd(Y, M, D);
   switch (preset) {
     case 'today': break;
-    case 'yesterday': {
-      start.setUTCDate(start.getUTCDate() - 1);
-      const e = new Date(start); e.setUTCHours(23,59,59,999);
-      return { start, end: e, preset };
-    }
-    case '7d':  start.setUTCDate(start.getUTCDate() - 6); break;
-    case '30d': start.setUTCDate(start.getUTCDate() - 29); break;
-    case 'mtd': start = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), 1)); break;
-    case 'qtd': start = new Date(Date.UTC(today.getUTCFullYear(), Math.floor(today.getUTCMonth()/3)*3, 1)); break;
-    case 'ytd': start = new Date(Date.UTC(today.getUTCFullYear(), 0, 1)); break;
-    case '90d': start.setUTCDate(start.getUTCDate() - 89); break;
-    default:    start.setUTCDate(start.getUTCDate() - 29);
+    case 'yesterday':
+      start = brtDayStart(Y, M, D - 1);
+      end   = brtDayEnd(Y, M, D - 1);
+      break;
+    case '7d':  start = brtDayStart(Y, M, D - 6);  break;
+    case '30d': start = brtDayStart(Y, M, D - 29); break;
+    case '90d': start = brtDayStart(Y, M, D - 89); break;
+    case 'mtd': start = brtDayStart(Y, M, 1);      break;
+    case 'qtd': start = brtDayStart(Y, Math.floor((M - 1) / 3) * 3 + 1, 1); break;
+    case 'ytd': start = brtDayStart(Y, 1, 1);      break;
+    default:    start = brtDayStart(Y, M, D - 29);
   }
   return { start, end, preset };
 }
