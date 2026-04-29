@@ -619,10 +619,14 @@ export function byCountryFromRows(
     e.orders += r.approved_count;
     map.set(r.country, e);
   }
+  // Top 25 — frontend renderiza top 10 e agrupa os 15+ restantes em
+  // "Outros (N países)" com expansão opcional. 25 é cap razoável pra
+  // não inchar o payload (vendor opera majoritariamente Tier 1, ~10
+  // países cobrem 95% do volume).
   return Array.from(map.values())
     .map((e) => ({ ...e, value: round2(e.value) }))
     .sort((a, b) => b.value - a.value)
-    .slice(0, 8);
+    .slice(0, 25);
 }
 
 export function byProductTypeFromRows(

@@ -6,6 +6,9 @@
 <title>Northscale · Operations Dashboard</title>
 <link rel="stylesheet" href="/styles/colors_and_type.css"/>
 <link rel="stylesheet" href="/styles/dashboard.css"/>
+<!-- flag-icons via CDN: SVG flags consistentes cross-platform.
+     Usado no card "Receita por país" do Overview. ~30kb gzip total. -->
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flag-icons@7.2.3/css/flag-icons.min.css"/>
 <link rel="icon" href="/assets/logo-mark-dark.svg"/>
 <script>
   // Aplica o tema antes do React montar pra evitar flash do tema errado.
@@ -221,7 +224,7 @@ function App({ user }) {
         />
         <FilterBar filters={filters} setFilters={setFilters} options={filterOptions} route={hashState.route}/>
         <div className="page">
-          {hashState.route === 'overview'       && <OverviewPage filters={filters}/>}
+          {hashState.route === 'overview'       && <OverviewPage filters={filters} setFilters={setFilters}/>}
           {hashState.route === 'funnel'         && <FunnelPage filters={filters}/>}
           {hashState.route === 'leaderboard'    && <LeaderboardPage filters={filters} onOpenAffiliate={setDrawerAff}/>}
           {hashState.route === 'all-affiliates' && <AllAffiliatesPage filters={filters} onOpenAffiliate={setDrawerAff}/>}

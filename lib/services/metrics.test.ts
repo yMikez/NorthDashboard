@@ -100,17 +100,17 @@ describe('byCountryFromRows', () => {
     expect(out[0].code).toBe('US');
   });
 
-  it('aggregates across families/products into per-country totals, top 8', () => {
-    // Generate 10 distinct countries; verify only top 8 are returned, sorted
+  it('aggregates across families/products into per-country totals, top 25', () => {
+    // Generate 30 distinct countries; verify only top 25 are returned, sorted
     // by gross desc.
-    const rows = Array.from({ length: 10 }, (_, i) =>
-      row({ country: `C${i}`, gross: (10 - i) * 100, approved_count: 10 - i }),
+    const rows = Array.from({ length: 30 }, (_, i) =>
+      row({ country: `C${i}`, gross: (30 - i) * 100, approved_count: 30 - i }),
     );
     const out = byCountryFromRows(rows);
-    expect(out).toHaveLength(8);
+    expect(out).toHaveLength(25);
     expect(out[0].code).toBe('C0'); // highest revenue first
-    expect(out[0].value).toBe(1000);
-    expect(out[7].value).toBe(300);
+    expect(out[0].value).toBe(3000);
+    expect(out[24].value).toBe(600);
   });
 
   it('combines multiple rows for the same country', () => {

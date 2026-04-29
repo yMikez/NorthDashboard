@@ -711,23 +711,57 @@ body { overflow-x: hidden; }
 .donut-row .p { font-family: var(--f-mono); font-size: 10px; color: var(--navy-400); min-width: 34px; text-align: right; }
 
 /* horizontal bar list */
-.hbars { display: flex; flex-direction: column; gap: 10px; }
-.hbar { display: grid; grid-template-columns: 28px 1fr auto; gap: 10px; align-items: center; font-size: 12px; }
-.hbar .flag {
-  width: 22px; height: 16px; border-radius: 3px; border: 1px solid var(--border-soft);
-  display: grid; place-items: center;
-  font-family: var(--f-mono); font-size: 9px; color: var(--white); letter-spacing: 0.05em; font-weight: 600;
-  background: rgba(91,200,255,0.06);
+.hbars { display: flex; flex-direction: column; gap: 8px; }
+/* .hbar pode ser <button> (clicável) ou <div> — reset de estilos quando button */
+.hbar {
+  display: grid; grid-template-columns: 26px 1fr auto;
+  gap: 10px; align-items: center; font-size: 12px;
+  text-align: left; background: transparent; border: 0;
+  padding: 4px 6px; width: 100%;
+  font-family: inherit; color: inherit;
+  border-radius: 4px;
 }
-.hbar .bar-track { position: relative; height: 20px; display: flex; align-items: center; gap: 10px; }
+.hbar.is-clickable { cursor: pointer; transition: background 150ms var(--ease-smooth); }
+.hbar.is-clickable:hover { background: rgba(91,200,255,0.06); }
+
+/* Bandeira SVG via flag-icons (substituiu o quadrado de texto). Tamanho
+   fixo + border sutil pra dar definição em fundos parecidos. */
+.hbars .fi {
+  width: 22px; height: 16px; border-radius: 2px;
+  background-size: cover; background-position: center;
+  border: 1px solid rgba(255,255,255,0.08);
+  flex-shrink: 0;
+}
+[data-theme="light"] .hbars .fi { border-color: rgba(30,58,138,0.10); }
+
+/* Linha "Outros" — placeholder no lugar da bandeira */
+.hbar .flag-other {
+  width: 22px; height: 16px; border-radius: 2px;
+  display: grid; place-items: center;
+  font-family: var(--f-mono); font-size: 9px; color: var(--glow-cyan);
+  letter-spacing: 0.04em; font-weight: 600;
+  background: rgba(91,200,255,0.10);
+  border: 1px solid var(--border);
+}
+
+.hbar .bar-track { position: relative; height: 20px; display: flex; align-items: center; gap: 10px; min-width: 0; }
 .hbar .bar-track .bar {
   position: absolute; left: 0; top: 6px; height: 8px;
+  min-width: 1px; /* legibilidade pra países muito pequenos */
   background: linear-gradient(90deg, var(--glow-cyan), rgba(91,200,255,0.3));
   border-radius: 3px;
   box-shadow: 0 0 8px rgba(91,200,255,0.2);
 }
-.hbar .bar-track .nm { position: relative; z-index: 1; color: var(--white); margin-left: 6px; mix-blend-mode: normal; padding-top: 0; }
-.hbar .stats { font-family: var(--f-mono); font-size: 11px; color: var(--navy-200); letter-spacing: 0.02em; }
+.hbar .bar-track .nm {
+  position: relative; z-index: 1; color: var(--white);
+  margin-left: 6px; mix-blend-mode: normal; padding-top: 0;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.hbar .stats {
+  font-family: var(--f-mono); font-size: 11px; color: var(--navy-200);
+  letter-spacing: 0.02em; display: inline-flex; align-items: center; gap: 4px;
+  white-space: nowrap;
+}
 .hbar .stats .d { color: var(--navy-400); }
 
 /* platform health card */
@@ -855,14 +889,8 @@ body { overflow-x: hidden; }
 /* empty state, etc */
 .empty { padding: 40px; text-align: center; color: var(--navy-400); font-family: var(--f-mono); font-size: 11px; letter-spacing: 0.1em; }
 
-/* flag emoji-like boxes use country code text; color-coded by region */
-.hbar.us .flag { background: #1E3A8A; color: #fff; }
-.hbar.ca .flag { background: #9a1f1f; color: #fff; }
-.hbar.uk .flag { background: #152a66; color: #fff; }
-.hbar.au .flag { background: #0b3a66; color: #fff; }
-.hbar.de .flag { background: #1a1a1a; color: #e6c84a; }
-.hbar.nz .flag { background: #0b2a5b; color: #fff; }
-.hbar.ie .flag { background: #0e6a2f; color: #fff; }
+/* (legado removido: country-class .flag — substituído por .fi do flag-icons,
+   estilizado em .hbars .fi acima) */
 
 /* status pips em transactions — liquid glass com sheen + bevel */
 .st {

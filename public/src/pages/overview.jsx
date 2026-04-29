@@ -116,7 +116,7 @@ const PLATFORM_VARIANTS = {
   clickbank: { short: 'CB', className: 'plat-cb' },
 };
 
-function OverviewPage({ filters }) {
+function OverviewPage({ filters, setFilters }) {
   const [state, setState] = useStateApp({ status: 'loading', data: null, error: null });
   const [metric, setMetric] = useState('gross');
 
@@ -186,7 +186,6 @@ function OverviewPage({ filters }) {
     value: c.value,
     orders: c.orders,
   }));
-  const maxCountry = Math.max(1, ...countryData.map((c) => c.value));
 
   // Esconde sparklines quando não há histórico suficiente pra dar leitura
   // (< 7 dias na série). Cards "novos" mostram delta='novo' sem o sparkline
@@ -316,10 +315,20 @@ function OverviewPage({ filters }) {
           <div className="panel-head">
             <div className="panel-title">
               <span className="panel-eyebrow">RECEITA POR PAÍS</span>
-              <div className="panel-sub">Top 8 · receita bruta aprovada</div>
+              <div className="panel-sub">Top 10 · click filtra · receita bruta aprovada</div>
             </div>
           </div>
-          <CountryBars data={countryData} maxValue={maxCountry} currency={cur}/>
+          <CountryBars
+            data={countryData}
+            currency={cur}
+            onCountryClick={setFilters ? (code) => {
+              setFilters((f) => {
+                const next = new Set(f.countries);
+                if (next.has(code)) next.delete(code); else next.add(code);
+                return { ...f, countries: next };
+              });
+            } : null}
+          />
         </div>
       </div>
 

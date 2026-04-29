@@ -202,25 +202,79 @@ function Donut({ items, totalLabel = 'Total', format = (v) => fmtCurrency(v) }) 
 }
 
 // ---------- Horizontal country bars ----------
-function CountryBars({ data, maxValue, currency = 'USD' }) {
+// Renderiza os top N (N=10 por default) com bandeira SVG (via flag-icons),
+// barra proporcional linear (sem padding artificial), e stats com AOV.
+// Países abaixo do threshold são agrupados em uma linha "Outros (N)"
+// expandível. onCountryClick (opcional) torna as linhas clicáveis pra
+// adicionar país aos filtros globais do dashboard.
+const COUNTRY_GROUP_THRESHOLD_USD = 1000;
+const COUNTRY_TOP_N = 10;
+// flag-icons usa código ISO 3166-1 alpha-2 lowercase. Nossa API usa
+// alguns aliases (UK == GB) — normalizamos aqui.
+function flagCodeFor(code) {
+  const c = (code || '').toUpperCase();
+  if (c === 'UK') return 'gb';
+  return c.toLowerCase();
+}
+function CountryBars({ data, currency = 'USD', onCountryClick }) {
+  const [expanded, setExpanded] = useStateC(false);
+  // Top N que estão acima do threshold. O resto vira "Outros".
+  const top = data.filter((d) => d.value >= COUNTRY_GROUP_THRESHOLD_USD).slice(0, COUNTRY_TOP_N);
+  const topSet = new Set(top.map((d) => d.code));
+  const others = data.filter((d) => !topSet.has(d.code));
+  const maxValue = Math.max(1, ...top.map((d) => d.value));
+  const othersTotal = others.reduce((s, d) => s + d.value, 0);
+  const othersOrders = others.reduce((s, d) => s + d.orders, 0);
+
+  function renderRow(d) {
+    const pct = (d.value / maxValue) * 100; // linear, sem padding artificial
+    const aov = d.orders > 0 ? d.value / d.orders : 0;
+    const code = flagCodeFor(d.code);
+    const isClickable = !!onCountryClick;
+    const Tag = isClickable ? 'button' : 'div';
+    return (
+      <Tag
+        key={d.code}
+        className={`hbar ${isClickable ? 'is-clickable' : ''}`}
+        onClick={isClickable ? () => onCountryClick(d.code) : undefined}
+        title={isClickable ? `Filtrar por ${d.name}` : undefined}
+      >
+        <span className={`fi fi-${code}`} aria-label={d.code}/>
+        <div className="bar-track">
+          <div className="bar" style={{ width: `${pct}%` }}/>
+          <span className="nm">{d.name}</span>
+        </div>
+        <div className="stats">
+          <span className="cell-mono">{fmtCurrency(d.value, currency, 0)}</span>
+          <span className="d cell-mono"> · {fmtInt(d.orders)} ped · AOV {fmtCurrency(aov, currency, 0)}</span>
+        </div>
+      </Tag>
+    );
+  }
+
   return (
     <div className="hbars">
-      {data.map((d) => {
-        const pct = Math.max(3, (d.value / maxValue) * 100);
-        return (
-          <div key={d.code} className={`hbar ${d.code.toLowerCase()}`}>
-            <div className="flag">{d.code}</div>
+      {top.map(renderRow)}
+      {others.length > 0 && (
+        <>
+          <button
+            className="hbar hbar-others is-clickable"
+            onClick={() => setExpanded((v) => !v)}
+            title={expanded ? 'Recolher' : 'Expandir países menores'}
+          >
+            <span className="flag-other">+{others.length}</span>
             <div className="bar-track">
-              <div className="bar" style={{ width: `${pct}%` }}/>
-              <span className="nm">{d.name}</span>
+              <span className="nm">Outros · {others.length} {others.length === 1 ? 'país' : 'países'}</span>
             </div>
             <div className="stats">
-              <span>{fmtCurrency(d.value, currency, 0)}</span>
-              <span className="d"> · {fmtInt(d.orders)}</span>
+              <span className="cell-mono">{fmtCurrency(othersTotal, currency, 0)}</span>
+              <span className="d cell-mono"> · {fmtInt(othersOrders)} ped</span>
+              <Icon name={expanded ? 'chevron-down' : 'chevron-right'} size={11}/>
             </div>
-          </div>
-        );
-      })}
+          </button>
+          {expanded && others.map(renderRow)}
+        </>
+      )}
     </div>
   );
 }
