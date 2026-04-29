@@ -88,6 +88,25 @@ function writeRoute(route, params) {
   history.pushState(null, '', url);
 }
 
+// Helper global pra drill-down (KpiCard click, hbar click, etc).
+// Navega pra outra rota com parâmetros adicionais opcionais.
+// Preserva os params atuais e mescla os novos. Dispara popstate pra
+// que o App reaja sem reload.
+window.NSNavigate = function(route, extraParams) {
+  const params = new URLSearchParams(location.search);
+  if (extraParams) {
+    for (const k of Object.keys(extraParams)) {
+      const v = extraParams[k];
+      if (v == null || v === '') params.delete(k);
+      else params.set(k, v);
+    }
+  }
+  const qs = params.toString();
+  const url = '/' + route + (qs ? '?' + qs : '');
+  window.history.pushState(null, '', url);
+  window.dispatchEvent(new PopStateEvent('popstate'));
+};
+
 function decodeSet(s) { return new Set(s ? s.split(',').filter(Boolean) : []); }
 function encodeSet(set) { return Array.from(set).join(','); }
 

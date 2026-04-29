@@ -4,10 +4,69 @@
 
 const { useEffect: useEffectOv } = React;
 
-function KpiCard({ label, value, unit, delta, trend, sparkData, icon, alert, hint }) {
-  const deltaClass = trend === 'up' ? 'up' : trend === 'down' ? 'down' : 'flat';
+// TODO: thresholds eventualmente vão pra Settings UI. Por enquanto
+// hardcoded — alinhado com operação real do user (validado 2026-04-29).
+const KPI_THRESHOLDS = {
+  approvalRate: {
+    label: () => 'meta 90%',
+    state: (v) => v >= 0.90 ? 'ok' : v >= 0.85 ? 'warn' : 'danger',
+  },
+  refundRate: {
+    // Sem meta dura — só sinaliza acima de 8% (chargeback amplifica em 1%).
+    label: (v) => v > 0.08 ? `acima da meta (≤8%)` : null,
+    state: (v) => v > 0.10 ? 'danger' : v > 0.08 ? 'warn' : 'ok',
+  },
+  cbRate: {
+    label: () => 'limite 2.0% · atenção 1.0%',
+    state: (v) => v >= 0.02 ? 'danger' : v >= 0.01 ? 'warn' : 'ok',
+  },
+  estimatedMarginPct: {
+    // estimatedMarginPct vem como %, ex: 6.6 = 6.6%
+    label: () => null,
+    state: (v) => v < 5 ? 'danger' : v < 10 ? 'warn' : 'ok',
+  },
+};
+
+// Computa display + arrow + good (semântico, baseado em directionPreference).
+// Substitui o deltaFor antigo, mantém retrocompat via aliases.
+function deltaFor(cur, prev, directionPreference = 'higher') {
+  if (prev === undefined || prev === null) return { display: '—', delta: '—', trend: 'flat', good: null };
+  if (prev === 0) {
+    if (cur === 0) return { display: '0%', delta: '0%', trend: 'flat', good: null };
+    return { display: 'novo', delta: 'novo', trend: 'up', good: null };
+  }
+  const d = (cur - prev) / prev;
+  // Cap: |delta| > 999% vira "—" (overflow visual, dado pouco confiável).
+  if (Math.abs(d) > 9.99) return { display: '—', delta: '—', trend: 'flat', good: null };
+  const display = (d >= 0 ? '+' : '') + (d * 100).toFixed(1) + '%';
+  if (Math.abs(d) < 0.002) return { display, delta: display, trend: 'flat', good: null };
+  const trend = d > 0 ? 'up' : 'down';
+  // good = se a mudança foi pro lado desejado (depende da preference)
+  let good = null;
+  if (directionPreference === 'higher') good = d > 0;
+  else if (directionPreference === 'lower') good = d < 0;
+  return { display, delta: display, trend, good };
+}
+
+function KpiCard({
+  label, value, unit, icon, alert, hint, sparkData,
+  cur, prev, directionPreference = 'higher',
+  threshold, hideSparkline, onClick,
+}) {
+  const { display, trend, good } = deltaFor(cur, prev, directionPreference);
+  const colorClass = good === true ? 'good' : good === false ? 'bad' : 'flat';
+  const arrowIcon = trend === 'up' ? 'arrow-up-right'
+                  : trend === 'down' ? 'arrow-down-right'
+                  : 'trending-up';
   return (
-    <div className={`kpi ${alert ? 'is-alert' : ''}`}>
+    <div
+      className={`kpi ${alert ? 'is-alert' : ''} ${onClick ? 'is-clickable' : ''}`}
+      onClick={onClick}
+      role={onClick ? 'button' : undefined}
+      tabIndex={onClick ? 0 : undefined}
+      onKeyDown={onClick ? (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onClick(); } } : undefined}
+      aria-label={onClick ? `${label} — clique pra abrir transações` : undefined}
+    >
       <span className="corner-tl"/>
       <span className="corner-br"/>
       <div className="kpi-row">
@@ -18,13 +77,16 @@ function KpiCard({ label, value, unit, delta, trend, sparkData, icon, alert, hin
         {value}{unit && <span className="unit">{unit}</span>}
       </div>
       <div className="kpi-foot">
-        <span className={`delta ${deltaClass}`}>
-          <Icon name={trend === 'up' ? 'arrow-up-right' : trend === 'down' ? 'arrow-down-right' : 'trending-up'} size={10}/>
-          {delta}
+        <span className={`delta ${colorClass}`}>
+          <Icon name={arrowIcon} size={10}/>
+          {display}
           <span className="vs">{hint || 'vs prev'}</span>
         </span>
-        {sparkData && <Sparkline data={sparkData} color={alert ? '#EF4444' : '#5BC8FF'}/>}
+        {!hideSparkline && sparkData && <Sparkline data={sparkData} color={alert ? '#EF4444' : '#5BC8FF'}/>}
       </div>
+      {threshold && threshold.label && (
+        <div className={`kpi-threshold ${threshold.state}`}>{threshold.label}</div>
+      )}
     </div>
   );
 }
@@ -53,29 +115,6 @@ const PLATFORM_VARIANTS = {
   digistore24: { short: 'D24', className: 'plat-d24' },
   clickbank: { short: 'CB', className: 'plat-cb' },
 };
-
-function deltaFor(cur, prev) {
-  if (prev === undefined || prev === null) return { delta: '—', trend: 'flat' };
-  if (prev === 0) {
-    if (cur === 0) return { delta: '0%', trend: 'flat' };
-    // Sem baseline pra comparar — mostra "novo" em vez de infinito.
-    return { delta: 'novo', trend: 'up' };
-  }
-  const d = (cur - prev) / prev;
-  // Cap em ±999% pra não poluir a UI com valores estratosféricos
-  // quando o período anterior teve volume residual (ex.: 2 pedidos
-  // virando 200 = +9900% que estoura visualmente).
-  if (Math.abs(d) > 9.99) {
-    return {
-      delta: (d > 0 ? '>+999%' : '<-999%'),
-      trend: d > 0 ? 'up' : 'down',
-    };
-  }
-  return {
-    delta: (d >= 0 ? '+' : '') + (d * 100).toFixed(1) + '%',
-    trend: d >= 0.002 ? 'up' : d <= -0.002 ? 'down' : 'flat',
-  };
-}
 
 function OverviewPage({ filters }) {
   const [state, setState] = useStateApp({ status: 'loading', data: null, error: null });
@@ -149,6 +188,11 @@ function OverviewPage({ filters }) {
   }));
   const maxCountry = Math.max(1, ...countryData.map((c) => c.value));
 
+  // Esconde sparklines quando não há histórico suficiente pra dar leitura
+  // (< 7 dias na série). Cards "novos" mostram delta='novo' sem o sparkline
+  // achatado no chão.
+  const hideSpark = buckets.length < 7;
+
   return (
     <div className="page-in">
       <div className="page-head">
@@ -166,41 +210,63 @@ function OverviewPage({ filters }) {
       <div className="kpi-grid">
         <KpiCard label="RECEITA BRUTA" icon="dollar"
           value={fmtCurrency(kpis.gross, cur, 0)}
-          {...deltaFor(kpis.gross, prev.gross)}
-          sparkData={sparkGross}/>
+          cur={kpis.gross} prev={prev.gross}
+          sparkData={sparkGross} hideSparkline={hideSpark}
+          onClick={() => window.NSNavigate('transactions')}/>
         <KpiCard label="RECEITA LÍQUIDA" icon="wallet"
           value={fmtCurrency(kpis.net, cur, 0)}
-          {...deltaFor(kpis.net, prev.net)}
-          sparkData={sparkNet}/>
+          cur={kpis.net} prev={prev.net}
+          sparkData={sparkNet} hideSparkline={hideSpark}
+          onClick={() => window.NSNavigate('transactions')}/>
         <KpiCard label="PEDIDOS APROVADOS" icon="shopping-cart"
           value={fmtInt(kpis.approvedCount)}
-          {...deltaFor(kpis.approvedCount, prev.approvedCount)}
-          sparkData={sparkOrders}/>
+          cur={kpis.approvedCount} prev={prev.approvedCount}
+          sparkData={sparkOrders} hideSparkline={hideSpark}
+          onClick={() => window.NSNavigate('transactions', { status: 'approved' })}/>
         <KpiCard label="AOV" icon="trending-up"
           value={fmtCurrency(kpis.aov, cur, 2)}
-          {...deltaFor(kpis.aov, prev.aov)}
-          sparkData={sparkAov}/>
+          cur={kpis.aov} prev={prev.aov}
+          sparkData={sparkAov} hideSparkline={hideSpark}/>
         <KpiCard label="TAXA DE APROVAÇÃO" icon="check"
           value={(kpis.approvalRate * 100).toFixed(1)} unit="%"
-          {...deltaFor(kpis.approvalRate, prev.approvalRate)}
-          sparkData={approvalSpark}/>
+          cur={kpis.approvalRate} prev={prev.approvalRate}
+          sparkData={approvalSpark} hideSparkline={hideSpark}
+          threshold={{
+            label: KPI_THRESHOLDS.approvalRate.label(),
+            state: KPI_THRESHOLDS.approvalRate.state(kpis.approvalRate),
+          }}
+          onClick={() => window.NSNavigate('transactions')}/>
         <KpiCard label="TAXA DE REEMBOLSO" icon="refresh"
           value={(kpis.refundRate * 100).toFixed(2)} unit="%"
-          {...deltaFor(kpis.refundRate, prev.refundRate)}
-          trend={kpis.refundRate > (prev.refundRate ?? 0) ? 'down' : 'up'}/>
+          cur={kpis.refundRate} prev={prev.refundRate}
+          directionPreference="lower"
+          threshold={KPI_THRESHOLDS.refundRate.label(kpis.refundRate) ? {
+            label: KPI_THRESHOLDS.refundRate.label(kpis.refundRate),
+            state: KPI_THRESHOLDS.refundRate.state(kpis.refundRate),
+          } : null}
+          onClick={() => window.NSNavigate('transactions', { status: 'refunded' })}/>
         <KpiCard label="CHARGEBACK" icon="alert-triangle"
-          alert={kpis.cbRate > 0.009}
+          alert={kpis.cbRate >= 0.02}
           value={(kpis.cbRate * 100).toFixed(2)} unit="%"
-          {...deltaFor(kpis.cbRate, prev.cbRate)}
-          trend={kpis.cbRate > (prev.cbRate ?? 0) ? 'down' : 'up'}
-          hint={kpis.cbRate > 0.009 ? 'acima do limite' : 'vs anterior'}/>
+          cur={kpis.cbRate} prev={prev.cbRate}
+          directionPreference="lower"
+          threshold={{
+            label: KPI_THRESHOLDS.cbRate.label(),
+            state: KPI_THRESHOLDS.cbRate.state(kpis.cbRate),
+          }}
+          onClick={() => window.NSNavigate('transactions', { status: 'chargeback' })}/>
         <KpiCard label="LUCRO ESTIMADO" icon="target"
           alert={kpis.estimatedProfit < 0}
           value={fmtCurrency(kpis.estimatedProfit ?? kpis.netProfit, cur, 0)}
-          {...deltaFor(kpis.estimatedProfit ?? kpis.netProfit, prev.estimatedProfit ?? prev.netProfit)}
+          cur={kpis.estimatedProfit ?? kpis.netProfit}
+          prev={prev.estimatedProfit ?? prev.netProfit}
           hint={kpis.estimatedMarginPct != null
             ? `margem ${kpis.estimatedMarginPct.toFixed(1)}%`
-            : 'inclui COGS + frete'}/>
+            : 'inclui COGS + frete'}
+          threshold={kpis.estimatedMarginPct != null ? {
+            label: `margem ${kpis.estimatedMarginPct.toFixed(1)}%`,
+            state: KPI_THRESHOLDS.estimatedMarginPct.state(kpis.estimatedMarginPct),
+          } : null}/>
       </div>
 
       <div className="panel" style={{ marginBottom: 14 }}>

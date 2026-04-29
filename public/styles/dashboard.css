@@ -436,8 +436,8 @@ body { overflow-x: hidden; }
 }
 .kpi-value {
   font-family: var(--f-display); font-weight: 600;
-  font-size: 36px; line-height: 1;
-  color: var(--white); letter-spacing: -0.03em;
+  font-size: 28px; line-height: 1;
+  color: var(--white); letter-spacing: -0.025em;
   display: flex; align-items: baseline; gap: 6px;
   margin-bottom: 4px;
 }
@@ -450,6 +450,32 @@ body { overflow-x: hidden; }
 .delta.up { color: var(--success); }
 .delta.down { color: var(--danger); }
 .delta.flat { color: var(--navy-400); }
+/* Semantic delta classes (decoupled from arrow direction) — usadas
+   por KpiCard com directionPreference. .good = movimento positivo
+   pra métrica (ex: refund rate caindo = good). */
+.delta.good { color: var(--success); }
+.delta.bad  { color: var(--danger); }
+.delta.neutral { color: var(--fg5); }
+
+/* KPI threshold line (limite/meta abaixo do delta) */
+.kpi-threshold {
+  font-family: var(--f-mono);
+  font-size: 10px;
+  letter-spacing: 0.05em;
+  margin-top: 2px;
+  color: var(--fg5);
+}
+.kpi-threshold.warn   { color: var(--warning); }
+.kpi-threshold.danger { color: var(--danger); }
+.kpi-threshold.ok     { color: var(--success); }
+
+/* KPI clicável (drill-down) */
+.kpi.is-clickable { cursor: pointer; user-select: none; }
+.kpi.is-clickable:hover {
+  border-color: var(--border-strong);
+  transform: translateY(-2px);
+  box-shadow: 0 8px 24px -10px rgba(91, 200, 255, 0.30);
+}
 .delta .vs { color: var(--navy-400); margin-left: 4px; letter-spacing: 0.05em; font-size: 10px; }
 
 /* sparkline */

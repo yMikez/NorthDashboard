@@ -1504,7 +1504,14 @@ function _LegacyProductsPage({ filters }) {
 // ---------- TRANSACTIONS ----------
 function TransactionsPage({ filters }) {
   const [query, setQuery] = useState('');
-  const [statusFilter, setStatusFilter] = useState('all');
+  // Initial status filter pode vir da URL (drill-down dos KPIs em /overview).
+  // Aceita os valores que a UI suporta; default é 'all'.
+  const [statusFilter, setStatusFilter] = useState(() => {
+    try {
+      const s = new URLSearchParams(location.search).get('status');
+      return s && ['all', 'approved', 'pending', 'refunded', 'chargeback'].includes(s) ? s : 'all';
+    } catch (e) { return 'all'; }
+  });
   const [debouncedQuery, setDebouncedQuery] = useState('');
   const [state, setStateTx] = useState({ status: 'loading', data: null, error: null });
   const [drawer, setDrawer] = useState(null); // { externalId, platformSlug } | null
