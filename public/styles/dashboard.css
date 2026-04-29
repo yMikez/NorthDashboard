@@ -874,7 +874,15 @@ body { overflow-x: hidden; }
 
 /* drill-down modal */
 .drawer-backdrop { position: fixed; inset: 0; background: rgba(3,6,23,0.7); backdrop-filter: blur(4px); z-index: 50; animation: fadeIn 200ms var(--ease-smooth); }
-.drawer { position: fixed; top: 0; right: 0; bottom: 0; width: 760px; max-width: 92vw; background: linear-gradient(180deg, rgba(6,13,37,0.98), rgba(3,6,23,0.99)); border-left: 1px solid var(--border); z-index: 51; overflow-y: auto; animation: slideIn 300ms var(--ease-smooth); }
+.drawer {
+  position: fixed; top: 0; right: 0; bottom: 0;
+  width: 760px; max-width: 92vw;
+  background: linear-gradient(180deg, #060D25 0%, #030617 100%);
+  border-left: 1px solid var(--border);
+  z-index: 51; overflow-y: auto;
+  animation: slideIn 300ms var(--ease-smooth);
+  box-shadow: -20px 0 60px -10px rgba(0,0,0,0.5);
+}
 @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
 @keyframes slideIn { from { transform: translateX(40px); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
 
@@ -1444,39 +1452,30 @@ body { overflow-x: hidden; }
   opacity: 0.6;
 }
 
-/* Drawer — glass profundo com rim cyan inferior */
+/* Drawer — glass profundo com sheen no topo (fica BEHIND do conteúdo
+   via z-index negativo + isolation, pra não interferir nos forms). */
 .drawer { isolation: isolate; }
 .drawer::before {
   content: '';
   position: absolute; inset: 0;
   pointer-events: none;
+  z-index: -1;
   background:
-    radial-gradient(ellipse 100% 35% at 50% -10%,
-      rgba(255,255,255,0.25) 0%,
-      transparent 55%);
-  mix-blend-mode: screen;
-  z-index: 0;
-}
-.drawer::after {
-  content: '';
-  position: absolute; inset: 0;
-  pointer-events: none;
-  background:
-    radial-gradient(ellipse 100% 50% at 50% 110%,
-      rgba(91,200,255,0.18) 0%,
-      rgba(139,127,255,0.10) 25%,
+    radial-gradient(ellipse 80% 30% at 50% 0%,
+      rgba(91,200,255,0.10) 0%,
+      transparent 60%),
+    radial-gradient(ellipse 100% 50% at 50% 100%,
+      rgba(139,127,255,0.08) 0%,
       transparent 60%);
-  mix-blend-mode: screen;
-  z-index: 0;
 }
-.drawer > * { position: relative; z-index: 1; }
 [data-theme="light"] .drawer::before {
-  mix-blend-mode: normal;
-  opacity: 0.7;
-}
-[data-theme="light"] .drawer::after {
-  mix-blend-mode: normal;
-  opacity: 0.5;
+  background:
+    radial-gradient(ellipse 80% 30% at 50% 0%,
+      rgba(91,200,255,0.20) 0%,
+      transparent 60%),
+    radial-gradient(ellipse 100% 50% at 50% 100%,
+      rgba(139,127,255,0.12) 0%,
+      transparent 60%);
 }
 
 /* Sidebar — top sheen sutil pra dar peso "vidro" */
