@@ -17,14 +17,21 @@ function fmtK(n) {
 }
 function fmtInt(n) { return new Intl.NumberFormat('en-US').format(Math.round(n)); }
 function fmtPct(n, digits = 1) { return (n * 100).toFixed(digits) + '%'; }
+// Bucket dates from the API are date-only strings like '2026-04-29' that
+// represent BRT calendar days. JS parses them as UTC midnight, so formatting
+// in the browser's local TZ (BRT, UTC-3) shifts the displayed date back one
+// day ("Apr 29" UTC midnight = "Apr 28" 21:00 BRT). Force UTC formatting so
+// the label matches the bucket's date semantics regardless of viewer TZ.
 function fmtDateShort(d) {
   const dt = typeof d === 'string' ? new Date(d) : d;
-  return dt.toLocaleDateString('en-US', { month: 'short', day: '2-digit' });
+  return dt.toLocaleDateString('en-US', { month: 'short', day: '2-digit', timeZone: 'UTC' });
 }
 function fmtDateLong(d) {
   const dt = typeof d === 'string' ? new Date(d) : d;
-  return dt.toLocaleDateString('en-US', { month: 'short', day: '2-digit', year: 'numeric' });
+  return dt.toLocaleDateString('en-US', { month: 'short', day: '2-digit', year: 'numeric', timeZone: 'UTC' });
 }
+// fmtDateTime opera em timestamps reais (orderedAt etc) — o user QUER ver
+// no fuso local (BRT) pra saber a hora real do pedido. Mantém local.
 function fmtDateTime(d) {
   const dt = typeof d === 'string' ? new Date(d) : d;
   return dt.toLocaleString('en-US', { month: 'short', day: '2-digit', hour: '2-digit', minute: '2-digit', hour12: false });
