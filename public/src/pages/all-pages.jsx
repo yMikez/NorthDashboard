@@ -2437,10 +2437,9 @@ function UserFormDrawer({ mode, initial, isSelf, onClose, onSaved }) {
   }
 
   return (
-    <>
-      <div className="drawer-backdrop" onClick={onClose}/>
-      <div className="drawer" style={{ width: 520 }}>
-        <div className="drawer-head">
+    <div className="modal-backdrop" onClick={onClose}>
+      <div className="modal-card" onClick={(e) => e.stopPropagation()}>
+        <div className="modal-head">
           <div>
             <span className="eyebrow">{isCreate ? 'NOVO USUÁRIO' : 'EDITAR USUÁRIO'}</span>
             <h3 style={{ margin: '4px 0', fontSize: 18, color: 'var(--fg1)' }}>
@@ -2455,7 +2454,7 @@ function UserFormDrawer({ mode, initial, isSelf, onClose, onSaved }) {
           <button className="icon-btn" onClick={onClose} title="Fechar"><Icon name="x" size={14}/></button>
         </div>
 
-        <div style={{ padding: '16px 18px 32px', display: 'grid', gap: 14 }}>
+        <div className="modal-body">
           {isCreate && (
             <UserField label="E-mail" value={email} onChange={setEmail} type="email" required/>
           )}
@@ -2649,7 +2648,7 @@ function UserFormDrawer({ mode, initial, isSelf, onClose, onSaved }) {
           </div>
         </div>
       </div>
-    </>
+    </div>
   );
 }
 

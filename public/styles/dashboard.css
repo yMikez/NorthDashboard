@@ -917,6 +917,76 @@ body { overflow-x: hidden; }
 .tbl-wrap::-webkit-scrollbar-thumb, .drawer::-webkit-scrollbar-thumb { background: rgba(91,200,255,0.15); border-radius: 4px; }
 .tbl-wrap::-webkit-scrollbar-thumb:hover, .drawer::-webkit-scrollbar-thumb:hover { background: rgba(91,200,255,0.3); }
 
+/* ---------- modal (centered card) ----------
+   Pra formulários curtos (criar/editar usuário, confirmações). Drawer
+   lateral fica pra views de detalhe densas (pedido, afiliado). */
+.modal-backdrop {
+  position: fixed; inset: 0;
+  background: rgba(3, 6, 23, 0.72);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  z-index: 50;
+  animation: fadeIn 200ms var(--ease-smooth);
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  overflow-y: auto;
+}
+[data-theme="light"] .modal-backdrop {
+  background: rgba(244, 246, 251, 0.60);
+}
+
+.modal-card {
+  width: 100%;
+  max-width: 540px;
+  max-height: calc(100vh - 48px);
+  background: linear-gradient(180deg, #15275A 0%, #0F1F4D 50%, #0A1638 100%);
+  border: 1px solid var(--border-strong);
+  border-top-color: rgba(91,200,255,0.30);
+  border-radius: var(--r-lg);
+  box-shadow:
+    0 30px 80px -10px rgba(0,0,0,0.55),
+    inset 0 1px 0 rgba(91,200,255,0.12);
+  display: flex;
+  flex-direction: column;
+  animation: modalIn 280ms var(--ease-smooth);
+  /* NÃO usar transform aqui — quebra position:fixed de filhos.
+     Usamos só opacity em modalIn por segurança. */
+}
+[data-theme="light"] .modal-card {
+  background: linear-gradient(180deg, #FFFFFF 0%, #F4F6FB 100%);
+  border-color: rgba(30,58,138,0.20);
+  border-top-color: rgba(255,255,255,0.95);
+  box-shadow:
+    0 30px 80px -10px rgba(15,31,77,0.20),
+    inset 0 1px 0 rgba(255,255,255,0.95);
+}
+@keyframes modalIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.modal-head {
+  padding: 20px 24px 16px;
+  border-bottom: 1px solid var(--border-soft);
+  display: flex; align-items: flex-start; justify-content: space-between; gap: 12px;
+  flex-shrink: 0;
+}
+.modal-body {
+  padding: 18px 20px 24px;
+  display: grid;
+  gap: 14px;
+  overflow-y: auto;
+}
+.modal-foot {
+  padding: 14px 20px;
+  border-top: 1px solid var(--border-soft);
+  display: flex; gap: 8px;
+  flex-shrink: 0;
+}
+[data-theme="light"] .modal-head { border-bottom-color: var(--border); }
+[data-theme="light"] .modal-foot { border-top-color: var(--border); }
+
 /* ---------- page enter ----------
    IMPORTANTE: NUNCA usar transform aqui. Drawers (.drawer) usam
    position: fixed e renderizam dentro de .page-in. Qualquer transform
