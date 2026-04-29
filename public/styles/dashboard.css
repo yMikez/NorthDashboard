@@ -67,17 +67,28 @@ body { overflow-x: hidden; }
   position: sticky; top: 0; height: 100vh;
   z-index: 2;
 }
-.side-logo { display: flex; align-items: center; gap: 10px; padding: 4px 8px 18px; }
+.side-logo {
+  display: flex; align-items: center; gap: 10px;
+  padding: 4px 8px 18px;
+  cursor: default;
+}
 .side-logo img { width: 22px; height: 22px; }
 .side-logo .wm {
   font-family: var(--f-display);
   font-size: 15px; color: var(--white);
-  letter-spacing: -0.02em;
-  }
+  letter-spacing: -0.025em;
+  font-weight: 700;
+  transition: text-shadow 400ms var(--ease-smooth);
+}
 .side-logo .wm em {
   font-style: italic;
   color: var(--glow-cyan);
-  }
+  font-weight: 500;
+  text-shadow: 0 0 16px rgba(91, 200, 255, 0.30);
+}
+.side-logo:hover .wm em {
+  text-shadow: 0 0 24px rgba(91, 200, 255, 0.55);
+}
 
 .side-group-label {
   font-family: var(--f-mono); font-size: 9px; letter-spacing: 0.22em;
@@ -1222,10 +1233,27 @@ body { overflow-x: hidden; }
 }
 .theme-toggle .knob svg { width: 12px; height: 12px; }
 
-/* ---------- Logo swap por tema ---------- */
+/* ---------- Logo swap por tema + hover orb ---------- */
 .logo-light { display: none; }
 [data-theme="light"] .logo-dark { display: none; }
 [data-theme="light"] .logo-light { display: inline-block; }
+
+/* Liquid-glass orb: hover lift + glow halo, idle SMIL anim já roda
+   automática dentro do SVG (auroras + center pulse). */
+.logo-mark {
+  transition: transform 400ms var(--ease-smooth), filter 400ms var(--ease-smooth);
+  filter: drop-shadow(0 4px 12px rgba(91, 200, 255, 0.20));
+}
+.side-logo:hover .logo-mark {
+  transform: scale(1.08) rotate(-2deg);
+  filter: drop-shadow(0 6px 18px rgba(91, 200, 255, 0.45));
+}
+[data-theme="light"] .logo-mark {
+  filter: drop-shadow(0 4px 12px rgba(30, 58, 138, 0.15));
+}
+[data-theme="light"] .side-logo:hover .logo-mark {
+  filter: drop-shadow(0 6px 18px rgba(91, 200, 255, 0.40));
+}
 
 /* ---------- Polish v3.2: weight bumps p/ Space Grotesk ---------- */
 .top-h1 { font-weight: 600; letter-spacing: -0.025em; }

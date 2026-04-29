@@ -1,7 +1,52 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" fill="none">
-  <circle cx="24" cy="26" r="14" stroke="#1E3A8A" stroke-width="1.2"></circle>
-  <ellipse cx="24" cy="26" rx="14" ry="5" stroke="#1E3A8A" stroke-width="0.8" opacity="0.4"></ellipse>
-  <line x1="10" y1="26" x2="38" y2="26" stroke="#1E3A8A" stroke-width="0.8" opacity="0.4"></line>
-  <path d="M24 42 L24 6 M24 6 L19 12 M24 6 L29 12" stroke="#0F1F4D" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"></path>
-  <circle cx="24" cy="26" r="2" fill="#1E3A8A"></circle>
+  <defs>
+    <radialGradient id="orbBgLight" cx="50%" cy="38%" r="65%">
+      <stop offset="0%"  stop-color="#FFFFFF" stop-opacity="0.95"/>
+      <stop offset="55%" stop-color="#5BC8FF" stop-opacity="0.45"/>
+      <stop offset="100%" stop-color="#1E3A8A" stop-opacity="0.20"/>
+    </radialGradient>
+    <radialGradient id="auroraCyanL" cx="72%" cy="28%" r="42%">
+      <stop offset="0%"  stop-color="#5BC8FF" stop-opacity="0.65"/>
+      <stop offset="100%" stop-color="#5BC8FF" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="auroraVioletL" cx="28%" cy="76%" r="42%">
+      <stop offset="0%"  stop-color="#8B7FFF" stop-opacity="0.55"/>
+      <stop offset="100%" stop-color="#8B7FFF" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="specularL" cx="32%" cy="22%" r="32%">
+      <stop offset="0%"  stop-color="#FFFFFF" stop-opacity="0.85"/>
+      <stop offset="100%" stop-color="#FFFFFF" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="rimL" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%"  stop-color="#FFFFFF" stop-opacity="0.95"/>
+      <stop offset="50%" stop-color="#5BC8FF" stop-opacity="0.65"/>
+      <stop offset="100%" stop-color="#1E3A8A" stop-opacity="0.40"/>
+    </linearGradient>
+    <clipPath id="orbClipL">
+      <circle cx="24" cy="24" r="18"/>
+    </clipPath>
+  </defs>
+
+  <ellipse cx="24" cy="40" rx="14" ry="2" fill="#1E3A8A" opacity="0.08"/>
+  <circle cx="24" cy="24" r="20" fill="#5BC8FF" opacity="0.18"/>
+
+  <g clip-path="url(#orbClipL)">
+    <circle cx="24" cy="24" r="18" fill="url(#orbBgLight)"/>
+    <circle cx="24" cy="24" r="18" fill="url(#auroraCyanL)">
+      <animate attributeName="opacity" values="0.85;1;0.85" dur="6s" repeatCount="indefinite"/>
+    </circle>
+    <circle cx="24" cy="24" r="18" fill="url(#auroraVioletL)">
+      <animate attributeName="opacity" values="0.95;0.65;0.95" dur="7s" repeatCount="indefinite"/>
+    </circle>
+    <circle cx="24" cy="24" r="18" fill="url(#specularL)"/>
+  </g>
+
+  <circle cx="24" cy="24" r="18" fill="none" stroke="url(#rimL)" stroke-width="1.2"/>
+  <ellipse cx="24" cy="24" rx="18" ry="5.5" fill="none" stroke="#1E3A8A" stroke-width="0.5" opacity="0.20"/>
+  <path d="M24 35.5 L24 12 M24 12 L20 16 M24 12 L28 16"
+        stroke="#0F1F4D" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+  <circle cx="24" cy="24" r="1.8" fill="#1E3A8A">
+    <animate attributeName="r" values="1.6;2.4;1.6" dur="3s" repeatCount="indefinite"/>
+    <animate attributeName="opacity" values="0.85;1;0.85" dur="3s" repeatCount="indefinite"/>
+  </circle>
 </svg>

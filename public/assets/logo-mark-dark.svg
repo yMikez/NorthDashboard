@@ -1,7 +1,70 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" fill="none">
-  <circle cx="24" cy="26" r="14" stroke="#5BC8FF" stroke-width="1.2"></circle>
-  <ellipse cx="24" cy="26" rx="14" ry="5" stroke="#5BC8FF" stroke-width="0.8" opacity="0.5"></ellipse>
-  <line x1="10" y1="26" x2="38" y2="26" stroke="#5BC8FF" stroke-width="0.8" opacity="0.5"></line>
-  <path d="M24 42 L24 6 M24 6 L19 12 M24 6 L29 12" stroke="#FFFFFF" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"></path>
-  <circle cx="24" cy="26" r="2" fill="#5BC8FF"></circle>
+  <defs>
+    <!-- Base orb fill: navy → cyan glass -->
+    <radialGradient id="orbBgDark" cx="50%" cy="38%" r="65%">
+      <stop offset="0%"  stop-color="#5BC8FF" stop-opacity="0.20"/>
+      <stop offset="55%" stop-color="#152A66" stop-opacity="0.45"/>
+      <stop offset="100%" stop-color="#030617" stop-opacity="0.70"/>
+    </radialGradient>
+
+    <!-- Aurora blob 1: cyan top-right -->
+    <radialGradient id="auroraCyanD" cx="72%" cy="28%" r="42%">
+      <stop offset="0%"  stop-color="#5BC8FF" stop-opacity="0.85"/>
+      <stop offset="100%" stop-color="#5BC8FF" stop-opacity="0"/>
+    </radialGradient>
+
+    <!-- Aurora blob 2: violet bottom-left -->
+    <radialGradient id="auroraVioletD" cx="28%" cy="76%" r="42%">
+      <stop offset="0%"  stop-color="#8B7FFF" stop-opacity="0.70"/>
+      <stop offset="100%" stop-color="#8B7FFF" stop-opacity="0"/>
+    </radialGradient>
+
+    <!-- Specular highlight: white droplet at top-left -->
+    <radialGradient id="specularD" cx="32%" cy="22%" r="32%">
+      <stop offset="0%"  stop-color="#FFFFFF" stop-opacity="0.65"/>
+      <stop offset="100%" stop-color="#FFFFFF" stop-opacity="0"/>
+    </radialGradient>
+
+    <!-- Beveled rim: stroke gradient (light top → cyan mid → violet bottom) -->
+    <linearGradient id="rimD" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%"  stop-color="#FFFFFF" stop-opacity="0.55"/>
+      <stop offset="50%" stop-color="#5BC8FF" stop-opacity="0.60"/>
+      <stop offset="100%" stop-color="#8B7FFF" stop-opacity="0.30"/>
+    </linearGradient>
+
+    <clipPath id="orbClipD">
+      <circle cx="24" cy="24" r="18"/>
+    </clipPath>
+  </defs>
+
+  <!-- Outer cyan glow halo -->
+  <circle cx="24" cy="24" r="20" fill="#5BC8FF" opacity="0.10"/>
+
+  <!-- Aurora wash inside orb (clipped) -->
+  <g clip-path="url(#orbClipD)">
+    <circle cx="24" cy="24" r="18" fill="url(#orbBgDark)"/>
+    <circle cx="24" cy="24" r="18" fill="url(#auroraCyanD)">
+      <animate attributeName="opacity" values="0.85;1;0.85" dur="6s" repeatCount="indefinite"/>
+    </circle>
+    <circle cx="24" cy="24" r="18" fill="url(#auroraVioletD)">
+      <animate attributeName="opacity" values="0.95;0.65;0.95" dur="7s" repeatCount="indefinite"/>
+    </circle>
+    <circle cx="24" cy="24" r="18" fill="url(#specularD)"/>
+  </g>
+
+  <!-- Beveled rim -->
+  <circle cx="24" cy="24" r="18" fill="none" stroke="url(#rimD)" stroke-width="1.2"/>
+
+  <!-- Equator line (perspective hint, planet feel) -->
+  <ellipse cx="24" cy="24" rx="18" ry="5.5" fill="none" stroke="#5BC8FF" stroke-width="0.5" opacity="0.30"/>
+
+  <!-- North arrow (signature mark) -->
+  <path d="M24 35.5 L24 12 M24 12 L20 16 M24 12 L28 16"
+        stroke="#FFFFFF" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+
+  <!-- Center pulse dot -->
+  <circle cx="24" cy="24" r="1.8" fill="#5BC8FF">
+    <animate attributeName="r" values="1.6;2.4;1.6" dur="3s" repeatCount="indefinite"/>
+    <animate attributeName="opacity" values="0.85;1;0.85" dur="3s" repeatCount="indefinite"/>
+  </circle>
 </svg>

@@ -79,7 +79,8 @@ export default function LoginPage() {
           }}
         >
           <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 28 }}>
-            <img src="/assets/logo-mark-dark.svg" alt="" width={36} height={36} />
+            <img src="/assets/logo-mark-dark.svg" alt="" width={36} height={36} className="logo-mark logo-dark" />
+            <img src="/assets/logo-mark-light.svg" alt="" width={36} height={36} className="logo-mark logo-light" />
             <div style={{ fontFamily: 'var(--f-display, serif)', fontSize: 22, lineHeight: 1 }}>
               north<em style={{ color: 'var(--glow-cyan)' }}>scale</em>
             </div>
