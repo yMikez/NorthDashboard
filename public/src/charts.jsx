@@ -128,15 +128,17 @@ function LineChart({ buckets, compareBuckets, metric, height = 280, currency = '
           <div style={{
             position: 'absolute', left: `${left}%`, top: 10,
             transform: 'translateX(-50%)',
-            background: 'rgba(3,6,23,0.98)', border: '1px solid var(--border)',
+            background: 'var(--bg-elev)', border: '1px solid var(--border)',
+            backdropFilter: 'blur(20px) saturate(180%)',
+            WebkitBackdropFilter: 'blur(20px) saturate(180%)',
             borderRadius: 6, padding: '8px 10px', minWidth: 140, pointerEvents: 'none',
-            fontFamily: 'var(--f-mono)', fontSize: 11, color: 'var(--navy-100)', letterSpacing: '0.02em',
+            fontFamily: 'var(--f-mono)', fontSize: 11, color: 'var(--fg2)', letterSpacing: '0.02em',
             boxShadow: '0 10px 30px -10px rgba(91,200,255,0.35)', zIndex: 2
           }}>
-            <div style={{ fontSize: 10, color: 'var(--navy-400)', letterSpacing: '0.1em', textTransform: 'uppercase', marginBottom: 4 }}>
+            <div style={{ fontSize: 10, color: 'var(--fg5)', letterSpacing: '0.1em', textTransform: 'uppercase', marginBottom: 4 }}>
               {fmtDateLong(series[hover].date)}
             </div>
-            <div style={{ color: 'var(--white)', fontSize: 15, fontFamily: 'var(--f-display)', marginBottom: 2 }}>
+            <div style={{ color: 'var(--fg1)', fontSize: 15, fontFamily: 'var(--f-display)', marginBottom: 2 }}>
               {fmtTTValue(cur)}
             </div>
             {delta != null && (
@@ -176,11 +178,11 @@ function Donut({ items, totalLabel = 'Total', format = (v) => fmtCurrency(v) }) 
           offset += dash;
           return seg;
         })}
-        <text x={cx} y={cy - 4} textAnchor="middle" fill="#fff"
-          style={{ fontFamily: 'var(--f-display)', fontSize: 20, fontWeight: 500, letterSpacing: '-0.02em', fontVariationSettings: "'opsz' 48, 'SOFT' 40" }}>
+        <text x={cx} y={cy - 4} textAnchor="middle" fill="var(--fg1)"
+          style={{ fontFamily: 'var(--f-display)', fontSize: 20, fontWeight: 600, letterSpacing: '-0.02em' }}>
           {format(total)}
         </text>
-        <text x={cx} y={cy + 14} textAnchor="middle" fill="#8CA1C8"
+        <text x={cx} y={cy + 14} textAnchor="middle" fill="var(--fg5)"
           style={{ fontFamily: 'var(--f-mono)', fontSize: 9, letterSpacing: '0.18em', textTransform: 'uppercase' }}>
           {totalLabel}
         </text>
@@ -226,7 +228,7 @@ function CountryBars({ data, maxValue, currency = 'USD' }) {
 // ---------- Funnel chart ----------
 function FunnelChart({ stages }) {
   if (!stages || stages.length === 0) {
-    return <div className="funnel" style={{ padding: 24, textAlign: 'center', color: 'var(--navy-300)', fontSize: 12 }}>Sem dados de funil no período</div>;
+    return <div className="funnel" style={{ padding: 24, textAlign: 'center', color: 'var(--fg4)', fontSize: 12 }}>Sem dados de funil no período</div>;
   }
   const topVol = stages[0].volume || 0;
   const maxBarW = 88; // %
@@ -304,7 +306,7 @@ function HourHeatmap({ data, metric = 'orders', currency = 'USD' }) {
   return (
     <div style={{ display: 'grid', gridTemplateColumns: 'auto 1fr', gap: 6, padding: '8px 0' }}>
       <div/>
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(24, 1fr)', gap: 2, fontFamily: 'var(--f-mono)', fontSize: 9, color: 'var(--navy-400)', marginBottom: 4 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(24, 1fr)', gap: 2, fontFamily: 'var(--f-mono)', fontSize: 9, color: 'var(--fg5)', marginBottom: 4 }}>
         {Array.from({ length: 24 }, (_, h) => (
           <div key={h} style={{ textAlign: 'center' }}>{HOUR_TICK(h) ? String(h).padStart(2, '0') : ''}</div>
         ))}
@@ -312,7 +314,7 @@ function HourHeatmap({ data, metric = 'orders', currency = 'USD' }) {
 
       {ROWS.map((label, r) => (
         <React.Fragment key={r}>
-          <div style={{ fontFamily: 'var(--f-mono)', fontSize: 10, color: 'var(--navy-300)', letterSpacing: '0.04em', alignSelf: 'center', paddingRight: 6, textAlign: 'right' }}>
+          <div style={{ fontFamily: 'var(--f-mono)', fontSize: 10, color: 'var(--fg4)', letterSpacing: '0.04em', alignSelf: 'center', paddingRight: 6, textAlign: 'right' }}>
             {label}
           </div>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(24, 1fr)', gap: 2 }}>
@@ -347,11 +349,11 @@ function HourHeatmap({ data, metric = 'orders', currency = 'USD' }) {
           background: 'rgba(6,13,37,0.95)',
           border: '1px solid var(--border)',
           borderRadius: 4,
-          fontFamily: 'var(--f-mono)', fontSize: 11, color: 'var(--navy-100)',
+          fontFamily: 'var(--f-mono)', fontSize: 11, color: 'var(--fg2)',
           display: 'flex', justifyContent: 'space-between', gap: 12,
         }}>
           <span>{ROWS[hover.r]} · {String(hover.h).padStart(2, '0')}:00 UTC</span>
-          <span style={{ color: 'var(--white)' }}>
+          <span style={{ color: 'var(--fg1)' }}>
             {fmtInt(hover.c.orders)} pedidos · {fmtCurrency(hover.c.gross, currency, 0)}
           </span>
         </div>

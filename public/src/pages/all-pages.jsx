@@ -193,7 +193,7 @@ function FunnelPage({ filters }) {
                     : 'var(--navy-400)';
                   return (
                     <tr key={s.id}>
-                      <td>{s.label}{isFE && <span style={{ marginLeft: 8, fontSize: 10, color: 'var(--navy-400)', fontFamily: 'var(--f-mono)' }}>BASELINE</span>}</td>
+                      <td>{s.label}{isFE && <span style={{ marginLeft: 8, fontSize: 10, color: 'var(--fg5)', fontFamily: 'var(--f-mono)' }}>BASELINE</span>}</td>
                       <td className="num cell-mono">{fmtInt(s.volume)}</td>
                       <td className="num cell-mono" style={{ color: rateColor }}>
                         {(s.takeRate * 100).toFixed(1)}%
@@ -224,7 +224,7 @@ function FunnelPage({ filters }) {
               const liftPct = i === 1 && summary.aovFEOnly > 0 ? (r.value - summary.aovFEOnly) / summary.aovFEOnly : null;
               return (
                 <div key={r.label} style={{ display: 'grid', gridTemplateColumns: '160px 1fr 80px', gap: 12, alignItems: 'center' }}>
-                  <div style={{ fontSize: 12, color: 'var(--navy-100)' }}>{r.label}</div>
+                  <div style={{ fontSize: 12, color: 'var(--fg2)' }}>{r.label}</div>
                   <div style={{ position: 'relative', height: 26, background: 'rgba(91,200,255,0.06)', borderRadius: 4, overflow: 'hidden' }}>
                     <div style={{
                       position: 'absolute', inset: 0,
@@ -232,7 +232,7 @@ function FunnelPage({ filters }) {
                       background: `linear-gradient(90deg, ${r.color}, ${r.color}44)`,
                       borderRadius: 4,
                       display: 'flex', alignItems: 'center', paddingLeft: 10,
-                      fontFamily: 'var(--f-display)', fontSize: 14, color: 'var(--white)',
+                      fontFamily: 'var(--f-display)', fontSize: 14, color: 'var(--fg1)',
                       letterSpacing: '-0.01em',
                       fontVariationSettings: "'opsz' 48, 'SOFT' 40",
                     }}>
@@ -250,7 +250,7 @@ function FunnelPage({ filters }) {
             })}
           </div>
           {summary.feGroups === 0 && (
-            <div style={{ padding: 14, fontSize: 12, color: 'var(--navy-300)', borderTop: '1px solid var(--border)' }}>
+            <div style={{ padding: 14, fontSize: 12, color: 'var(--fg4)', borderTop: '1px solid var(--border)' }}>
               Sem vendas FE no período — quando vendas chegarem, o lift aparece aqui.
             </div>
           )}
@@ -288,7 +288,7 @@ function FunnelPage({ filters }) {
                         {c.fromFamily}
                       </span>
                     </td>
-                    <td style={{ color: 'var(--navy-400)', textAlign: 'center', fontFamily: 'var(--f-mono)' }}>→</td>
+                    <td style={{ color: 'var(--fg5)', textAlign: 'center', fontFamily: 'var(--f-mono)' }}>→</td>
                     <td>
                       <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
                         <span style={{ width: 6, height: 6, borderRadius: '50%', background: familyAccent(c.toFamily) }}/>
@@ -460,7 +460,7 @@ function LeaderboardPage({ filters, onOpenAffiliate }) {
                     </td>
                     <td><span className={`plat ${platClass}`}>{platShort}</span></td>
                     <td className="num cell-mono">{fmtInt(r.orders)}</td>
-                    <td className="num cell-mono" style={{ color: 'var(--white)' }}>{fmtCurrency(r.revenue, cur, 0)}</td>
+                    <td className="num cell-mono" style={{ color: 'var(--fg1)' }}>{fmtCurrency(r.revenue, cur, 0)}</td>
                     <td>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                         <span className={`cell-mono ${apClass}`} style={{ minWidth: 44 }}>{(r.approvalRate * 100).toFixed(1)}%</span>
@@ -477,7 +477,7 @@ function LeaderboardPage({ filters, onOpenAffiliate }) {
                     <td className="num cell-mono" style={{ color: (r.attributedProfit ?? 0) > 0 ? 'var(--success)' : 'var(--danger)', fontWeight: 600 }}>
                       {r.attributedProfit != null ? fmtCurrency(r.attributedProfit, cur, 0) : '—'}
                       {r.attributedSessions > 0 && (
-                        <span style={{ display: 'block', fontSize: 9, color: 'var(--navy-400)', fontWeight: 400, marginTop: 1 }}>
+                        <span style={{ display: 'block', fontSize: 9, color: 'var(--fg5)', fontWeight: 400, marginTop: 1 }}>
                           {r.attributedSessions} sessões
                         </span>
                       )}
@@ -686,7 +686,7 @@ function AffiliateDrawer({ affiliateId, filters, onClose }) {
                     <tr key={p.externalId}>
                       <td>
                         <div>{p.name}</div>
-                        <div className="cell-mono" style={{ fontSize: 10, color: 'var(--navy-400)' }}>{p.externalId}</div>
+                        <div className="cell-mono" style={{ fontSize: 10, color: 'var(--fg5)' }}>{p.externalId}</div>
                       </td>
                       <td><span className="badge neutral">{p.productType.toLowerCase()}</span></td>
                       <td className="num cell-mono">{fmtInt(p.orders)}</td>
@@ -774,7 +774,7 @@ function AllAffiliatesPage({ filters, onOpenAffiliate }) {
             <Icon name="search" size={13}/>
             <input value={query} onChange={(e) => setQuery(e.target.value)}
               placeholder="Buscar por nickname ou ID..."
-              style={{ background: 'transparent', border: 0, color: 'var(--white)', outline: 'none', flex: 1, fontFamily: 'var(--f-body)', fontSize: 12 }}
+              style={{ background: 'transparent', border: 0, color: 'var(--fg1)', outline: 'none', flex: 1, fontFamily: 'var(--f-body)', fontSize: 12 }}
             />
           </div>
           <button className="btn btn-ghost"><Icon name="download" size={12}/> Exportar CSV</button>
@@ -967,7 +967,7 @@ function FamilyGrid({ state, cur, onPick }) {
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                   <div style={{ width: 8, height: 8, borderRadius: '50%', background: accent, boxShadow: `0 0 8px ${accent}` }}/>
-                  <div style={{ fontFamily: 'var(--f-display)', fontSize: 18, color: 'var(--white)' }}>{f.family}</div>
+                  <div style={{ fontFamily: 'var(--f-display)', fontSize: 18, color: 'var(--fg1)' }}>{f.family}</div>
                 </div>
                 <div style={{ display: 'flex', gap: 6 }}>
                   {f.niches.map((n) => (
@@ -977,7 +977,7 @@ function FamilyGrid({ state, cur, onPick }) {
               </div>
 
               <div style={{ display: 'flex', alignItems: 'baseline', gap: 10, marginBottom: 12 }}>
-                <div style={{ fontFamily: 'var(--f-display)', fontSize: 28, color: 'var(--white)', letterSpacing: '-0.01em' }}>
+                <div style={{ fontFamily: 'var(--f-display)', fontSize: 28, color: 'var(--fg1)', letterSpacing: '-0.01em' }}>
                   {hasOrders ? fmtCurrency(f.grossRevenue, cur, 0) : '—'}
                 </div>
                 {liftPct != null && (
@@ -993,7 +993,7 @@ function FamilyGrid({ state, cur, onPick }) {
                 <div className="prod-stat"><div className="l">AOV</div><div className="v sm">{hasOrders ? fmtCurrency(f.aov, cur, 0) : '—'}</div></div>
               </div>
 
-              <div style={{ paddingTop: 10, borderTop: '1px solid rgba(91,200,255,0.15)', display: 'flex', justifyContent: 'space-between', fontSize: 11, color: 'var(--navy-300)', fontFamily: 'var(--f-mono)' }}>
+              <div style={{ paddingTop: 10, borderTop: '1px solid rgba(91,200,255,0.15)', display: 'flex', justifyContent: 'space-between', fontSize: 11, color: 'var(--fg4)', fontFamily: 'var(--f-mono)' }}>
                 <span>{f.feSkuCount} FE · {f.upSkuCount} UP · {f.dwSkuCount} DW · {f.rcSkuCount} RC</span>
                 <span style={{ color: accent }}>Abrir →</span>
               </div>
@@ -1064,7 +1064,7 @@ function FamilyDrillDown({ family, familyAgg, productsState, cur, onBack, onPick
                   {meta.label.toUpperCase()} · {variants.length}
                 </div>
                 {variants.length === 0 && (
-                  <div style={{ fontSize: 11, color: 'var(--navy-400)', fontStyle: 'italic' }}>
+                  <div style={{ fontSize: 11, color: 'var(--fg5)', fontStyle: 'italic' }}>
                     Sem variantes deste tipo no catálogo
                   </div>
                 )}
@@ -1115,21 +1115,21 @@ function VariantRow({ variant: v, cur, accent, onClick }) {
       onMouseLeave={(e) => { e.currentTarget.style.background = 'rgba(91,200,255,0.04)'; }}
     >
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 6 }}>
-        <span style={{ fontSize: 12, color: 'var(--white)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+        <span style={{ fontSize: 12, color: 'var(--fg1)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
           {v.name}
         </span>
         <span className={`plat ${platClass}`} style={{ flexShrink: 0 }}>{platShort}</span>
       </div>
-      <div style={{ fontFamily: 'var(--f-mono)', fontSize: 10, color: 'var(--navy-400)', letterSpacing: '0.04em', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+      <div style={{ fontFamily: 'var(--f-mono)', fontSize: 10, color: 'var(--fg5)', letterSpacing: '0.04em', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
         {v.externalId}{v.vendorAccount ? ` · ${v.vendorAccount}` : ''}
       </div>
       <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 4, fontFamily: 'var(--f-mono)', fontSize: 11 }}>
         <span style={{ color: accent }}>{fmtInt(v.orders)} pedidos</span>
-        <span style={{ color: 'var(--white)' }}>{fmtCurrency(v.revenue, cur, 0)}</span>
+        <span style={{ color: 'var(--fg1)' }}>{fmtCurrency(v.revenue, cur, 0)}</span>
       </div>
       {marginPct != null && v.revenue > 0 && (
         <div style={{ display: 'flex', justifyContent: 'space-between', fontFamily: 'var(--f-mono)', fontSize: 10 }}>
-          <span style={{ color: 'var(--navy-400)' }}>{profitLabel}</span>
+          <span style={{ color: 'var(--fg5)' }}>{profitLabel}</span>
           <span style={{
             color: profit > 0 ? 'var(--success)' : 'var(--danger)',
           }}>
@@ -1170,8 +1170,8 @@ function VariantDetailDrawer({ variant: v, cur, onClose }) {
         <div className="drawer-head">
           <div>
             <span className="eyebrow">VARIANTE · {v.platformSlug === 'digistore24' ? 'DIGISTORE24' : 'CLICKBANK'}</span>
-            <h3 style={{ margin: '4px 0', fontSize: 18, color: 'var(--white)' }}>{v.name}</h3>
-            <div style={{ fontFamily: 'var(--f-mono)', fontSize: 11, color: 'var(--navy-300)' }}>
+            <h3 style={{ margin: '4px 0', fontSize: 18, color: 'var(--fg1)' }}>{v.name}</h3>
+            <div style={{ fontFamily: 'var(--f-mono)', fontSize: 11, color: 'var(--fg4)' }}>
               {v.externalId} {v.vendorAccount && `· ${v.vendorAccount}`}
             </div>
           </div>
@@ -1186,7 +1186,7 @@ function VariantDetailDrawer({ variant: v, cur, onClose }) {
               </span>
             )}
             {v.catalogPriceUsd != null && (
-              <span className="badge" style={{ background: 'rgba(255,255,255,0.05)', color: 'var(--white)' }}>
+              <span className="badge" style={{ background: 'rgba(255,255,255,0.05)', color: 'var(--fg1)' }}>
                 Catálogo: {fmtCurrency(v.catalogPriceUsd, cur, 0)}
               </span>
             )}
@@ -1213,7 +1213,7 @@ function VariantDetailDrawer({ variant: v, cur, onClose }) {
 
           {showAttributed && (
             <div style={{ borderTop: '1px solid var(--border-soft)', paddingTop: 12, display: 'grid', gap: 8 }}>
-              <div style={{ fontFamily: 'var(--f-mono)', fontSize: 10, color: 'var(--navy-400)', letterSpacing: '0.1em' }}>
+              <div style={{ fontFamily: 'var(--f-mono)', fontSize: 10, color: 'var(--fg5)', letterSpacing: '0.1em' }}>
                 LUCRO ATRIBUÍDO · funil completo da sessão
               </div>
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 10 }}>
@@ -1227,14 +1227,14 @@ function VariantDetailDrawer({ variant: v, cur, onClose }) {
                 </div>
                 <div className="prod-stat"><div className="l">Margem atrib.</div><div className="v sm">{v.attributedMarginPct.toFixed(1)}%</div></div>
               </div>
-              <div style={{ fontSize: 10, color: 'var(--navy-300)', lineHeight: 1.4 }}>
+              <div style={{ fontSize: 10, color: 'var(--fg4)', lineHeight: 1.4 }}>
                 Inclui UPs, DWs e bumps comprados na mesma sessão deste FE — mostra a economia real do funil que este SKU traz.
               </div>
             </div>
           )}
 
           {(v.firstSoldAt || v.lastSoldAt) && (
-            <div style={{ borderTop: '1px solid var(--border-soft)', paddingTop: 12, fontFamily: 'var(--f-mono)', fontSize: 11, color: 'var(--navy-300)', display: 'flex', justifyContent: 'space-between' }}>
+            <div style={{ borderTop: '1px solid var(--border-soft)', paddingTop: 12, fontFamily: 'var(--f-mono)', fontSize: 11, color: 'var(--fg4)', display: 'flex', justifyContent: 'space-between' }}>
               <span>1ª venda: {v.firstSoldAt ? fmtDateShort(v.firstSoldAt) : '—'}</span>
               <span>Última: {v.lastSoldAt ? fmtDateShort(v.lastSoldAt) : '—'}</span>
             </div>
@@ -1242,7 +1242,7 @@ function VariantDetailDrawer({ variant: v, cur, onClose }) {
 
           {(v.salesPageUrl || v.checkoutUrl || v.thanksPageUrl || v.driveUrl) && (
             <div style={{ borderTop: '1px solid var(--border-soft)', paddingTop: 12, display: 'grid', gap: 6 }}>
-              <div style={{ fontFamily: 'var(--f-mono)', fontSize: 10, color: 'var(--navy-400)', letterSpacing: '0.1em' }}>LINKS DO CATÁLOGO</div>
+              <div style={{ fontFamily: 'var(--f-mono)', fontSize: 10, color: 'var(--fg5)', letterSpacing: '0.1em' }}>LINKS DO CATÁLOGO</div>
               {v.salesPageUrl && <DrawerLink href={v.salesPageUrl} icon="globe" label="Sales Page"/>}
               {v.checkoutUrl && <DrawerLink href={v.checkoutUrl} icon="credit-card" label="Checkout"/>}
               {v.thanksPageUrl && <DrawerLink href={v.thanksPageUrl} icon="check" label="Thanks Page"/>}
@@ -1317,7 +1317,7 @@ function _LegacyProductsPage({ filters }) {
           <div className="select-btn" style={{ padding: '0 10px', width: 220 }}>
             <Icon name="search" size={13}/>
             <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Buscar por nome ou ID..."
-              style={{ background: 'transparent', border: 0, color: 'var(--white)', outline: 'none', flex: 1, fontFamily: 'var(--f-mono)', fontSize: 12 }}/>
+              style={{ background: 'transparent', border: 0, color: 'var(--fg1)', outline: 'none', flex: 1, fontFamily: 'var(--f-mono)', fontSize: 12 }}/>
           </div>
           <div className="seg">
             <button className={view === 'cards' ? 'is-active' : ''} onClick={() => setView('cards')}>
@@ -1378,7 +1378,7 @@ function _LegacyProductsPage({ filters }) {
                 </div>
                 <div>
                   <div className="prod-name" title={p.name}>{p.name}</div>
-                  <div style={{ fontFamily: 'var(--f-mono)', fontSize: 10, color: 'var(--navy-400)', letterSpacing: '0.06em', marginTop: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                  <div style={{ fontFamily: 'var(--f-mono)', fontSize: 10, color: 'var(--fg5)', letterSpacing: '0.06em', marginTop: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                     {p.externalId}
                   </div>
                 </div>
@@ -1388,7 +1388,7 @@ function _LegacyProductsPage({ filters }) {
                     {meta.label}
                   </span>
                   {p.vendorAccount && (
-                    <span style={{ fontFamily: 'var(--f-mono)', fontSize: 10, color: 'var(--navy-400)', marginLeft: 'auto' }}>
+                    <span style={{ fontFamily: 'var(--f-mono)', fontSize: 10, color: 'var(--fg5)', marginLeft: 'auto' }}>
                       {p.vendorAccount}
                     </span>
                   )}
@@ -1404,7 +1404,7 @@ function _LegacyProductsPage({ filters }) {
                   <div className="prod-stat"><div className="l">Margem %</div><div className="v sm" style={{ color: marginPct > 0.2 ? 'var(--success)' : marginPct > 0.1 ? 'var(--warning)' : 'var(--danger)' }}>{(marginPct * 100).toFixed(1)}%</div></div>
                 </div>
                 {p.lastSoldAt && (
-                  <div style={{ marginTop: 10, paddingTop: 10, borderTop: '1px solid rgba(91,200,255,0.15)', fontSize: 11, color: 'var(--navy-300)', display: 'flex', justifyContent: 'space-between', fontFamily: 'var(--f-mono)' }}>
+                  <div style={{ marginTop: 10, paddingTop: 10, borderTop: '1px solid rgba(91,200,255,0.15)', fontSize: 11, color: 'var(--fg4)', display: 'flex', justifyContent: 'space-between', fontFamily: 'var(--f-mono)' }}>
                     <span>1ª venda: {fmtDateShort(p.firstSoldAt)}</span>
                     <span>Última: {fmtDateShort(p.lastSoldAt)}</span>
                   </div>
@@ -1444,14 +1444,14 @@ function _LegacyProductsPage({ filters }) {
                   return (
                     <tr key={`${p.platformSlug}:${p.externalId}`}>
                       <td>{p.name}</td>
-                      <td className="cell-mono" style={{ color: 'var(--navy-300)' }}>{p.externalId}</td>
+                      <td className="cell-mono" style={{ color: 'var(--fg4)' }}>{p.externalId}</td>
                       <td>
                         <span className="badge" style={{ background: `${meta.accent}22`, color: meta.accent, borderColor: `${meta.accent}55` }}>
                           {meta.label}
                         </span>
                       </td>
                       <td><span className={`plat ${platClass}`}>{platShort}</span></td>
-                      <td className="cell-mono" style={{ color: 'var(--navy-300)' }}>{p.vendorAccount || '—'}</td>
+                      <td className="cell-mono" style={{ color: 'var(--fg4)' }}>{p.vendorAccount || '—'}</td>
                       <td className="num cell-mono">{fmtInt(p.orders)}</td>
                       <td className="num cell-mono" style={{ color: p.allOrders ? apColor : 'var(--navy-400)' }}>
                         {p.allOrders ? (p.approvalRate * 100).toFixed(1) + '%' : '—'}
@@ -1474,7 +1474,7 @@ function _LegacyProductsPage({ filters }) {
       {/* Resumo por tipo no rodapé — contexto, não headline */}
       {byType.some((b) => b.orders > 0) && (
         <div style={{ marginTop: 18 }}>
-          <div style={{ fontFamily: 'var(--f-mono)', fontSize: 9, letterSpacing: '0.18em', color: 'var(--navy-400)', textTransform: 'uppercase', marginBottom: 10 }}>
+          <div style={{ fontFamily: 'var(--f-mono)', fontSize: 9, letterSpacing: '0.18em', color: 'var(--fg5)', textTransform: 'uppercase', marginBottom: 10 }}>
             Resumo por tipo · período
           </div>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 10 }}>
@@ -1485,10 +1485,10 @@ function _LegacyProductsPage({ filters }) {
                   <div style={{ fontFamily: 'var(--f-mono)', fontSize: 10, color: meta.accent, letterSpacing: '0.1em', marginBottom: 6 }}>
                     {meta.label.toUpperCase()}
                   </div>
-                  <div style={{ fontFamily: 'var(--f-display)', fontSize: 22, color: 'var(--white)', lineHeight: 1, marginBottom: 4 }}>
+                  <div style={{ fontFamily: 'var(--f-display)', fontSize: 22, color: 'var(--fg1)', lineHeight: 1, marginBottom: 4 }}>
                     {fmtCurrency(b.revenue, cur, 0)}
                   </div>
-                  <div style={{ fontSize: 11, color: 'var(--navy-300)' }}>
+                  <div style={{ fontSize: 11, color: 'var(--fg4)' }}>
                     {fmtInt(b.orders)} pedidos · {b.productCount} SKUs
                   </div>
                 </div>
@@ -1555,7 +1555,7 @@ function TransactionsPage({ filters }) {
           <div className="select-btn" style={{ padding: '0 10px', width: 240 }}>
             <Icon name="search" size={13}/>
             <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Buscar por ID de pedido ou afiliado..."
-              style={{ background: 'transparent', border: 0, color: 'var(--white)', outline: 'none', flex: 1, fontFamily: 'var(--f-mono)', fontSize: 12 }}/>
+              style={{ background: 'transparent', border: 0, color: 'var(--fg1)', outline: 'none', flex: 1, fontFamily: 'var(--f-mono)', fontSize: 12 }}/>
           </div>
           <button className="btn btn-ghost"><Icon name="download" size={12}/> CSV</button>
           <button className="btn btn-ghost"><Icon name="download" size={12}/> XLSX</button>
@@ -1614,7 +1614,7 @@ function TransactionsPage({ filters }) {
                     <td className="cell-mono">{o.country || '—'}</td>
                     <td className="cell-mono">{o.paymentMethod || '—'}</td>
                     <td className="num cell-mono">{fmtCurrency(o.grossAmountUsd, cur, 2)}</td>
-                    <td className="num cell-mono" style={{ color: 'var(--navy-400)' }}>{fmtCurrency(o.fees, cur, 2)}</td>
+                    <td className="num cell-mono" style={{ color: 'var(--fg5)' }}>{fmtCurrency(o.fees, cur, 2)}</td>
                     <td className="num cell-mono">{fmtCurrency(o.netAmountUsd, cur, 2)}</td>
                     <td><span className={`st st-${statusLc}`}>{statusLc}</span></td>
                     <td className="num cell-mono">{fmtCurrency(o.cpaPaidUsd, cur, 2)}</td>
@@ -1662,7 +1662,7 @@ function TransactionDrawer({ externalId, platformSlug, cur, onClose, onPickOrder
         <div className="drawer-backdrop" onClick={onClose}/>
         <div className="drawer" style={{ width: 540 }}>
           <div className="drawer-head">
-            <span style={{ color: 'var(--navy-300)' }}>Carregando pedido {externalId}...</span>
+            <span style={{ color: 'var(--fg4)' }}>Carregando pedido {externalId}...</span>
             <button className="icon-btn" onClick={onClose}><Icon name="x" size={14}/></button>
           </div>
         </div>
@@ -1698,7 +1698,7 @@ function TransactionDrawer({ externalId, platformSlug, cur, onClose, onPickOrder
         <div className="drawer-head">
           <div>
             <span className="eyebrow">PEDIDO · {o.platformDisplayName.toUpperCase()}</span>
-            <h3 style={{ margin: '4px 0', fontSize: 18, color: 'var(--white)' }}>{o.externalId}</h3>
+            <h3 style={{ margin: '4px 0', fontSize: 18, color: 'var(--fg1)' }}>{o.externalId}</h3>
             <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
               <span className={`plat ${platClass}`}>{platShort}</span>
               <span className="badge" style={{ background: `${typeColor}22`, color: typeColor, borderColor: `${typeColor}55` }}>
@@ -1719,7 +1719,7 @@ function TransactionDrawer({ externalId, platformSlug, cur, onClose, onPickOrder
 
           {/* Financial breakdown */}
           <div>
-            <div style={{ fontFamily: 'var(--f-mono)', fontSize: 10, color: 'var(--navy-300)', letterSpacing: '0.1em', marginBottom: 8 }}>
+            <div style={{ fontFamily: 'var(--f-mono)', fontSize: 10, color: 'var(--fg4)', letterSpacing: '0.1em', marginBottom: 8 }}>
               FLUXO FINANCEIRO
             </div>
             <FinRow label="Cliente pagou" value={o.grossAmountUsd} cur={cur} bold/>
@@ -1761,12 +1761,12 @@ function TransactionDrawer({ externalId, platformSlug, cur, onClose, onPickOrder
               </>
             )}
             {o.cogsUsd == null && (
-              <div style={{ marginTop: 8, fontSize: 11, color: 'var(--navy-400)', fontStyle: 'italic' }}>
+              <div style={{ marginTop: 8, fontSize: 11, color: 'var(--fg5)', fontStyle: 'italic' }}>
                 COGS não calculado pra este pedido — rode /api/admin/backfill-cogs.
               </div>
             )}
             {o.currencyOriginal !== 'USD' && (
-              <div style={{ marginTop: 6, fontFamily: 'var(--f-mono)', fontSize: 10, color: 'var(--navy-400)' }}>
+              <div style={{ marginTop: 6, fontFamily: 'var(--f-mono)', fontSize: 10, color: 'var(--fg5)' }}>
                 Original: {fmtCurrency(o.grossAmountOrig, o.currencyOriginal, 2)} ({o.currencyOriginal})
               </div>
             )}
@@ -1774,11 +1774,11 @@ function TransactionDrawer({ externalId, platformSlug, cur, onClose, onPickOrder
 
           {/* Product */}
           <div>
-            <div style={{ fontFamily: 'var(--f-mono)', fontSize: 10, color: 'var(--navy-300)', letterSpacing: '0.1em', marginBottom: 8 }}>
+            <div style={{ fontFamily: 'var(--f-mono)', fontSize: 10, color: 'var(--fg4)', letterSpacing: '0.1em', marginBottom: 8 }}>
               PRODUTO
             </div>
-            <div style={{ fontFamily: 'var(--f-display)', fontSize: 16, color: 'var(--white)' }}>{product.name}</div>
-            <div style={{ fontFamily: 'var(--f-mono)', fontSize: 11, color: 'var(--navy-300)', marginTop: 2 }}>
+            <div style={{ fontFamily: 'var(--f-display)', fontSize: 16, color: 'var(--fg1)' }}>{product.name}</div>
+            <div style={{ fontFamily: 'var(--f-mono)', fontSize: 11, color: 'var(--fg4)', marginTop: 2 }}>
               SKU: {product.externalId}
             </div>
             <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 8 }}>
@@ -1795,7 +1795,7 @@ function TransactionDrawer({ externalId, platformSlug, cur, onClose, onPickOrder
           {/* Affiliate */}
           {affiliate ? (
             <div>
-              <div style={{ fontFamily: 'var(--f-mono)', fontSize: 10, color: 'var(--navy-300)', letterSpacing: '0.1em', marginBottom: 8 }}>
+              <div style={{ fontFamily: 'var(--f-mono)', fontSize: 10, color: 'var(--fg4)', letterSpacing: '0.1em', marginBottom: 8 }}>
                 AFILIADO
               </div>
               <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
@@ -1803,17 +1803,17 @@ function TransactionDrawer({ externalId, platformSlug, cur, onClose, onPickOrder
                   {initials(affiliate.nickname || affiliate.externalId)}
                 </div>
                 <div>
-                  <div style={{ color: 'var(--white)' }}>{affiliate.nickname || '(sem nickname)'}</div>
-                  <div style={{ fontFamily: 'var(--f-mono)', fontSize: 11, color: 'var(--navy-300)' }}>{affiliate.externalId}</div>
+                  <div style={{ color: 'var(--fg1)' }}>{affiliate.nickname || '(sem nickname)'}</div>
+                  <div style={{ fontFamily: 'var(--f-mono)', fontSize: 11, color: 'var(--fg4)' }}>{affiliate.externalId}</div>
                 </div>
               </div>
             </div>
           ) : (
             <div>
-              <div style={{ fontFamily: 'var(--f-mono)', fontSize: 10, color: 'var(--navy-300)', letterSpacing: '0.1em', marginBottom: 8 }}>
+              <div style={{ fontFamily: 'var(--f-mono)', fontSize: 10, color: 'var(--fg4)', letterSpacing: '0.1em', marginBottom: 8 }}>
                 AFILIADO
               </div>
-              <div style={{ fontSize: 12, color: 'var(--navy-400)', fontStyle: 'italic' }}>
+              <div style={{ fontSize: 12, color: 'var(--fg5)', fontStyle: 'italic' }}>
                 Venda direta (sem afiliado atribuído)
               </div>
             </div>
@@ -1822,13 +1822,13 @@ function TransactionDrawer({ externalId, platformSlug, cur, onClose, onPickOrder
           {/* Customer */}
           {customer && (
             <div>
-              <div style={{ fontFamily: 'var(--f-mono)', fontSize: 10, color: 'var(--navy-300)', letterSpacing: '0.1em', marginBottom: 8 }}>
+              <div style={{ fontFamily: 'var(--f-mono)', fontSize: 10, color: 'var(--fg4)', letterSpacing: '0.1em', marginBottom: 8 }}>
                 CLIENTE
               </div>
-              <div style={{ color: 'var(--white)' }}>
+              <div style={{ color: 'var(--fg1)' }}>
                 {[customer.firstName, customer.lastName].filter(Boolean).join(' ') || '(nome n/d)'}
               </div>
-              <div style={{ fontFamily: 'var(--f-mono)', fontSize: 11, color: 'var(--navy-300)' }}>
+              <div style={{ fontFamily: 'var(--f-mono)', fontSize: 11, color: 'var(--fg4)' }}>
                 {customer.email || '—'} · {o.country || customer.country || '—'} · {customer.language || 'n/d'}
               </div>
             </div>
@@ -1837,7 +1837,7 @@ function TransactionDrawer({ externalId, platformSlug, cur, onClose, onPickOrder
           {/* Session */}
           {session.length > 1 && (
             <div>
-              <div style={{ fontFamily: 'var(--f-mono)', fontSize: 10, color: 'var(--navy-300)', letterSpacing: '0.1em', marginBottom: 8, display: 'flex', justifyContent: 'space-between' }}>
+              <div style={{ fontFamily: 'var(--f-mono)', fontSize: 10, color: 'var(--fg4)', letterSpacing: '0.1em', marginBottom: 8, display: 'flex', justifyContent: 'space-between' }}>
                 <span>SESSÃO COMPLETA · {session.length} pedidos</span>
                 <span style={{ color: 'var(--success)' }}>{fmtCurrency(sumSession, cur, 2)}</span>
               </div>
@@ -1861,12 +1861,12 @@ function TransactionDrawer({ externalId, platformSlug, cur, onClose, onPickOrder
                       <span className="badge" style={{ background: `${sColor}22`, color: sColor, borderColor: `${sColor}55`, fontSize: 9, justifySelf: 'start' }}>
                         {sType}
                       </span>
-                      <span style={{ fontSize: 12, color: 'var(--navy-100)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      <span style={{ fontSize: 12, color: 'var(--fg2)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                         {s.productName}
                         {s.isCrossSell && <span style={{ color: 'var(--warning)', marginLeft: 6, fontSize: 10 }}>cross</span>}
                       </span>
                       <span className={`st st-${sStatusLc}`} style={{ fontSize: 9 }}>{sStatusLc}</span>
-                      <span style={{ fontFamily: 'var(--f-mono)', fontSize: 11, color: 'var(--white)' }}>
+                      <span style={{ fontFamily: 'var(--f-mono)', fontSize: 11, color: 'var(--fg1)' }}>
                         {fmtCurrency(s.grossAmountUsd, cur, 2)}
                       </span>
                     </button>
@@ -1879,7 +1879,7 @@ function TransactionDrawer({ externalId, platformSlug, cur, onClose, onPickOrder
           {/* Tracking */}
           {(o.clickId || o.trackingId || o.campaignKey || o.trafficSource) && (
             <div>
-              <div style={{ fontFamily: 'var(--f-mono)', fontSize: 10, color: 'var(--navy-300)', letterSpacing: '0.1em', marginBottom: 8 }}>
+              <div style={{ fontFamily: 'var(--f-mono)', fontSize: 10, color: 'var(--fg4)', letterSpacing: '0.1em', marginBottom: 8 }}>
                 ORIGEM DO TRÁFEGO
               </div>
               <div style={{ display: 'grid', gap: 4, fontFamily: 'var(--f-mono)', fontSize: 11 }}>
@@ -1893,7 +1893,7 @@ function TransactionDrawer({ externalId, platformSlug, cur, onClose, onPickOrder
 
           {/* Timeline */}
           <div>
-            <div style={{ fontFamily: 'var(--f-mono)', fontSize: 10, color: 'var(--navy-300)', letterSpacing: '0.1em', marginBottom: 8 }}>
+            <div style={{ fontFamily: 'var(--f-mono)', fontSize: 10, color: 'var(--fg4)', letterSpacing: '0.1em', marginBottom: 8 }}>
               TIMELINE
             </div>
             <div style={{ display: 'grid', gap: 4, fontFamily: 'var(--f-mono)', fontSize: 11 }}>
@@ -1953,7 +1953,7 @@ function Pill({ label, color }) {
 function KV({ k, v, color }) {
   return (
     <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12 }}>
-      <span style={{ color: 'var(--navy-400)' }}>{k}</span>
+      <span style={{ color: 'var(--fg5)' }}>{k}</span>
       <span style={{ color: color || 'var(--white)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
         {v}
       </span>
@@ -2074,7 +2074,7 @@ function IntegrationsPage({ filters }) {
                   <div className="l">Afiliados ativos</div>
                   <div className="v" style={{ fontSize: 18 }}>
                     {fmtInt(p.affiliatesActive)}
-                    <span style={{ fontSize: 11, color: 'var(--navy-300)', marginLeft: 6 }}>
+                    <span style={{ fontSize: 11, color: 'var(--fg4)', marginLeft: 6 }}>
                       / {fmtInt(p.affiliatesTotal)} no total
                     </span>
                   </div>
@@ -2083,10 +2083,10 @@ function IntegrationsPage({ filters }) {
 
               {p.topProduct && (
                 <div style={{ marginTop: 12, paddingTop: 10, borderTop: '1px solid rgba(91,200,255,0.15)' }}>
-                  <div style={{ fontSize: 10, letterSpacing: '0.1em', color: 'var(--navy-300)', marginBottom: 4 }}>
+                  <div style={{ fontSize: 10, letterSpacing: '0.1em', color: 'var(--fg4)', marginBottom: 4 }}>
                     TOP PRODUTO
                   </div>
-                  <div style={{ fontSize: 13, color: 'var(--white)', display: 'flex', justifyContent: 'space-between', gap: 12 }}>
+                  <div style={{ fontSize: 13, color: 'var(--fg1)', display: 'flex', justifyContent: 'space-between', gap: 12 }}>
                     <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                       {p.topProduct.name}
                     </span>
@@ -2104,7 +2104,7 @@ function IntegrationsPage({ filters }) {
           <div key={p.slug} className="ph-card" style={{ borderStyle: 'dashed', opacity: 0.7 }}>
             <div className="ph-head">
               <div className="ph-name">
-                <div className="ph-logo" style={{ color: 'var(--navy-400)' }}>{p.short}</div>
+                <div className="ph-logo" style={{ color: 'var(--fg5)' }}>{p.short}</div>
                 <div className="txt">
                   <span className="nm">{p.displayName}</span>
                   <span className="sync">Não configurado</span>
@@ -2112,7 +2112,7 @@ function IntegrationsPage({ filters }) {
               </div>
               <span className="badge neutral">EM BREVE</span>
             </div>
-            <div style={{ fontSize: 12, color: 'var(--navy-200)', lineHeight: 1.5, marginTop: 8 }}>
+            <div style={{ fontSize: 12, color: 'var(--fg3)', lineHeight: 1.5, marginTop: 8 }}>
               {p.desc}
             </div>
           </div>
@@ -2162,7 +2162,7 @@ function FXPage({ filters }) {
                   <td><span className="plat plat-cb">{r.code}</span></td>
                   <td className="num cell-mono">{r.rate.toFixed(4)}</td>
                   <td className="cell-mono">{r.updated}</td>
-                  <td className="cell-mono" style={{ color: 'var(--navy-300)' }}>ECB · daily</td>
+                  <td className="cell-mono" style={{ color: 'var(--fg4)' }}>ECB · daily</td>
                   <td><button className="btn btn-ghost"><Icon name="refresh" size={12}/> Refresh</button></td>
                 </tr>
               ))}
@@ -2290,7 +2290,7 @@ function UsersPage({ currentUser }) {
                         </span>
                       )}
                     </td>
-                    <td className="cell-mono" style={{ color: 'var(--navy-300)', fontSize: 11 }}>
+                    <td className="cell-mono" style={{ color: 'var(--fg4)', fontSize: 11 }}>
                       {u.lastLoginAt ? fmtRelative(u.lastLoginAt) : '—'}
                     </td>
                     <td>
@@ -2443,11 +2443,11 @@ function UserFormDrawer({ mode, initial, isSelf, onClose, onSaved }) {
         <div className="drawer-head">
           <div>
             <span className="eyebrow">{isCreate ? 'NOVO USUÁRIO' : 'EDITAR USUÁRIO'}</span>
-            <h3 style={{ margin: '4px 0', fontSize: 18, color: 'var(--white)' }}>
+            <h3 style={{ margin: '4px 0', fontSize: 18, color: 'var(--fg1)' }}>
               {isCreate ? 'Convidar pro dashboard' : (initial.name || initial.email)}
             </h3>
             {!isCreate && (
-              <div style={{ fontFamily: 'var(--f-mono)', fontSize: 11, color: 'var(--navy-300)' }}>
+              <div style={{ fontFamily: 'var(--f-mono)', fontSize: 11, color: 'var(--fg4)' }}>
                 {initial.email}{isSelf && ' · você'}
               </div>
             )}
@@ -2479,7 +2479,7 @@ function UserFormDrawer({ mode, initial, isSelf, onClose, onSaved }) {
           )}
 
           <div style={{ display: 'grid', gap: 6 }}>
-            <span style={{ fontFamily: 'var(--f-mono)', fontSize: 10, letterSpacing: '0.12em', color: 'var(--navy-300)' }}>PAPEL</span>
+            <span style={{ fontFamily: 'var(--f-mono)', fontSize: 10, letterSpacing: '0.12em', color: 'var(--fg4)' }}>PAPEL</span>
             <div className="seg" style={{ width: 'fit-content' }}>
               {[['MEMBER', 'Member'], ['ADMIN', 'Admin']].map(([k, l]) => (
                 <button
@@ -2493,7 +2493,7 @@ function UserFormDrawer({ mode, initial, isSelf, onClose, onSaved }) {
                 </button>
               ))}
             </div>
-            <div style={{ fontSize: 11, color: 'var(--navy-400)', fontFamily: 'var(--f-mono)' }}>
+            <div style={{ fontSize: 11, color: 'var(--fg5)', fontFamily: 'var(--f-mono)' }}>
               {role === 'ADMIN'
                 ? 'Admin acessa todas as abas + gerencia outros usuários.'
                 : 'Member acessa só as abas marcadas abaixo.'}
@@ -2503,7 +2503,7 @@ function UserFormDrawer({ mode, initial, isSelf, onClose, onSaved }) {
           {role === 'MEMBER' && (
             <div style={{ display: 'grid', gap: 8 }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <span style={{ fontFamily: 'var(--f-mono)', fontSize: 10, letterSpacing: '0.12em', color: 'var(--navy-300)' }}>
+                <span style={{ fontFamily: 'var(--f-mono)', fontSize: 10, letterSpacing: '0.12em', color: 'var(--fg4)' }}>
                   ABAS LIBERADAS · {allowedTabs.size}
                 </span>
                 <button
@@ -2521,7 +2521,7 @@ function UserFormDrawer({ mode, initial, isSelf, onClose, onSaved }) {
                 return (
                   <div key={group} style={{ border: '1px solid var(--border-soft)', borderRadius: 6, padding: 10 }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
-                      <span style={{ fontFamily: 'var(--f-mono)', fontSize: 10, color: 'var(--navy-300)', letterSpacing: '0.1em' }}>
+                      <span style={{ fontFamily: 'var(--f-mono)', fontSize: 10, color: 'var(--fg4)', letterSpacing: '0.1em' }}>
                         {group.toUpperCase()} · {checked}/{tabs.length}
                       </span>
                       <span style={{ display: 'flex', gap: 4 }}>
@@ -2532,14 +2532,14 @@ function UserFormDrawer({ mode, initial, isSelf, onClose, onSaved }) {
                         >TODOS</button>
                         <button
                           onClick={() => clearGroup(group)}
-                          style={{ background: 'transparent', border: 0, color: 'var(--navy-400)',
+                          style={{ background: 'transparent', border: 0, color: 'var(--fg5)',
                                    fontFamily: 'var(--f-mono)', fontSize: 9, letterSpacing: '0.08em', cursor: 'pointer' }}
                         >NENHUM</button>
                       </span>
                     </div>
                     <div style={{ display: 'grid', gap: 4 }}>
                       {tabs.map((t) => (
-                        <label key={t.id} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, color: 'var(--white)', cursor: 'pointer' }}>
+                        <label key={t.id} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, color: 'var(--fg1)', cursor: 'pointer' }}>
                           <input
                             type="checkbox"
                             checked={allowedTabs.has(t.id)}
@@ -2558,8 +2558,8 @@ function UserFormDrawer({ mode, initial, isSelf, onClose, onSaved }) {
 
           {!isCreate && (
             <div style={{ display: 'grid', gap: 6, paddingTop: 6, borderTop: '1px solid var(--border-soft)' }}>
-              <span style={{ fontFamily: 'var(--f-mono)', fontSize: 10, letterSpacing: '0.12em', color: 'var(--navy-300)' }}>STATUS</span>
-              <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, color: 'var(--white)', cursor: isSelf ? 'not-allowed' : 'pointer', opacity: isSelf ? 0.6 : 1 }}>
+              <span style={{ fontFamily: 'var(--f-mono)', fontSize: 10, letterSpacing: '0.12em', color: 'var(--fg4)' }}>STATUS</span>
+              <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, color: 'var(--fg1)', cursor: isSelf ? 'not-allowed' : 'pointer', opacity: isSelf ? 0.6 : 1 }}>
                 <input
                   type="checkbox"
                   checked={active}
@@ -2575,7 +2575,7 @@ function UserFormDrawer({ mode, initial, isSelf, onClose, onSaved }) {
           {!isCreate && (
             <div style={{ display: 'grid', gap: 6, paddingTop: 6, borderTop: '1px solid var(--border-soft)' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <span style={{ fontFamily: 'var(--f-mono)', fontSize: 10, letterSpacing: '0.12em', color: 'var(--navy-300)' }}>SENHA</span>
+                <span style={{ fontFamily: 'var(--f-mono)', fontSize: 10, letterSpacing: '0.12em', color: 'var(--fg4)' }}>SENHA</span>
                 {!showResetField && (
                   <button
                     onClick={() => setShowResetField(true)}
@@ -2601,7 +2601,7 @@ function UserFormDrawer({ mode, initial, isSelf, onClose, onSaved }) {
                     <button
                       onClick={() => { setShowResetField(false); setPassword(''); }}
                       style={{ padding: '4px 10px', fontFamily: 'var(--f-mono)', fontSize: 10,
-                               color: 'var(--navy-400)', background: 'transparent',
+                               color: 'var(--fg5)', background: 'transparent',
                                border: '1px solid var(--border-soft)', borderRadius: 4,
                                cursor: 'pointer', letterSpacing: '0.08em' }}
                     >CANCELAR</button>
@@ -2656,7 +2656,7 @@ function UserFormDrawer({ mode, initial, isSelf, onClose, onSaved }) {
 function UserField({ label, value, onChange, type, required }) {
   return (
     <label style={{ display: 'grid', gap: 6 }}>
-      <span style={{ fontFamily: 'var(--f-mono)', fontSize: 10, letterSpacing: '0.12em', color: 'var(--navy-300)' }}>
+      <span style={{ fontFamily: 'var(--f-mono)', fontSize: 10, letterSpacing: '0.12em', color: 'var(--fg4)' }}>
         {label.toUpperCase()}
       </span>
       <input
@@ -2665,7 +2665,7 @@ function UserField({ label, value, onChange, type, required }) {
         onChange={(e) => onChange(e.target.value)}
         required={required}
         style={{
-          padding: '9px 12px', fontSize: 13, color: 'var(--white)',
+          padding: '9px 12px', fontSize: 13, color: 'var(--fg1)',
           background: 'rgba(91,200,255,0.05)', border: '1px solid rgba(91,200,255,0.2)',
           borderRadius: 6, outline: 'none', fontFamily: 'inherit',
         }}
@@ -2801,10 +2801,10 @@ function HealthPage() {
           </div>
           <div style={{ display: 'grid', gap: 12, padding: '6px 0' }}>
             <div style={{ display: 'flex', alignItems: 'baseline', gap: 12 }}>
-              <span style={{ fontFamily: 'var(--f-display)', fontSize: 32, color: 'var(--white)' }}>
+              <span style={{ fontFamily: 'var(--f-display)', fontSize: 32, color: 'var(--fg1)' }}>
                 {d.catalog.productsWithFamily}
               </span>
-              <span style={{ fontSize: 12, color: 'var(--navy-300)' }}>
+              <span style={{ fontSize: 12, color: 'var(--fg4)' }}>
                 de {d.catalog.totalProducts} produtos classificados
                 ({((d.catalog.productsWithFamily / Math.max(1, d.catalog.totalProducts)) * 100).toFixed(0)}%)
               </span>
@@ -2814,11 +2814,11 @@ function HealthPage() {
                 <div style={{ fontFamily: 'var(--f-mono)', fontSize: 10, color: 'var(--warning)', letterSpacing: '0.1em' }}>
                   {d.catalog.productsWithoutFamily} SEM FAMÍLIA
                 </div>
-                <div style={{ fontFamily: 'var(--f-mono)', fontSize: 11, color: 'var(--navy-300)', maxHeight: 180, overflowY: 'auto', display: 'grid', gap: 4 }}>
+                <div style={{ fontFamily: 'var(--f-mono)', fontSize: 11, color: 'var(--fg4)', maxHeight: 180, overflowY: 'auto', display: 'grid', gap: 4 }}>
                   {d.catalog.unknownSKUs.map((s, i) => (
                     <div key={i} style={{ display: 'flex', justifyContent: 'space-between', gap: 8 }}>
                       <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{s.externalId}</span>
-                      <span style={{ color: 'var(--navy-400)' }}>{s.platform}</span>
+                      <span style={{ color: 'var(--fg5)' }}>{s.platform}</span>
                     </div>
                   ))}
                 </div>
@@ -2842,7 +2842,7 @@ function HealthRate({ label, value, good, threshold, baseline, baselineLabel, de
   if (good === 'down') color = value <= threshold ? 'var(--success)' : value <= threshold * 1.5 ? 'var(--warning)' : 'var(--danger)';
   return (
     <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 12 }}>
-      <span style={{ fontSize: 13, color: 'var(--navy-200)' }}>{label}</span>
+      <span style={{ fontSize: 13, color: 'var(--fg3)' }}>{label}</span>
       <div style={{ textAlign: 'right' }}>
         <div style={{ fontFamily: 'var(--f-display)', fontSize: 22, color }}>{pct}%</div>
         {baseline != null && (
@@ -3014,10 +3014,10 @@ function CostsPage() {
           <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
             <Icon name="alert-triangle" size={14} className="" />
             <div style={{ flex: 1, minWidth: 200 }}>
-              <div style={{ fontSize: 12, color: 'var(--white)', marginBottom: 4 }}>
+              <div style={{ fontSize: 12, color: 'var(--fg1)', marginBottom: 4 }}>
                 Token de admin necessário pra editar
               </div>
-              <div style={{ fontSize: 11, color: 'var(--navy-300)' }}>
+              <div style={{ fontSize: 11, color: 'var(--fg4)' }}>
                 Bearer secret (mesmo INGEST_SECRET). Ficará na sessionStorage até fechar a aba.
               </div>
             </div>
@@ -3028,7 +3028,7 @@ function CostsPage() {
               placeholder="bearer secret"
               style={{
                 background: 'rgba(91,200,255,0.06)', border: '1px solid var(--border)',
-                borderRadius: 4, padding: '6px 10px', color: 'var(--white)',
+                borderRadius: 4, padding: '6px 10px', color: 'var(--fg1)',
                 fontFamily: 'var(--f-mono)', fontSize: 12, minWidth: 240,
               }}
             />
@@ -3092,7 +3092,7 @@ function CostsPage() {
                           style={costInputStyle(dirty, !token)}
                         />
                       </td>
-                      <td className="cell-mono" style={{ color: 'var(--navy-300)' }}>{fmtDateShort(f.updatedAt)}</td>
+                      <td className="cell-mono" style={{ color: 'var(--fg4)' }}>{fmtDateShort(f.updatedAt)}</td>
                     </tr>
                   );
                 })}
@@ -3123,7 +3123,7 @@ function CostsPage() {
                   const dirty = rateDirty(r.bottlesMax);
                   return (
                     <tr key={r.bottlesMax}>
-                      <td className="cell-mono" style={{ color: 'var(--navy-300)', fontSize: 11 }}>{r.label}</td>
+                      <td className="cell-mono" style={{ color: 'var(--fg4)', fontSize: 11 }}>{r.label}</td>
                       <td className="num cell-mono">{r.bottlesMax}</td>
                       <td className="num">
                         <input
@@ -3169,7 +3169,7 @@ function CostsPage() {
 
       {/* Token clear */}
       {token && (
-        <div style={{ marginTop: 18, fontSize: 11, color: 'var(--navy-400)', textAlign: 'right' }}>
+        <div style={{ marginTop: 18, fontSize: 11, color: 'var(--fg5)', textAlign: 'right' }}>
           Token autenticado nesta sessão · <button onClick={() => setToken('')} style={{ background: 'none', border: 0, color: 'var(--glow-cyan)', cursor: 'pointer', textDecoration: 'underline', font: 'inherit' }}>esquecer</button>
         </div>
       )}
@@ -3183,7 +3183,7 @@ function costInputStyle(dirty, disabled) {
     border: '1px solid ' + (dirty ? 'var(--glow-cyan)' : 'var(--border)'),
     borderRadius: 4,
     padding: '4px 8px',
-    color: 'var(--white)',
+    color: 'var(--fg1)',
     fontFamily: 'var(--f-mono)',
     fontSize: 12,
     width: 90,
@@ -3278,7 +3278,7 @@ function InsightsPage() {
 
       {/* Insights list */}
       {visible.length === 0 && (
-        <div className="panel" style={{ textAlign: 'center', padding: 32, color: 'var(--navy-300)' }}>
+        <div className="panel" style={{ textAlign: 'center', padding: 32, color: 'var(--fg4)' }}>
           {layout === 'tabs' && activeCategory !== 'all'
             ? `Nenhum insight ativo nesta categoria. Tudo OK por aqui.`
             : `Nenhum insight ativo. Operação saudável neste período.`}
@@ -3353,11 +3353,11 @@ function InsightCard({ insight }) {
               {catLabel}
             </span>
           </div>
-          <div style={{ fontFamily: 'var(--f-display)', fontSize: 16, color: 'var(--white)', letterSpacing: '-0.01em', lineHeight: 1.3 }}>
+          <div style={{ fontFamily: 'var(--f-display)', fontSize: 16, color: 'var(--fg1)', letterSpacing: '-0.01em', lineHeight: 1.3 }}>
             {insight.headline}
           </div>
           {insight.body && (
-            <div style={{ marginTop: 6, fontSize: 12, color: 'var(--navy-200)', lineHeight: 1.5 }}>
+            <div style={{ marginTop: 6, fontSize: 12, color: 'var(--fg3)', lineHeight: 1.5 }}>
               {insight.body}
             </div>
           )}
@@ -3372,10 +3372,10 @@ function InsightCard({ insight }) {
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 8, marginTop: 10, paddingTop: 10, borderTop: '1px solid var(--border-soft)' }}>
           {insight.metrics.map((m, i) => (
             <div key={i}>
-              <div style={{ fontFamily: 'var(--f-mono)', fontSize: 9, color: 'var(--navy-400)', letterSpacing: '0.1em', marginBottom: 2 }}>
+              <div style={{ fontFamily: 'var(--f-mono)', fontSize: 9, color: 'var(--fg5)', letterSpacing: '0.1em', marginBottom: 2 }}>
                 {m.label.toUpperCase()}
               </div>
-              <div style={{ fontSize: 12, color: 'var(--navy-100)' }}>{m.value}</div>
+              <div style={{ fontSize: 12, color: 'var(--fg2)' }}>{m.value}</div>
             </div>
           ))}
         </div>

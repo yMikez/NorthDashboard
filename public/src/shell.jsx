@@ -53,7 +53,18 @@ function Sidebar({ active, onNav, user }) {
   return (
     <aside className="side">
       <div className="side-logo">
-        <img src="/assets/logo-mark-dark.svg" alt="" style={{ width: 32, height: 32 }}/>
+        <img
+          src="/assets/logo-mark-dark.svg"
+          alt=""
+          className="logo-mark logo-dark"
+          style={{ width: 32, height: 32 }}
+        />
+        <img
+          src="/assets/logo-mark-light.svg"
+          alt=""
+          className="logo-mark logo-light"
+          style={{ width: 32, height: 32 }}
+        />
         <div className="wm" style={{ width: 71, fontSize: 24 }}>north<em>scale</em></div>
       </div>
 
@@ -77,7 +88,7 @@ function Sidebar({ active, onNav, user }) {
       ))}
 
       <div className="side-foot">
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 6px', fontFamily: 'var(--f-mono)', fontSize: 10, color: 'var(--navy-400)', letterSpacing: '0.1em' }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 6px', fontFamily: 'var(--f-mono)', fontSize: 10, color: 'var(--fg5)', letterSpacing: '0.1em' }}>
           <span>v2.4.1 · prod</span>
           <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, color: 'var(--success)' }}>
             <span style={{ width: 6, height: 6, borderRadius: '50%', background: 'var(--success)', boxShadow: '0 0 6px var(--success)' }}/>
@@ -123,20 +134,21 @@ function UserChip({ user }) {
       {open && (
         <div style={{
           position: 'absolute', bottom: 'calc(100% + 6px)', left: 0, right: 0,
-          background: 'rgba(6,13,37,0.98)', border: '1px solid var(--border)',
+          background: 'var(--bg-elev)', border: '1px solid var(--border)',
           borderRadius: 8, padding: 4, zIndex: 30,
-          boxShadow: '0 -10px 40px -10px rgba(91,200,255,0.25)', backdropFilter: 'blur(10px)',
+          boxShadow: '0 -10px 40px -10px rgba(91,200,255,0.25)', backdropFilter: 'blur(20px)',
+          WebkitBackdropFilter: 'blur(20px)',
         }}>
           <button
             onClick={logout}
             style={{
               width: '100%', textAlign: 'left', padding: '8px 10px', borderRadius: 4,
               background: 'transparent', border: 0, cursor: 'pointer',
-              fontFamily: 'var(--f-mono)', fontSize: 11, color: 'var(--white)',
+              fontFamily: 'var(--f-mono)', fontSize: 11, color: 'var(--fg1)',
               display: 'flex', alignItems: 'center', gap: 8,
             }}
             onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(239,68,68,0.1)'; e.currentTarget.style.color = 'var(--danger)'; }}
-            onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = 'var(--white)'; }}
+            onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = 'var(--fg1)'; }}
           >
             <Icon name="log-out" size={12}/> Sair
           </button>
@@ -234,7 +246,7 @@ function MultiSelect({ label, options, selected, onChange, icon }) {
           <div style={{ display: 'flex', justifyContent: 'space-between', padding: '4px 8px', marginBottom: 4 }}>
             <button className="dh-link" style={{ background: 'none', border: 0, color: 'var(--glow-cyan)', fontFamily: 'var(--f-mono)', fontSize: 10, letterSpacing: '0.08em', cursor: 'pointer' }}
               onClick={() => onChange(new Set())}>TODOS</button>
-            <button className="dh-link" style={{ background: 'none', border: 0, color: 'var(--navy-300)', fontFamily: 'var(--f-mono)', fontSize: 10, letterSpacing: '0.08em', cursor: 'pointer' }}
+            <button className="dh-link" style={{ background: 'none', border: 0, color: 'var(--fg4)', fontFamily: 'var(--f-mono)', fontSize: 10, letterSpacing: '0.08em', cursor: 'pointer' }}
               onClick={() => onChange(new Set(options.map(o => o.id)))}>NENHUM</button>
           </div>
           <div style={{ maxHeight: 280, overflowY: 'auto' }}>
@@ -253,7 +265,7 @@ function MultiSelect({ label, options, selected, onChange, icon }) {
               return (
                 <label key={opt.id} style={{
                   display: 'flex', alignItems: 'center', gap: 8, padding: '6px 8px',
-                  fontSize: 12, color: 'var(--navy-100)', cursor: 'pointer', borderRadius: 4,
+                  fontSize: 12, color: 'var(--fg2)', cursor: 'pointer', borderRadius: 4,
                   background: on ? 'rgba(91,200,255,0.06)' : 'transparent',
                   transition: 'background 120ms',
                 }}>
@@ -265,7 +277,7 @@ function MultiSelect({ label, options, selected, onChange, icon }) {
                   />
                   {opt.swatch && <span style={{ width: 10, height: 10, borderRadius: 3, background: opt.swatch, flexShrink: 0 }}/>}
                   <span style={{ flex: 1 }}>{opt.label}</span>
-                  {opt.meta && <span style={{ fontFamily: 'var(--f-mono)', fontSize: 10, color: 'var(--navy-400)' }}>{opt.meta}</span>}
+                  {opt.meta && <span style={{ fontFamily: 'var(--f-mono)', fontSize: 10, color: 'var(--fg5)' }}>{opt.meta}</span>}
                 </label>
               );
             })}
@@ -330,10 +342,10 @@ function DateRangeChip({ range, onChange }) {
           backdropFilter: 'blur(10px)',
           display: 'grid', gap: 10,
         }}>
-          <div style={{ fontFamily: 'var(--f-mono)', fontSize: 10, color: 'var(--navy-300)', letterSpacing: '0.08em' }}>
+          <div style={{ fontFamily: 'var(--f-mono)', fontSize: 10, color: 'var(--fg4)', letterSpacing: '0.08em' }}>
             INTERVALO CUSTOMIZADO
           </div>
-          <label style={{ display: 'grid', gap: 4, fontSize: 11, color: 'var(--navy-200)' }}>
+          <label style={{ display: 'grid', gap: 4, fontSize: 11, color: 'var(--fg3)' }}>
             <span>De</span>
             <input
               type="date"
@@ -343,7 +355,7 @@ function DateRangeChip({ range, onChange }) {
               style={dateInputStyle}
             />
           </label>
-          <label style={{ display: 'grid', gap: 4, fontSize: 11, color: 'var(--navy-200)' }}>
+          <label style={{ display: 'grid', gap: 4, fontSize: 11, color: 'var(--fg3)' }}>
             <span>Até</span>
             <input
               type="date"
@@ -369,7 +381,7 @@ const dateInputStyle = {
   border: '1px solid var(--border)',
   borderRadius: 4,
   padding: '6px 8px',
-  color: 'var(--white)',
+  color: 'var(--fg1)',
   fontFamily: 'var(--f-mono)',
   fontSize: 12,
   colorScheme: 'dark',

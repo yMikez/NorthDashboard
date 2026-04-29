@@ -1033,6 +1033,86 @@ body { overflow-x: hidden; }
 }
 .theme-toggle .knob svg { width: 12px; height: 12px; }
 
+/* ---------- Logo swap por tema ---------- */
+.logo-light { display: none; }
+[data-theme="light"] .logo-dark { display: none; }
+[data-theme="light"] .logo-light { display: inline-block; }
+
+/* ---------- Polish v3.2: weight bumps p/ Space Grotesk ---------- */
+.top-h1 { font-weight: 600; letter-spacing: -0.025em; }
+.page-head h2 { font-weight: 600; }
+.kpi-value { font-weight: 600; }
+.panel-metric { font-weight: 600; }
+.panel-h3 { font-weight: 600; }
+.mini-kpi .v { font-weight: 600; }
+.donut-center .v { font-weight: 600; }
+.funnel-meta .vol { font-weight: 600; }
+.ph-stat .v { font-weight: 600; }
+.prod-stat .v { font-weight: 600; }
+.prod-name { font-weight: 600; }
+.drawer-aff h3 { font-weight: 600; }
+
+/* Em light, aurora blobs + scanlines bem mais sutis pra não saturar */
+[data-theme="light"] .ns-bg::before,
+[data-theme="light"] .ns-bg::after { opacity: 0.10; filter: blur(120px); }
+
+/* Em light, panel sub e mini-kpi label ganham peso pra puxar contraste */
+[data-theme="light"] .panel-sub,
+[data-theme="light"] .mini-kpi .l,
+[data-theme="light"] .kpi-label,
+[data-theme="light"] .ph-stat .l,
+[data-theme="light"] .donut-center .l,
+[data-theme="light"] .prod-stat .l { font-weight: 600; color: var(--fg4); }
+
+/* Filter labels mais visíveis */
+[data-theme="light"] .f-label { color: var(--navy-600); font-weight: 600; }
+
+/* Eyebrow / mono-tag em light: cyan vira navy-600 (cyan puro fica fraco em fundo claro) */
+[data-theme="light"] .t-eyebrow,
+[data-theme="light"] .t-mono-tag,
+[data-theme="light"] .panel-eyebrow,
+[data-theme="light"] .top-crumb .cur,
+[data-theme="light"] .page-head .eyebrow {
+  color: var(--navy-600);
+}
+
+/* Chart line em light vira cyan saturado pra destacar */
+[data-theme="light"] .chart-line { stroke: var(--glow-electric); stroke-width: 2; }
+[data-theme="light"] .chart-line.prev { stroke: var(--navy-300); stroke-dasharray: 3 4; }
+[data-theme="light"] .chart-area { fill: url(#gradCyan); opacity: 0.45; }
+
+/* Scrollbar webkit em light */
+[data-theme="light"] ::-webkit-scrollbar-thumb { background: rgba(30,58,138,0.18); }
+[data-theme="light"] ::-webkit-scrollbar-thumb:hover { background: rgba(30,58,138,0.32); }
+
+/* Topbar action buttons — extra contraste em light */
+[data-theme="light"] .top-actions .btn-ghost {
+  background: rgba(255,255,255,0.75);
+  border-color: var(--border);
+  color: var(--fg1);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.95), 0 2px 8px -4px rgba(15,31,77,0.10);
+}
+[data-theme="light"] .top-actions .btn-ghost:hover {
+  background: rgba(255,255,255,0.95);
+  border-color: var(--border-strong);
+  color: var(--navy-600);
+}
+
+/* Theme toggle em light: knob mais legível */
+[data-theme="light"] .theme-toggle {
+  background: rgba(255,255,255,0.8);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.95), 0 2px 6px -2px rgba(15,31,77,0.10);
+}
+
+/* Drawer-head em light pode ter title invisível se ficou .drawer-aff h3
+   sem override; o bump pra fg1 acima já cobre, mas reforço aqui: */
+[data-theme="light"] .drawer-head { color: var(--fg1); }
+
+/* Filter chip popover dropdowns (inline JSX) — cobertos via var(--bg-elev) +
+   border var(--border). Inputs/search com background hardcoded em
+   rgba(91,200,255,...) já são theme-neutral (cyan tint sutil). */
+
+
 /* ============================================================
    LIQUID GLASS — sheen + rim refraction nas superfícies-chave
    Aplica top-sheen (::before) e bottom rim cyan/violet (::after)
