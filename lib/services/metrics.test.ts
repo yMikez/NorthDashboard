@@ -27,6 +27,7 @@ function row(overrides: Partial<DailyMetricsRow> = {}): DailyMetricsRow {
     refunded_count: 1,
     chargeback_count: 0,
     gross: 1000,
+    gross_original: 1000,
     net: 950,
     cpa: 200,
     ...overrides,

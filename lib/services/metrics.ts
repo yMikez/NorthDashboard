@@ -20,7 +20,10 @@ export interface MetricsFilters {
 }
 
 export interface OverviewKPIs {
-  gross: number;
+  gross: number;          // gross "ativo": só APPROVED (refunds removidos do total)
+  grossOriginal: number;  // gross "Date of Event" (CB-style): valor original
+                          // de toda venda no dia, mesmo que depois refundada.
+                          // Bate com o "Gross Sale Amount" do CB Reporting.
   net: number;
   cpa: number;
   netProfit: number;
@@ -43,6 +46,7 @@ export interface OverviewKPIs {
 export interface DailyBucket {
   date: string; // YYYY-MM-DD
   gross: number;
+  grossOriginal: number; // gross "Date of Event" (CB-style)
   net: number;
   cpa: number;
   cogs: number;
@@ -489,10 +493,11 @@ async function kpisFromRows(
   rows: DailyMetricsRow[],
   filters: MetricsFilters,
 ): Promise<OverviewKPIs> {
-  let gross = 0, net = 0, cpa = 0, cogs = 0, fulfillment = 0;
+  let gross = 0, grossOriginal = 0, net = 0, cpa = 0, cogs = 0, fulfillment = 0;
   let approvedCount = 0, refundedCount = 0, chargebackCount = 0;
   for (const r of rows) {
     gross += r.gross;
+    grossOriginal += r.gross_original;
     net += r.net;
     cpa += r.cpa;
     cogs += r.cogs;
@@ -518,6 +523,7 @@ async function kpisFromRows(
 
   return {
     gross: round2(gross),
+    grossOriginal: round2(grossOriginal),
     net: round2(net),
     cpa: round2(cpa),
     netProfit: round2(net - cpa),
@@ -582,7 +588,7 @@ export function dailyFromRows(
   for (let d = startOfDay(startBrt); d <= endBrt; d = addDays(d, 1)) {
     const key = isoDate(d);
     buckets.set(key, {
-      date: key, gross: 0, net: 0, cpa: 0, cogs: 0, fulfillment: 0, profit: 0,
+      date: key, gross: 0, grossOriginal: 0, net: 0, cpa: 0, cogs: 0, fulfillment: 0, profit: 0,
       orders: 0, approvedOrders: 0, allOrders: 0,
     });
   }
@@ -591,6 +597,7 @@ export function dailyFromRows(
     const b = buckets.get(key);
     if (!b) continue;
     b.gross = round2(b.gross + r.gross);
+    b.grossOriginal = round2(b.grossOriginal + r.gross_original);
     b.net = round2(b.net + r.net);
     b.cpa = round2(b.cpa + r.cpa);
     b.cogs = round2(b.cogs + r.cogs);
@@ -2497,13 +2504,16 @@ async function fetchOrders(filters: MetricsFilters): Promise<OrderWithJoins[]> {
 }
 
 function computeKPIs(orders: OrderWithJoins[]): OverviewKPIs {
-  let gross = 0, net = 0, cpa = 0, cogs = 0, fulfillment = 0;
+  let gross = 0, grossOriginal = 0, net = 0, cpa = 0, cogs = 0, fulfillment = 0;
   let approvedCount = 0;
   let refundedCount = 0;
   let chargebackCount = 0;
   const groups = new Set<string>();
 
   for (const o of orders) {
+    // grossOriginal: valor da venda no momento da criação. Fallback ABS pra
+    // orders antigos pré-backfill onde originalGrossUsd ainda é null.
+    grossOriginal += toNumber(o.originalGrossUsd ?? Math.abs(toNumber(o.grossAmountUsd)));
     if (o.status === 'APPROVED') {
       gross += toNumber(o.grossAmountUsd);
       net += toNumber(o.netAmountUsd);
@@ -2529,6 +2539,7 @@ function computeKPIs(orders: OrderWithJoins[]): OverviewKPIs {
 
   return {
     gross: round2(gross),
+    grossOriginal: round2(grossOriginal),
     net: round2(net),
     cpa: round2(cpa),
     netProfit: round2(net - cpa),
@@ -2561,7 +2572,7 @@ function computeDaily(
     const key = isoDate(d);
     buckets.set(key, {
       date: key,
-      gross: 0, net: 0, cpa: 0, cogs: 0, fulfillment: 0, profit: 0,
+      gross: 0, grossOriginal: 0, net: 0, cpa: 0, cogs: 0, fulfillment: 0, profit: 0,
       orders: 0, approvedOrders: 0, allOrders: 0,
     });
   }
@@ -2571,6 +2582,7 @@ function computeDaily(
     const b = buckets.get(key);
     if (!b) continue;
     b.allOrders++;
+    b.grossOriginal += toNumber(o.originalGrossUsd ?? Math.abs(toNumber(o.grossAmountUsd)));
     if (o.status === 'APPROVED') {
       b.gross += toNumber(o.grossAmountUsd);
       b.net += toNumber(o.netAmountUsd);
@@ -2585,6 +2597,7 @@ function computeDaily(
 
   for (const b of buckets.values()) {
     b.gross = round2(b.gross);
+    b.grossOriginal = round2(b.grossOriginal);
     b.net = round2(b.net);
     b.cpa = round2(b.cpa);
     b.cogs = round2(b.cogs);

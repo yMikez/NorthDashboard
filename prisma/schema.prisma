@@ -135,6 +135,13 @@ model Order {
   currencyOriginal String
   grossAmountOrig  Decimal @db.Decimal(12, 2)
   grossAmountUsd   Decimal @db.Decimal(12, 2)
+  // Snapshot do gross na PRIMEIRA vez que vimos esta order (na criação).
+  // grossAmountUsd é overwritten pra negativo quando vem refund/chargeback;
+  // originalGrossUsd preserva o valor da venda original pra reconciliação
+  // estilo "Date of Event" (CB-style) e cálculo de "Receita bruta do dia"
+  // que inclui vendas que depois foram refundadas.
+  // Nullable só pra suportar migration; ingest novos sempre populam.
+  originalGrossUsd Decimal? @db.Decimal(12, 2)
   taxAmount        Decimal @db.Decimal(12, 2) @default(0)
   fees             Decimal @db.Decimal(12, 2) @default(0)
   netAmountUsd     Decimal @db.Decimal(12, 2)

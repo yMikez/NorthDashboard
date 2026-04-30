@@ -68,11 +68,14 @@ export interface DailyMetricsRow {
   approved_count: number;
   refunded_count: number;
   chargeback_count: number;
-  gross: number;       // approved gross only
-  net: number;         // approved net only
-  cpa: number;         // CPA paid (across all statuses)
-  cogs: number;        // production cost (across all statuses — we paid even on refunds)
-  fulfillment: number; // shipping cost (across all statuses)
+  gross: number;          // gross atual: só APPROVED. Refunded/cb removidos.
+  gross_original: number; // gross "Date of Event" (CB-style): valor original da venda
+                          // mesmo que depois tenha sido refundada. Preservado via
+                          // Order.originalGrossUsd (fallback ABS(grossAmountUsd)).
+  net: number;            // approved net only
+  cpa: number;            // CPA paid (across all statuses)
+  cogs: number;           // production cost (across all statuses)
+  fulfillment: number;    // shipping cost (across all statuses)
 }
 
 interface RawDailyMetricsRow {
@@ -86,6 +89,7 @@ interface RawDailyMetricsRow {
   refunded_count: bigint;
   chargeback_count: bigint;
   gross: Prisma.Decimal;
+  gross_original: Prisma.Decimal;
   net: Prisma.Decimal;
   cpa: Prisma.Decimal;
   cogs: Prisma.Decimal;
@@ -133,7 +137,7 @@ export async function queryDailyMetrics(
   const rows = await db.$queryRaw<RawDailyMetricsRow[]>(Prisma.sql`
     SELECT day, platform, family, country, product_type,
            total_count, approved_count, refunded_count, chargeback_count,
-           gross, net, cpa, cogs, fulfillment
+           gross, gross_original, net, cpa, cogs, fulfillment
     FROM daily_metrics
     WHERE ${where}
     ORDER BY day ASC
@@ -149,6 +153,7 @@ export async function queryDailyMetrics(
     approved_count: toNum(r.approved_count),
     refunded_count: toNum(r.refunded_count),
     chargeback_count: toNum(r.chargeback_count),
+    gross_original: toDec(r.gross_original),
     gross: toDec(r.gross),
     net: toDec(r.net),
     cpa: toDec(r.cpa),

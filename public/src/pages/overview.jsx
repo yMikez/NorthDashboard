@@ -119,6 +119,13 @@ const PLATFORM_VARIANTS = {
 function OverviewPage({ filters, setFilters }) {
   const [state, setState] = useStateApp({ status: 'loading', data: null, error: null });
   const [metric, setMetric] = useState('gross');
+  // Modo do gross:
+  //  - 'active'  (default): gross = só APPROVED (status atual). Refunds removem
+  //    do total. Reflete "receita ativa real" hoje no books.
+  //  - 'event'   (CB-style): gross = valor original da venda no dia que ocorreu,
+  //    inclui orders que depois foram refundadas. Bate com o "Gross Sale Amount"
+  //    do CB Reporting Dashboard.
+  const [grossMode, setGrossMode] = useState('active');
 
   useEffectOv(() => {
     let cancelled = false;
@@ -149,12 +156,27 @@ function OverviewPage({ filters, setFilters }) {
     </div></div>;
   }
 
-  const { kpis, previous, daily, byCountry, byProductType, topAffiliates, platformHealth } = state.data;
-  const prev = previous || {};
+  const { kpis: rawKpis, previous: rawPrev, daily, byCountry, byProductType, topAffiliates, platformHealth } = state.data;
+  // grossMode='event' substitui gross por grossOriginal (CB-aligned). KPIs
+  // dependentes (AOV, marginPct) recalculam usando o gross efetivo.
+  const useEvent = grossMode === 'event';
+  const kpis = useEvent && rawKpis.grossOriginal != null ? {
+    ...rawKpis,
+    gross: rawKpis.grossOriginal,
+    aov: rawKpis.orderGroups ? rawKpis.grossOriginal / rawKpis.orderGroups : 0,
+    estimatedMarginPct: rawKpis.grossOriginal > 0
+      ? Math.round((rawKpis.estimatedProfit / rawKpis.grossOriginal) * 10000) / 100
+      : 0,
+  } : rawKpis;
+  const prev = useEvent && rawPrev?.grossOriginal != null ? {
+    ...rawPrev,
+    gross: rawPrev.grossOriginal,
+    aov: rawPrev.orderGroups ? rawPrev.grossOriginal / rawPrev.orderGroups : 0,
+  } : (rawPrev || {});
 
   const buckets = daily.map((b) => ({
     date: new Date(b.date),
-    gross: b.gross,
+    gross: useEvent && b.grossOriginal != null ? b.grossOriginal : b.gross,
     net: b.net,
     cpa: b.cpa,
     cogs: b.cogs ?? 0,
@@ -201,6 +223,18 @@ function OverviewPage({ filters, setFilters }) {
           <span className="sub">{fmtRange(filters.dateRange)} · dados unificados ClickBank + Digistore24</span>
         </div>
         <div className="page-head-actions">
+          <div className="seg" title="Modo de cálculo do gross">
+            <button
+              className={grossMode === 'active' ? 'is-active' : ''}
+              onClick={() => setGrossMode('active')}
+              aria-label="Receita ativa: só vendas aprovadas"
+            >ATIVO</button>
+            <button
+              className={grossMode === 'event' ? 'is-active' : ''}
+              onClick={() => setGrossMode('event')}
+              aria-label="Data do evento: inclui valor original de vendas refundadas (alinha com ClickBank)"
+            >EVENTO</button>
+          </div>
           <button className="btn btn-ghost"><Icon name="calendar" size={12}/> Agendar relatório</button>
           <button className="btn btn-primary"><Icon name="plus" size={12}/> Nova visão</button>
         </div>

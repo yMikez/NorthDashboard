@@ -190,10 +190,23 @@ export async function upsertOrder(normalized: NormalizedOrder): Promise<UpsertOr
 
   let result: UpsertOrderResult;
   if (existing) {
+    // UPDATE: NÃO mexe em originalGrossUsd. grossAmountUsd vai ser overwritten
+    // (refund/chargeback negativo); originalGrossUsd permanece o valor da
+    // venda inicial pra reconciliação CB-style "Date of Event".
     await db.order.update({ where: { id: existing.id }, data: orderData });
     result = { created: false, orderId: existing.id };
   } else {
-    const created = await db.order.create({ data: orderData, select: { id: true } });
+    // CREATE: snapshot do grossAmountUsd como originalGrossUsd. Pra orders
+    // que nascem APPROVED os dois ficam iguais (positivo). Pra orders que
+    // nascem como refund/cb (raríssimo — sale + cb instantâneo), original
+    // fica negativo, mas usamos COALESCE com ABS no MV pra normalizar.
+    const created = await db.order.create({
+      data: {
+        ...orderData,
+        originalGrossUsd: new Prisma.Decimal(normalized.grossAmountUsd),
+      },
+      select: { id: true },
+    });
     result = { created: true, orderId: created.id };
   }
 
