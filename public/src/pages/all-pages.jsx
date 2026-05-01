@@ -3390,8 +3390,673 @@ function InsightCard({ insight }) {
   );
 }
 
+// ==========================================================================
+// NETWORKS / SUBAFILIADOS — visual-only mockup
+// Mock data hardcoded. Sem backend, sem persistência. Pra validar UX antes
+// de comprometer schema/lógica. Quando virar real, mover mock pro fixture
+// e plugar fetch real.
+// ==========================================================================
+
+const MOCK_NETWORKS = [
+  {
+    id: 'fenix', name: 'Fenix Media Group', slug: 'fenix',
+    contractStart: '2026-02-01', status: 'active',
+    affiliatesActive: 8, affiliatesTotal: 12,
+    salesMonth: 487, grossMonth: 124350,
+    rate: { type: 'fixed', value: 25 }, // $25 por venda FE
+    pending: 2435.00, accrued: 8975.00, paidAllTime: 47250.00,
+    lastSaleAt: '2026-04-30T13:32:00Z', lastPayoutAt: '2026-04-15',
+    nextPayoutEstimate: '2026-05-12', nextPayoutAmount: 8975.00,
+  },
+  {
+    id: 'wave', name: 'Wave Marketing', slug: 'wave',
+    contractStart: '2026-03-10', status: 'active',
+    affiliatesActive: 5, affiliatesTotal: 5,
+    salesMonth: 142, grossMonth: 38420,
+    rate: { type: 'pct', value: 0.05 }, // 5% do gross
+    pending: 487.20, accrued: 1250.30, paidAllTime: 8400.00,
+    lastSaleAt: '2026-04-30T11:14:00Z', lastPayoutAt: '2026-04-15',
+    nextPayoutEstimate: '2026-05-04', nextPayoutAmount: 1250.30,
+  },
+  {
+    id: 'rocketads', name: 'RocketAds Brasil', slug: 'rocketads',
+    contractStart: '2026-04-08', status: 'active',
+    affiliatesActive: 3, affiliatesTotal: 4,
+    salesMonth: 89, grossMonth: 23780,
+    rate: { type: 'fixed', value: 30 },
+    pending: 1830.00, accrued: 0, paidAllTime: 0,
+    lastSaleAt: '2026-04-30T09:48:00Z', lastPayoutAt: null,
+    nextPayoutEstimate: '2026-06-08', nextPayoutAmount: 0,
+  },
+  {
+    id: 'meridian', name: 'Meridian Digital', slug: 'meridian',
+    contractStart: '2025-11-15', status: 'paused',
+    affiliatesActive: 0, affiliatesTotal: 7,
+    salesMonth: 0, grossMonth: 0,
+    rate: { type: 'fixed', value: 20 },
+    pending: 0, accrued: 360.00, paidAllTime: 31280.00,
+    lastSaleAt: '2026-04-12T18:20:00Z', lastPayoutAt: '2026-04-15',
+    nextPayoutEstimate: null, nextPayoutAmount: 360.00,
+  },
+];
+
+const MOCK_AFFILIATES_BY_NETWORK = {
+  fenix: [
+    { affId: 'fenix2025', nickname: 'fenix2025', salesMonth: 134, grossMonth: 34520, commissionMonth: 3350, lastSale: '2h' },
+    { affId: 'adsmkt9',   nickname: 'adsmkt9',   salesMonth: 121, grossMonth: 31480, commissionMonth: 3025, lastSale: '5h' },
+    { affId: 'evolute',   nickname: 'evolute',   salesMonth: 87,  grossMonth: 22130, commissionMonth: 2175, lastSale: 'ontem' },
+    { affId: 'nchm41',    nickname: 'nchm41',    salesMonth: 52,  grossMonth: 13420, commissionMonth: 1300, lastSale: 'há 3d' },
+    { affId: 'thiagosale',nickname: 'thiagosale',salesMonth: 48,  grossMonth: 12780, commissionMonth: 1200, lastSale: 'ontem' },
+    { affId: 'mugi10',    nickname: 'mugi10',    salesMonth: 31,  grossMonth: 8120,  commissionMonth: 775,  lastSale: 'há 4d' },
+    { affId: 'row1010',   nickname: 'row1010',   salesMonth: 14,  grossMonth: 3420,  commissionMonth: 350,  lastSale: 'há 2d' },
+    { affId: 'andredp04', nickname: 'andredp04', salesMonth: 0,   grossMonth: 0,     commissionMonth: 0,    lastSale: 'há 12d' },
+  ],
+  wave: [
+    { affId: 'nvrocket',  nickname: 'nvrocket',  salesMonth: 67, grossMonth: 18230, commissionMonth: 911,  lastSale: 'há 1h' },
+    { affId: 'acebee123', nickname: 'acebee123', salesMonth: 38, grossMonth: 10240, commissionMonth: 512,  lastSale: 'há 5h' },
+    { affId: 'teiler',    nickname: 'teiler',    salesMonth: 22, grossMonth: 5870,  commissionMonth: 293,  lastSale: 'ontem' },
+    { affId: 'tubagringa',nickname: 'tubagringa',salesMonth: 10, grossMonth: 2680,  commissionMonth: 134,  lastSale: 'há 2d' },
+    { affId: 'gabivechia',nickname: 'gabivechia',salesMonth: 5,  grossMonth: 1400,  commissionMonth: 70,   lastSale: 'há 3d' },
+  ],
+  rocketads: [
+    { affId: 'cilerioqueiroz', nickname: 'cilerioqueiroz', salesMonth: 41, grossMonth: 11340, commissionMonth: 870, lastSale: 'há 1h' },
+    { affId: 'ajumpclick',     nickname: 'ajumpclick',     salesMonth: 28, grossMonth: 7340,  commissionMonth: 590, lastSale: 'há 4h' },
+    { affId: 'matheustb',      nickname: 'MatheusTB',      salesMonth: 20, grossMonth: 5100,  commissionMonth: 370, lastSale: 'há 6h' },
+  ],
+  meridian: [],
+};
+
+const MOCK_COMMISSIONS_BY_NETWORK = {
+  fenix: [
+    { id: 'c1', orderId: '4JW7MB3E', date: '2026-04-30T13:32:00Z', aff: 'fenix2025', product: 'NeuroMindPro-6-FE', gross: 318.26, amount: 25, status: 'pending', pendingUntil: '2026-06-29' },
+    { id: 'c2', orderId: 'KQR7MFXE', date: '2026-04-30T11:14:00Z', aff: 'adsmkt9',   product: 'NeuroMindPro-6-FE', gross: 311.64, amount: 25, status: 'pending', pendingUntil: '2026-06-29' },
+    { id: 'c3', orderId: 'XBR7M5JE', date: '2026-04-30T08:32:00Z', aff: 'evolute',   product: 'NeuroMindPro-6-FE', gross: 320.46, amount: 25, status: 'pending', pendingUntil: '2026-06-29' },
+    { id: 'c4', orderId: 'LKR7M99E', date: '2026-04-29T21:15:00Z', aff: 'fenix2025', product: 'NeuroMindPro-3-FE', gross: 219.94, amount: 25, status: 'pending', pendingUntil: '2026-06-28' },
+    { id: 'c5', orderId: 'B4DYMZSE', date: '2026-04-29T21:55:00Z', aff: 'fenix2025', product: 'NeuroMindPro-6-FE', gross: 318.26, amount: 25, status: 'reversed', pendingUntil: '2026-06-28' },
+    { id: 'c6', orderId: 'M8W7M85E', date: '2026-02-28T17:11:00Z', aff: 'adsmkt9',   product: 'NeuroMindPro-6-FE', gross: 323.41, amount: 25, status: 'accrued', pendingUntil: '2026-04-29' },
+    { id: 'c7', orderId: 'M8W7MWBE', date: '2026-02-27T15:15:00Z', aff: 'evolute',   product: 'NeuroMindPro-3-FE', gross: 220.46, amount: 25, status: 'accrued', pendingUntil: '2026-04-28' },
+    { id: 'c8', orderId: 'JBJ7M8TE', date: '2026-01-15T12:00:00Z', aff: 'fenix2025', product: 'NeuroMindPro-6-FE', gross: 318.18, amount: 25, status: 'paid',    paidAt: '2026-04-15', batchId: 'PAY-2026-04' },
+    { id: 'c9', orderId: 'KSW7MKQE', date: '2026-01-12T17:50:00Z', aff: 'adsmkt9',   product: 'NeuroMindPro-6-FE', gross: 311.64, amount: 25, status: 'paid',    paidAt: '2026-04-15', batchId: 'PAY-2026-04' },
+  ],
+  wave: [],
+  rocketads: [],
+  meridian: [],
+};
+
+const MOCK_PAYOUTS_BY_NETWORK = {
+  fenix: [
+    { id: 'PAY-2026-04', date: '2026-04-15', count: 189, total: 4725.00, status: 'paid', method: 'wire' },
+    { id: 'PAY-2026-03', date: '2026-03-15', count: 215, total: 5375.00, status: 'paid', method: 'wire' },
+    { id: 'PAY-2026-02', date: '2026-02-15', count: 178, total: 4450.00, status: 'paid', method: 'wire' },
+  ],
+  wave: [
+    { id: 'PAY-2026-04', date: '2026-04-15', count: 67, total: 1675.00, status: 'paid', method: 'wire' },
+    { id: 'PAY-2026-03', date: '2026-03-15', count: 89, total: 2225.00, status: 'paid', method: 'wire' },
+  ],
+  rocketads: [],
+  meridian: [
+    { id: 'PAY-2026-04', date: '2026-04-15', count: 142, total: 2840.00, status: 'paid', method: 'wire' },
+    { id: 'PAY-2026-03', date: '2026-03-15', count: 198, total: 3960.00, status: 'paid', method: 'wire' },
+  ],
+};
+
+function NetworksPage() {
+  const [selected, setSelected] = useState(null); // network id ou null
+  const [partnerView, setPartnerView] = useState(false);
+
+  const totals = MOCK_NETWORKS.reduce((acc, n) => {
+    acc.pending += n.pending;
+    acc.accrued += n.accrued;
+    acc.paidMonth += (n.lastPayoutAt && n.lastPayoutAt.startsWith('2026-04')) ? n.accrued / 4 : 0;
+    acc.activeCount += n.status === 'active' ? 1 : 0;
+    acc.salesMonth += n.salesMonth;
+    return acc;
+  }, { pending: 0, accrued: 0, paidMonth: 0, activeCount: 0, salesMonth: 0 });
+
+  return (
+    <div className="page-in">
+      <div className="page-head">
+        <div className="lead">
+          <span className="eyebrow">ADMIN · NETWORKS / PARCEIROS</span>
+          <h2>Networks <em>parceiras</em></h2>
+          <span className="sub">
+            {totals.activeCount} ativas · ${fmtInt(totals.accrued)} acumulado a pagar · {fmtInt(totals.salesMonth)} vendas no mês
+          </span>
+        </div>
+        <div className="page-head-actions">
+          <button className="btn btn-ghost"><Icon name="download" size={12}/> Exportar reconciliação</button>
+          <button className="btn btn-primary"><Icon name="plus" size={12}/> Nova network</button>
+        </div>
+      </div>
+
+      <div className="kpi-grid">
+        <NetKpi label="NETWORKS ATIVAS" icon="layers"
+          value={fmtInt(totals.activeCount)}
+          unit={`/ ${MOCK_NETWORKS.length}`}
+          hint={`${MOCK_NETWORKS.filter(n => n.status === 'paused').length} pausadas`}/>
+        <NetKpi label="COMISSÕES A PAGAR" icon="wallet"
+          value={fmtCurrency(totals.accrued, 'USD', 0)}
+          hint="acumulado · refund window fechado"/>
+        <NetKpi label="EM REFUND WINDOW" icon="clock"
+          value={fmtCurrency(totals.pending, 'USD', 0)}
+          hint="provisão · pode reverter"/>
+        <NetKpi label="VENDAS NO MÊS" icon="shopping-cart"
+          value={fmtInt(totals.salesMonth)}
+          hint="atribuíveis às networks"/>
+      </div>
+
+      <div className="panel" style={{ padding: 0 }}>
+        <div className="panel-head" style={{ padding: '14px 18px 10px' }}>
+          <div className="panel-title">
+            <span className="panel-eyebrow">NETWORKS · CONTRATOS ATIVOS</span>
+            <div className="panel-sub">Click numa linha pra ver detalhes, comissões e payouts</div>
+          </div>
+        </div>
+        <div className="tbl-wrap" style={{ margin: 0, padding: '0 4px' }}>
+          <table className="tbl">
+            <thead>
+              <tr>
+                <th style={{ width: 40 }}></th>
+                <th>Network</th>
+                <th>Contrato</th>
+                <th>Afiliados</th>
+                <th className="num">Vendas mês</th>
+                <th className="num">Comissão mês</th>
+                <th className="num">A pagar (acumulado)</th>
+                <th>Próximo payout</th>
+                <th>Última venda</th>
+              </tr>
+            </thead>
+            <tbody>
+              {MOCK_NETWORKS.map((n) => {
+                const rateLabel = n.rate.type === 'fixed' ? `$${n.rate.value} / FE` : `${(n.rate.value * 100).toFixed(1)}% gross`;
+                const commissionMonth = n.salesMonth * (n.rate.type === 'fixed' ? n.rate.value : n.grossMonth * n.rate.value / Math.max(1, n.salesMonth));
+                return (
+                  <tr key={n.id} onClick={() => { setSelected(n.id); setPartnerView(false); }}>
+                    <td><span className="av" style={{ background: avatarColor(n.id), width: 28, height: 28, fontSize: 11, fontFamily: 'var(--f-mono)' }}>{n.name.slice(0, 2).toUpperCase()}</span></td>
+                    <td>
+                      <div style={{ color: 'var(--fg1)', fontSize: 13 }}>{n.name}</div>
+                      <div style={{ fontFamily: 'var(--f-mono)', fontSize: 10, color: 'var(--fg5)', letterSpacing: '0.05em' }}>{rateLabel}</div>
+                    </td>
+                    <td>
+                      <span className={`badge ${n.status === 'active' ? 'ok' : 'neutral'}`}>{n.status === 'active' ? 'ATIVO' : 'PAUSADO'}</span>
+                      <div style={{ fontSize: 10, color: 'var(--fg5)', fontFamily: 'var(--f-mono)', marginTop: 2 }}>desde {fmtDateShort(n.contractStart)}</div>
+                    </td>
+                    <td className="cell-mono">{n.affiliatesActive}/{n.affiliatesTotal}</td>
+                    <td className="num cell-mono">{fmtInt(n.salesMonth)}</td>
+                    <td className="num cell-mono">{fmtCurrency(commissionMonth, 'USD', 0)}</td>
+                    <td className="num cell-mono" style={{ color: n.accrued > 0 ? 'var(--success)' : 'var(--fg5)' }}>
+                      {fmtCurrency(n.accrued, 'USD', 0)}
+                    </td>
+                    <td>
+                      {n.nextPayoutEstimate ? (
+                        <div style={{ fontFamily: 'var(--f-mono)', fontSize: 11 }}>
+                          <div style={{ color: 'var(--glow-cyan)' }}>{fmtCurrency(n.nextPayoutAmount, 'USD', 0)}</div>
+                          <div style={{ fontSize: 10, color: 'var(--fg5)' }}>{fmtDateShort(n.nextPayoutEstimate)}</div>
+                        </div>
+                      ) : (
+                        <span style={{ color: 'var(--fg5)', fontSize: 11, fontFamily: 'var(--f-mono)' }}>—</span>
+                      )}
+                    </td>
+                    <td className="cell-mono" style={{ color: 'var(--fg4)', fontSize: 11 }}>
+                      {n.lastSaleAt ? fmtRelativeShort(n.lastSaleAt) : '—'}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      {selected && (
+        <NetworkDetailDrawer
+          network={MOCK_NETWORKS.find((n) => n.id === selected)}
+          onClose={() => { setSelected(null); setPartnerView(false); }}
+          partnerView={partnerView}
+          setPartnerView={setPartnerView}
+        />
+      )}
+    </div>
+  );
+}
+
+function NetKpi({ label, value, unit, hint, icon }) {
+  return (
+    <div className="kpi">
+      <span className="corner-tl"/>
+      <span className="corner-br"/>
+      <div className="kpi-row">
+        <span className="kpi-label">{label}</span>
+        <span className="kpi-icon"><Icon name={icon} size={12}/></span>
+      </div>
+      <div className="kpi-value">
+        {value}{unit && <span className="unit">{unit}</span>}
+      </div>
+      <div className="kpi-foot">
+        <span className="delta flat">
+          <span className="vs">{hint}</span>
+        </span>
+      </div>
+    </div>
+  );
+}
+
+function fmtRelativeShort(iso) {
+  const ms = Date.now() - new Date(iso).getTime();
+  if (ms < 60_000) return 'agora';
+  const m = Math.floor(ms / 60_000);
+  if (m < 60) return `há ${m}m`;
+  const h = Math.floor(m / 60);
+  if (h < 24) return `há ${h}h`;
+  const d = Math.floor(h / 24);
+  return `há ${d}d`;
+}
+
+const STATUS_LABELS = {
+  pending:  { label: 'PENDENTE', cls: 'warn',     desc: 'Em refund window' },
+  accrued:  { label: 'ACUMULADO',cls: 'ok',       desc: 'Pronto pra pagar' },
+  reversed: { label: 'REVERTIDA',cls: 'bad',      desc: 'Venda refundada' },
+  paid:     { label: 'PAGO',     cls: 'neutral',  desc: 'Liquidado' },
+};
+
+function NetworkDetailDrawer({ network: n, onClose, partnerView, setPartnerView }) {
+  const [tab, setTab] = useState('summary');
+  const affs = MOCK_AFFILIATES_BY_NETWORK[n.id] || [];
+  const comms = MOCK_COMMISSIONS_BY_NETWORK[n.id] || [];
+  const payouts = MOCK_PAYOUTS_BY_NETWORK[n.id] || [];
+  const rateLabel = n.rate.type === 'fixed' ? `$${n.rate.value} por venda FE` : `${(n.rate.value * 100).toFixed(1)}% do gross`;
+
+  return (
+    <>
+      <div className="drawer-backdrop" onClick={onClose}/>
+      <div className="drawer" style={{ width: 920, maxWidth: '95vw' }}>
+        <div className="drawer-head">
+          <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+            <span className="av-lg" style={{ background: avatarColor(n.id), fontFamily: 'var(--f-mono)', fontSize: 18 }}>
+              {n.name.slice(0, 2).toUpperCase()}
+            </span>
+            <div>
+              <span className="eyebrow">{partnerView ? 'PORTAL DO PARCEIRO · PREVIEW' : 'NETWORK'}</span>
+              <h3 style={{ margin: '4px 0', fontSize: 22, color: 'var(--fg1)' }}>{n.name}</h3>
+              <div style={{ fontFamily: 'var(--f-mono)', fontSize: 11, color: 'var(--fg4)' }}>
+                contrato ATIVO desde {fmtDateShort(n.contractStart)} · {rateLabel}
+              </div>
+            </div>
+          </div>
+          <button className="icon-btn" onClick={onClose} title="Fechar"><Icon name="x" size={14}/></button>
+        </div>
+
+        {/* Toggle ver-como-parceiro */}
+        <div style={{
+          padding: '12px 24px', borderBottom: '1px solid var(--border-soft)',
+          display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12,
+          background: partnerView ? 'rgba(91,200,255,0.06)' : 'transparent',
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <Icon name={partnerView ? 'eye' : 'settings'} size={14}/>
+            <span style={{ fontSize: 12, color: 'var(--fg2)' }}>
+              {partnerView
+                ? 'Você está vendo a network como o parceiro vê (modo preview).'
+                : 'Visão admin: editar contrato, vincular afiliados, rodar payouts.'}
+            </span>
+          </div>
+          <button
+            className="btn btn-ghost"
+            onClick={() => setPartnerView((v) => !v)}
+            style={{ fontSize: 11 }}
+          >
+            <Icon name={partnerView ? 'settings' : 'eye'} size={11}/>
+            {partnerView ? 'Voltar pra admin' : 'Ver como parceiro'}
+          </button>
+        </div>
+
+        {/* Tabs */}
+        <div style={{ padding: '12px 24px 0', display: 'flex', gap: 4, borderBottom: '1px solid var(--border-soft)' }}>
+          {[
+            ['summary',     'Resumo'],
+            ['commissions', 'Comissões'],
+            ['affiliates',  'Afiliados',  partnerView],
+            ['payouts',     'Payouts'],
+            ['contract',    'Contrato',   partnerView],
+          ].map(([k, l, hide]) => hide ? null : (
+            <button
+              key={k}
+              onClick={() => setTab(k)}
+              style={{
+                padding: '8px 14px', fontFamily: 'var(--f-mono)', fontSize: 11,
+                letterSpacing: '0.1em',
+                background: 'transparent', border: 0,
+                color: tab === k ? 'var(--glow-cyan)' : 'var(--fg4)',
+                borderBottom: '2px solid ' + (tab === k ? 'var(--glow-cyan)' : 'transparent'),
+                cursor: 'pointer', marginBottom: -1,
+              }}
+            >
+              {l.toUpperCase()}
+            </button>
+          ))}
+        </div>
+
+        <div style={{ padding: '20px 24px 32px', display: 'grid', gap: 16 }}>
+          {tab === 'summary' && <NetSummary n={n} comms={comms} partnerView={partnerView}/>}
+          {tab === 'commissions' && <NetCommissions comms={comms} partnerView={partnerView}/>}
+          {tab === 'affiliates' && !partnerView && <NetAffiliates affs={affs}/>}
+          {tab === 'payouts' && <NetPayouts payouts={payouts} partnerView={partnerView}/>}
+          {tab === 'contract' && !partnerView && <NetContract n={n}/>}
+        </div>
+      </div>
+    </>
+  );
+}
+
+function NetSummary({ n, comms, partnerView }) {
+  return (
+    <>
+      <div className="mini-kpis">
+        <div className="mini-kpi">
+          <div className="l">PENDENTE</div>
+          <div className="v">{fmtCurrency(n.pending, 'USD', 0)}</div>
+          <div className="s">refund window aberta</div>
+        </div>
+        <div className="mini-kpi">
+          <div className="l">A PAGAR</div>
+          <div className="v" style={{ color: 'var(--success)' }}>{fmtCurrency(n.accrued, 'USD', 0)}</div>
+          <div className="s">próximo payout {n.nextPayoutEstimate ? fmtDateShort(n.nextPayoutEstimate) : '—'}</div>
+        </div>
+        <div className="mini-kpi">
+          <div className="l">PAGO ALL-TIME</div>
+          <div className="v">{fmtCurrency(n.paidAllTime, 'USD', 0)}</div>
+          <div className="s">{n.lastPayoutAt ? `último em ${fmtDateShort(n.lastPayoutAt)}` : 'sem payouts ainda'}</div>
+        </div>
+        <div className="mini-kpi">
+          <div className="l">VENDAS NO MÊS</div>
+          <div className="v">{fmtInt(n.salesMonth)}</div>
+          <div className="s">{fmtCurrency(n.grossMonth, 'USD', 0)} gross gerado</div>
+        </div>
+      </div>
+
+      {!partnerView && (
+        <div className="panel" style={{ background: 'rgba(245,158,11,0.04)', borderColor: 'rgba(245,158,11,0.25)' }}>
+          <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10 }}>
+            <Icon name="alert-triangle" size={14}/>
+            <div>
+              <div style={{ fontFamily: 'var(--f-mono)', fontSize: 11, color: 'var(--warning)', letterSpacing: '0.08em' }}>
+                AÇÃO RECOMENDADA
+              </div>
+              <div style={{ fontSize: 13, color: 'var(--fg2)', marginTop: 4 }}>
+                {n.accrued > 0
+                  ? `${fmtCurrency(n.accrued, 'USD', 0)} acumulado pronto pra pagar. Rodar payout batch?`
+                  : 'Nenhuma comissão acumulada no momento.'}
+              </div>
+            </div>
+            {n.accrued > 0 && (
+              <button className="btn btn-primary" style={{ marginLeft: 'auto', flexShrink: 0 }}>
+                <Icon name="dollar" size={12}/> Pagar batch
+              </button>
+            )}
+          </div>
+        </div>
+      )}
+
+      <div className="panel">
+        <div className="panel-head">
+          <div className="panel-title">
+            <span className="panel-eyebrow">COMISSÕES MENSAIS</span>
+            <div className="panel-sub">{partnerView ? 'Histórico de ganhos' : 'Acumulado por mês'}</div>
+          </div>
+        </div>
+        {/* Mock chart simples — só pra dar a sensação */}
+        <div style={{ display: 'flex', alignItems: 'flex-end', gap: 12, height: 140, padding: '12px 0' }}>
+          {[
+            { m: 'Nov', v: 28 }, { m: 'Dez', v: 35 }, { m: 'Jan', v: 42 },
+            { m: 'Fev', v: 38 }, { m: 'Mar', v: 47 }, { m: 'Abr', v: 55 },
+          ].map((b, i) => (
+            <div key={i} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6 }}>
+              <div style={{ flex: 1, display: 'flex', alignItems: 'flex-end', width: '100%' }}>
+                <div style={{
+                  width: '100%', height: `${b.v}%`,
+                  background: i === 5 ? 'linear-gradient(180deg, var(--glow-cyan), rgba(91,200,255,0.3))' : 'rgba(91,200,255,0.18)',
+                  borderRadius: 4,
+                  boxShadow: i === 5 ? '0 0 20px rgba(91,200,255,0.3)' : 'none',
+                }}/>
+              </div>
+              <div style={{ fontFamily: 'var(--f-mono)', fontSize: 10, color: 'var(--fg5)' }}>{b.m}</div>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      <div className="panel">
+        <div className="panel-head">
+          <div className="panel-title">
+            <span className="panel-eyebrow">ÚLTIMAS COMISSÕES</span>
+            <div className="panel-sub">5 mais recentes — ver tab "Comissões" pra histórico completo</div>
+          </div>
+        </div>
+        <CommissionsTable comms={comms.slice(0, 5)} partnerView={partnerView}/>
+      </div>
+    </>
+  );
+}
+
+function NetCommissions({ comms, partnerView }) {
+  const [filter, setFilter] = useState('all');
+  const visible = filter === 'all' ? comms : comms.filter((c) => c.status === filter);
+  return (
+    <div className="panel" style={{ padding: 0 }}>
+      <div className="panel-head" style={{ padding: '14px 18px 8px' }}>
+        <div className="panel-title">
+          <span className="panel-eyebrow">LEDGER · COMISSÕES</span>
+          <div className="panel-sub">{visible.length} de {comms.length} · cada linha = uma venda atribuída</div>
+        </div>
+        <div style={{ display: 'flex', gap: 8 }}>
+          <div className="seg">
+            {[
+              ['all', 'Todas'],
+              ['pending', 'Pendentes'],
+              ['accrued', 'Acumuladas'],
+              ['paid', 'Pagas'],
+              ['reversed', 'Revertidas'],
+            ].map(([k, l]) => (
+              <button key={k} className={filter === k ? 'is-active' : ''} onClick={() => setFilter(k)}>{l}</button>
+            ))}
+          </div>
+          <button className="btn btn-ghost"><Icon name="download" size={11}/> CSV</button>
+        </div>
+      </div>
+      <CommissionsTable comms={visible} partnerView={partnerView}/>
+    </div>
+  );
+}
+
+function CommissionsTable({ comms, partnerView }) {
+  if (comms.length === 0) {
+    return <div className="empty">Sem comissões neste filtro</div>;
+  }
+  return (
+    <div className="tbl-wrap" style={{ margin: 0, padding: '0 4px' }}>
+      <table className="tbl">
+        <thead>
+          <tr>
+            <th>Data/hora</th>
+            <th>Pedido</th>
+            <th>Afiliado</th>
+            <th>Produto</th>
+            <th className="num">Gross</th>
+            <th className="num">Comissão</th>
+            <th>Status</th>
+            <th>Refund window</th>
+          </tr>
+        </thead>
+        <tbody>
+          {comms.map((c) => {
+            const st = STATUS_LABELS[c.status];
+            const reversed = c.status === 'reversed';
+            return (
+              <tr key={c.id} style={reversed ? { opacity: 0.55 } : null}>
+                <td className="cell-mono" style={{ fontSize: 11 }}>
+                  {fmtDateShort(c.date)} · {c.date.slice(11, 16)}
+                </td>
+                <td className="cell-mono" style={{ fontSize: 11, color: 'var(--fg3)' }}>
+                  {c.orderId}
+                </td>
+                <td className="cell-mono" style={{ color: 'var(--fg2)' }}>{c.aff}</td>
+                <td style={{ fontSize: 12, color: 'var(--fg3)' }}>{c.product}</td>
+                <td className="num cell-mono">{fmtCurrency(c.gross, 'USD', 2)}</td>
+                <td className="num cell-mono" style={{
+                  color: reversed ? 'var(--danger)' : 'var(--success)',
+                  textDecoration: reversed ? 'line-through' : 'none',
+                }}>
+                  {fmtCurrency(c.amount, 'USD', 2)}
+                </td>
+                <td>
+                  <span className={`badge ${st.cls}`} title={st.desc}>{st.label}</span>
+                </td>
+                <td className="cell-mono" style={{ fontSize: 10, color: 'var(--fg5)' }}>
+                  {c.status === 'paid' && c.paidAt && `pago ${fmtDateShort(c.paidAt)}`}
+                  {c.status === 'pending' && c.pendingUntil && `libera ${fmtDateShort(c.pendingUntil)}`}
+                  {c.status === 'accrued' && c.pendingUntil && `liberada ${fmtDateShort(c.pendingUntil)}`}
+                  {c.status === 'reversed' && 'venda revertida'}
+                </td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+function NetAffiliates({ affs }) {
+  if (affs.length === 0) {
+    return <div className="empty">Nenhum afiliado vinculado a esta network</div>;
+  }
+  return (
+    <div className="panel" style={{ padding: 0 }}>
+      <div className="panel-head" style={{ padding: '14px 18px 8px' }}>
+        <div className="panel-title">
+          <span className="panel-eyebrow">AFILIADOS DA NETWORK</span>
+          <div className="panel-sub">{affs.length} vinculados · click pra abrir o perfil completo</div>
+        </div>
+        <button className="btn btn-ghost"><Icon name="user-plus" size={11}/> Vincular afiliado</button>
+      </div>
+      <div className="tbl-wrap" style={{ margin: 0, padding: '0 4px' }}>
+        <table className="tbl">
+          <thead>
+            <tr>
+              <th>Afiliado</th>
+              <th className="num">Vendas mês</th>
+              <th className="num">Gross gerado</th>
+              <th className="num">Comissão gerada</th>
+              <th>Última venda</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody>
+            {affs.map((a) => (
+              <tr key={a.affId}>
+                <td>
+                  <span className="cell-aff">
+                    <span className="av" style={{ background: avatarColor(a.affId) }}>{initials(a.nickname)}</span>
+                    <span className="meta"><span className="nm">{a.nickname}</span><span className="id">{a.affId}</span></span>
+                  </span>
+                </td>
+                <td className="num cell-mono">{fmtInt(a.salesMonth)}</td>
+                <td className="num cell-mono">{fmtCurrency(a.grossMonth, 'USD', 0)}</td>
+                <td className="num cell-mono" style={{ color: 'var(--success)' }}>{fmtCurrency(a.commissionMonth, 'USD', 0)}</td>
+                <td className="cell-mono" style={{ fontSize: 11, color: 'var(--fg4)' }}>{a.lastSale}</td>
+                <td><button className="btn btn-ghost" style={{ fontSize: 11 }}>Desvincular</button></td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
+function NetPayouts({ payouts, partnerView }) {
+  if (payouts.length === 0) {
+    return <div className="empty">Nenhum payout realizado ainda</div>;
+  }
+  return (
+    <div className="panel" style={{ padding: 0 }}>
+      <div className="panel-head" style={{ padding: '14px 18px 8px' }}>
+        <div className="panel-title">
+          <span className="panel-eyebrow">HISTÓRICO DE PAYOUTS</span>
+          <div className="panel-sub">{payouts.length} batches · click pra ver receipt detalhado</div>
+        </div>
+      </div>
+      <div className="tbl-wrap" style={{ margin: 0, padding: '0 4px' }}>
+        <table className="tbl">
+          <thead>
+            <tr>
+              <th>Batch ID</th>
+              <th>Data</th>
+              <th className="num">Comissões</th>
+              <th className="num">Total</th>
+              <th>Método</th>
+              <th>Status</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody>
+            {payouts.map((p) => (
+              <tr key={p.id}>
+                <td className="cell-mono" style={{ color: 'var(--glow-cyan)', fontSize: 11 }}>{p.id}</td>
+                <td className="cell-mono">{fmtDateShort(p.date)}</td>
+                <td className="num cell-mono">{fmtInt(p.count)}</td>
+                <td className="num cell-mono" style={{ color: 'var(--success)' }}>{fmtCurrency(p.total, 'USD', 0)}</td>
+                <td className="cell-mono" style={{ color: 'var(--fg3)' }}>{p.method.toUpperCase()}</td>
+                <td><span className="badge ok">PAGO</span></td>
+                <td><button className="btn btn-ghost" style={{ fontSize: 11 }}><Icon name="download" size={10}/> Receipt</button></td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
+function NetContract({ n }) {
+  const rateLabel = n.rate.type === 'fixed' ? `$${n.rate.value} fixo por venda FE` : `${(n.rate.value * 100).toFixed(2)}% do gross`;
+  return (
+    <div className="panel">
+      <div className="panel-head">
+        <div className="panel-title">
+          <span className="panel-eyebrow">CONTRATO E CONFIGURAÇÃO</span>
+          <div className="panel-sub">Termos vigentes — alterações criam nova snapshot pra novas vendas</div>
+        </div>
+        <button className="btn btn-ghost"><Icon name="edit" size={11}/> Editar</button>
+      </div>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 14 }}>
+        <ContractField label="Comissão base" value={rateLabel}/>
+        <ContractField label="Status" value={n.status === 'active' ? 'Ativo' : 'Pausado'}/>
+        <ContractField label="Início do contrato" value={fmtDateShort(n.contractStart)}/>
+        <ContractField label="Fim previsto" value="indeterminado"/>
+        <ContractField label="Refund window" value="60 dias (ClickBank padrão)"/>
+        <ContractField label="Cadência de payout" value="manual on-demand"/>
+        <ContractField label="Threshold mínimo" value="$100"/>
+        <ContractField label="Email de billing" value={`billing@${n.slug}.com`}/>
+        <ContractField label="Escopo" value="Todas as famílias de produto"/>
+        <ContractField label="Inclui upsell/downsell" value="Não — só FE"/>
+      </div>
+    </div>
+  );
+}
+
+function ContractField({ label, value }) {
+  return (
+    <div>
+      <div style={{ fontFamily: 'var(--f-mono)', fontSize: 9, letterSpacing: '0.15em', color: 'var(--fg5)', marginBottom: 4, textTransform: 'uppercase' }}>{label}</div>
+      <div style={{ color: 'var(--fg1)', fontSize: 13 }}>{value}</div>
+    </div>
+  );
+}
+
 Object.assign(window, {
   FunnelPage, LeaderboardPage, AffiliateDrawer, AllAffiliatesPage,
   ProductsPage, TransactionsPage, IntegrationsPage, FXPage, UsersPage,
-  HealthPage, CostsPage, InsightsPage,
+  HealthPage, CostsPage, InsightsPage, NetworksPage,
 });

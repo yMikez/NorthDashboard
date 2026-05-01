@@ -43,7 +43,10 @@ function Sidebar({ active, onNav, user }) {
   const allowed = new Set(user?.allowedTabs || []);
   const adminOnly = {
     label: 'Admin',
-    items: [{ id: 'users', label: 'Usuários', icon: 'user-plus' }],
+    items: [
+      { id: 'users', label: 'Usuários', icon: 'user-plus' },
+      { id: 'networks', label: 'Networks', icon: 'layers' },
+    ],
   };
   const groups = isAdmin
     ? [...allGroups, adminOnly]

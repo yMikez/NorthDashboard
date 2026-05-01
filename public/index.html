@@ -55,6 +55,7 @@ const ROUTES = {
   'costs':          { title: 'Custos',      em: 'da operação', crumbs: ['Sistema', 'Custos'] },
   'insights':       { title: 'Insights',    em: 'do negócio',  crumbs: ['Análise', 'Insights'] },
   'users':          { title: 'Usuários',    em: 'do dashboard', crumbs: ['Admin', 'Usuários'] },
+  'networks':       { title: 'Networks',    em: 'parceiras',   crumbs: ['Admin', 'Networks'] },
 };
 
 // Path-based routing via History API. Pathname is the route name (e.g.
@@ -235,6 +236,7 @@ function App({ user }) {
           {hashState.route === 'costs'          && <CostsPage/>}
           {hashState.route === 'insights'       && <InsightsPage/>}
           {hashState.route === 'users'          && <UsersPage currentUser={user}/>}
+          {hashState.route === 'networks'       && <NetworksPage/>}
         </div>
       </div>
 
