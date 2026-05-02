@@ -849,17 +849,16 @@ export async function getFunnel(
   //   parentExternalId when present (digistore order_id, clickbank upsellOriginalReceipt),
   //   otherwise the order's own externalId (a frontend with no upsells).
   // We scope keys per platform to avoid ID collisions between sources.
+  // upsellsByStep / downsellsByStep are keyed by funnelStep (UP1 → step 2,
+  // UP2 → step 3, ...) so the funnel can fan out arbitrarily without
+  // hardcoding stage slots.
   interface Group {
     hasFE: boolean;
     hasBump: boolean;
-    hasU1: boolean;
-    hasU2: boolean;
-    hasDown: boolean;
     feRevenue: number;
     bumpRevenue: number;
-    u1Revenue: number;
-    u2Revenue: number;
-    downRevenue: number;
+    upsellsByStep: Map<number, number>;
+    downsellsByStep: Map<number, number>;
     feProductExternalId: string | null;
     feProductName: string | null;
     feProductFamily: string | null;
@@ -877,8 +876,10 @@ export async function getFunnel(
     let g = groups.get(key);
     if (!g) {
       g = {
-        hasFE: false, hasBump: false, hasU1: false, hasU2: false, hasDown: false,
-        feRevenue: 0, bumpRevenue: 0, u1Revenue: 0, u2Revenue: 0, downRevenue: 0,
+        hasFE: false, hasBump: false,
+        feRevenue: 0, bumpRevenue: 0,
+        upsellsByStep: new Map(),
+        downsellsByStep: new Map(),
         feProductExternalId: null, feProductName: null, feProductFamily: null,
         fePlatformSlug: slug,
       };
@@ -946,16 +947,13 @@ export async function getFunnel(
       g.hasBump = true;
       g.bumpRevenue += gross;
     } else if (t === 'UPSELL') {
-      if (step >= 2) {
-        g.hasU2 = true;
-        g.u2Revenue += gross;
-      } else {
-        g.hasU1 = true;
-        g.u1Revenue += gross;
-      }
+      // step missing or 0 (legacy data) falls back to step=2 (UP1) so the
+      // order still appears somewhere in the funnel rather than being lost.
+      const s = step >= 2 ? step : 2;
+      g.upsellsByStep.set(s, (g.upsellsByStep.get(s) ?? 0) + gross);
     } else if (t === 'DOWNSELL') {
-      g.hasDown = true;
-      g.downRevenue += gross;
+      const s = step >= 2 ? step : 2;
+      g.downsellsByStep.set(s, (g.downsellsByStep.get(s) ?? 0) + gross);
     }
   }
 
@@ -1049,14 +1047,12 @@ export function classifyOrderInGroup(
 export interface FunnelGroupAgg {
   hasFE: boolean;
   hasBump: boolean;
-  hasU1: boolean;
-  hasU2: boolean;
-  hasDown: boolean;
   feRevenue: number;
   bumpRevenue: number;
-  u1Revenue: number;
-  u2Revenue: number;
-  downRevenue: number;
+  // Map keys are funnelStep values (UP1 → 2, UP2 → 3, UP3 → 4, ...). Values
+  // are revenue summed across orders at that step inside this single group.
+  upsellsByStep: Map<number, number>;
+  downsellsByStep: Map<number, number>;
 }
 
 export function aggregateGroups(
@@ -1065,35 +1061,46 @@ export function aggregateGroups(
 ): { stages: FunnelStage[]; summary: FunnelSummary } {
   let feGroups = 0;
   let bumpGroups = 0;
-  let u1Groups = 0;
-  let u2Groups = 0;
-  let downGroups = 0;
   let feRevenue = 0;
   let bumpRevenue = 0;
-  let u1Revenue = 0;
-  let u2Revenue = 0;
-  let downRevenue = 0;
   let revenueFEOnly = 0;
   let revenueWithUpsell = 0;
   let groupsFEOnly = 0;
   let groupsWithUpsell = 0;
 
+  // Per-step accumulators. We discover which steps actually appeared in the
+  // dataset rather than declaring them up front, so UP3/DW3 only show up
+  // when there's data for them and we don't keep dead "Upsell N" stages for
+  // steps that never existed.
+  const upStepGroups = new Map<number, number>();
+  const upStepRevenue = new Map<number, number>();
+  const dwStepGroups = new Map<number, number>();
+  const dwStepRevenue = new Map<number, number>();
+
   for (const g of groupList) {
     if (g.hasFE) feGroups++;
     if (g.hasBump) bumpGroups++;
-    if (g.hasU1) u1Groups++;
-    if (g.hasU2) u2Groups++;
-    if (g.hasDown) downGroups++;
     feRevenue += g.feRevenue;
     bumpRevenue += g.bumpRevenue;
-    u1Revenue += g.u1Revenue;
-    u2Revenue += g.u2Revenue;
-    downRevenue += g.downRevenue;
+
+    let groupUpsellRevenue = 0;
+    let groupDownsellRevenue = 0;
+    for (const [step, rev] of g.upsellsByStep) {
+      upStepGroups.set(step, (upStepGroups.get(step) ?? 0) + 1);
+      upStepRevenue.set(step, (upStepRevenue.get(step) ?? 0) + rev);
+      groupUpsellRevenue += rev;
+    }
+    for (const [step, rev] of g.downsellsByStep) {
+      dwStepGroups.set(step, (dwStepGroups.get(step) ?? 0) + 1);
+      dwStepRevenue.set(step, (dwStepRevenue.get(step) ?? 0) + rev);
+      groupDownsellRevenue += rev;
+    }
 
     if (g.hasFE) {
       const groupRev =
-        g.feRevenue + g.bumpRevenue + g.u1Revenue + g.u2Revenue + g.downRevenue;
-      const takesUpsell = g.hasU1 || g.hasU2 || g.hasBump || g.hasDown;
+        g.feRevenue + g.bumpRevenue + groupUpsellRevenue + groupDownsellRevenue;
+      const takesUpsell =
+        g.hasBump || g.upsellsByStep.size > 0 || g.downsellsByStep.size > 0;
       if (takesUpsell) {
         groupsWithUpsell++;
         revenueWithUpsell += groupRev;
@@ -1104,51 +1111,66 @@ export function aggregateGroups(
     }
   }
 
-  const totalRevenue = feRevenue + bumpRevenue + u1Revenue + u2Revenue + downRevenue;
+  const totalUpsellRevenue = Array.from(upStepRevenue.values()).reduce((a, b) => a + b, 0);
+  const totalDownsellRevenue = Array.from(dwStepRevenue.values()).reduce((a, b) => a + b, 0);
+  const totalRevenue = feRevenue + bumpRevenue + totalUpsellRevenue + totalDownsellRevenue;
   const aov = feGroups ? totalRevenue / feGroups : 0;
   const aovFEOnly = groupsFEOnly ? revenueFEOnly / groupsFEOnly : 0;
   const aovWithUpsell = groupsWithUpsell ? revenueWithUpsell / groupsWithUpsell : 0;
   const revenueLiftFromUpsells =
     aovFEOnly > 0 ? (aovWithUpsell - aovFEOnly) / aovFEOnly : 0;
 
+  // Empty-group case: still emit the canonical UP1/DW1 stages so the UI has
+  // something to render (matches old behavior where these slots existed
+  // unconditionally). When there's actual data, the loop discovers them.
+  const upStepsSorted = [...upStepGroups.keys()].sort((a, b) => a - b);
+  const dwStepsSorted = [...dwStepGroups.keys()].sort((a, b) => a - b);
+  if (upStepsSorted.length === 0) upStepsSorted.push(2);
+  if (dwStepsSorted.length === 0) dwStepsSorted.push(2);
+
+  const stages: FunnelStage[] = [
+    {
+      id: 'frontend',
+      label: 'Frontend',
+      volume: feGroups,
+      revenue: round2(feRevenue),
+      takeRate: 1.0,
+    },
+    {
+      id: 'bump',
+      label: 'Order Bump',
+      volume: bumpGroups,
+      revenue: round2(bumpRevenue),
+      takeRate: feGroups ? round4(bumpGroups / feGroups) : 0,
+    },
+  ];
+  for (const step of upStepsSorted) {
+    const n = step - 1;
+    const volume = upStepGroups.get(step) ?? 0;
+    const revenue = upStepRevenue.get(step) ?? 0;
+    stages.push({
+      id: `upsell${n}`,
+      label: `Upsell ${n}`,
+      volume,
+      revenue: round2(revenue),
+      takeRate: feGroups ? round4(volume / feGroups) : 0,
+    });
+  }
+  for (const step of dwStepsSorted) {
+    const n = step - 1;
+    const volume = dwStepGroups.get(step) ?? 0;
+    const revenue = dwStepRevenue.get(step) ?? 0;
+    stages.push({
+      id: `downsell${n}`,
+      label: `Downsell ${n}`,
+      volume,
+      revenue: round2(revenue),
+      takeRate: feGroups ? round4(volume / feGroups) : 0,
+    });
+  }
+
   return {
-    stages: [
-      {
-        id: 'frontend',
-        label: 'Frontend',
-        volume: feGroups,
-        revenue: round2(feRevenue),
-        takeRate: 1.0,
-      },
-      {
-        id: 'bump',
-        label: 'Order Bump',
-        volume: bumpGroups,
-        revenue: round2(bumpRevenue),
-        takeRate: feGroups ? round4(bumpGroups / feGroups) : 0,
-      },
-      {
-        id: 'upsell1',
-        label: 'Upsell 1',
-        volume: u1Groups,
-        revenue: round2(u1Revenue),
-        takeRate: feGroups ? round4(u1Groups / feGroups) : 0,
-      },
-      {
-        id: 'upsell2',
-        label: 'Upsell 2+',
-        volume: u2Groups,
-        revenue: round2(u2Revenue),
-        takeRate: feGroups ? round4(u2Groups / feGroups) : 0,
-      },
-      {
-        id: 'downsell',
-        label: 'Downsell',
-        volume: downGroups,
-        revenue: round2(downRevenue),
-        takeRate: feGroups ? round4(downGroups / feGroups) : 0,
-      },
-    ],
+    stages,
     summary: {
       feGroups,
       totalGroups,

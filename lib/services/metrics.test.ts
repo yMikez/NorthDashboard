@@ -156,18 +156,20 @@ describe('byProductTypeFromRows', () => {
 
 // ------------ aggregateGroups (Funnel) ------------
 
+// Builder helpers for the per-step funnel maps. Tests read more cleanly
+// when we say `up({ 2: 50 })` instead of `new Map([[2, 50]])`.
+const up = (entries: Record<number, number> = {}): Map<number, number> =>
+  new Map(Object.entries(entries).map(([k, v]) => [Number(k), v]));
+const dw = up;
+
 function group(p: Partial<FunnelGroupAgg> = {}): FunnelGroupAgg {
   return {
     hasFE: true,
     hasBump: false,
-    hasU1: false,
-    hasU2: false,
-    hasDown: false,
     feRevenue: 100,
     bumpRevenue: 0,
-    u1Revenue: 0,
-    u2Revenue: 0,
-    downRevenue: 0,
+    upsellsByStep: new Map(),
+    downsellsByStep: new Map(),
     ...p,
   };
 }
@@ -185,22 +187,14 @@ describe('aggregateGroups', () => {
   });
 
   it('computes take rates relative to FE volume', () => {
-    // 10 FE groups; 3 with U1, 1 with U2, 2 with downsell.
-    const groups: FunnelGroupAgg[] = [
-      ...Array.from({ length: 7 }, () => group({ feRevenue: 100 })),
-      ...Array.from({ length: 2 }, () => group({ hasU1: true, feRevenue: 100, u1Revenue: 50 })),
-      group({ hasU1: true, hasU2: true, feRevenue: 100, u1Revenue: 50, u2Revenue: 30 }),
-      // Wait — we want 10 FE total. The above is 10. But also 2 with downsell:
-      // adjust: take 2 of the FE-only and add downsell instead.
-    ];
-    // Simpler: build deterministic dataset.
+    // 10 FE groups; 3 with U1, 1 with U2, 2 with downsell (DW1).
     const fixed: FunnelGroupAgg[] = [
       group(), group(), group(), group(), group(), // 5 FE-only
-      group({ hasU1: true, u1Revenue: 50 }),
-      group({ hasU1: true, u1Revenue: 50 }),
-      group({ hasU1: true, hasU2: true, u1Revenue: 50, u2Revenue: 30 }),
-      group({ hasDown: true, downRevenue: 40 }),
-      group({ hasDown: true, downRevenue: 40 }),
+      group({ upsellsByStep: up({ 2: 50 }) }),
+      group({ upsellsByStep: up({ 2: 50 }) }),
+      group({ upsellsByStep: up({ 2: 50, 3: 30 }) }),
+      group({ downsellsByStep: dw({ 2: 40 }) }),
+      group({ downsellsByStep: dw({ 2: 40 }) }),
     ];
     const out = aggregateGroups(fixed, fixed.length);
     expect(out.summary.feGroups).toBe(10);
@@ -210,14 +204,14 @@ describe('aggregateGroups', () => {
     expect(stage('upsell1').takeRate).toBe(0.3);
     expect(stage('upsell2').volume).toBe(1);
     expect(stage('upsell2').takeRate).toBe(0.1);
-    expect(stage('downsell').volume).toBe(2);
-    expect(stage('downsell').takeRate).toBe(0.2);
+    expect(stage('downsell1').volume).toBe(2);
+    expect(stage('downsell1').takeRate).toBe(0.2);
   });
 
   it('AOV per-buyer = total gross / FE groups', () => {
     const groups: FunnelGroupAgg[] = [
       group({ feRevenue: 100 }),
-      group({ feRevenue: 200, hasU1: true, u1Revenue: 50 }),
+      group({ feRevenue: 200, upsellsByStep: up({ 2: 50 }) }),
     ];
     const out = aggregateGroups(groups, groups.length);
     // total = 100 + 200 + 50 = 350. feGroups = 2. aov = 175.
@@ -229,13 +223,36 @@ describe('aggregateGroups', () => {
     const groups: FunnelGroupAgg[] = [
       group({ feRevenue: 100 }),
       group({ feRevenue: 100 }),
-      group({ feRevenue: 100, hasU1: true, u1Revenue: 100 }),
+      group({ feRevenue: 100, upsellsByStep: up({ 2: 100 }) }),
     ];
     const out = aggregateGroups(groups, groups.length);
     // FE-only avg = 100. With upsell avg = 200. Lift = 1.0 (100%).
     expect(out.summary.aovFEOnly).toBe(100);
     expect(out.summary.aovWithUpsell).toBe(200);
     expect(out.summary.revenueLiftFromUpsells).toBe(1);
+  });
+
+  it('emite stages separadas para UP1/UP2/UP3 e DW1/DW2/DW3 quando o dado existe', () => {
+    const groups: FunnelGroupAgg[] = [
+      group({ upsellsByStep: up({ 2: 50, 3: 30, 4: 20 }) }),
+      group({ upsellsByStep: up({ 2: 50, 3: 30 }) }),
+      group({ upsellsByStep: up({ 2: 50 }) }),
+      group({ downsellsByStep: dw({ 2: 40, 3: 25, 4: 15 }) }),
+      group({ downsellsByStep: dw({ 2: 40, 3: 25 }) }),
+      group({ downsellsByStep: dw({ 2: 40 }) }),
+    ];
+    const out = aggregateGroups(groups, groups.length);
+    const ids = out.stages.map((s) => s.id);
+    expect(ids).toEqual([
+      'frontend', 'bump',
+      'upsell1', 'upsell2', 'upsell3',
+      'downsell1', 'downsell2', 'downsell3',
+    ]);
+    const stage = (id: string) => out.stages.find((s) => s.id === id)!;
+    expect(stage('upsell1').volume).toBe(3); // 3 grupos com step 2
+    expect(stage('upsell2').volume).toBe(2); // 2 grupos com step 3
+    expect(stage('upsell3').volume).toBe(1); // 1 grupo com step 4
+    expect(stage('downsell3').revenue).toBe(15);
   });
 });
 

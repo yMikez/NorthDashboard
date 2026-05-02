@@ -128,6 +128,17 @@ export async function upsertOrder(normalized: NormalizedOrder): Promise<UpsertOr
     customerId = customer.id;
   }
 
+  // Forward-fix: when the classifier confidently recognized the SKU, prefer
+  // its funnelStep over the IPN's. Why: Digistore DW orders arrive with
+  // upsell_no=0 (panel treats a downsell as a fresh sale), but the SKU
+  // pattern says DW2→step 3 / DW3→step 4. Without this, new ingests would
+  // need the periodic backfill to land correctly. Only override when the
+  // classifier has both family AND a derived step.
+  const finalFunnelStep =
+    classified.family != null && classified.funnelStep != null
+      ? classified.funnelStep
+      : normalized.funnelStep;
+
   const orderData = {
     platformId: platform.id,
     externalId: normalized.externalId,
@@ -160,7 +171,7 @@ export async function upsertOrder(normalized: NormalizedOrder): Promise<UpsertOr
     city: normalized.city,
 
     funnelSessionId: normalized.funnelSessionId,
-    funnelStep: normalized.funnelStep,
+    funnelStep: finalFunnelStep,
     clickId: normalized.clickId,
     trackingId: normalized.trackingId,
     campaignKey: normalized.campaignKey,

@@ -27,14 +27,18 @@ export interface ProductClassification {
 // "2e1" / "3e1" / "6e2" formats appear on RC (recovery) SKUs in the CB CSV.
 // They mean "{primary} bottles + {bonus} bottles" as one combo offer. We
 // capture both so COGS calc can charge for the total bottles shipped.
+//
+// Type group aceita UP\d+ / DW\d+ / M\d+ genéricos pra suportar variantes
+// futuras (UP3, DW2, DW3, M4, ...) sem precisar mexer aqui de novo.
 const CB_SKU_RE =
-  /^(?<family>[A-Za-z]+)-(?<bottles>\d+)(?:e(?<bonus>\d+))?-(?<type>FE|UP1|UP2|DW1|DS1|RC)(?:-(?<variant>[A-Za-z0-9]+))?$/i;
+  /^(?<family>[A-Za-z]+)-(?<bottles>\d+)(?:e(?<bonus>\d+))?-(?<type>FE|UP\d+|DW\d+|DS\d*|RC)(?:-(?<variant>[A-Za-z0-9]+))?$/i;
 
 // DigiStore name pattern. Accepts type variants like "UP1-V1" or "UP1-vsnova"
-// and also the recovery format "RC - Glyco Pulse (6 + 2 Bottles)" where the
-// "+ 2" is the bonus bottle count.
+// e a forma de recovery "RC - Glyco Pulse (6 + 2 Bottles)" onde "+ 2" é
+// bonus. Family character class agora aceita hífen (Flex-ImmuneGuard) e
+// dígitos no meio (caso futuro). Type group também genérico.
 const D24_NAME_RE =
-  /^(?<typeFull>M[123]|UP[12](?:-[A-Za-z0-9]+)?|DW1|DS1|RC)\s*-\s*(?<family>[A-Za-z][A-Za-z ]+?)\s*\((?<bottles>\d+)(?:\s*\+\s*(?<bonus>\d+))?\s*Bottles?\)$/i;
+  /^(?<typeFull>M\d+|UP\d+(?:-[A-Za-z0-9]+)?|DW\d+(?:-[A-Za-z0-9]+)?|DS\d*|RC)\s*-\s*(?<family>[A-Za-z][A-Za-z0-9 \-]+?)\s*\((?<bottles>\d+)(?:\s*\+\s*(?<bonus>\d+))?\s*Bottles?\)$/i;
 
 const FAMILY_NORMALIZATIONS: Array<[RegExp, string]> = [
   [/^glycopulse$/i, 'GlycoPulse'],
@@ -46,6 +50,9 @@ const FAMILY_NORMALIZATIONS: Array<[RegExp, string]> = [
   [/^thermo\s*burn\s*pro$/i, 'ThermoBurnPro'],
   [/^maxvitalize?$/i, 'MaxVitalize'],
   [/^max\s*vitalize?$/i, 'MaxVitalize'],
+  // Famílias novas (2026-04 em diante) — preservar a grafia oficial.
+  [/^flex[\s\-]*immune[\s\-]*guard$/i, 'FlexImmuneGuard'],
+  [/^night[\s]*calm$/i, 'NightCalm'],
 ];
 
 export function normalizeFamily(raw: string): string {
@@ -59,24 +66,31 @@ export function normalizeFamily(raw: string): string {
 
 function classifyType(typeCode: string): { type: ProductType; step: number } {
   const code = typeCode.toUpperCase();
-  switch (code) {
-    case 'FE':
-    case 'M1':
-    case 'M2':
-    case 'M3':
-      return { type: 'FRONTEND', step: 1 };
-    case 'UP1':
-      return { type: 'UPSELL', step: 2 };
-    case 'UP2':
-      return { type: 'UPSELL', step: 3 };
-    case 'DW1':
-    case 'DS1':
-      return { type: 'DOWNSELL', step: 2 };
-    case 'RC':
-      return { type: 'SMS_RECOVERY', step: 1 };
-    default:
-      throw new Error(`classifyProduct: unknown type code "${typeCode}"`);
+  // Frontend: 'FE' (CB) ou 'M\d+' (D24, multi-bottle pack).
+  if (code === 'FE' || /^M\d+$/.test(code)) {
+    return { type: 'FRONTEND', step: 1 };
   }
+  // Recovery: SMS opt-in flow.
+  if (code === 'RC') {
+    return { type: 'SMS_RECOVERY', step: 1 };
+  }
+  // Upsell: UP1=step 2 (após FE), UP2=step 3, UP3=step 4, ...
+  // Step indica posição do produto na sequência do funil; permite
+  // distinguir UP1 vs UP2 vs UP3 nas agregações sem hardcode.
+  const upMatch = code.match(/^UP(\d+)$/);
+  if (upMatch) {
+    return { type: 'UPSELL', step: parseInt(upMatch[1], 10) + 1 };
+  }
+  // Downsell: DW1=step 2 (após declinar UP1), DW2=step 3, DW3=step 4, ...
+  const dwMatch = code.match(/^DW(\d+)$/);
+  if (dwMatch) {
+    return { type: 'DOWNSELL', step: parseInt(dwMatch[1], 10) + 1 };
+  }
+  // Legacy 'DS' (downsell sem número) — mantém step=2 como antes.
+  if (/^DS\d*$/.test(code)) {
+    return { type: 'DOWNSELL', step: 2 };
+  }
+  throw new Error(`classifyProduct: unknown type code "${typeCode}"`);
 }
 
 export function classifyProduct(

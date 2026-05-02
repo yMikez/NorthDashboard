@@ -18,6 +18,17 @@ describe('normalizeFamily', () => {
   it('keeps unknown families as-is', () => {
     expect(normalizeFamily('VisionGuard')).toBe('VisionGuard');
   });
+
+  it('canonicalizes Flex-ImmuneGuard com hífen e variações', () => {
+    expect(normalizeFamily('Flex-ImmuneGuard')).toBe('FlexImmuneGuard');
+    expect(normalizeFamily('Flex Immune Guard')).toBe('FlexImmuneGuard');
+    expect(normalizeFamily('FlexImmuneGuard')).toBe('FlexImmuneGuard');
+  });
+
+  it('canonicalizes NightCalm', () => {
+    expect(normalizeFamily('NightCalm')).toBe('NightCalm');
+    expect(normalizeFamily('Night Calm')).toBe('NightCalm');
+  });
 });
 
 describe('classifyProduct (ClickBank SKU patterns)', () => {
@@ -81,6 +92,28 @@ describe('classifyProduct (ClickBank SKU patterns)', () => {
     const r = classifyProduct('NeuroMindPro-6-FE');
     expect(r.bonusBottles).toBeNull();
   });
+
+  // Variantes futuras: classifier aceita UP3+, DW2+, DW3+ via regex genérico
+  it('UP3 → UPSELL step 4', () => {
+    const r = classifyProduct('NeuroMindPro-3-UP3-V1');
+    expect(r.type).toBe('UPSELL');
+    expect(r.funnelStep).toBe(4);
+    expect(r.variant).toBe('V1');
+  });
+
+  it('DW2 → DOWNSELL step 3', () => {
+    const r = classifyProduct('NeuroMindPro-1-DW2-V1');
+    expect(r.type).toBe('DOWNSELL');
+    expect(r.funnelStep).toBe(3);
+    expect(r.variant).toBe('V1');
+  });
+
+  it('DW3 sem variante → DOWNSELL step 4', () => {
+    const r = classifyProduct('NeuroMindPro-2-DW3');
+    expect(r.type).toBe('DOWNSELL');
+    expect(r.funnelStep).toBe(4);
+    expect(r.variant).toBeNull();
+  });
 });
 
 describe('classifyProduct (DigiStore name patterns)', () => {
@@ -122,6 +155,34 @@ describe('classifyProduct (DigiStore name patterns)', () => {
     expect(r.bottles).toBe(6);
     expect(r.bonusBottles).toBe(2);
     expect(r.family).toBe('GlycoPulse');
+  });
+
+  // Variantes novas (Apr/2026 +): UP3, DW2, DW3 com famílias novas
+  it('UP3 - Flex-ImmuneGuard com bonus bottles', () => {
+    const r = classifyProduct('688490', 'UP3 - Flex-ImmuneGuard (3 + 3 Bottles)');
+    expect(r.family).toBe('FlexImmuneGuard');
+    expect(r.type).toBe('UPSELL');
+    expect(r.funnelStep).toBe(4);
+    expect(r.bottles).toBe(3);
+    expect(r.bonusBottles).toBe(3);
+  });
+
+  it('DW2 - NightCalm sem bonus', () => {
+    const r = classifyProduct('688481', 'DW2 - NightCalm (3 Bottles)');
+    expect(r.family).toBe('NightCalm');
+    expect(r.type).toBe('DOWNSELL');
+    expect(r.funnelStep).toBe(3);
+    expect(r.bottles).toBe(3);
+    expect(r.bonusBottles).toBeNull();
+  });
+
+  it('DW3 - Flex-ImmuneGuard com bonus', () => {
+    const r = classifyProduct('688485', 'DW3 - Flex-ImmuneGuard (1 + 1 Bottles)');
+    expect(r.family).toBe('FlexImmuneGuard');
+    expect(r.type).toBe('DOWNSELL');
+    expect(r.funnelStep).toBe(4);
+    expect(r.bottles).toBe(1);
+    expect(r.bonusBottles).toBe(1);
   });
 });
 

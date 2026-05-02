@@ -18,6 +18,7 @@ export interface BackfillStats {
   classified: number;
   productTypeFixed: number;
   ordersFixed: number;
+  funnelStepFixed: number;
   unrecognized: string[];
 }
 
@@ -31,12 +32,18 @@ export async function classifyExistingProducts(): Promise<BackfillStats> {
     classified: 0,
     productTypeFixed: 0,
     ordersFixed: 0,
+    funnelStepFixed: 0,
     unrecognized: [],
   };
 
   // Track SKUs whose role the IPN clearly got wrong, so we can fix the
   // historical Order.productType for them in a second pass below.
   const productsToFixOrders: Array<{ id: string; toType: 'UPSELL' | 'DOWNSELL' | 'SMS_RECOVERY' }> = [];
+  // Track funnelStep of every classified product so we can reconcile
+  // Order.funnelStep with the catalog (IPN's upsell_no can disagree —
+  // notably Digistore DW orders arrive with upsell_no=0, but the SKU
+  // pattern says step=3 for DW2).
+  const productsToFixFunnelStep: Array<{ id: string; funnelStep: number }> = [];
 
   for (const p of products) {
     const c = classifyProduct(p.externalId, p.name);
@@ -66,6 +73,10 @@ export async function classifyExistingProducts(): Promise<BackfillStats> {
     if (c.type === 'UPSELL' || c.type === 'DOWNSELL' || c.type === 'SMS_RECOVERY') {
       productsToFixOrders.push({ id: p.id, toType: c.type });
     }
+
+    if (c.funnelStep != null) {
+      productsToFixFunnelStep.push({ id: p.id, funnelStep: c.funnelStep });
+    }
   }
 
   for (const { id, toType } of productsToFixOrders) {
@@ -74,6 +85,16 @@ export async function classifyExistingProducts(): Promise<BackfillStats> {
       data: { productType: toType },
     });
     stats.ordersFixed += result.count;
+  }
+
+  // Reconcile Order.funnelStep with the classifier's verdict. Idempotent:
+  // the `not: funnelStep` filter ensures already-correct rows are skipped.
+  for (const { id, funnelStep } of productsToFixFunnelStep) {
+    const result = await db.order.updateMany({
+      where: { productId: id, funnelStep: { not: funnelStep } },
+      data: { funnelStep },
+    });
+    stats.funnelStepFixed += result.count;
   }
 
   return stats;
