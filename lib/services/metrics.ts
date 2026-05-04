@@ -903,6 +903,24 @@ export async function getFunnel(
     }
   }
 
+  // Pass 1.5: orphan-FE recovery. If a group has no FE in this period (FE
+  // happened earlier, was refunded/canceled, or for any reason isn't in the
+  // filtered dataset), we still see its UP/DW/RC orders here. Without a
+  // family hint, those orders never get bucketed under any family in
+  // byFamily. To surface them in the right family's funnel, infer the
+  // family from the first non-FE order's product.family. Pass 2 then
+  // classifies same-family vs cross-sell against this inferred family.
+  // hasFE stays false so feGroups/AOV calc isn't polluted — only the
+  // upsell/downsell volume + revenue land in the family bucket.
+  for (const o of orders) {
+    if (o.productType === 'FRONTEND') continue;
+    const groupKey = `${o.platform.slug}:${o.parentExternalId ?? o.externalId}`;
+    const g = getOrInit(groupKey, o.platform.slug);
+    if (g.feProductFamily == null && o.product.family) {
+      g.feProductFamily = o.product.family;
+    }
+  }
+
   // Cross-sell flow tracking: groups whose backend order family ≠ FE family.
   // Sessions counts distinct groups (not orders) per (fromFamily → toFamily)
   // pair so a session with two cross-sells to the same family doesn't double-
@@ -969,23 +987,34 @@ export async function getFunnel(
     : null;
   const allGroups = Array.from(groups.values()).filter((g) => {
     if (!productFilter && !familyFilter) return true;
-    if (!g.hasFE) return false;
-    if (productFilter && (!g.feProductExternalId || !productFilter.has(g.feProductExternalId))) return false;
-    if (familyFilter && (!g.feProductFamily || !familyFilter.has(g.feProductFamily))) return false;
+    // productFilter is FE-specific (a SKU is the entry point), so it
+    // implicitly requires an FE in the period. familyFilter doesn't —
+    // orphan-FE groups (UP/DW only) still belong to a family if Pass 1.5
+    // could infer it.
+    if (productFilter) {
+      if (!g.hasFE) return false;
+      if (!g.feProductExternalId || !productFilter.has(g.feProductExternalId)) return false;
+    }
+    if (familyFilter) {
+      if (!g.feProductFamily || !familyFilter.has(g.feProductFamily)) return false;
+    }
     return true;
   });
   const global = aggregateGroups(allGroups, allGroups.length);
 
-  // Bucket groups by FE family. Groups without an FE order or whose FE
-  // belongs to an unclassified SKU (family=null) are excluded — we can't
-  // attribute their upsells to a known funnel.
+  // Bucket groups by family. Pass 1 sets feProductFamily from the FE order
+  // when available; Pass 1.5 falls back to the family of any non-FE order
+  // for orphan-FE groups (UP/DW arriving without their FE in the dataset,
+  // e.g. cross-period sessions). Groups whose family is still unknown
+  // (unclassified SKUs across the board) are excluded — there's no funnel
+  // to attribute them to.
   interface FamilyBucket {
     family: string;
     groups: Group[];
   }
   const buckets = new Map<string, FamilyBucket>();
   for (const g of allGroups) {
-    if (!g.hasFE || !g.feProductFamily) continue;
+    if (!g.feProductFamily) continue;
     let b = buckets.get(g.feProductFamily);
     if (!b) {
       b = { family: g.feProductFamily, groups: [] };
