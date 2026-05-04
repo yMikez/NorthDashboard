@@ -1163,7 +1163,10 @@ function VariantDetailDrawer({ variant: v, cur, onClose }) {
     ? v.attributedRevenue / v.attributedSessions
     : v.orders ? v.revenue / v.orders : 0;
   const aovLabel = showAttributed ? 'AOV global' : 'AOV';
-  return (
+  // Portal pro body — renderizado dentro de .page-in (que vira stacking
+  // context via animation: pageIn, opacity), o drawer ficaria atrás da
+  // topbar mesmo com z-index 50/51.
+  return ReactDOM.createPortal((
     <>
       <div className="drawer-backdrop" onClick={onClose}/>
       <div className="drawer" style={{ width: 480 }}>
@@ -1252,7 +1255,7 @@ function VariantDetailDrawer({ variant: v, cur, onClose }) {
         </div>
       </div>
     </>
-  );
+  ), document.body);
 }
 
 // ---------- Original ProductsPage (per-SKU card grid) — kept inline below
@@ -1664,7 +1667,7 @@ function TransactionDrawer({ externalId, platformSlug, cur, onClose, onPickOrder
   }, [externalId, platformSlug]);
 
   if (state.status === 'loading') {
-    return (
+    return ReactDOM.createPortal((
       <>
         <div className="drawer-backdrop" onClick={onClose}/>
         <div className="drawer" style={{ width: 540 }}>
@@ -1674,10 +1677,10 @@ function TransactionDrawer({ externalId, platformSlug, cur, onClose, onPickOrder
           </div>
         </div>
       </>
-    );
+    ), document.body);
   }
   if (state.status === 'error' || !state.data) {
-    return (
+    return ReactDOM.createPortal((
       <>
         <div className="drawer-backdrop" onClick={onClose}/>
         <div className="drawer" style={{ width: 540 }}>
@@ -1687,7 +1690,7 @@ function TransactionDrawer({ externalId, platformSlug, cur, onClose, onPickOrder
           </div>
         </div>
       </>
-    );
+    ), document.body);
   }
 
   const { order: o, product, affiliate, customer, session, isCrossSell } = state.data;
@@ -1698,7 +1701,7 @@ function TransactionDrawer({ externalId, platformSlug, cur, onClose, onPickOrder
   const statusLc = o.status.toLowerCase();
   const sumSession = session.reduce((s, x) => x.status === 'APPROVED' ? s + x.grossAmountUsd : s, 0);
 
-  return (
+  return ReactDOM.createPortal((
     <>
       <div className="drawer-backdrop" onClick={onClose}/>
       <div className="drawer" style={{ width: 540 }}>
@@ -1925,7 +1928,7 @@ function TransactionDrawer({ externalId, platformSlug, cur, onClose, onPickOrder
         </div>
       </div>
     </>
-  );
+  ), document.body);
 }
 
 function FinRow({ label, value, cur, bold, muted, accent }) {
@@ -2443,7 +2446,11 @@ function UserFormDrawer({ mode, initial, isSelf, onClose, onSaved }) {
     if (!isCreate) setShowResetField(true);
   }
 
-  return (
+  // Portalizamos pro body pra escapar do stacking context da .page-in
+  // (criado pela animation: pageIn que toca opacity — mesmo após terminar,
+  // alguns browsers mantêm o layer e o modal acaba ficando "atrás" da
+  // topbar mesmo com z-index alto).
+  return ReactDOM.createPortal((
     <div className="modal-backdrop" onClick={onClose}>
       <div className="modal-card" onClick={(e) => e.stopPropagation()}>
         <div className="modal-head">
@@ -2656,7 +2663,7 @@ function UserFormDrawer({ mode, initial, isSelf, onClose, onSaved }) {
         </div>
       </div>
     </div>
-  );
+  ), document.body);
 }
 
 function UserField({ label, value, onChange, type, required }) {
