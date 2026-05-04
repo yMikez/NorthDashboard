@@ -225,8 +225,13 @@ async function fetchInsights() {
 
 /* -------- Admin: Users -------- */
 
-async function adminListUsers() {
-  const res = await fetch('/api/admin/users', { headers: { Accept: 'application/json' } });
+async function adminListUsers(opts = {}) {
+  const search = new URLSearchParams();
+  if (opts.page) search.set('page', String(opts.page));
+  if (opts.pageSize) search.set('pageSize', String(opts.pageSize));
+  if (opts.q) search.set('q', opts.q);
+  const qs = search.toString();
+  const res = await fetch('/api/admin/users' + (qs ? `?${qs}` : ''), { headers: { Accept: 'application/json' } });
   if (!res.ok) throw new Error(`${res.status} listUsers`);
   return res.json();
 }
@@ -305,9 +310,49 @@ async function adminBackfillCogs(token) {
 
 /* -------- Admin: Networks -------- */
 
-async function adminListNetworks() {
-  const res = await fetch('/api/admin/networks', { headers: { Accept: 'application/json' } });
+function pageQS({ page, pageSize, q, status }) {
+  const p = new URLSearchParams();
+  if (page) p.set('page', String(page));
+  if (pageSize) p.set('pageSize', String(pageSize));
+  if (q) p.set('q', q);
+  if (status) p.set('status', status);
+  const s = p.toString();
+  return s ? `?${s}` : '';
+}
+
+async function adminListNetworks(opts = {}) {
+  const res = await fetch('/api/admin/networks' + pageQS(opts), { headers: { Accept: 'application/json' } });
   if (!res.ok) throw new Error(`${res.status} listNetworks`);
+  return res.json();
+}
+
+async function adminListNetworkCommissions(networkId, opts = {}) {
+  const res = await fetch(
+    `/api/admin/networks/${encodeURIComponent(networkId)}/commissions` + pageQS(opts),
+    { headers: { Accept: 'application/json' } },
+  );
+  if (!res.ok) throw new Error(`${res.status}`);
+  return res.json();
+}
+
+async function adminListNetworkPayouts(networkId, opts = {}) {
+  const res = await fetch(
+    `/api/admin/networks/${encodeURIComponent(networkId)}/payouts` + pageQS(opts),
+    { headers: { Accept: 'application/json' } },
+  );
+  if (!res.ok) throw new Error(`${res.status}`);
+  return res.json();
+}
+
+async function fetchNetworkMyCommissions(opts = {}) {
+  const res = await fetch('/api/network/me/commissions' + pageQS(opts), { headers: { Accept: 'application/json' } });
+  if (!res.ok) throw new Error(`${res.status}`);
+  return res.json();
+}
+
+async function fetchNetworkMyPayouts(opts = {}) {
+  const res = await fetch('/api/network/me/payouts' + pageQS(opts), { headers: { Accept: 'application/json' } });
+  if (!res.ok) throw new Error(`${res.status}`);
   return res.json();
 }
 
@@ -351,9 +396,12 @@ async function adminDeleteNetwork(id) {
   return data;
 }
 
-async function adminListAvailableAffiliates(q) {
-  const url = `/api/admin/networks/available-affiliates${q ? `?q=${encodeURIComponent(q)}` : ''}`;
-  const res = await fetch(url, { headers: { Accept: 'application/json' } });
+async function adminListAvailableAffiliates(opts = {}) {
+  const arg = typeof opts === 'string' ? { q: opts } : opts;
+  const res = await fetch(
+    '/api/admin/networks/available-affiliates' + pageQS(arg),
+    { headers: { Accept: 'application/json' } },
+  );
   if (!res.ok) throw new Error(`${res.status}`);
   return res.json();
 }
@@ -449,6 +497,8 @@ window.NSApi = {
   adminResetUserPassword,
   adminDeleteUser,
   adminListNetworks,
+  adminListNetworkCommissions,
+  adminListNetworkPayouts,
   adminCreateNetwork,
   adminGetNetwork,
   adminPatchNetwork,
@@ -460,6 +510,8 @@ window.NSApi = {
   adminMarkPayoutPaid,
   adminContractPdfUrl,
   fetchNetworkMe,
+  fetchNetworkMyCommissions,
+  fetchNetworkMyPayouts,
   networkSignContract,
   networkContractPdfUrl,
 };

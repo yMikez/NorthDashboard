@@ -10,6 +10,7 @@ import { requireAdmin } from '@/lib/auth/guard';
 import { audit } from '@/lib/services/networkAuditLog';
 import { generateContractVersion } from '@/lib/services/contractTemplate';
 import { estimateNextPayout } from '@/lib/services/payoutCalc';
+import { parsePagination, paginatedResponse } from '@/lib/pagination';
 import { logger } from '@/lib/logger';
 
 export const runtime = 'nodejs';
@@ -24,21 +25,39 @@ function slugify(name: string): string {
     .slice(0, 60) || 'network';
 }
 
-export async function GET() {
+export async function GET(req: Request) {
   const auth = await requireAdmin();
   if (!auth.ok) return auth.response;
 
-  const networks = await db.network.findMany({
-    orderBy: [{ status: 'asc' }, { createdAt: 'desc' }],
-    include: {
-      _count: { select: { affiliates: true } },
-      contracts: {
-        orderBy: { version: 'desc' },
-        take: 1,
-        select: { version: true, signedAt: true, signedByUserId: true },
+  const url = new URL(req.url);
+  const pagination = parsePagination(url, { defaultPageSize: 25 });
+  const q = (url.searchParams.get('q') ?? '').trim();
+  const where: Prisma.NetworkWhereInput = q
+    ? {
+        OR: [
+          { name: { contains: q, mode: 'insensitive' } },
+          { slug: { contains: q, mode: 'insensitive' } },
+        ],
+      }
+    : {};
+
+  const [networks, total] = await Promise.all([
+    db.network.findMany({
+      where,
+      orderBy: [{ status: 'asc' }, { createdAt: 'desc' }],
+      skip: pagination.skip,
+      take: pagination.take,
+      include: {
+        _count: { select: { affiliates: true } },
+        contracts: {
+          orderBy: { version: 'desc' },
+          take: 1,
+          select: { version: true, signedAt: true, signedByUserId: true },
+        },
       },
-    },
-  });
+    }),
+    db.network.count({ where }),
+  ]);
 
   // Agregados por-network: accrued total + sales count last 30d.
   const since = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
@@ -73,35 +92,41 @@ export async function GET() {
     });
   }
 
+  const items = networks.map((n) => {
+    const acc = accruedByNet.get(n.id) ?? { accruedUsd: '0', accruedCount: 0, paidCount: 0 };
+    const last30 = last30ByNet.get(n.id) ?? { totalUsd: '0', count: 0 };
+    const lastContract = n.contracts[0];
+    return {
+      id: n.id,
+      name: n.name,
+      slug: n.slug,
+      status: n.status,
+      commissionType: n.commissionType,
+      commissionValue: n.commissionValue.toString(),
+      paymentPeriodValue: n.paymentPeriodValue,
+      paymentPeriodUnit: n.paymentPeriodUnit,
+      contractStart: n.contractStart.toISOString(),
+      billingEmail: n.billingEmail,
+      notes: n.notes,
+      createdAt: n.createdAt.toISOString(),
+      updatedAt: n.updatedAt.toISOString(),
+      affiliatesCount: n._count.affiliates,
+      accruedUsd: acc.accruedUsd,
+      accruedCount: acc.accruedCount,
+      last30SalesUsd: last30.totalUsd,
+      last30SalesCount: last30.count,
+      contractVersion: lastContract?.version ?? null,
+      contractSigned: !!lastContract?.signedAt,
+      contractSignedAt: lastContract?.signedAt?.toISOString() ?? null,
+    };
+  });
+
+  // Backward-compat: top-level `networks` mantido pra clients antigos.
+  // `pagination` é o novo envelope.
+  const paged = paginatedResponse(items, total, pagination);
   return NextResponse.json({
-    networks: networks.map((n) => {
-      const acc = accruedByNet.get(n.id) ?? { accruedUsd: '0', accruedCount: 0, paidCount: 0 };
-      const last30 = last30ByNet.get(n.id) ?? { totalUsd: '0', count: 0 };
-      const lastContract = n.contracts[0];
-      return {
-        id: n.id,
-        name: n.name,
-        slug: n.slug,
-        status: n.status,
-        commissionType: n.commissionType,
-        commissionValue: n.commissionValue.toString(),
-        paymentPeriodValue: n.paymentPeriodValue,
-        paymentPeriodUnit: n.paymentPeriodUnit,
-        contractStart: n.contractStart.toISOString(),
-        billingEmail: n.billingEmail,
-        notes: n.notes,
-        createdAt: n.createdAt.toISOString(),
-        updatedAt: n.updatedAt.toISOString(),
-        affiliatesCount: n._count.affiliates,
-        accruedUsd: acc.accruedUsd,
-        accruedCount: acc.accruedCount,
-        last30SalesUsd: last30.totalUsd,
-        last30SalesCount: last30.count,
-        contractVersion: lastContract?.version ?? null,
-        contractSigned: !!lastContract?.signedAt,
-        contractSignedAt: lastContract?.signedAt?.toISOString() ?? null,
-      };
-    }),
+    networks: paged.items,
+    pagination: { page: paged.page, pageSize: paged.pageSize, total: paged.total, hasMore: paged.hasMore },
   });
 }
 

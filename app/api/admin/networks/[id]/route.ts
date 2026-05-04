@@ -44,26 +44,31 @@ export async function GET(
   });
   if (!network) return NextResponse.json({ error: 'not found' }, { status: 404 });
 
-  // Recent commissions (last 50).
-  const commissions = await db.networkCommission.findMany({
-    where: { networkId: id },
-    orderBy: { createdAt: 'desc' },
-    take: 50,
-    include: {
-      order: { select: { externalId: true, grossAmountUsd: true, orderedAt: true, country: true } },
-      affiliate: { select: { externalId: true, nickname: true } },
-    },
-  });
-
-  // Payouts (all).
-  const payouts = await db.networkPayout.findMany({
-    where: { networkId: id },
-    orderBy: { createdAt: 'desc' },
-    include: {
-      paidBy: { select: { id: true, name: true, email: true } },
-      _count: { select: { commissions: true } },
-    },
-  });
+  // Preview de comissões/payouts (últimos 10). Lista completa paginada via
+  // /api/admin/networks/[id]/commissions e /payouts.
+  const PREVIEW_TAKE = 10;
+  const [commissions, commissionsTotal, payouts, payoutsTotal] = await Promise.all([
+    db.networkCommission.findMany({
+      where: { networkId: id },
+      orderBy: { createdAt: 'desc' },
+      take: PREVIEW_TAKE,
+      include: {
+        order: { select: { externalId: true, grossAmountUsd: true, orderedAt: true, country: true } },
+        affiliate: { select: { externalId: true, nickname: true } },
+      },
+    }),
+    db.networkCommission.count({ where: { networkId: id } }),
+    db.networkPayout.findMany({
+      where: { networkId: id },
+      orderBy: { createdAt: 'desc' },
+      take: PREVIEW_TAKE,
+      include: {
+        paidBy: { select: { id: true, name: true, email: true } },
+        _count: { select: { commissions: true } },
+      },
+    }),
+    db.networkPayout.count({ where: { networkId: id } }),
+  ]);
 
   const next = await estimateNextPayout(network);
 
@@ -120,6 +125,8 @@ export async function GET(
         lastPayoutAt: next.lastPayoutAt?.toISOString() ?? null,
       },
     },
+    commissionsTotal,
+    payoutsTotal,
     affiliates: network.affiliates.map((a) => ({
       id: a.id,
       attachedAt: a.attachedAt.toISOString(),

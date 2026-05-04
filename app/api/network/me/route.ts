@@ -34,20 +34,27 @@ export async function GET() {
   });
   if (!network) return NextResponse.json({ error: 'network not found' }, { status: 404 });
 
-  const commissions = await db.networkCommission.findMany({
-    where: { networkId },
-    orderBy: { createdAt: 'desc' },
-    take: 100,
-    include: {
-      order: { select: { externalId: true, grossAmountUsd: true, orderedAt: true, country: true } },
-      affiliate: { select: { externalId: true, nickname: true } },
-    },
-  });
-
-  const payouts = await db.networkPayout.findMany({
-    where: { networkId },
-    orderBy: { createdAt: 'desc' },
-  });
+  // Preview de comissões/payouts (últimos 10). Lista completa paginada via
+  // /api/network/me/commissions e /api/network/me/payouts.
+  const PREVIEW_TAKE = 10;
+  const [commissions, commissionsTotal, payouts, payoutsTotal] = await Promise.all([
+    db.networkCommission.findMany({
+      where: { networkId },
+      orderBy: { createdAt: 'desc' },
+      take: PREVIEW_TAKE,
+      include: {
+        order: { select: { externalId: true, grossAmountUsd: true, orderedAt: true, country: true } },
+        affiliate: { select: { externalId: true, nickname: true } },
+      },
+    }),
+    db.networkCommission.count({ where: { networkId } }),
+    db.networkPayout.findMany({
+      where: { networkId },
+      orderBy: { createdAt: 'desc' },
+      take: PREVIEW_TAKE,
+    }),
+    db.networkPayout.count({ where: { networkId } }),
+  ]);
 
   const next = await estimateNextPayout(network);
 
@@ -98,6 +105,8 @@ export async function GET() {
         lastPayoutAt: next.lastPayoutAt?.toISOString() ?? null,
       },
     },
+    commissionsTotal,
+    payoutsTotal,
     affiliates: network.affiliates.map((a) => ({
       attachedAt: a.attachedAt.toISOString(),
       externalId: a.affiliate.externalId,

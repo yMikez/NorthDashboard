@@ -9,37 +9,61 @@ import { db } from '@/lib/db';
 import { requireAdmin } from '@/lib/auth/guard';
 import { hashPassword, validatePasswordStrength } from '@/lib/auth/password';
 import { sanitizeTabs } from '@/lib/auth/tabs';
+import { parsePagination, paginatedResponse } from '@/lib/pagination';
 import { logger } from '@/lib/logger';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
-export async function GET() {
+export async function GET(req: Request) {
   const auth = await requireAdmin();
   if (!auth.ok) return auth.response;
-  const users = await db.user.findMany({
-    select: {
-      id: true,
-      email: true,
-      name: true,
-      role: true,
-      allowedTabs: true,
-      active: true,
-      lastLoginAt: true,
-      createdAt: true,
-      createdById: true,
-      networkId: true,
-      network: { select: { id: true, name: true } },
-    },
-    orderBy: [{ active: 'desc' }, { createdAt: 'asc' }],
-  });
-  return NextResponse.json({
-    users: users.map((u) => ({
-      ...u,
-      lastLoginAt: u.lastLoginAt?.toISOString() ?? null,
-      createdAt: u.createdAt.toISOString(),
-    })),
-  });
+  const url = new URL(req.url);
+  const pagination = parsePagination(url, { defaultPageSize: 50 });
+  const q = (url.searchParams.get('q') ?? '').trim();
+
+  const where: Prisma.UserWhereInput = q
+    ? {
+        OR: [
+          { email: { contains: q, mode: 'insensitive' } },
+          { name: { contains: q, mode: 'insensitive' } },
+        ],
+      }
+    : {};
+
+  const [users, total] = await Promise.all([
+    db.user.findMany({
+      where,
+      skip: pagination.skip,
+      take: pagination.take,
+      select: {
+        id: true,
+        email: true,
+        name: true,
+        role: true,
+        allowedTabs: true,
+        active: true,
+        lastLoginAt: true,
+        createdAt: true,
+        createdById: true,
+        networkId: true,
+        network: { select: { id: true, name: true } },
+      },
+      orderBy: [{ active: 'desc' }, { createdAt: 'asc' }],
+    }),
+    db.user.count({ where }),
+  ]);
+
+  const mapped = users.map((u) => ({
+    ...u,
+    lastLoginAt: u.lastLoginAt?.toISOString() ?? null,
+    createdAt: u.createdAt.toISOString(),
+  }));
+
+  // Backward-compat: caller antigo lê `users` direto. Mantemos o array no top
+  // level + envelope `pagination` ao lado pra novos consumidores.
+  const paged = paginatedResponse(mapped, total, pagination);
+  return NextResponse.json({ users: paged.items, pagination: { page: paged.page, pageSize: paged.pageSize, total: paged.total, hasMore: paged.hasMore } });
 }
 
 interface CreateBody {

@@ -2203,23 +2203,24 @@ const TAB_CATALOG = [
 const TAB_GROUPS = ['Análise', 'Afiliados', 'Catálogo', 'Sistema'];
 
 function UsersPage({ currentUser }) {
-  const [state, setState] = useState({ status: 'loading', users: [], error: null });
-  const [editing, setEditing] = useState(null);   // user being edited, or null
+  const [state, setState] = useState({ status: 'loading', users: [], pagination: null, error: null });
+  const [editing, setEditing] = useState(null);
   const [creating, setCreating] = useState(false);
   const [bumpRefresh, setBumpRefresh] = useState(0);
+  const [page, setPage] = useState(1);
 
   useEffect(() => {
     let cancelled = false;
     setState((s) => ({ ...s, status: 'loading' }));
-    window.NSApi.adminListUsers()
-      .then((data) => { if (!cancelled) setState({ status: 'ready', users: data.users, error: null }); })
+    window.NSApi.adminListUsers({ page, pageSize: 50 })
+      .then((data) => { if (!cancelled) setState({ status: 'ready', users: data.users, pagination: data.pagination || null, error: null }); })
       .catch((err) => {
         if (cancelled) return;
         console.error('adminListUsers failed', err);
-        setState({ status: 'error', users: [], error: err.message });
+        setState({ status: 'error', users: [], pagination: null, error: err.message });
       });
     return () => { cancelled = true; };
-  }, [bumpRefresh]);
+  }, [bumpRefresh, page]);
 
   function reload() { setBumpRefresh((n) => n + 1); }
 
@@ -2323,6 +2324,15 @@ function UsersPage({ currentUser }) {
               })}
             </tbody>
           </table>
+          {state.pagination && (
+            <Pagination
+              page={state.pagination.page}
+              pageSize={state.pagination.pageSize}
+              total={state.pagination.total}
+              hasMore={state.pagination.hasMore}
+              onChange={setPage}
+            />
+          )}
         </div>
       </div>
 
@@ -3497,21 +3507,72 @@ function NetKpi({ label, value, unit, hint, icon }) {
   );
 }
 
+// Pagination genérica. Espera `{ page, pageSize, total, hasMore }` na shape
+// que o /lib/pagination.ts retorna do server. onChange(newPage) atualiza
+// só o page; pageSize fica imutável aqui (UI sem seletor de tamanho).
+function Pagination({ page, pageSize, total, hasMore, onChange }) {
+  const totalPages = total > 0 ? Math.ceil(total / pageSize) : 1;
+  const from = total === 0 ? 0 : (page - 1) * pageSize + 1;
+  const to = Math.min(page * pageSize, total);
+  return (
+    <div style={{
+      display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+      padding: '10px 14px', borderTop: '1px solid var(--border-soft)',
+      fontSize: 11, fontFamily: 'var(--f-mono)', color: 'var(--fg5)',
+      gap: 12,
+    }}>
+      <div>
+        {total === 0
+          ? 'nenhum registro'
+          : `${from}–${to} de ${fmtInt(total)}`}
+      </div>
+      <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+        <button
+          onClick={() => onChange(page - 1)}
+          disabled={page <= 1}
+          className="btn btn-ghost"
+          style={{ padding: '4px 10px', fontSize: 10, opacity: page <= 1 ? 0.4 : 1 }}
+        >
+          <Icon name="chevron-left" size={10}/> Anterior
+        </button>
+        <span style={{ minWidth: 60, textAlign: 'center', color: 'var(--fg3)' }}>
+          {page} / {totalPages}
+        </span>
+        <button
+          onClick={() => onChange(page + 1)}
+          disabled={!hasMore}
+          className="btn btn-ghost"
+          style={{ padding: '4px 10px', fontSize: 10, opacity: !hasMore ? 0.4 : 1 }}
+        >
+          Próxima <Icon name="chevron-right" size={10}/>
+        </button>
+      </div>
+    </div>
+  );
+}
+
 function NetworksPage() {
-  const [state, setState] = useState({ status: 'loading', networks: [], error: null });
+  const [state, setState] = useState({ status: 'loading', networks: [], pagination: null, error: null });
   const [refresh, setRefresh] = useState(0);
   const [selectedId, setSelectedId] = useState(null);
   const [creating, setCreating] = useState(false);
-  const [editing, setEditing] = useState(null); // network row when editing termos
+  const [editing, setEditing] = useState(null);
+  const [page, setPage] = useState(1);
+  const [q, setQ] = useState('');
+  const [debouncedQ, setDebouncedQ] = useState('');
+  useEffect(() => {
+    const t = setTimeout(() => { setDebouncedQ(q); setPage(1); }, 250);
+    return () => clearTimeout(t);
+  }, [q]);
 
   useEffect(() => {
     let cancelled = false;
     setState((s) => ({ ...s, status: 'loading' }));
-    window.NSApi.adminListNetworks()
-      .then((data) => { if (!cancelled) setState({ status: 'ready', networks: data.networks || [], error: null }); })
-      .catch((err) => { if (!cancelled) setState({ status: 'error', networks: [], error: err.message || 'erro' }); });
+    window.NSApi.adminListNetworks({ page, pageSize: 25, q: debouncedQ || undefined })
+      .then((data) => { if (!cancelled) setState({ status: 'ready', networks: data.networks || [], pagination: data.pagination || null, error: null }); })
+      .catch((err) => { if (!cancelled) setState({ status: 'error', networks: [], pagination: null, error: err.message || 'erro' }); });
     return () => { cancelled = true; };
-  }, [refresh]);
+  }, [refresh, page, debouncedQ]);
 
   function reload() { setRefresh((n) => n + 1); }
 
@@ -3623,6 +3684,15 @@ function NetworksPage() {
               ))}
             </tbody>
           </table>
+          {state.pagination && (
+            <Pagination
+              page={state.pagination.page}
+              pageSize={state.pagination.pageSize}
+              total={state.pagination.total}
+              hasMore={state.pagination.hasMore}
+              onChange={setPage}
+            />
+          )}
         </div>
       </div>
 
@@ -3814,6 +3884,7 @@ function NetworkDetailDrawer({ networkId, onClose, onChanged, onEdit }) {
   const [refresh, setRefresh] = useState(0);
   const [attaching, setAttaching] = useState(false);
   const [markPaid, setMarkPaid] = useState(null);
+  const [commissionsStatus, setCommissionsStatus] = useState('');
 
   useEffect(() => {
     let cancelled = false;
@@ -3878,7 +3949,9 @@ function NetworkDetailDrawer({ networkId, onClose, onChanged, onEdit }) {
     ), document.body);
   }
 
-  const { network: n, affiliates, commissions, payouts } = state.data;
+  // commissions/payouts são preview-only no detail endpoint (top 10).
+  // Listas completas vêm dos sub-endpoints paginados via NetCommissions/NetPayouts.
+  const { network: n, affiliates, commissionsTotal = 0, payoutsTotal = 0 } = state.data;
 
   return ReactDOM.createPortal((
     <>
@@ -3912,8 +3985,8 @@ function NetworkDetailDrawer({ networkId, onClose, onChanged, onEdit }) {
           {[
             ['summary', 'Resumo'],
             ['affiliates', `Afiliados · ${affiliates.length}`],
-            ['commissions', `Comissões · ${commissions.length}`],
-            ['payouts', `Payouts · ${payouts.length}`],
+            ['commissions', `Comissões · ${fmtInt(commissionsTotal)}`],
+            ['payouts', `Payouts · ${fmtInt(payoutsTotal)}`],
             ['contract', 'Contrato'],
           ].map(([k, l]) => (
             <button
@@ -3939,14 +4012,21 @@ function NetworkDetailDrawer({ networkId, onClose, onChanged, onEdit }) {
               onAttach={() => setAttaching(true)}
             />
           )}
-          {tab === 'commissions' && <NetCommissions commissions={commissions}/>}
+          {tab === 'commissions' && (
+            <NetCommissions
+              fetcher={(opts) => window.NSApi.adminListNetworkCommissions(networkId, opts)}
+              statusFilter={commissionsStatus}
+              onStatusChange={setCommissionsStatus}
+            />
+          )}
           {tab === 'payouts' && (
             <NetPayouts
-              payouts={payouts}
+              fetcher={(opts) => window.NSApi.adminListNetworkPayouts(networkId, opts)}
               onGenerate={generatePayout}
               onMarkPaid={(p) => setMarkPaid(p)}
               accruedUsd={n.nextPayout.accruedUsd}
               accruedCount={n.nextPayout.accruedCount}
+              refreshKey={refresh}
             />
           )}
           {tab === 'contract' && <NetContract network={n} networkId={networkId}/>}
@@ -4067,100 +4147,153 @@ function NetAffiliates({ affiliates, onDetach, onAttach }) {
   );
 }
 
-function NetCommissions({ commissions }) {
-  if (commissions.length === 0) {
-    return <div style={{ padding: 24, textAlign: 'center', color: 'var(--fg4)', fontSize: 12 }}>Nenhuma comissão ainda. Vendas FE de afiliados vinculados geram comissão automaticamente.</div>;
-  }
+// Self-fetching paginated commissions list. fetcher é injetado pra
+// reaproveitar o mesmo componente no contexto admin (network detail) e
+// partner (/me) sem duplicação.
+function NetCommissions({ fetcher, statusFilter, onStatusChange }) {
+  const [page, setPage] = useState(1);
+  const pageSize = 25;
+  const [data, setData] = useState({ status: 'loading', items: [], total: 0, hasMore: false });
+
+  useEffect(() => {
+    let cancelled = false;
+    setData((s) => ({ ...s, status: 'loading' }));
+    fetcher({ page, pageSize, status: statusFilter || undefined })
+      .then((r) => { if (!cancelled) setData({ status: 'ready', items: r.items, total: r.total, hasMore: r.hasMore }); })
+      .catch(() => { if (!cancelled) setData({ status: 'error', items: [], total: 0, hasMore: false }); });
+    return () => { cancelled = true; };
+  }, [fetcher, page, pageSize, statusFilter]);
+
   return (
-    <div className="tbl-wrap">
-      <table className="tbl">
-        <thead>
-          <tr>
-            <th>Order</th>
-            <th>Afiliado</th>
-            <th>Country</th>
-            <th className="num">Gross</th>
-            <th className="num">Comissão</th>
-            <th>Status</th>
-            <th>Data</th>
-          </tr>
-        </thead>
-        <tbody>
-          {commissions.map((c) => (
-            <tr key={c.id}>
-              <td className="cell-mono" style={{ fontSize: 11 }}>{c.orderExternalId}</td>
-              <td>{c.affiliateNickname || c.affiliateExternalId}</td>
-              <td className="cell-mono">{c.country || '—'}</td>
-              <td className="num cell-mono">{fmtCurrency(Number(c.orderGrossUsd), 'USD', 2)}</td>
-              <td className="num cell-mono" style={{ color: 'var(--glow-cyan)' }}>{fmtCurrency(Number(c.amountUsd), 'USD', 2)}</td>
-              <td>
-                <span className={`badge ${c.status === 'PAID' ? 'ok' : 'neutral'}`}>{c.status}</span>
-              </td>
-              <td style={{ fontFamily: 'var(--f-mono)', fontSize: 11, color: 'var(--fg4)' }}>{fmtRelativeShort(c.createdAt)}</td>
-            </tr>
+    <div style={{ display: 'grid', gap: 8 }}>
+      {onStatusChange && (
+        <div className="seg" style={{ width: 'fit-content' }}>
+          {[['', 'Todas'], ['ACCRUED', 'Accrued'], ['PAID', 'Pagas']].map(([k, l]) => (
+            <button
+              key={k || 'all'}
+              className={(statusFilter || '') === k ? 'is-active' : ''}
+              onClick={() => { onStatusChange(k); setPage(1); }}
+            >{l}</button>
           ))}
-        </tbody>
-      </table>
+        </div>
+      )}
+      <div className="tbl-wrap" style={{ margin: 0 }}>
+        <table className="tbl">
+          <thead>
+            <tr>
+              <th>Order</th>
+              <th>Afiliado</th>
+              <th>Country</th>
+              <th className="num">Gross</th>
+              <th className="num">Comissão</th>
+              <th>Status</th>
+              <th>Data</th>
+            </tr>
+          </thead>
+          <tbody>
+            {data.status === 'loading' && (
+              <tr><td colSpan={7} style={{ textAlign: 'center', padding: 16, opacity: 0.6 }}>Carregando...</td></tr>
+            )}
+            {data.status !== 'loading' && data.items.length === 0 && (
+              <tr><td colSpan={7} style={{ textAlign: 'center', padding: 24, color: 'var(--fg4)', fontSize: 12 }}>
+                Nenhuma comissão{statusFilter ? ` ${statusFilter.toLowerCase()}` : ''}.
+              </td></tr>
+            )}
+            {data.items.map((c) => (
+              <tr key={c.id}>
+                <td className="cell-mono" style={{ fontSize: 11 }}>{c.orderExternalId}</td>
+                <td>{c.affiliateNickname || c.affiliateExternalId}</td>
+                <td className="cell-mono">{c.country || '—'}</td>
+                <td className="num cell-mono">{fmtCurrency(Number(c.orderGrossUsd), 'USD', 2)}</td>
+                <td className="num cell-mono" style={{ color: 'var(--glow-cyan)' }}>{fmtCurrency(Number(c.amountUsd), 'USD', 2)}</td>
+                <td><span className={`badge ${c.status === 'PAID' ? 'ok' : 'neutral'}`}>{c.status}</span></td>
+                <td style={{ fontFamily: 'var(--f-mono)', fontSize: 11, color: 'var(--fg4)' }}>{fmtRelativeShort(c.createdAt)}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+        <Pagination page={page} pageSize={pageSize} total={data.total} hasMore={data.hasMore} onChange={setPage}/>
+      </div>
     </div>
   );
 }
 
-function NetPayouts({ payouts, onGenerate, onMarkPaid, accruedUsd, accruedCount }) {
+function NetPayouts({ fetcher, onGenerate, onMarkPaid, accruedUsd, accruedCount, refreshKey }) {
+  const [page, setPage] = useState(1);
+  const pageSize = 25;
+  const [data, setData] = useState({ status: 'loading', items: [], total: 0, hasMore: false });
+
+  useEffect(() => {
+    let cancelled = false;
+    setData((s) => ({ ...s, status: 'loading' }));
+    fetcher({ page, pageSize })
+      .then((r) => { if (!cancelled) setData({ status: 'ready', items: r.items, total: r.total, hasMore: r.hasMore }); })
+      .catch(() => { if (!cancelled) setData({ status: 'error', items: [], total: 0, hasMore: false }); });
+    return () => { cancelled = true; };
+  }, [fetcher, page, pageSize, refreshKey]);
+
+  const showAccruedCard = onGenerate !== undefined; // partner não tem botão
+
   return (
     <div style={{ display: 'grid', gap: 12 }}>
-      <div className="panel" style={{ background: 'rgba(91,200,255,0.04)' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12 }}>
-          <div>
-            <div style={{ fontFamily: 'var(--f-mono)', fontSize: 10, color: 'var(--fg5)', letterSpacing: '0.12em' }}>PRONTO PRA PAYOUT</div>
-            <div style={{ fontSize: 24, color: 'var(--glow-cyan)', fontFamily: 'var(--f-display)', marginTop: 4 }}>
-              {fmtCurrency(Number(accruedUsd), 'USD', 2)}
+      {showAccruedCard && (
+        <div className="panel" style={{ background: 'rgba(91,200,255,0.04)' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12 }}>
+            <div>
+              <div style={{ fontFamily: 'var(--f-mono)', fontSize: 10, color: 'var(--fg5)', letterSpacing: '0.12em' }}>PRONTO PRA PAYOUT</div>
+              <div style={{ fontSize: 24, color: 'var(--glow-cyan)', fontFamily: 'var(--f-display)', marginTop: 4 }}>
+                {fmtCurrency(Number(accruedUsd), 'USD', 2)}
+              </div>
+              <div style={{ fontSize: 11, color: 'var(--fg5)' }}>{fmtInt(accruedCount)} comissões accrued</div>
             </div>
-            <div style={{ fontSize: 11, color: 'var(--fg5)' }}>{fmtInt(accruedCount)} comissões accrued</div>
+            <button className="btn btn-primary" onClick={onGenerate} disabled={!accruedCount}>
+              <Icon name="file-text" size={11}/> Gerar payout
+            </button>
           </div>
-          <button className="btn btn-primary" onClick={onGenerate} disabled={!accruedCount}>
-            <Icon name="file-text" size={11}/> Gerar payout
-          </button>
-        </div>
-      </div>
-
-      {payouts.length === 0 ? (
-        <div style={{ padding: 24, textAlign: 'center', color: 'var(--fg4)', fontSize: 12 }}>Nenhum payout gerado ainda.</div>
-      ) : (
-        <div className="tbl-wrap">
-          <table className="tbl">
-            <thead>
-              <tr>
-                <th>Período</th>
-                <th className="num">Comissões</th>
-                <th className="num">Total</th>
-                <th>Status</th>
-                <th>Pago em</th>
-                <th>Por</th>
-                <th></th>
-              </tr>
-            </thead>
-            <tbody>
-              {payouts.map((p) => (
-                <tr key={p.id}>
-                  <td style={{ fontSize: 11 }}>{fmtDateShort(p.periodStart)} → {fmtDateShort(p.periodEnd)}</td>
-                  <td className="num cell-mono">{fmtInt(p.commissionsCount)}</td>
-                  <td className="num cell-mono">{fmtCurrency(Number(p.totalUsd), 'USD', 2)}</td>
-                  <td><span className={`badge ${p.status === 'PAID' ? 'ok' : 'warn'}`}>{p.status}</span></td>
-                  <td style={{ fontSize: 11 }}>{p.paidAt ? fmtDateShort(p.paidAt) : '—'}</td>
-                  <td style={{ fontSize: 11, color: 'var(--fg4)' }}>{p.paidByName || '—'}</td>
-                  <td>
-                    {p.status === 'PENDING' && (
-                      <button onClick={() => onMarkPaid(p)} className="btn btn-ghost" style={{ fontSize: 10 }}>
-                        <Icon name="check" size={10}/> Marcar pago
-                      </button>
-                    )}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
         </div>
       )}
+
+      <div className="tbl-wrap" style={{ margin: 0 }}>
+        <table className="tbl">
+          <thead>
+            <tr>
+              <th>Período</th>
+              <th className="num">Comissões</th>
+              <th className="num">Total</th>
+              <th>Status</th>
+              <th>Pago em</th>
+              <th>Por</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody>
+            {data.status === 'loading' && (
+              <tr><td colSpan={7} style={{ textAlign: 'center', padding: 16, opacity: 0.6 }}>Carregando...</td></tr>
+            )}
+            {data.status !== 'loading' && data.items.length === 0 && (
+              <tr><td colSpan={7} style={{ textAlign: 'center', padding: 24, color: 'var(--fg4)', fontSize: 12 }}>Nenhum payout gerado ainda.</td></tr>
+            )}
+            {data.items.map((p) => (
+              <tr key={p.id}>
+                <td style={{ fontSize: 11 }}>{fmtDateShort(p.periodStart)} → {fmtDateShort(p.periodEnd)}</td>
+                <td className="num cell-mono">{fmtInt(p.commissionsCount)}</td>
+                <td className="num cell-mono">{fmtCurrency(Number(p.totalUsd), 'USD', 2)}</td>
+                <td><span className={`badge ${p.status === 'PAID' ? 'ok' : 'warn'}`}>{p.status}</span></td>
+                <td style={{ fontSize: 11 }}>{p.paidAt ? fmtDateShort(p.paidAt) : '—'}</td>
+                <td style={{ fontSize: 11, color: 'var(--fg4)' }}>{p.paidByName || p.paymentMethod || '—'}</td>
+                <td>
+                  {onMarkPaid && p.status === 'PENDING' && (
+                    <button onClick={() => onMarkPaid(p)} className="btn btn-ghost" style={{ fontSize: 10 }}>
+                      <Icon name="check" size={10}/> Marcar pago
+                    </button>
+                  )}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+        <Pagination page={page} pageSize={pageSize} total={data.total} hasMore={data.hasMore} onChange={setPage}/>
+      </div>
     </div>
   );
 }
@@ -4198,8 +4331,9 @@ function NetContract({ network: n, networkId }) {
 }
 
 function AttachAffiliateModal({ networkId, onClose, onSaved }) {
-  const [list, setList] = useState({ status: 'loading', items: [] });
+  const [list, setList] = useState({ status: 'loading', items: [], pagination: null });
   const [q, setQ] = useState('');
+  const [page, setPage] = useState(1);
   const [selected, setSelected] = useState(new Set());
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(null);
@@ -4208,12 +4342,15 @@ function AttachAffiliateModal({ networkId, onClose, onSaved }) {
     let cancelled = false;
     setList((s) => ({ ...s, status: 'loading' }));
     const t = setTimeout(() => {
-      window.NSApi.adminListAvailableAffiliates(q)
-        .then((data) => { if (!cancelled) setList({ status: 'ready', items: data.affiliates || [] }); })
-        .catch(() => { if (!cancelled) setList({ status: 'ready', items: [] }); });
+      window.NSApi.adminListAvailableAffiliates({ q: q || undefined, page, pageSize: 25 })
+        .then((data) => { if (!cancelled) setList({ status: 'ready', items: data.affiliates || [], pagination: data.pagination || null }); })
+        .catch(() => { if (!cancelled) setList({ status: 'ready', items: [], pagination: null }); });
     }, 200);
     return () => { cancelled = true; clearTimeout(t); };
-  }, [q]);
+  }, [q, page]);
+
+  // Reset page quando q muda (mas mantém o debounce do useEffect acima).
+  useEffect(() => { setPage(1); }, [q]);
 
   function toggle(id) {
     setSelected((prev) => {
@@ -4288,6 +4425,15 @@ function AttachAffiliateModal({ networkId, onClose, onSaved }) {
               </label>
             ))}
           </div>
+          {list.pagination && list.pagination.total > list.pagination.pageSize && (
+            <Pagination
+              page={list.pagination.page}
+              pageSize={list.pagination.pageSize}
+              total={list.pagination.total}
+              hasMore={list.pagination.hasMore}
+              onChange={setPage}
+            />
+          )}
           {error && (
             <div style={{ fontSize: 12, color: 'var(--danger)', background: 'rgba(239,68,68,0.08)',
                           border: '1px solid rgba(239,68,68,0.25)', padding: '8px 10px', borderRadius: 6 }}>
@@ -4560,61 +4706,31 @@ function PartnerOverview({ data }) {
       <div className="panel" style={{ padding: 0 }}>
         <div className="panel-head" style={{ padding: '14px 18px 10px' }}>
           <div className="panel-title">
-            <span className="panel-eyebrow">COMISSÕES RECENTES</span>
-            <div className="panel-sub">Últimas 100 vendas que geraram comissão pra você</div>
+            <span className="panel-eyebrow">MINHAS COMISSÕES · {fmtInt(data.commissionsTotal || 0)}</span>
+            <div className="panel-sub">Cada venda FE de afiliado vinculado vira uma linha aqui.</div>
           </div>
         </div>
-        {data.commissions.length === 0 ? (
-          <div style={{ padding: 24, textAlign: 'center', color: 'var(--fg4)', fontSize: 12 }}>Nenhuma comissão ainda.</div>
-        ) : (
-          <div className="tbl-wrap" style={{ margin: 0, padding: '0 4px' }}>
-            <table className="tbl">
-              <thead><tr><th>Order</th><th>Afiliado</th><th>Country</th><th className="num">Comissão</th><th>Status</th><th>Data</th></tr></thead>
-              <tbody>
-                {data.commissions.map((c) => (
-                  <tr key={c.id}>
-                    <td className="cell-mono" style={{ fontSize: 11 }}>{c.orderExternalId}</td>
-                    <td>{c.affiliateNickname || c.affiliateExternalId}</td>
-                    <td className="cell-mono">{c.country || '—'}</td>
-                    <td className="num cell-mono" style={{ color: 'var(--glow-cyan)' }}>{fmtCurrency(Number(c.amountUsd), 'USD', 2)}</td>
-                    <td><span className={`badge ${c.status === 'PAID' ? 'ok' : 'neutral'}`}>{c.status}</span></td>
-                    <td style={{ fontFamily: 'var(--f-mono)', fontSize: 11, color: 'var(--fg4)' }}>{fmtRelativeShort(c.createdAt)}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
+        <div style={{ padding: '0 4px' }}>
+          <NetCommissions
+            fetcher={(opts) => window.NSApi.fetchNetworkMyCommissions(opts)}
+            statusFilter={''}
+            onStatusChange={null}
+          />
+        </div>
       </div>
 
       <div className="panel" style={{ padding: 0 }}>
         <div className="panel-head" style={{ padding: '14px 18px 10px' }}>
           <div className="panel-title">
-            <span className="panel-eyebrow">HISTÓRICO DE PAGAMENTOS</span>
-            <div className="panel-sub">Transparência total: cada payout, status e método</div>
+            <span className="panel-eyebrow">HISTÓRICO DE PAGAMENTOS · {fmtInt(data.payoutsTotal || 0)}</span>
+            <div className="panel-sub">Transparência total: cada payout, status e método.</div>
           </div>
         </div>
-        {data.payouts.length === 0 ? (
-          <div style={{ padding: 24, textAlign: 'center', color: 'var(--fg4)', fontSize: 12 }}>Nenhum pagamento ainda.</div>
-        ) : (
-          <div className="tbl-wrap" style={{ margin: 0, padding: '0 4px' }}>
-            <table className="tbl">
-              <thead><tr><th>Período</th><th className="num">Comissões</th><th className="num">Total</th><th>Status</th><th>Pago em</th><th>Método</th></tr></thead>
-              <tbody>
-                {data.payouts.map((p) => (
-                  <tr key={p.id}>
-                    <td style={{ fontSize: 11 }}>{fmtDateShort(p.periodStart)} → {fmtDateShort(p.periodEnd)}</td>
-                    <td className="num cell-mono">{fmtInt(p.commissionsCount)}</td>
-                    <td className="num cell-mono">{fmtCurrency(Number(p.totalUsd), 'USD', 2)}</td>
-                    <td><span className={`badge ${p.status === 'PAID' ? 'ok' : 'warn'}`}>{p.status}</span></td>
-                    <td style={{ fontSize: 11 }}>{p.paidAt ? fmtDateShort(p.paidAt) : '—'}</td>
-                    <td style={{ fontSize: 11, color: 'var(--fg4)' }}>{p.paymentMethod || '—'}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
+        <div style={{ padding: '0 4px' }}>
+          <NetPayouts
+            fetcher={(opts) => window.NSApi.fetchNetworkMyPayouts(opts)}
+          />
+        </div>
       </div>
     </div>
   );
