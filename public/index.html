@@ -115,6 +115,17 @@ function decodeSet(s) { return new Set(s ? s.split(',').filter(Boolean) : []); }
 function encodeSet(set) { return Array.from(set).join(','); }
 
 function App({ user }) {
+  // NETWORK_PARTNER tem shell próprio (PartnerShell) — não compartilha a
+  // sidebar/topbar/filtros do dashboard admin/member. Bypass total.
+  if (user?.role === 'NETWORK_PARTNER') {
+    async function logout() {
+      try {
+        await fetch('/api/auth/logout', { method: 'POST' });
+      } catch (e) { /* swallow */ }
+      window.location.href = '/login';
+    }
+    return <window.PartnerShell user={user} onLogout={logout}/>;
+  }
   // Resolve a default route a partir do allowedTabs, pra MEMBER cair em
   // alguma tab que ele tenha acesso (em vez de cair em 'overview' e ver
   // página em branco).

@@ -67,3 +67,23 @@ export async function requireAdmin(): Promise<
   }
   return auth;
 }
+
+/**
+ * Partner-only guard. Garante que o user é NETWORK_PARTNER E tem
+ * networkId setado. Endpoints /api/network/me/* usam isso pra resolver
+ * qual network mostrar sem confiar em params do path.
+ */
+export async function requireNetworkPartner(): Promise<
+  | { ok: true; user: SessionUser & { networkId: string } }
+  | { ok: false; response: NextResponse }
+> {
+  const auth = await requireAuth();
+  if (!auth.ok) return auth;
+  if (auth.user.role !== 'NETWORK_PARTNER' || !auth.user.networkId) {
+    return {
+      ok: false,
+      response: NextResponse.json({ error: 'network partner required' }, { status: 403 }),
+    };
+  }
+  return { ok: true, user: { ...auth.user, networkId: auth.user.networkId } };
+}

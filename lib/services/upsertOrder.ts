@@ -5,6 +5,8 @@ import type { NormalizedOrder } from '../shared/types';
 import { classifyProduct } from './productClassification';
 import { calcCogs } from './cogs';
 import { rebalanceSessionFulfillment } from './sessionFulfillment';
+import { accrueCommissionForOrder } from './networkAccrual';
+import { logger } from '../logger';
 
 export interface UpsertOrderResult {
   created: boolean;
@@ -227,6 +229,15 @@ export async function upsertOrder(normalized: NormalizedOrder): Promise<UpsertOr
   // values from the orderData snapshot get rewritten here for correctness.
   const sessionKey = normalized.parentExternalId ?? normalized.externalId;
   await rebalanceSessionFulfillment(platform.id, sessionKey);
+
+  // Network commission accrual. Idempotent (UNIQUE on orderId). Only fires
+  // for FE+APPROVED orders whose affiliate is linked to a Network. Errors
+  // here are logged but don't fail the ingest — accrual can be backfilled.
+  try {
+    await accrueCommissionForOrder(result.orderId);
+  } catch (err) {
+    logger.error({ err, orderId: result.orderId }, '[upsertOrder] networkAccrual failed');
+  }
 
   return result;
 }

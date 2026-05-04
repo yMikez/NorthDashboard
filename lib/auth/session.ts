@@ -23,6 +23,9 @@ export interface SessionUser {
   name: string | null;
   role: UserRole;
   allowedTabs: TabId[];
+  // Apenas pra role=NETWORK_PARTNER. Identifica qual Network esse user
+  // representa — usado no auth guard pra escopar /api/network/me.
+  networkId: string | null;
 }
 
 export function newSessionId(): string {
@@ -66,7 +69,7 @@ export async function getSessionUserById(sessionId: string): Promise<SessionUser
       id: true,
       expiresAt: true,
       user: {
-        select: { id: true, email: true, name: true, role: true, allowedTabs: true, active: true },
+        select: { id: true, email: true, name: true, role: true, allowedTabs: true, active: true, networkId: true },
       },
     },
   });
@@ -92,6 +95,7 @@ export async function getSessionUserById(sessionId: string): Promise<SessionUser
     name: session.user.name,
     role: session.user.role,
     allowedTabs: session.user.allowedTabs as TabId[],
+    networkId: session.user.networkId,
   };
 }
 

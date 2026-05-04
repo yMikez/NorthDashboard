@@ -8,12 +8,12 @@ datasource db {
 }
 
 model Platform {
-  id          String   @id @default(cuid())
-  slug        String   @unique
+  id          String    @id @default(cuid())
+  slug        String    @unique
   displayName String
-  isActive    Boolean  @default(true)
+  isActive    Boolean   @default(true)
   lastSyncAt  DateTime?
-  createdAt   DateTime @default(now())
+  createdAt   DateTime  @default(now())
 
   orders     Order[]
   products   Product[]
@@ -30,12 +30,12 @@ enum ProductType {
 }
 
 model Product {
-  id              String      @id @default(cuid())
-  platformId      String
-  externalId      String
-  name            String
-  productType     ProductType
-  funnelPosition  Int?
+  id             String      @id @default(cuid())
+  platformId     String
+  externalId     String
+  name           String
+  productType    ProductType
+  funnelPosition Int?
 
   // Catalog metadata seeded from Planilhas/Products - *.csv. Authoritative
   // classification used by the dashboard's filters/grouping. The same SKU can
@@ -48,7 +48,7 @@ model Product {
   // pay COGS + fulfillment for the total (bottles + bonusBottles).
   bonusBottles    Int?
   vendorAccount   String?
-  catalogPriceUsd Decimal?    @db.Decimal(10, 2)
+  catalogPriceUsd Decimal? @db.Decimal(10, 2)
   niche           String?
   salesPageUrl    String?
   checkoutUrl     String?
@@ -57,10 +57,10 @@ model Product {
   catalogStatus   String?
 
   parentProductId String?
-  costOfGoods     Decimal?    @db.Decimal(10, 2)
-  currency        String      @default("USD")
-  isActive        Boolean     @default(true)
-  createdAt       DateTime    @default(now())
+  costOfGoods     Decimal? @db.Decimal(10, 2)
+  currency        String   @default("USD")
+  isActive        Boolean  @default(true)
+  createdAt       DateTime @default(now())
 
   platform Platform  @relation(fields: [platformId], references: [id])
   parent   Product?  @relation("FunnelTree", fields: [parentProductId], references: [id])
@@ -80,8 +80,12 @@ model Affiliate {
   firstSeenAt DateTime
   lastOrderAt DateTime?
 
-  platform Platform @relation(fields: [platformId], references: [id])
-  orders   Order[]
+  platform    Platform            @relation(fields: [platformId], references: [id])
+  orders      Order[]
+  // Network attachment is 1:1 — an affiliate belongs to at most one
+  // network so commission attribution is unambiguous on each FE sale.
+  networkLink NetworkAffiliate?
+  commissions NetworkCommission[]
 
   @@unique([platformId, externalId])
   @@index([lastOrderAt])
@@ -122,7 +126,7 @@ enum BillingType {
 }
 
 model Order {
-  id                    String      @id @default(cuid())
+  id                    String  @id @default(cuid())
   platformId            String
   externalId            String
   parentExternalId      String?
@@ -133,8 +137,8 @@ model Order {
   customerId            String?
 
   currencyOriginal String
-  grossAmountOrig  Decimal @db.Decimal(12, 2)
-  grossAmountUsd   Decimal @db.Decimal(12, 2)
+  grossAmountOrig  Decimal  @db.Decimal(12, 2)
+  grossAmountUsd   Decimal  @db.Decimal(12, 2)
   // Snapshot do gross na PRIMEIRA vez que vimos esta order (na criação).
   // grossAmountUsd é overwritten pra negativo quando vem refund/chargeback;
   // originalGrossUsd preserva o valor da venda original pra reconciliação
@@ -142,10 +146,10 @@ model Order {
   // que inclui vendas que depois foram refundadas.
   // Nullable só pra suportar migration; ingest novos sempre populam.
   originalGrossUsd Decimal? @db.Decimal(12, 2)
-  taxAmount        Decimal @db.Decimal(12, 2) @default(0)
-  fees             Decimal @db.Decimal(12, 2) @default(0)
-  netAmountUsd     Decimal @db.Decimal(12, 2)
-  cpaPaidUsd       Decimal @db.Decimal(12, 2) @default(0)
+  taxAmount        Decimal  @default(0) @db.Decimal(12, 2)
+  fees             Decimal  @default(0) @db.Decimal(12, 2)
+  netAmountUsd     Decimal  @db.Decimal(12, 2)
+  cpaPaidUsd       Decimal  @default(0) @db.Decimal(12, 2)
 
   // Per-order productType. Authoritative classification for THIS sale's role
   // in the funnel. The same SKU can be FE in one order and UPSELL in another
@@ -154,10 +158,10 @@ model Order {
   // catalog hint (most-recent observed type).
   productType ProductType @default(FRONTEND)
 
-  status      OrderStatus
-  eventType   String
-  billingType BillingType @default(UNKNOWN)
-  paySequenceNo      Int?
+  status               OrderStatus
+  eventType            String
+  billingType          BillingType @default(UNKNOWN)
+  paySequenceNo        Int?
   numberOfInstallments Int?
 
   paymentMethod String?
@@ -191,10 +195,12 @@ model Order {
   cogsUsd        Decimal? @db.Decimal(10, 2)
   fulfillmentUsd Decimal? @db.Decimal(10, 2)
 
-  platform  Platform   @relation(fields: [platformId], references: [id])
-  product   Product    @relation(fields: [productId], references: [id])
-  affiliate Affiliate? @relation(fields: [affiliateId], references: [id])
-  customer  Customer?  @relation(fields: [customerId], references: [id])
+  platform          Platform           @relation(fields: [platformId], references: [id])
+  product           Product            @relation(fields: [productId], references: [id])
+  affiliate         Affiliate?         @relation(fields: [affiliateId], references: [id])
+  customer          Customer?          @relation(fields: [customerId], references: [id])
+  // 1:1 — uma order FE de afiliado vinculado gera no máx 1 comissão de network.
+  networkCommission NetworkCommission?
 
   @@unique([platformId, externalId])
   @@index([orderedAt])
@@ -238,9 +244,9 @@ model IngestLog {
 // UI). Snapshot is captured into Order.cogsUsd at ingest time, so changing
 // values here only affects future orders — historical numbers are preserved.
 model ProductFamilyCost {
-  family       String   @id  // 'NeuroMindPro', 'GlycoPulse', etc.
-  unitCostUsd  Decimal  @db.Decimal(10, 4)
-  updatedAt    DateTime @updatedAt
+  family      String   @id // 'NeuroMindPro', 'GlycoPulse', etc.
+  unitCostUsd Decimal  @db.Decimal(10, 4)
+  updatedAt   DateTime @updatedAt
 }
 
 // Fulfillment (shipping) brackets. Lookup is "first row whose maxBottles
@@ -248,43 +254,248 @@ model ProductFamilyCost {
 // — the supplier prices already account for our specific bottle weights,
 // so we map bottle count directly to bracket.
 model FulfillmentRate {
-  bottlesMax  Int      @id        // largest bottle count covered (e.g. 2, 3, 4, ...)
-  priceUsd    Decimal  @db.Decimal(10, 2)
-  label       String              // human display ("0 to 2.99 oz", etc.)
-  updatedAt   DateTime @updatedAt
+  bottlesMax Int      @id // largest bottle count covered (e.g. 2, 3, 4, ...)
+  priceUsd   Decimal  @db.Decimal(10, 2)
+  label      String // human display ("0 to 2.99 oz", etc.)
+  updatedAt  DateTime @updatedAt
 }
 
 enum UserRole {
   ADMIN
   MEMBER
+  // Partner externo (network owner). Vê só os dados da própria network
+  // — afiliados vinculados, comissões, payouts, contrato. Sem acesso ao
+  // dashboard global.
+  NETWORK_PARTNER
 }
 
 // Dashboard users. ADMIN sees everything and can manage other users.
 // MEMBER sees only the tabs listed in allowedTabs (validated against
 // AVAILABLE_TABS in lib/auth/tabs.ts at write time, not at the DB level).
+// NETWORK_PARTNER is scoped to a single Network via networkId.
 model User {
-  id            String    @id @default(cuid())
-  email         String    @unique
-  passwordHash  String
-  name          String?
-  role          UserRole  @default(MEMBER)
-  allowedTabs   String[]  @default([])
-  active        Boolean   @default(true)
-  lastLoginAt   DateTime?
-  createdAt     DateTime  @default(now())
-  createdById   String?
-  sessions      Session[]
+  id           String    @id @default(cuid())
+  email        String    @unique
+  passwordHash String
+  name         String?
+  role         UserRole  @default(MEMBER)
+  allowedTabs  String[]  @default([])
+  active       Boolean   @default(true)
+  lastLoginAt  DateTime?
+  createdAt    DateTime  @default(now())
+  createdById  String?
+  // Pra role=NETWORK_PARTNER esse campo é obrigatório (FK pro Network
+  // que ele representa). Pra ADMIN/MEMBER fica null.
+  networkId    String?
+  sessions     Session[]
+
+  network         Network?          @relation(fields: [networkId], references: [id])
+  signedContracts NetworkContract[] @relation("ContractSignedBy")
+  paidPayouts     NetworkPayout[]   @relation("PayoutPaidBy")
+  auditEntries    NetworkAuditLog[] @relation("AuditActor")
 }
 
 model Session {
-  id         String   @id   // random hex token; IS the cookie value
-  userId     String
-  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  expiresAt  DateTime
-  createdAt  DateTime @default(now())
-  ipAddress  String?
-  userAgent  String?
+  id        String   @id // random hex token; IS the cookie value
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+  ipAddress String?
+  userAgent String?
 
   @@index([userId])
   @@index([expiresAt])
+}
+
+// ============================================================
+// NETWORKS — sub-affiliate program. Network = parceiro externo
+// que indica afiliados pra promover nossos produtos. Cada venda
+// FE aprovada de um afiliado vinculado gera comissão pro Network.
+// Comissão é fixed (USD/venda) ou percent (% do gross). Payouts
+// agregam comissões por período (a cada N dias/semanas/meses).
+// Refunds NÃO afetam comissão já contabilizada (decisão de produto).
+// ============================================================
+
+enum NetworkStatus {
+  ACTIVE
+  PAUSED
+}
+
+enum CommissionType {
+  FIXED // USD por venda FE
+  PERCENT // fração do gross (0.05 = 5%)
+}
+
+enum PaymentPeriodUnit {
+  DAYS
+  WEEKS
+  MONTHS
+}
+
+enum CommissionStatus {
+  ACCRUED // contabilizada, aguardando virar payout
+  PAID // já incluída num payout que foi marcado como pago
+}
+
+enum PayoutStatus {
+  PENDING // gerado pelo sistema, aguardando admin marcar como pago
+  PAID // admin confirmou que pagou
+}
+
+enum AuditEntityType {
+  NETWORK
+  NETWORK_PAYOUT
+  NETWORK_AFFILIATE
+  NETWORK_CONTRACT
+}
+
+model Network {
+  id     String        @id @default(cuid())
+  name   String
+  slug   String        @unique
+  status NetworkStatus @default(ACTIVE)
+
+  // Comissão por venda FE de afiliado vinculado.
+  // FIXED:   commissionValue = USD a pagar (ex: 25.00 = $25/FE)
+  // PERCENT: commissionValue = fração (ex: 0.05 = 5% do gross)
+  commissionType  CommissionType
+  commissionValue Decimal        @db.Decimal(10, 4)
+
+  // Periodicidade do payout. Próximo pagamento estimado =
+  // último payout + (paymentPeriodValue * paymentPeriodUnit) ou
+  // contractStart + período se nunca pagou.
+  paymentPeriodValue Int
+  paymentPeriodUnit  PaymentPeriodUnit @default(DAYS)
+
+  contractStart DateTime @default(now())
+  billingEmail  String?
+  notes         String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  affiliates   NetworkAffiliate[]
+  commissions  NetworkCommission[]
+  payouts      NetworkPayout[]
+  contracts    NetworkContract[]
+  partnerUsers User[]
+
+  @@index([status])
+}
+
+model NetworkAffiliate {
+  id               String   @id @default(cuid())
+  networkId        String
+  affiliateId      String   @unique // 1:1 — afiliado pertence a no máx 1 network
+  attachedAt       DateTime @default(now())
+  attachedByUserId String?
+
+  network   Network   @relation(fields: [networkId], references: [id], onDelete: Cascade)
+  affiliate Affiliate @relation(fields: [affiliateId], references: [id], onDelete: Cascade)
+
+  @@unique([networkId, affiliateId])
+  @@index([networkId])
+}
+
+model NetworkCommission {
+  id          String @id @default(cuid())
+  networkId   String
+  orderId     String @unique // 1:1 com FE order
+  affiliateId String
+
+  amountUsd Decimal          @db.Decimal(12, 4)
+  status    CommissionStatus @default(ACCRUED)
+
+  // Snapshot do tipo+valor da comissão NO MOMENTO da venda. Se admin
+  // alterar a config da network depois, comissões antigas mantêm o
+  // valor pactuado original.
+  commissionType  CommissionType
+  commissionValue Decimal        @db.Decimal(10, 4)
+
+  payoutId  String?
+  paidAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  network   Network        @relation(fields: [networkId], references: [id], onDelete: Cascade)
+  order     Order          @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  affiliate Affiliate      @relation(fields: [affiliateId], references: [id])
+  payout    NetworkPayout? @relation(fields: [payoutId], references: [id])
+
+  @@index([networkId, status])
+  @@index([networkId, createdAt])
+  @@index([payoutId])
+}
+
+model NetworkPayout {
+  id        String @id @default(cuid())
+  networkId String
+
+  totalUsd         Decimal @db.Decimal(12, 4)
+  commissionsCount Int
+
+  // Janela coberta pelo payout (do último payout até a geração).
+  periodStart DateTime
+  periodEnd   DateTime
+
+  status        PayoutStatus @default(PENDING)
+  paidAt        DateTime?
+  paidByUserId  String?
+  paymentMethod String? // ex: "wise", "pix", "bank-transfer" — texto livre
+  notes         String?
+
+  createdAt DateTime @default(now())
+
+  network     Network             @relation(fields: [networkId], references: [id], onDelete: Cascade)
+  paidBy      User?               @relation("PayoutPaidBy", fields: [paidByUserId], references: [id])
+  commissions NetworkCommission[]
+
+  @@index([networkId, periodEnd])
+  @@index([status])
+}
+
+model NetworkContract {
+  id        String @id @default(cuid())
+  networkId String
+  version   Int // bump a cada alteração nos termos da network
+
+  // Markdown source com placeholders já substituídos pelos valores
+  // específicos desta network/versão (snapshot imutável).
+  contentMd String
+  // Path relativo dentro de /public/uploads/contracts/. Servimos o PDF
+  // via endpoint autenticado, não como static asset.
+  pdfPath   String
+
+  signedAt       DateTime?
+  signedByUserId String?
+  signatureIp    String?
+
+  createdAt DateTime @default(now())
+
+  network  Network @relation(fields: [networkId], references: [id], onDelete: Cascade)
+  signedBy User?   @relation("ContractSignedBy", fields: [signedByUserId], references: [id])
+
+  @@unique([networkId, version])
+  @@index([networkId])
+}
+
+// Audit trail genérico pra mudanças sensíveis em entidades de Network.
+// Action é texto livre ("create", "update", "mark_paid",
+// "attach_affiliate", "detach_affiliate", "regenerate_contract", ...).
+model NetworkAuditLog {
+  id          String          @id @default(cuid())
+  actorUserId String
+  entityType  AuditEntityType
+  entityId    String
+  action      String
+
+  beforeJson Json?
+  afterJson  Json?
+
+  createdAt DateTime @default(now())
+
+  actor User @relation("AuditActor", fields: [actorUserId], references: [id])
+
+  @@index([entityType, entityId])
+  @@index([createdAt])
 }

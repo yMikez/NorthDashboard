@@ -28,6 +28,8 @@ export async function GET() {
       lastLoginAt: true,
       createdAt: true,
       createdById: true,
+      networkId: true,
+      network: { select: { id: true, name: true } },
     },
     orderBy: [{ active: 'desc' }, { createdAt: 'asc' }],
   });
@@ -46,6 +48,13 @@ interface CreateBody {
   password?: unknown;
   role?: unknown;
   allowedTabs?: unknown;
+  networkId?: unknown;
+}
+
+function parseRole(v: unknown): UserRole {
+  if (v === 'ADMIN') return 'ADMIN';
+  if (v === 'NETWORK_PARTNER') return 'NETWORK_PARTNER';
+  return 'MEMBER';
 }
 
 export async function POST(req: Request) {
@@ -62,8 +71,9 @@ export async function POST(req: Request) {
   const email = typeof body.email === 'string' ? body.email.trim().toLowerCase() : '';
   const name = typeof body.name === 'string' && body.name.trim() ? body.name.trim() : null;
   const password = typeof body.password === 'string' ? body.password : '';
-  const role: UserRole = body.role === 'ADMIN' ? 'ADMIN' : 'MEMBER';
-  const allowedTabs = role === 'ADMIN' ? [] : sanitizeTabs(body.allowedTabs);
+  const role = parseRole(body.role);
+  const allowedTabs = role === 'ADMIN' || role === 'NETWORK_PARTNER' ? [] : sanitizeTabs(body.allowedTabs);
+  const networkId = typeof body.networkId === 'string' && body.networkId ? body.networkId : null;
 
   if (!email || !email.includes('@')) {
     return NextResponse.json({ error: 'email inválido' }, { status: 400 });
@@ -71,6 +81,13 @@ export async function POST(req: Request) {
   const pwErr = validatePasswordStrength(password);
   if (pwErr) {
     return NextResponse.json({ error: pwErr }, { status: 400 });
+  }
+  if (role === 'NETWORK_PARTNER' && !networkId) {
+    return NextResponse.json({ error: 'networkId obrigatório pra role NETWORK_PARTNER' }, { status: 400 });
+  }
+  if (networkId) {
+    const exists = await db.network.findUnique({ where: { id: networkId }, select: { id: true } });
+    if (!exists) return NextResponse.json({ error: 'network não encontrada' }, { status: 400 });
   }
 
   const passwordHash = await hashPassword(password);
@@ -82,15 +99,17 @@ export async function POST(req: Request) {
         passwordHash,
         role,
         allowedTabs,
+        networkId: role === 'NETWORK_PARTNER' ? networkId : null,
         createdById: auth.user.id,
         active: true,
       },
       select: {
         id: true, email: true, name: true, role: true, allowedTabs: true,
         active: true, lastLoginAt: true, createdAt: true, createdById: true,
+        networkId: true,
       },
     });
-    logger.info({ actorId: auth.user.id, userId: created.id, email }, 'admin.users.create');
+    logger.info({ actorId: auth.user.id, userId: created.id, email, role }, 'admin.users.create');
     return NextResponse.json({
       user: {
         ...created,

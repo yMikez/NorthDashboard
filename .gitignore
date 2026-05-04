@@ -15,3 +15,7 @@ coverage/
 .vitest-cache/
 tsconfig.tsbuildinfo
 tmp/
+
+# Networks contracts são gerados em runtime e persistidos no FS.
+# Em prod, o diretório fica sob volume bind-mount; não versionar PDFs.
+public/uploads/contracts/

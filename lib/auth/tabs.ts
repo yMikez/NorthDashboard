@@ -15,7 +15,8 @@ export type TabId =
   | 'transactions'
   | 'platforms'
   | 'costs'
-  | 'health';
+  | 'health'
+  | 'networks';
 
 export interface TabSpec {
   id: TabId;
@@ -29,6 +30,7 @@ export const AVAILABLE_TABS: TabSpec[] = [
   { id: 'insights',       label: 'Insights',            group: 'Análise' },
   { id: 'leaderboard',    label: 'Ranking',             group: 'Afiliados' },
   { id: 'all-affiliates', label: 'Todos os afiliados',  group: 'Afiliados' },
+  { id: 'networks',       label: 'Networks',            group: 'Afiliados' },
   { id: 'products',       label: 'Produtos',            group: 'Catálogo' },
   { id: 'transactions',   label: 'Transações',          group: 'Catálogo' },
   { id: 'platforms',      label: 'Plataformas',         group: 'Sistema' },

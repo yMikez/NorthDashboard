@@ -303,6 +303,130 @@ async function adminBackfillCogs(token) {
   return res.json();
 }
 
+/* -------- Admin: Networks -------- */
+
+async function adminListNetworks() {
+  const res = await fetch('/api/admin/networks', { headers: { Accept: 'application/json' } });
+  if (!res.ok) throw new Error(`${res.status} listNetworks`);
+  return res.json();
+}
+
+async function adminCreateNetwork(body) {
+  const res = await fetch('/api/admin/networks', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+    body: JSON.stringify(body),
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.error || `${res.status}`);
+  return data;
+}
+
+async function adminGetNetwork(id) {
+  const res = await fetch(`/api/admin/networks/${encodeURIComponent(id)}`, {
+    headers: { Accept: 'application/json' },
+  });
+  if (!res.ok) throw new Error(`${res.status} getNetwork`);
+  return res.json();
+}
+
+async function adminPatchNetwork(id, body) {
+  const res = await fetch(`/api/admin/networks/${encodeURIComponent(id)}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+    body: JSON.stringify(body),
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.error || `${res.status}`);
+  return data;
+}
+
+async function adminDeleteNetwork(id) {
+  const res = await fetch(`/api/admin/networks/${encodeURIComponent(id)}`, {
+    method: 'DELETE',
+    headers: { Accept: 'application/json' },
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.error || `${res.status}`);
+  return data;
+}
+
+async function adminListAvailableAffiliates(q) {
+  const url = `/api/admin/networks/available-affiliates${q ? `?q=${encodeURIComponent(q)}` : ''}`;
+  const res = await fetch(url, { headers: { Accept: 'application/json' } });
+  if (!res.ok) throw new Error(`${res.status}`);
+  return res.json();
+}
+
+async function adminAttachAffiliates(networkId, affiliateIds) {
+  const res = await fetch(`/api/admin/networks/${encodeURIComponent(networkId)}/affiliates`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+    body: JSON.stringify({ affiliateIds }),
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.error || `${res.status}`);
+  return data;
+}
+
+async function adminDetachAffiliate(networkId, affiliateId) {
+  const res = await fetch(
+    `/api/admin/networks/${encodeURIComponent(networkId)}/affiliates/${encodeURIComponent(affiliateId)}`,
+    { method: 'DELETE', headers: { Accept: 'application/json' } },
+  );
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.error || `${res.status}`);
+  return data;
+}
+
+async function adminCreatePayout(networkId) {
+  const res = await fetch(`/api/admin/networks/${encodeURIComponent(networkId)}/payouts`, {
+    method: 'POST',
+    headers: { Accept: 'application/json' },
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.error || `${res.status}`);
+  return data;
+}
+
+async function adminMarkPayoutPaid(networkId, payoutId, body) {
+  const res = await fetch(
+    `/api/admin/networks/${encodeURIComponent(networkId)}/payouts/${encodeURIComponent(payoutId)}`,
+    {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+      body: JSON.stringify({ action: 'mark_paid', ...(body || {}) }),
+    },
+  );
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.error || `${res.status}`);
+  return data;
+}
+
+function adminContractPdfUrl(networkId) {
+  return `/api/admin/networks/${encodeURIComponent(networkId)}/contract.pdf`;
+}
+
+/* -------- Network Partner self -------- */
+
+async function fetchNetworkMe() {
+  const res = await fetch('/api/network/me', { headers: { Accept: 'application/json' } });
+  if (!res.ok) throw new Error(`${res.status}`);
+  return res.json();
+}
+
+async function networkSignContract() {
+  const res = await fetch('/api/network/me/contract/sign', {
+    method: 'POST',
+    headers: { Accept: 'application/json' },
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.error || `${res.status}`);
+  return data;
+}
+
+const networkContractPdfUrl = '/api/network/me/contract.pdf';
+
 window.NSApi = {
   fetchOverview,
   fetchOrders,
@@ -324,4 +448,18 @@ window.NSApi = {
   adminPatchUser,
   adminResetUserPassword,
   adminDeleteUser,
+  adminListNetworks,
+  adminCreateNetwork,
+  adminGetNetwork,
+  adminPatchNetwork,
+  adminDeleteNetwork,
+  adminListAvailableAffiliates,
+  adminAttachAffiliates,
+  adminDetachAffiliate,
+  adminCreatePayout,
+  adminMarkPayoutPaid,
+  adminContractPdfUrl,
+  fetchNetworkMe,
+  networkSignContract,
+  networkContractPdfUrl,
 };

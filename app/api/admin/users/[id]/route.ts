@@ -20,6 +20,13 @@ interface PatchBody {
   role?: unknown;
   allowedTabs?: unknown;
   active?: unknown;
+  networkId?: unknown;
+}
+
+function parseRole(v: unknown): UserRole {
+  if (v === 'ADMIN') return 'ADMIN';
+  if (v === 'NETWORK_PARTNER') return 'NETWORK_PARTNER';
+  return 'MEMBER';
 }
 
 export async function PATCH(
@@ -39,7 +46,7 @@ export async function PATCH(
 
   const target = await db.user.findUnique({
     where: { id },
-    select: { id: true, role: true, active: true },
+    select: { id: true, role: true, active: true, networkId: true },
   });
   if (!target) return NextResponse.json({ error: 'not found' }, { status: 404 });
 
@@ -50,13 +57,14 @@ export async function PATCH(
     role?: UserRole;
     allowedTabs?: string[];
     active?: boolean;
+    networkId?: string | null;
   } = {};
 
   if ('name' in body) {
     data.name = typeof body.name === 'string' && body.name.trim() ? body.name.trim() : null;
   }
   if ('role' in body) {
-    const newRole: UserRole = body.role === 'ADMIN' ? 'ADMIN' : 'MEMBER';
+    const newRole = parseRole(body.role);
     if (isSelf && target.role === 'ADMIN' && newRole !== 'ADMIN') {
       return NextResponse.json(
         { error: 'admin não pode se rebaixar (use outra conta admin pra fazer)' },
@@ -64,13 +72,29 @@ export async function PATCH(
       );
     }
     data.role = newRole;
-    // Promover pra admin limpa allowedTabs (admin acessa tudo de qualquer
-    // forma); rebaixar pra member exige allowedTabs explícitos no body.
-    if (newRole === 'ADMIN') data.allowedTabs = [];
+    // Promover pra admin OU virar partner limpa allowedTabs (admin acessa
+    // tudo; partner é escopado pelo networkId, não usa allowedTabs).
+    // Sair de NETWORK_PARTNER limpa networkId; só pode ter networkId quem é partner.
+    if (newRole === 'ADMIN' || newRole === 'NETWORK_PARTNER') data.allowedTabs = [];
+    if (newRole !== 'NETWORK_PARTNER') data.networkId = null;
   }
   if ('allowedTabs' in body) {
     const incomingRole = data.role ?? target.role;
-    data.allowedTabs = incomingRole === 'ADMIN' ? [] : sanitizeTabs(body.allowedTabs);
+    data.allowedTabs = incomingRole === 'ADMIN' || incomingRole === 'NETWORK_PARTNER'
+      ? [] : sanitizeTabs(body.allowedTabs);
+  }
+  if ('networkId' in body) {
+    const incomingRole = data.role ?? target.role;
+    if (incomingRole !== 'NETWORK_PARTNER') {
+      return NextResponse.json({ error: 'networkId só vale pra role NETWORK_PARTNER' }, { status: 400 });
+    }
+    const nid = typeof body.networkId === 'string' && body.networkId ? body.networkId : null;
+    if (!nid) {
+      return NextResponse.json({ error: 'networkId obrigatório pra role NETWORK_PARTNER' }, { status: 400 });
+    }
+    const exists = await db.network.findUnique({ where: { id: nid }, select: { id: true } });
+    if (!exists) return NextResponse.json({ error: 'network não encontrada' }, { status: 400 });
+    data.networkId = nid;
   }
   if ('active' in body) {
     const next = !!body.active;
@@ -87,12 +111,24 @@ export async function PATCH(
     return NextResponse.json({ error: 'nada pra atualizar' }, { status: 400 });
   }
 
+  // Se o role final for NETWORK_PARTNER, garantir que ele tem networkId
+  // (ou no body, ou já gravado no target).
+  const finalRole = data.role ?? target.role;
+  const finalNetworkId = 'networkId' in data ? data.networkId : target.networkId;
+  if (finalRole === 'NETWORK_PARTNER' && !finalNetworkId) {
+    return NextResponse.json(
+      { error: 'networkId obrigatório pra role NETWORK_PARTNER' },
+      { status: 400 },
+    );
+  }
+
   const updated = await db.user.update({
     where: { id },
     data,
     select: {
       id: true, email: true, name: true, role: true, allowedTabs: true,
       active: true, lastLoginAt: true, createdAt: true, createdById: true,
+      networkId: true,
     },
   });
 

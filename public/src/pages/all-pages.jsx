@@ -2193,6 +2193,7 @@ const TAB_CATALOG = [
   { group: 'Análise',   id: 'insights',       label: 'Insights' },
   { group: 'Afiliados', id: 'leaderboard',    label: 'Ranking' },
   { group: 'Afiliados', id: 'all-affiliates', label: 'Todos os afiliados' },
+  { group: 'Afiliados', id: 'networks',       label: 'Networks' },
   { group: 'Catálogo',  id: 'products',       label: 'Produtos' },
   { group: 'Catálogo',  id: 'transactions',   label: 'Transações' },
   { group: 'Sistema',   id: 'platforms',      label: 'Plataformas' },
@@ -2368,6 +2369,19 @@ function UserFormDrawer({ mode, initial, isSelf, onClose, onSaved }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(null);
   const [showResetField, setShowResetField] = useState(false);
+  // Pra role NETWORK_PARTNER: lista de networks pra escolher e qual está
+  // selecionada. Carregada lazy quando role passa pra NETWORK_PARTNER.
+  const [networks, setNetworks] = useState(null); // null = ainda não carregou
+  const [networkId, setNetworkId] = useState(initial?.networkId || '');
+
+  useEffect(() => {
+    if (role !== 'NETWORK_PARTNER' || networks !== null) return;
+    let cancelled = false;
+    window.NSApi.adminListNetworks()
+      .then((data) => { if (!cancelled) setNetworks(data.networks || []); })
+      .catch(() => { if (!cancelled) setNetworks([]); });
+    return () => { cancelled = true; };
+  }, [role, networks]);
 
   function toggleTab(id) {
     setAllowedTabs((prev) => {
@@ -2398,19 +2412,26 @@ function UserFormDrawer({ mode, initial, isSelf, onClose, onSaved }) {
     setBusy(true);
     setError(null);
     try {
+      if (role === 'NETWORK_PARTNER' && !networkId) {
+        setError('selecione a network deste partner');
+        setBusy(false);
+        return;
+      }
+      const payload = {
+        name: name || (isCreate ? undefined : null),
+        role,
+        allowedTabs: role === 'MEMBER' ? Array.from(allowedTabs) : [],
+        ...(role === 'NETWORK_PARTNER' ? { networkId } : {}),
+      };
       if (isCreate) {
         await window.NSApi.adminCreateUser({
           email,
-          name: name || undefined,
           password,
-          role,
-          allowedTabs: role === 'MEMBER' ? Array.from(allowedTabs) : [],
+          ...payload,
         });
       } else {
         await window.NSApi.adminPatchUser(initial.id, {
-          name: name || null,
-          role,
-          allowedTabs: role === 'MEMBER' ? Array.from(allowedTabs) : [],
+          ...payload,
           active,
         });
         if (showResetField && password) {
@@ -2494,24 +2515,54 @@ function UserFormDrawer({ mode, initial, isSelf, onClose, onSaved }) {
           <div style={{ display: 'grid', gap: 6 }}>
             <span style={{ fontFamily: 'var(--f-mono)', fontSize: 10, letterSpacing: '0.12em', color: 'var(--fg4)' }}>PAPEL</span>
             <div className="seg" style={{ width: 'fit-content' }}>
-              {[['MEMBER', 'Member'], ['ADMIN', 'Admin']].map(([k, l]) => (
+              {[['MEMBER', 'Member'], ['ADMIN', 'Admin'], ['NETWORK_PARTNER', 'Partner']].map(([k, l]) => (
                 <button
                   key={k}
                   className={role === k ? 'is-active' : ''}
                   onClick={() => setRole(k)}
-                  disabled={isSelf && initial?.role === 'ADMIN' && k === 'MEMBER'}
-                  title={isSelf && initial?.role === 'ADMIN' && k === 'MEMBER' ? 'admin não pode se rebaixar' : ''}
+                  disabled={isSelf && initial?.role === 'ADMIN' && k !== 'ADMIN'}
+                  title={isSelf && initial?.role === 'ADMIN' && k !== 'ADMIN' ? 'admin não pode se rebaixar' : ''}
                 >
                   {l}
                 </button>
               ))}
             </div>
             <div style={{ fontSize: 11, color: 'var(--fg5)', fontFamily: 'var(--f-mono)' }}>
-              {role === 'ADMIN'
-                ? 'Admin acessa todas as abas + gerencia outros usuários.'
-                : 'Member acessa só as abas marcadas abaixo.'}
+              {role === 'ADMIN' && 'Admin acessa todas as abas + gerencia outros usuários.'}
+              {role === 'MEMBER' && 'Member acessa só as abas marcadas abaixo.'}
+              {role === 'NETWORK_PARTNER' && 'Partner externo de uma network. Acessa só os dados da própria network (afiliados, comissões, payouts, contrato).'}
             </div>
           </div>
+
+          {role === 'NETWORK_PARTNER' && (
+            <div style={{ display: 'grid', gap: 6 }}>
+              <span style={{ fontFamily: 'var(--f-mono)', fontSize: 10, letterSpacing: '0.12em', color: 'var(--fg4)' }}>
+                NETWORK VINCULADA
+              </span>
+              {networks === null ? (
+                <div style={{ fontSize: 12, color: 'var(--fg5)' }}>Carregando networks...</div>
+              ) : networks.length === 0 ? (
+                <div style={{ fontSize: 12, color: 'var(--warning)' }}>
+                  Nenhuma network cadastrada. Crie uma na aba <strong>Networks</strong> antes de criar um partner.
+                </div>
+              ) : (
+                <select
+                  value={networkId}
+                  onChange={(e) => setNetworkId(e.target.value)}
+                  style={{
+                    padding: '9px 12px', fontSize: 13, color: 'var(--fg1)',
+                    background: 'rgba(91,200,255,0.05)', border: '1px solid rgba(91,200,255,0.2)',
+                    borderRadius: 6,
+                  }}
+                >
+                  <option value="">— escolher network —</option>
+                  {networks.map((n) => (
+                    <option key={n.id} value={n.id}>{n.name}</option>
+                  ))}
+                </select>
+              )}
+            </div>
+          )}
 
           {role === 'MEMBER' && (
             <div style={{ display: 'grid', gap: 8 }}>
@@ -3398,127 +3449,79 @@ function InsightCard({ insight }) {
 }
 
 // ==========================================================================
-// NETWORKS / SUBAFILIADOS — visual-only mockup
-// Mock data hardcoded. Sem backend, sem persistência. Pra validar UX antes
-// de comprometer schema/lógica. Quando virar real, mover mock pro fixture
-// e plugar fetch real.
+// NETWORKS / SUBAFILIADOS — backed by /api/admin/networks
+// Lista, criação, attach de afiliados, geração de payout, mark-as-paid e
+// download de contrato em PDF. Cada commission row é gerada server-side
+// quando uma venda FE de afiliado vinculado é aprovada (hook em
+// upsertOrder). Refunds NÃO afetam comissões — admin sempre paga o
+// pactuado. Schema em prisma/schema.prisma:Network*.
 // ==========================================================================
 
-const MOCK_NETWORKS = [
-  {
-    id: 'fenix', name: 'Fenix Media Group', slug: 'fenix',
-    contractStart: '2026-02-01', status: 'active',
-    affiliatesActive: 8, affiliatesTotal: 12,
-    salesMonth: 487, grossMonth: 124350,
-    rate: { type: 'fixed', value: 25 }, // $25 por venda FE
-    pending: 2435.00, accrued: 8975.00, paidAllTime: 47250.00,
-    lastSaleAt: '2026-04-30T13:32:00Z', lastPayoutAt: '2026-04-15',
-    nextPayoutEstimate: '2026-05-12', nextPayoutAmount: 8975.00,
-  },
-  {
-    id: 'wave', name: 'Wave Marketing', slug: 'wave',
-    contractStart: '2026-03-10', status: 'active',
-    affiliatesActive: 5, affiliatesTotal: 5,
-    salesMonth: 142, grossMonth: 38420,
-    rate: { type: 'pct', value: 0.05 }, // 5% do gross
-    pending: 487.20, accrued: 1250.30, paidAllTime: 8400.00,
-    lastSaleAt: '2026-04-30T11:14:00Z', lastPayoutAt: '2026-04-15',
-    nextPayoutEstimate: '2026-05-04', nextPayoutAmount: 1250.30,
-  },
-  {
-    id: 'rocketads', name: 'RocketAds Brasil', slug: 'rocketads',
-    contractStart: '2026-04-08', status: 'active',
-    affiliatesActive: 3, affiliatesTotal: 4,
-    salesMonth: 89, grossMonth: 23780,
-    rate: { type: 'fixed', value: 30 },
-    pending: 1830.00, accrued: 0, paidAllTime: 0,
-    lastSaleAt: '2026-04-30T09:48:00Z', lastPayoutAt: null,
-    nextPayoutEstimate: '2026-06-08', nextPayoutAmount: 0,
-  },
-  {
-    id: 'meridian', name: 'Meridian Digital', slug: 'meridian',
-    contractStart: '2025-11-15', status: 'paused',
-    affiliatesActive: 0, affiliatesTotal: 7,
-    salesMonth: 0, grossMonth: 0,
-    rate: { type: 'fixed', value: 20 },
-    pending: 0, accrued: 360.00, paidAllTime: 31280.00,
-    lastSaleAt: '2026-04-12T18:20:00Z', lastPayoutAt: '2026-04-15',
-    nextPayoutEstimate: null, nextPayoutAmount: 360.00,
-  },
-];
+function fmtRelativeShort(iso) {
+  if (!iso) return '—';
+  const ms = Date.now() - new Date(iso).getTime();
+  if (ms < 60000) return 'agora';
+  if (ms < 3600000) return `${Math.floor(ms / 60000)}min`;
+  if (ms < 86400000) return `${Math.floor(ms / 3600000)}h`;
+  const d = Math.floor(ms / 86400000);
+  if (d < 7) return `${d}d`;
+  return new Date(iso).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' });
+}
 
-const MOCK_AFFILIATES_BY_NETWORK = {
-  fenix: [
-    { affId: 'fenix2025', nickname: 'fenix2025', salesMonth: 134, grossMonth: 34520, commissionMonth: 3350, lastSale: '2h' },
-    { affId: 'adsmkt9',   nickname: 'adsmkt9',   salesMonth: 121, grossMonth: 31480, commissionMonth: 3025, lastSale: '5h' },
-    { affId: 'evolute',   nickname: 'evolute',   salesMonth: 87,  grossMonth: 22130, commissionMonth: 2175, lastSale: 'ontem' },
-    { affId: 'nchm41',    nickname: 'nchm41',    salesMonth: 52,  grossMonth: 13420, commissionMonth: 1300, lastSale: 'há 3d' },
-    { affId: 'thiagosale',nickname: 'thiagosale',salesMonth: 48,  grossMonth: 12780, commissionMonth: 1200, lastSale: 'ontem' },
-    { affId: 'mugi10',    nickname: 'mugi10',    salesMonth: 31,  grossMonth: 8120,  commissionMonth: 775,  lastSale: 'há 4d' },
-    { affId: 'row1010',   nickname: 'row1010',   salesMonth: 14,  grossMonth: 3420,  commissionMonth: 350,  lastSale: 'há 2d' },
-    { affId: 'andredp04', nickname: 'andredp04', salesMonth: 0,   grossMonth: 0,     commissionMonth: 0,    lastSale: 'há 12d' },
-  ],
-  wave: [
-    { affId: 'nvrocket',  nickname: 'nvrocket',  salesMonth: 67, grossMonth: 18230, commissionMonth: 911,  lastSale: 'há 1h' },
-    { affId: 'acebee123', nickname: 'acebee123', salesMonth: 38, grossMonth: 10240, commissionMonth: 512,  lastSale: 'há 5h' },
-    { affId: 'teiler',    nickname: 'teiler',    salesMonth: 22, grossMonth: 5870,  commissionMonth: 293,  lastSale: 'ontem' },
-    { affId: 'tubagringa',nickname: 'tubagringa',salesMonth: 10, grossMonth: 2680,  commissionMonth: 134,  lastSale: 'há 2d' },
-    { affId: 'gabivechia',nickname: 'gabivechia',salesMonth: 5,  grossMonth: 1400,  commissionMonth: 70,   lastSale: 'há 3d' },
-  ],
-  rocketads: [
-    { affId: 'cilerioqueiroz', nickname: 'cilerioqueiroz', salesMonth: 41, grossMonth: 11340, commissionMonth: 870, lastSale: 'há 1h' },
-    { affId: 'ajumpclick',     nickname: 'ajumpclick',     salesMonth: 28, grossMonth: 7340,  commissionMonth: 590, lastSale: 'há 4h' },
-    { affId: 'matheustb',      nickname: 'MatheusTB',      salesMonth: 20, grossMonth: 5100,  commissionMonth: 370, lastSale: 'há 6h' },
-  ],
-  meridian: [],
-};
+function commissionRateLabel(type, value) {
+  const v = Number(value);
+  if (type === 'FIXED') return `$${v.toFixed(2)} / FE`;
+  return `${(v * 100).toFixed(2)}% gross`;
+}
 
-const MOCK_COMMISSIONS_BY_NETWORK = {
-  fenix: [
-    { id: 'c1', orderId: '4JW7MB3E', date: '2026-04-30T13:32:00Z', aff: 'fenix2025', product: 'NeuroMindPro-6-FE', gross: 318.26, amount: 25, status: 'pending', pendingUntil: '2026-06-29' },
-    { id: 'c2', orderId: 'KQR7MFXE', date: '2026-04-30T11:14:00Z', aff: 'adsmkt9',   product: 'NeuroMindPro-6-FE', gross: 311.64, amount: 25, status: 'pending', pendingUntil: '2026-06-29' },
-    { id: 'c3', orderId: 'XBR7M5JE', date: '2026-04-30T08:32:00Z', aff: 'evolute',   product: 'NeuroMindPro-6-FE', gross: 320.46, amount: 25, status: 'pending', pendingUntil: '2026-06-29' },
-    { id: 'c4', orderId: 'LKR7M99E', date: '2026-04-29T21:15:00Z', aff: 'fenix2025', product: 'NeuroMindPro-3-FE', gross: 219.94, amount: 25, status: 'pending', pendingUntil: '2026-06-28' },
-    { id: 'c5', orderId: 'B4DYMZSE', date: '2026-04-29T21:55:00Z', aff: 'fenix2025', product: 'NeuroMindPro-6-FE', gross: 318.26, amount: 25, status: 'reversed', pendingUntil: '2026-06-28' },
-    { id: 'c6', orderId: 'M8W7M85E', date: '2026-02-28T17:11:00Z', aff: 'adsmkt9',   product: 'NeuroMindPro-6-FE', gross: 323.41, amount: 25, status: 'accrued', pendingUntil: '2026-04-29' },
-    { id: 'c7', orderId: 'M8W7MWBE', date: '2026-02-27T15:15:00Z', aff: 'evolute',   product: 'NeuroMindPro-3-FE', gross: 220.46, amount: 25, status: 'accrued', pendingUntil: '2026-04-28' },
-    { id: 'c8', orderId: 'JBJ7M8TE', date: '2026-01-15T12:00:00Z', aff: 'fenix2025', product: 'NeuroMindPro-6-FE', gross: 318.18, amount: 25, status: 'paid',    paidAt: '2026-04-15', batchId: 'PAY-2026-04' },
-    { id: 'c9', orderId: 'KSW7MKQE', date: '2026-01-12T17:50:00Z', aff: 'adsmkt9',   product: 'NeuroMindPro-6-FE', gross: 311.64, amount: 25, status: 'paid',    paidAt: '2026-04-15', batchId: 'PAY-2026-04' },
-  ],
-  wave: [],
-  rocketads: [],
-  meridian: [],
-};
+function paymentPeriodLabel(value, unit) {
+  const u = unit === 'DAYS' ? (value === 1 ? 'dia' : 'dias')
+          : unit === 'WEEKS' ? (value === 1 ? 'semana' : 'semanas')
+          : (value === 1 ? 'mês' : 'meses');
+  return `${value} ${u}`;
+}
 
-const MOCK_PAYOUTS_BY_NETWORK = {
-  fenix: [
-    { id: 'PAY-2026-04', date: '2026-04-15', count: 189, total: 4725.00, status: 'paid', method: 'wire' },
-    { id: 'PAY-2026-03', date: '2026-03-15', count: 215, total: 5375.00, status: 'paid', method: 'wire' },
-    { id: 'PAY-2026-02', date: '2026-02-15', count: 178, total: 4450.00, status: 'paid', method: 'wire' },
-  ],
-  wave: [
-    { id: 'PAY-2026-04', date: '2026-04-15', count: 67, total: 1675.00, status: 'paid', method: 'wire' },
-    { id: 'PAY-2026-03', date: '2026-03-15', count: 89, total: 2225.00, status: 'paid', method: 'wire' },
-  ],
-  rocketads: [],
-  meridian: [
-    { id: 'PAY-2026-04', date: '2026-04-15', count: 142, total: 2840.00, status: 'paid', method: 'wire' },
-    { id: 'PAY-2026-03', date: '2026-03-15', count: 198, total: 3960.00, status: 'paid', method: 'wire' },
-  ],
-};
+function NetKpi({ label, value, unit, hint, icon }) {
+  return (
+    <div className="kpi">
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 8 }}>
+        <span style={{ fontFamily: 'var(--f-mono)', fontSize: 9, letterSpacing: '0.16em', color: 'var(--fg5)' }}>{label}</span>
+        <span style={{ color: 'var(--fg5)' }}><Icon name={icon} size={14}/></span>
+      </div>
+      <div className="kpi-value" style={{ fontSize: 28 }}>
+        {value}
+        {unit && <span style={{ fontSize: 14, color: 'var(--fg4)', marginLeft: 6, fontFamily: 'var(--f-mono)' }}>{unit}</span>}
+      </div>
+      {hint && <div style={{ fontSize: 11, color: 'var(--fg5)', marginTop: 4 }}>{hint}</div>}
+    </div>
+  );
+}
 
 function NetworksPage() {
-  const [selected, setSelected] = useState(null); // network id ou null
-  const [partnerView, setPartnerView] = useState(false);
+  const [state, setState] = useState({ status: 'loading', networks: [], error: null });
+  const [refresh, setRefresh] = useState(0);
+  const [selectedId, setSelectedId] = useState(null);
+  const [creating, setCreating] = useState(false);
+  const [editing, setEditing] = useState(null); // network row when editing termos
 
-  const totals = MOCK_NETWORKS.reduce((acc, n) => {
-    acc.pending += n.pending;
-    acc.accrued += n.accrued;
-    acc.paidMonth += (n.lastPayoutAt && n.lastPayoutAt.startsWith('2026-04')) ? n.accrued / 4 : 0;
-    acc.activeCount += n.status === 'active' ? 1 : 0;
-    acc.salesMonth += n.salesMonth;
+  useEffect(() => {
+    let cancelled = false;
+    setState((s) => ({ ...s, status: 'loading' }));
+    window.NSApi.adminListNetworks()
+      .then((data) => { if (!cancelled) setState({ status: 'ready', networks: data.networks || [], error: null }); })
+      .catch((err) => { if (!cancelled) setState({ status: 'error', networks: [], error: err.message || 'erro' }); });
+    return () => { cancelled = true; };
+  }, [refresh]);
+
+  function reload() { setRefresh((n) => n + 1); }
+
+  const totals = state.networks.reduce((acc, n) => {
+    acc.activeCount += n.status === 'ACTIVE' ? 1 : 0;
+    acc.accruedUsd += Number(n.accruedUsd || 0);
+    acc.last30Usd += Number(n.last30SalesUsd || 0);
+    acc.last30Count += n.last30SalesCount || 0;
     return acc;
-  }, { pending: 0, accrued: 0, paidMonth: 0, activeCount: 0, salesMonth: 0 });
+  }, { activeCount: 0, accruedUsd: 0, last30Usd: 0, last30Count: 0 });
 
   return (
     <div className="page-in">
@@ -3527,36 +3530,41 @@ function NetworksPage() {
           <span className="eyebrow">ADMIN · NETWORKS / PARCEIROS</span>
           <h2>Networks <em>parceiras</em></h2>
           <span className="sub">
-            {totals.activeCount} ativas · ${fmtInt(totals.accrued)} acumulado a pagar · {fmtInt(totals.salesMonth)} vendas no mês
+            {totals.activeCount} ativas · ${fmtInt(totals.accrued || totals.accruedUsd)} acumulado a pagar · {fmtInt(totals.last30Count)} comissões nos últimos 30d
           </span>
         </div>
         <div className="page-head-actions">
-          <button className="btn btn-ghost"><Icon name="download" size={12}/> Exportar reconciliação</button>
-          <button className="btn btn-primary"><Icon name="plus" size={12}/> Nova network</button>
+          <button className="btn btn-primary" onClick={() => setCreating(true)}>
+            <Icon name="plus" size={12}/> Nova network
+          </button>
         </div>
       </div>
+
+      {state.status === 'error' && (
+        <div className="panel" style={{ color: 'var(--danger)' }}>Erro ao carregar: {state.error}</div>
+      )}
 
       <div className="kpi-grid">
         <NetKpi label="NETWORKS ATIVAS" icon="layers"
           value={fmtInt(totals.activeCount)}
-          unit={`/ ${MOCK_NETWORKS.length}`}
-          hint={`${MOCK_NETWORKS.filter(n => n.status === 'paused').length} pausadas`}/>
-        <NetKpi label="COMISSÕES A PAGAR" icon="wallet"
-          value={fmtCurrency(totals.accrued, 'USD', 0)}
-          hint="acumulado · refund window fechado"/>
-        <NetKpi label="EM REFUND WINDOW" icon="clock"
-          value={fmtCurrency(totals.pending, 'USD', 0)}
-          hint="provisão · pode reverter"/>
-        <NetKpi label="VENDAS NO MÊS" icon="shopping-cart"
-          value={fmtInt(totals.salesMonth)}
-          hint="atribuíveis às networks"/>
+          unit={`/ ${state.networks.length}`}
+          hint={`${state.networks.filter((n) => n.status === 'PAUSED').length} pausadas`}/>
+        <NetKpi label="A PAGAR (ACUMULADO)" icon="wallet"
+          value={fmtCurrency(totals.accruedUsd, 'USD', 0)}
+          hint="comissões accrued aguardando payout"/>
+        <NetKpi label="COMISSÕES 30D" icon="trending-up"
+          value={fmtCurrency(totals.last30Usd, 'USD', 0)}
+          hint={`${fmtInt(totals.last30Count)} vendas atribuíveis`}/>
+        <NetKpi label="CONTRATOS PENDENTES" icon="file-text"
+          value={fmtInt(state.networks.filter((n) => n.contractVersion && !n.contractSigned).length)}
+          hint="aguardando aceite do partner"/>
       </div>
 
       <div className="panel" style={{ padding: 0 }}>
         <div className="panel-head" style={{ padding: '14px 18px 10px' }}>
           <div className="panel-title">
-            <span className="panel-eyebrow">NETWORKS · CONTRATOS ATIVOS</span>
-            <div className="panel-sub">Click numa linha pra ver detalhes, comissões e payouts</div>
+            <span className="panel-eyebrow">NETWORKS · CONTRATOS</span>
+            <div className="panel-sub">Click numa linha pra abrir detalhes, comissões, payouts</div>
           </div>
         </div>
         <div className="tbl-wrap" style={{ margin: 0, padding: '0 4px' }}>
@@ -3565,492 +3573,805 @@ function NetworksPage() {
               <tr>
                 <th style={{ width: 40 }}></th>
                 <th>Network</th>
+                <th>Status</th>
+                <th>Comissão</th>
+                <th>Período</th>
+                <th className="num">Afiliados</th>
+                <th className="num">A pagar</th>
                 <th>Contrato</th>
-                <th>Afiliados</th>
-                <th className="num">Vendas mês</th>
-                <th className="num">Comissão mês</th>
-                <th className="num">A pagar (acumulado)</th>
-                <th>Próximo payout</th>
-                <th>Última venda</th>
+                <th>Última atualização</th>
               </tr>
             </thead>
             <tbody>
-              {MOCK_NETWORKS.map((n) => {
-                const rateLabel = n.rate.type === 'fixed' ? `$${n.rate.value} / FE` : `${(n.rate.value * 100).toFixed(1)}% gross`;
-                const commissionMonth = n.salesMonth * (n.rate.type === 'fixed' ? n.rate.value : n.grossMonth * n.rate.value / Math.max(1, n.salesMonth));
-                return (
-                  <tr key={n.id} onClick={() => { setSelected(n.id); setPartnerView(false); }}>
-                    <td><span className="av" style={{ background: avatarColor(n.id), width: 28, height: 28, fontSize: 11, fontFamily: 'var(--f-mono)' }}>{n.name.slice(0, 2).toUpperCase()}</span></td>
-                    <td>
-                      <div style={{ color: 'var(--fg1)', fontSize: 13 }}>{n.name}</div>
-                      <div style={{ fontFamily: 'var(--f-mono)', fontSize: 10, color: 'var(--fg5)', letterSpacing: '0.05em' }}>{rateLabel}</div>
-                    </td>
-                    <td>
-                      <span className={`badge ${n.status === 'active' ? 'ok' : 'neutral'}`}>{n.status === 'active' ? 'ATIVO' : 'PAUSADO'}</span>
-                      <div style={{ fontSize: 10, color: 'var(--fg5)', fontFamily: 'var(--f-mono)', marginTop: 2 }}>desde {fmtDateShort(n.contractStart)}</div>
-                    </td>
-                    <td className="cell-mono">{n.affiliatesActive}/{n.affiliatesTotal}</td>
-                    <td className="num cell-mono">{fmtInt(n.salesMonth)}</td>
-                    <td className="num cell-mono">{fmtCurrency(commissionMonth, 'USD', 0)}</td>
-                    <td className="num cell-mono" style={{ color: n.accrued > 0 ? 'var(--success)' : 'var(--fg5)' }}>
-                      {fmtCurrency(n.accrued, 'USD', 0)}
-                    </td>
-                    <td>
-                      {n.nextPayoutEstimate ? (
-                        <div style={{ fontFamily: 'var(--f-mono)', fontSize: 11 }}>
-                          <div style={{ color: 'var(--glow-cyan)' }}>{fmtCurrency(n.nextPayoutAmount, 'USD', 0)}</div>
-                          <div style={{ fontSize: 10, color: 'var(--fg5)' }}>{fmtDateShort(n.nextPayoutEstimate)}</div>
-                        </div>
-                      ) : (
-                        <span style={{ color: 'var(--fg5)', fontSize: 11, fontFamily: 'var(--f-mono)' }}>—</span>
-                      )}
-                    </td>
-                    <td className="cell-mono" style={{ color: 'var(--fg4)', fontSize: 11 }}>
-                      {n.lastSaleAt ? fmtRelativeShort(n.lastSaleAt) : '—'}
-                    </td>
-                  </tr>
-                );
-              })}
+              {state.status === 'loading' && (
+                <tr><td colSpan={9} style={{ textAlign: 'center', padding: 24, opacity: 0.6 }}>Carregando...</td></tr>
+              )}
+              {state.status === 'ready' && state.networks.length === 0 && (
+                <tr><td colSpan={9} style={{ textAlign: 'center', padding: 24, color: 'var(--fg4)' }}>
+                  Nenhuma network cadastrada. Click em <strong>Nova network</strong> pra começar.
+                </td></tr>
+              )}
+              {state.networks.map((n) => (
+                <tr key={n.id} onClick={() => setSelectedId(n.id)} style={{ cursor: 'pointer' }}>
+                  <td><span className="av" style={{ background: avatarColor(n.id), width: 28, height: 28, fontSize: 11, fontFamily: 'var(--f-mono)' }}>{n.name.slice(0, 2).toUpperCase()}</span></td>
+                  <td>
+                    <div style={{ color: 'var(--fg1)', fontSize: 13 }}>{n.name}</div>
+                    <div style={{ fontFamily: 'var(--f-mono)', fontSize: 10, color: 'var(--fg5)' }}>{n.slug}</div>
+                  </td>
+                  <td>
+                    <span className={`badge ${n.status === 'ACTIVE' ? 'ok' : 'neutral'}`}>
+                      {n.status === 'ACTIVE' ? 'ATIVO' : 'PAUSADO'}
+                    </span>
+                  </td>
+                  <td className="cell-mono">{commissionRateLabel(n.commissionType, n.commissionValue)}</td>
+                  <td className="cell-mono">{paymentPeriodLabel(n.paymentPeriodValue, n.paymentPeriodUnit)}</td>
+                  <td className="num cell-mono">{fmtInt(n.affiliatesCount)}</td>
+                  <td className="num cell-mono">{fmtCurrency(Number(n.accruedUsd), 'USD', 0)}</td>
+                  <td>
+                    {n.contractVersion ? (
+                      <span className={`badge ${n.contractSigned ? 'ok' : 'warn'}`}>
+                        v{n.contractVersion} · {n.contractSigned ? 'assinado' : 'pendente'}
+                      </span>
+                    ) : (
+                      <span style={{ color: 'var(--fg5)', fontSize: 11 }}>—</span>
+                    )}
+                  </td>
+                  <td style={{ fontFamily: 'var(--f-mono)', fontSize: 10, color: 'var(--fg5)' }}>
+                    {fmtRelativeShort(n.updatedAt)}
+                  </td>
+                </tr>
+              ))}
             </tbody>
           </table>
         </div>
       </div>
 
-      {selected && (
+      {selectedId && (
         <NetworkDetailDrawer
-          network={MOCK_NETWORKS.find((n) => n.id === selected)}
-          onClose={() => { setSelected(null); setPartnerView(false); }}
-          partnerView={partnerView}
-          setPartnerView={setPartnerView}
+          networkId={selectedId}
+          onClose={() => setSelectedId(null)}
+          onChanged={reload}
+          onEdit={(net) => { setEditing(net); setSelectedId(null); }}
+        />
+      )}
+      {creating && (
+        <NetworkFormModal
+          onClose={() => setCreating(false)}
+          onSaved={() => { setCreating(false); reload(); }}
+        />
+      )}
+      {editing && (
+        <NetworkFormModal
+          initial={editing}
+          onClose={() => setEditing(null)}
+          onSaved={() => { setEditing(null); reload(); }}
         />
       )}
     </div>
   );
 }
 
-function NetKpi({ label, value, unit, hint, icon }) {
-  return (
-    <div className="kpi">
-      <span className="corner-tl"/>
-      <span className="corner-br"/>
-      <div className="kpi-row">
-        <span className="kpi-label">{label}</span>
-        <span className="kpi-icon"><Icon name={icon} size={12}/></span>
-      </div>
-      <div className="kpi-value">
-        {value}{unit && <span className="unit">{unit}</span>}
-      </div>
-      <div className="kpi-foot">
-        <span className="delta flat">
-          <span className="vs">{hint}</span>
-        </span>
-      </div>
-    </div>
+function NetworkFormModal({ initial, onClose, onSaved }) {
+  const isCreate = !initial;
+  const [name, setName] = useState(initial?.name || '');
+  const [commissionType, setCommissionType] = useState(initial?.commissionType || 'FIXED');
+  const [commissionValue, setCommissionValue] = useState(
+    initial ? String(initial.commissionValue) : ''
   );
-}
+  const [paymentPeriodValue, setPaymentPeriodValue] = useState(initial?.paymentPeriodValue || 30);
+  const [paymentPeriodUnit, setPaymentPeriodUnit] = useState(initial?.paymentPeriodUnit || 'DAYS');
+  const [billingEmail, setBillingEmail] = useState(initial?.billingEmail || '');
+  const [notes, setNotes] = useState(initial?.notes || '');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState(null);
 
-function fmtRelativeShort(iso) {
-  const ms = Date.now() - new Date(iso).getTime();
-  if (ms < 60_000) return 'agora';
-  const m = Math.floor(ms / 60_000);
-  if (m < 60) return `há ${m}m`;
-  const h = Math.floor(m / 60);
-  if (h < 24) return `há ${h}h`;
-  const d = Math.floor(h / 24);
-  return `há ${d}d`;
-}
+  async function save() {
+    setBusy(true);
+    setError(null);
+    try {
+      const cv = Number(commissionValue);
+      if (!Number.isFinite(cv) || cv <= 0) {
+        throw new Error('valor da comissão inválido');
+      }
+      if (commissionType === 'PERCENT' && cv > 1) {
+        throw new Error('PERCENT espera fração (ex: 0.05 = 5%)');
+      }
+      const body = {
+        name: name.trim(),
+        commissionType,
+        commissionValue: cv,
+        paymentPeriodValue: Number(paymentPeriodValue),
+        paymentPeriodUnit,
+        billingEmail: billingEmail.trim() || null,
+        notes: notes.trim() || null,
+      };
+      if (isCreate) {
+        await window.NSApi.adminCreateNetwork(body);
+      } else {
+        await window.NSApi.adminPatchNetwork(initial.id, body);
+      }
+      onSaved();
+    } catch (err) {
+      setError(err.message || 'erro');
+      setBusy(false);
+    }
+  }
 
-const STATUS_LABELS = {
-  pending:  { label: 'PENDENTE', cls: 'warn',     desc: 'Em refund window' },
-  accrued:  { label: 'ACUMULADO',cls: 'ok',       desc: 'Pronto pra pagar' },
-  reversed: { label: 'REVERTIDA',cls: 'bad',      desc: 'Venda refundada' },
-  paid:     { label: 'PAGO',     cls: 'neutral',  desc: 'Liquidado' },
-};
-
-function NetworkDetailDrawer({ network: n, onClose, partnerView, setPartnerView }) {
-  const [tab, setTab] = useState('summary');
-  const affs = MOCK_AFFILIATES_BY_NETWORK[n.id] || [];
-  const comms = MOCK_COMMISSIONS_BY_NETWORK[n.id] || [];
-  const payouts = MOCK_PAYOUTS_BY_NETWORK[n.id] || [];
-  const rateLabel = n.rate.type === 'fixed' ? `$${n.rate.value} por venda FE` : `${(n.rate.value * 100).toFixed(1)}% do gross`;
-
-  return (
-    <>
-      <div className="drawer-backdrop" onClick={onClose}/>
-      <div className="drawer" style={{ width: 920, maxWidth: '95vw' }}>
-        <div className="drawer-head">
-          <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
-            <span className="av-lg" style={{ background: avatarColor(n.id), fontFamily: 'var(--f-mono)', fontSize: 18 }}>
-              {n.name.slice(0, 2).toUpperCase()}
-            </span>
-            <div>
-              <span className="eyebrow">{partnerView ? 'PORTAL DO PARCEIRO · PREVIEW' : 'NETWORK'}</span>
-              <h3 style={{ margin: '4px 0', fontSize: 22, color: 'var(--fg1)' }}>{n.name}</h3>
-              <div style={{ fontFamily: 'var(--f-mono)', fontSize: 11, color: 'var(--fg4)' }}>
-                contrato ATIVO desde {fmtDateShort(n.contractStart)} · {rateLabel}
-              </div>
-            </div>
+  return ReactDOM.createPortal((
+    <div className="modal-backdrop" onClick={onClose}>
+      <div className="modal-card" onClick={(e) => e.stopPropagation()}>
+        <div className="modal-head">
+          <div>
+            <span className="eyebrow">{isCreate ? 'NOVA NETWORK' : 'EDITAR NETWORK'}</span>
+            <h3 style={{ margin: '4px 0', fontSize: 18, color: 'var(--fg1)' }}>
+              {isCreate ? 'Cadastrar parceiro' : initial.name}
+            </h3>
           </div>
           <button className="icon-btn" onClick={onClose} title="Fechar"><Icon name="x" size={14}/></button>
         </div>
 
-        {/* Toggle ver-como-parceiro */}
-        <div style={{
-          padding: '12px 24px', borderBottom: '1px solid var(--border-soft)',
-          display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12,
-          background: partnerView ? 'rgba(91,200,255,0.06)' : 'transparent',
-        }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-            <Icon name={partnerView ? 'eye' : 'settings'} size={14}/>
-            <span style={{ fontSize: 12, color: 'var(--fg2)' }}>
-              {partnerView
-                ? 'Você está vendo a network como o parceiro vê (modo preview).'
-                : 'Visão admin: editar contrato, vincular afiliados, rodar payouts.'}
-            </span>
+        <div className="modal-body">
+          <UserField label="Nome da network" value={name} onChange={setName} type="text" required/>
+
+          <div style={{ display: 'grid', gap: 6 }}>
+            <span style={{ fontFamily: 'var(--f-mono)', fontSize: 10, letterSpacing: '0.12em', color: 'var(--fg4)' }}>TIPO DE COMISSÃO</span>
+            <div className="seg" style={{ width: 'fit-content' }}>
+              {[['FIXED', 'Valor fixo (USD/venda)'], ['PERCENT', '% do gross']].map(([k, l]) => (
+                <button key={k} className={commissionType === k ? 'is-active' : ''} onClick={() => setCommissionType(k)}>{l}</button>
+              ))}
+            </div>
+            <div style={{ fontSize: 11, color: 'var(--fg5)', fontFamily: 'var(--f-mono)' }}>
+              {commissionType === 'FIXED'
+                ? 'Valor fixo em USD por cada venda FE aprovada de afiliado vinculado.'
+                : 'Fração do gross. Ex: 0.05 = 5%. Use ponto decimal.'}
+            </div>
           </div>
-          <button
-            className="btn btn-ghost"
-            onClick={() => setPartnerView((v) => !v)}
-            style={{ fontSize: 11 }}
-          >
-            <Icon name={partnerView ? 'settings' : 'eye'} size={11}/>
-            {partnerView ? 'Voltar pra admin' : 'Ver como parceiro'}
-          </button>
+
+          <UserField
+            label={commissionType === 'FIXED' ? 'Valor por venda (USD)' : 'Fração (0.05 = 5%)'}
+            value={commissionValue}
+            onChange={setCommissionValue}
+            type="text"
+            required
+          />
+
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+            <UserField
+              label="Período de pagamento (valor)"
+              value={String(paymentPeriodValue)}
+              onChange={(v) => setPaymentPeriodValue(v.replace(/\D/g, '') || '0')}
+              type="text"
+              required
+            />
+            <div style={{ display: 'grid', gap: 6 }}>
+              <span style={{ fontFamily: 'var(--f-mono)', fontSize: 10, letterSpacing: '0.12em', color: 'var(--fg4)' }}>UNIDADE</span>
+              <select
+                value={paymentPeriodUnit}
+                onChange={(e) => setPaymentPeriodUnit(e.target.value)}
+                style={{
+                  padding: '9px 12px', fontSize: 13, color: 'var(--fg1)',
+                  background: 'rgba(91,200,255,0.05)', border: '1px solid rgba(91,200,255,0.2)',
+                  borderRadius: 6,
+                }}
+              >
+                <option value="DAYS">Dias</option>
+                <option value="WEEKS">Semanas</option>
+                <option value="MONTHS">Meses</option>
+              </select>
+            </div>
+          </div>
+
+          <UserField label="E-mail de billing (opcional)" value={billingEmail} onChange={setBillingEmail} type="email"/>
+
+          <div style={{ display: 'grid', gap: 6 }}>
+            <span style={{ fontFamily: 'var(--f-mono)', fontSize: 10, letterSpacing: '0.12em', color: 'var(--fg4)' }}>NOTAS INTERNAS (OPCIONAL)</span>
+            <textarea
+              value={notes}
+              onChange={(e) => setNotes(e.target.value)}
+              rows={3}
+              style={{
+                padding: '9px 12px', fontSize: 13, color: 'var(--fg1)',
+                background: 'rgba(91,200,255,0.05)', border: '1px solid rgba(91,200,255,0.2)',
+                borderRadius: 6, fontFamily: 'var(--f-sans)', resize: 'vertical',
+              }}
+            />
+          </div>
+
+          {!isCreate && (
+            <div style={{ fontSize: 11, color: 'var(--warning)', background: 'rgba(255,140,0,0.06)',
+                          border: '1px solid rgba(255,140,0,0.2)', padding: '8px 10px', borderRadius: 6 }}>
+              Alterar termos comerciais (comissão, período, billing) gera nova versão do contrato.
+              O partner vai precisar re-assinar antes do próximo login.
+            </div>
+          )}
+
+          {error && (
+            <div style={{ fontSize: 12, color: 'var(--danger)', background: 'rgba(239,68,68,0.08)',
+                          border: '1px solid rgba(239,68,68,0.25)', padding: '8px 10px', borderRadius: 6 }}>
+              {error}
+            </div>
+          )}
+
+          <div style={{ display: 'flex', gap: 8, marginTop: 8, paddingTop: 12, borderTop: '1px solid var(--border-soft)' }}>
+            <button
+              className="btn btn-primary"
+              onClick={save}
+              disabled={busy || !name.trim() || !commissionValue || !paymentPeriodValue}
+              style={{ flex: 1 }}
+            >
+              {busy ? 'SALVANDO...' : (isCreate ? 'CRIAR NETWORK' : 'SALVAR ALTERAÇÕES')}
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  ), document.body);
+}
+
+function NetworkDetailDrawer({ networkId, onClose, onChanged, onEdit }) {
+  const [state, setState] = useState({ status: 'loading', data: null, error: null });
+  const [tab, setTab] = useState('summary');
+  const [refresh, setRefresh] = useState(0);
+  const [attaching, setAttaching] = useState(false);
+  const [markPaid, setMarkPaid] = useState(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    setState((s) => ({ ...s, status: 'loading' }));
+    window.NSApi.adminGetNetwork(networkId)
+      .then((data) => { if (!cancelled) setState({ status: 'ready', data, error: null }); })
+      .catch((err) => { if (!cancelled) setState({ status: 'error', data: null, error: err.message || 'erro' }); });
+    return () => { cancelled = true; };
+  }, [networkId, refresh]);
+
+  function reload() { setRefresh((n) => n + 1); onChanged?.(); }
+
+  async function generatePayout() {
+    if (!confirm('Gerar payout com todas as comissões accrued? Você ainda precisa marcar como pago depois.')) return;
+    try {
+      const r = await window.NSApi.adminCreatePayout(networkId);
+      if (!r.payoutId) {
+        alert(r.reason === 'no_accrued' ? 'Nenhuma comissão accrued pra pagar.' : `Erro: ${r.reason}`);
+      } else {
+        alert(`Payout #${r.payoutId.slice(0, 8)} criado: $${Number(r.totalUsd).toFixed(2)} (${r.commissionsCount} comissões). Status PENDING — marque como pago após confirmar pagamento.`);
+        reload();
+      }
+    } catch (err) {
+      alert('Erro: ' + err.message);
+    }
+  }
+
+  async function detachAffiliate(affiliateId) {
+    if (!confirm('Desvincular esse afiliado da network? Vendas futuras dele deixam de gerar comissão. Comissões já contabilizadas permanecem.')) return;
+    try {
+      await window.NSApi.adminDetachAffiliate(networkId, affiliateId);
+      reload();
+    } catch (err) {
+      alert('Erro: ' + err.message);
+    }
+  }
+
+  if (state.status === 'loading') {
+    return ReactDOM.createPortal((
+      <>
+        <div className="drawer-backdrop" onClick={onClose}/>
+        <div className="drawer" style={{ width: 720 }}>
+          <div className="drawer-head">
+            <span style={{ color: 'var(--fg4)' }}>Carregando network...</span>
+            <button className="icon-btn" onClick={onClose}><Icon name="x" size={14}/></button>
+          </div>
+        </div>
+      </>
+    ), document.body);
+  }
+  if (state.status === 'error' || !state.data) {
+    return ReactDOM.createPortal((
+      <>
+        <div className="drawer-backdrop" onClick={onClose}/>
+        <div className="drawer" style={{ width: 720 }}>
+          <div className="drawer-head">
+            <span style={{ color: 'var(--danger)' }}>Erro: {state.error || 'network não encontrada'}</span>
+            <button className="icon-btn" onClick={onClose}><Icon name="x" size={14}/></button>
+          </div>
+        </div>
+      </>
+    ), document.body);
+  }
+
+  const { network: n, affiliates, commissions, payouts } = state.data;
+
+  return ReactDOM.createPortal((
+    <>
+      <div className="drawer-backdrop" onClick={onClose}/>
+      <div className="drawer" style={{ width: 720 }}>
+        <div className="drawer-head">
+          <div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+              <span className="av" style={{ background: avatarColor(n.id), width: 36, height: 36, fontSize: 14 }}>{n.name.slice(0, 2).toUpperCase()}</span>
+              <div>
+                <span className="eyebrow">NETWORK · {n.slug.toUpperCase()}</span>
+                <h3 style={{ margin: '2px 0', fontSize: 18, color: 'var(--fg1)' }}>{n.name}</h3>
+                <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginTop: 4 }}>
+                  <span className={`badge ${n.status === 'ACTIVE' ? 'ok' : 'neutral'}`}>{n.status}</span>
+                  <span style={{ fontFamily: 'var(--f-mono)', fontSize: 10, color: 'var(--fg5)' }}>
+                    {commissionRateLabel(n.commissionType, n.commissionValue)} · {paymentPeriodLabel(n.paymentPeriodValue, n.paymentPeriodUnit)}
+                  </span>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div style={{ display: 'flex', gap: 6 }}>
+            <button className="btn btn-ghost" onClick={() => onEdit(n)} title="Editar termos">
+              <Icon name="edit" size={11}/> Editar
+            </button>
+            <button className="icon-btn" onClick={onClose}><Icon name="x" size={14}/></button>
+          </div>
         </div>
 
-        {/* Tabs */}
-        <div style={{ padding: '12px 24px 0', display: 'flex', gap: 4, borderBottom: '1px solid var(--border-soft)' }}>
+        <div style={{ display: 'flex', borderBottom: '1px solid var(--border-soft)', padding: '0 16px' }}>
           {[
-            ['summary',     'Resumo'],
-            ['commissions', 'Comissões'],
-            ['affiliates',  'Afiliados',  partnerView],
-            ['payouts',     'Payouts'],
-            ['contract',    'Contrato',   partnerView],
-          ].map(([k, l, hide]) => hide ? null : (
+            ['summary', 'Resumo'],
+            ['affiliates', `Afiliados · ${affiliates.length}`],
+            ['commissions', `Comissões · ${commissions.length}`],
+            ['payouts', `Payouts · ${payouts.length}`],
+            ['contract', 'Contrato'],
+          ].map(([k, l]) => (
             <button
               key={k}
               onClick={() => setTab(k)}
               style={{
-                padding: '8px 14px', fontFamily: 'var(--f-mono)', fontSize: 11,
-                letterSpacing: '0.1em',
-                background: 'transparent', border: 0,
-                color: tab === k ? 'var(--glow-cyan)' : 'var(--fg4)',
-                borderBottom: '2px solid ' + (tab === k ? 'var(--glow-cyan)' : 'transparent'),
-                cursor: 'pointer', marginBottom: -1,
+                padding: '12px 14px', fontFamily: 'var(--f-mono)', fontSize: 11,
+                letterSpacing: '0.08em', textTransform: 'uppercase',
+                background: 'transparent', border: 0, cursor: 'pointer',
+                color: tab === k ? 'var(--glow-cyan)' : 'var(--fg5)',
+                borderBottom: tab === k ? '2px solid var(--glow-cyan)' : '2px solid transparent',
               }}
-            >
-              {l.toUpperCase()}
-            </button>
+            >{l}</button>
           ))}
         </div>
 
-        <div style={{ padding: '20px 24px 32px', display: 'grid', gap: 16 }}>
-          {tab === 'summary' && <NetSummary n={n} comms={comms} partnerView={partnerView}/>}
-          {tab === 'commissions' && <NetCommissions comms={comms} partnerView={partnerView}/>}
-          {tab === 'affiliates' && !partnerView && <NetAffiliates affs={affs}/>}
-          {tab === 'payouts' && <NetPayouts payouts={payouts} partnerView={partnerView}/>}
-          {tab === 'contract' && !partnerView && <NetContract n={n}/>}
+        <div className="drawer-body" style={{ padding: 16 }}>
+          {tab === 'summary' && <NetSummary network={n}/>}
+          {tab === 'affiliates' && (
+            <NetAffiliates
+              affiliates={affiliates}
+              onDetach={detachAffiliate}
+              onAttach={() => setAttaching(true)}
+            />
+          )}
+          {tab === 'commissions' && <NetCommissions commissions={commissions}/>}
+          {tab === 'payouts' && (
+            <NetPayouts
+              payouts={payouts}
+              onGenerate={generatePayout}
+              onMarkPaid={(p) => setMarkPaid(p)}
+              accruedUsd={n.nextPayout.accruedUsd}
+              accruedCount={n.nextPayout.accruedCount}
+            />
+          )}
+          {tab === 'contract' && <NetContract network={n} networkId={networkId}/>}
         </div>
       </div>
+
+      {attaching && (
+        <AttachAffiliateModal
+          networkId={networkId}
+          onClose={() => setAttaching(false)}
+          onSaved={() => { setAttaching(false); reload(); }}
+        />
+      )}
+      {markPaid && (
+        <MarkPaidModal
+          networkId={networkId}
+          payout={markPaid}
+          onClose={() => setMarkPaid(null)}
+          onSaved={() => { setMarkPaid(null); reload(); }}
+        />
+      )}
     </>
-  );
+  ), document.body);
 }
 
-function NetSummary({ n, comms, partnerView }) {
+function NetSummary({ network: n }) {
+  const next = n.nextPayout;
   return (
-    <>
-      <div className="mini-kpis">
-        <div className="mini-kpi">
-          <div className="l">PENDENTE</div>
-          <div className="v">{fmtCurrency(n.pending, 'USD', 0)}</div>
-          <div className="s">refund window aberta</div>
+    <div style={{ display: 'grid', gap: 16 }}>
+      <div className="kpi-grid" style={{ gridTemplateColumns: 'repeat(2, 1fr)' }}>
+        <NetKpi label="A PAGAR (ACUMULADO)" icon="wallet"
+          value={fmtCurrency(Number(next.accruedUsd), 'USD', 0)}
+          hint={`${fmtInt(next.accruedCount)} comissões accrued`}/>
+        <NetKpi label="AOV (30D)" icon="trending-up"
+          value={fmtCurrency(Number(n.networkAovUsd), 'USD', 0)}
+          hint="média ponderada dos afiliados vinculados"/>
+        <NetKpi label="PRÓXIMO PAYOUT" icon="calendar"
+          value={new Date(next.at).toLocaleDateString('pt-BR', { day: '2-digit', month: 'short' })}
+          hint={`a cada ${paymentPeriodLabel(n.paymentPeriodValue, n.paymentPeriodUnit)}`}/>
+        <NetKpi label="ÚLTIMO PAGAMENTO" icon="check-circle"
+          value={next.lastPayoutAt ? new Date(next.lastPayoutAt).toLocaleDateString('pt-BR', { day: '2-digit', month: 'short' }) : '—'}
+          hint={next.lastPayoutAt ? fmtRelativeShort(next.lastPayoutAt) : 'nunca'}/>
+      </div>
+      <div className="panel">
+        <div className="panel-head">
+          <div className="panel-title">
+            <span className="panel-eyebrow">CONTRATO ATUAL</span>
+            <div className="panel-sub">Termos vigentes — alterações criam nova versão</div>
+          </div>
         </div>
-        <div className="mini-kpi">
-          <div className="l">A PAGAR</div>
-          <div className="v" style={{ color: 'var(--success)' }}>{fmtCurrency(n.accrued, 'USD', 0)}</div>
-          <div className="s">próximo payout {n.nextPayoutEstimate ? fmtDateShort(n.nextPayoutEstimate) : '—'}</div>
-        </div>
-        <div className="mini-kpi">
-          <div className="l">PAGO ALL-TIME</div>
-          <div className="v">{fmtCurrency(n.paidAllTime, 'USD', 0)}</div>
-          <div className="s">{n.lastPayoutAt ? `último em ${fmtDateShort(n.lastPayoutAt)}` : 'sem payouts ainda'}</div>
-        </div>
-        <div className="mini-kpi">
-          <div className="l">VENDAS NO MÊS</div>
-          <div className="v">{fmtInt(n.salesMonth)}</div>
-          <div className="s">{fmtCurrency(n.grossMonth, 'USD', 0)} gross gerado</div>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 14 }}>
+          <ContractField label="Comissão" value={commissionRateLabel(n.commissionType, n.commissionValue)}/>
+          <ContractField label="Período de pagamento" value={paymentPeriodLabel(n.paymentPeriodValue, n.paymentPeriodUnit)}/>
+          <ContractField label="Início do contrato" value={fmtDateShort(n.contractStart)}/>
+          <ContractField label="Email de billing" value={n.billingEmail || '(não informado)'}/>
+          <ContractField label="Versão do contrato"
+            value={n.currentContract ? `v${n.currentContract.version} · ${n.currentContract.signedAt ? 'assinado' : 'aguardando aceite'}` : '—'}/>
+          <ContractField label="Status" value={n.status === 'ACTIVE' ? 'Ativo' : 'Pausado'}/>
         </div>
       </div>
-
-      {!partnerView && (
-        <div className="panel" style={{ background: 'rgba(245,158,11,0.04)', borderColor: 'rgba(245,158,11,0.25)' }}>
-          <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10 }}>
-            <Icon name="alert-triangle" size={14}/>
-            <div>
-              <div style={{ fontFamily: 'var(--f-mono)', fontSize: 11, color: 'var(--warning)', letterSpacing: '0.08em' }}>
-                AÇÃO RECOMENDADA
-              </div>
-              <div style={{ fontSize: 13, color: 'var(--fg2)', marginTop: 4 }}>
-                {n.accrued > 0
-                  ? `${fmtCurrency(n.accrued, 'USD', 0)} acumulado pronto pra pagar. Rodar payout batch?`
-                  : 'Nenhuma comissão acumulada no momento.'}
-              </div>
-            </div>
-            {n.accrued > 0 && (
-              <button className="btn btn-primary" style={{ marginLeft: 'auto', flexShrink: 0 }}>
-                <Icon name="dollar" size={12}/> Pagar batch
-              </button>
-            )}
-          </div>
+      {n.notes && (
+        <div className="panel">
+          <div style={{ fontFamily: 'var(--f-mono)', fontSize: 10, color: 'var(--fg5)', letterSpacing: '0.12em', marginBottom: 6 }}>NOTAS INTERNAS</div>
+          <div style={{ fontSize: 13, color: 'var(--fg2)', whiteSpace: 'pre-wrap' }}>{n.notes}</div>
         </div>
       )}
-
-      <div className="panel">
-        <div className="panel-head">
-          <div className="panel-title">
-            <span className="panel-eyebrow">COMISSÕES MENSAIS</span>
-            <div className="panel-sub">{partnerView ? 'Histórico de ganhos' : 'Acumulado por mês'}</div>
-          </div>
-        </div>
-        {/* Mock chart simples — só pra dar a sensação */}
-        <div style={{ display: 'flex', alignItems: 'flex-end', gap: 12, height: 140, padding: '12px 0' }}>
-          {[
-            { m: 'Nov', v: 28 }, { m: 'Dez', v: 35 }, { m: 'Jan', v: 42 },
-            { m: 'Fev', v: 38 }, { m: 'Mar', v: 47 }, { m: 'Abr', v: 55 },
-          ].map((b, i) => (
-            <div key={i} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6 }}>
-              <div style={{ flex: 1, display: 'flex', alignItems: 'flex-end', width: '100%' }}>
-                <div style={{
-                  width: '100%', height: `${b.v}%`,
-                  background: i === 5 ? 'linear-gradient(180deg, var(--glow-cyan), rgba(91,200,255,0.3))' : 'rgba(91,200,255,0.18)',
-                  borderRadius: 4,
-                  boxShadow: i === 5 ? '0 0 20px rgba(91,200,255,0.3)' : 'none',
-                }}/>
-              </div>
-              <div style={{ fontFamily: 'var(--f-mono)', fontSize: 10, color: 'var(--fg5)' }}>{b.m}</div>
-            </div>
-          ))}
-        </div>
-      </div>
-
-      <div className="panel">
-        <div className="panel-head">
-          <div className="panel-title">
-            <span className="panel-eyebrow">ÚLTIMAS COMISSÕES</span>
-            <div className="panel-sub">5 mais recentes — ver tab "Comissões" pra histórico completo</div>
-          </div>
-        </div>
-        <CommissionsTable comms={comms.slice(0, 5)} partnerView={partnerView}/>
-      </div>
-    </>
-  );
-}
-
-function NetCommissions({ comms, partnerView }) {
-  const [filter, setFilter] = useState('all');
-  const visible = filter === 'all' ? comms : comms.filter((c) => c.status === filter);
-  return (
-    <div className="panel" style={{ padding: 0 }}>
-      <div className="panel-head" style={{ padding: '14px 18px 8px' }}>
-        <div className="panel-title">
-          <span className="panel-eyebrow">LEDGER · COMISSÕES</span>
-          <div className="panel-sub">{visible.length} de {comms.length} · cada linha = uma venda atribuída</div>
-        </div>
-        <div style={{ display: 'flex', gap: 8 }}>
-          <div className="seg">
-            {[
-              ['all', 'Todas'],
-              ['pending', 'Pendentes'],
-              ['accrued', 'Acumuladas'],
-              ['paid', 'Pagas'],
-              ['reversed', 'Revertidas'],
-            ].map(([k, l]) => (
-              <button key={k} className={filter === k ? 'is-active' : ''} onClick={() => setFilter(k)}>{l}</button>
-            ))}
-          </div>
-          <button className="btn btn-ghost"><Icon name="download" size={11}/> CSV</button>
-        </div>
-      </div>
-      <CommissionsTable comms={visible} partnerView={partnerView}/>
     </div>
   );
 }
 
-function CommissionsTable({ comms, partnerView }) {
-  if (comms.length === 0) {
-    return <div className="empty">Sem comissões neste filtro</div>;
+function NetAffiliates({ affiliates, onDetach, onAttach }) {
+  return (
+    <div style={{ display: 'grid', gap: 12 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <div style={{ fontSize: 12, color: 'var(--fg5)', fontFamily: 'var(--f-mono)' }}>
+          {affiliates.length === 0 ? 'Nenhum afiliado vinculado' : `${affiliates.length} afiliado(s) vinculado(s)`}
+        </div>
+        <button className="btn btn-primary" onClick={onAttach}>
+          <Icon name="plus" size={11}/> Vincular afiliado
+        </button>
+      </div>
+      {affiliates.length > 0 && (
+        <div className="tbl-wrap">
+          <table className="tbl">
+            <thead>
+              <tr>
+                <th>Afiliado</th>
+                <th>Plataforma</th>
+                <th className="num">Pedidos totais</th>
+                <th>Última venda</th>
+                <th>Vinculado em</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody>
+              {affiliates.map((a) => (
+                <tr key={a.id}>
+                  <td>
+                    <div style={{ color: 'var(--fg1)', fontSize: 13 }}>{a.nickname || a.externalId}</div>
+                    <div style={{ fontFamily: 'var(--f-mono)', fontSize: 10, color: 'var(--fg5)' }}>{a.externalId}</div>
+                  </td>
+                  <td><span className={`plat plat-${a.platformSlug === 'digistore24' ? 'd24' : 'cb'}`}>{a.platformSlug === 'digistore24' ? 'D24' : 'CB'}</span></td>
+                  <td className="num cell-mono">{fmtInt(a.ordersCount)}</td>
+                  <td style={{ fontFamily: 'var(--f-mono)', fontSize: 11, color: 'var(--fg4)' }}>{fmtRelativeShort(a.lastOrderAt)}</td>
+                  <td style={{ fontFamily: 'var(--f-mono)', fontSize: 11, color: 'var(--fg4)' }}>{fmtDateShort(a.attachedAt)}</td>
+                  <td>
+                    <button onClick={() => onDetach(a.affiliateId)} className="btn btn-ghost" style={{ fontSize: 10, color: 'var(--danger)' }}>
+                      <Icon name="trash" size={10}/>
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function NetCommissions({ commissions }) {
+  if (commissions.length === 0) {
+    return <div style={{ padding: 24, textAlign: 'center', color: 'var(--fg4)', fontSize: 12 }}>Nenhuma comissão ainda. Vendas FE de afiliados vinculados geram comissão automaticamente.</div>;
   }
   return (
-    <div className="tbl-wrap" style={{ margin: 0, padding: '0 4px' }}>
+    <div className="tbl-wrap">
       <table className="tbl">
         <thead>
           <tr>
-            <th>Data/hora</th>
-            <th>Pedido</th>
+            <th>Order</th>
             <th>Afiliado</th>
-            <th>Produto</th>
+            <th>Country</th>
             <th className="num">Gross</th>
             <th className="num">Comissão</th>
             <th>Status</th>
-            <th>Refund window</th>
+            <th>Data</th>
           </tr>
         </thead>
         <tbody>
-          {comms.map((c) => {
-            const st = STATUS_LABELS[c.status];
-            const reversed = c.status === 'reversed';
-            return (
-              <tr key={c.id} style={reversed ? { opacity: 0.55 } : null}>
-                <td className="cell-mono" style={{ fontSize: 11 }}>
-                  {fmtDateShort(c.date)} · {c.date.slice(11, 16)}
-                </td>
-                <td className="cell-mono" style={{ fontSize: 11, color: 'var(--fg3)' }}>
-                  {c.orderId}
-                </td>
-                <td className="cell-mono" style={{ color: 'var(--fg2)' }}>{c.aff}</td>
-                <td style={{ fontSize: 12, color: 'var(--fg3)' }}>{c.product}</td>
-                <td className="num cell-mono">{fmtCurrency(c.gross, 'USD', 2)}</td>
-                <td className="num cell-mono" style={{
-                  color: reversed ? 'var(--danger)' : 'var(--success)',
-                  textDecoration: reversed ? 'line-through' : 'none',
-                }}>
-                  {fmtCurrency(c.amount, 'USD', 2)}
-                </td>
-                <td>
-                  <span className={`badge ${st.cls}`} title={st.desc}>{st.label}</span>
-                </td>
-                <td className="cell-mono" style={{ fontSize: 10, color: 'var(--fg5)' }}>
-                  {c.status === 'paid' && c.paidAt && `pago ${fmtDateShort(c.paidAt)}`}
-                  {c.status === 'pending' && c.pendingUntil && `libera ${fmtDateShort(c.pendingUntil)}`}
-                  {c.status === 'accrued' && c.pendingUntil && `liberada ${fmtDateShort(c.pendingUntil)}`}
-                  {c.status === 'reversed' && 'venda revertida'}
-                </td>
-              </tr>
-            );
-          })}
+          {commissions.map((c) => (
+            <tr key={c.id}>
+              <td className="cell-mono" style={{ fontSize: 11 }}>{c.orderExternalId}</td>
+              <td>{c.affiliateNickname || c.affiliateExternalId}</td>
+              <td className="cell-mono">{c.country || '—'}</td>
+              <td className="num cell-mono">{fmtCurrency(Number(c.orderGrossUsd), 'USD', 2)}</td>
+              <td className="num cell-mono" style={{ color: 'var(--glow-cyan)' }}>{fmtCurrency(Number(c.amountUsd), 'USD', 2)}</td>
+              <td>
+                <span className={`badge ${c.status === 'PAID' ? 'ok' : 'neutral'}`}>{c.status}</span>
+              </td>
+              <td style={{ fontFamily: 'var(--f-mono)', fontSize: 11, color: 'var(--fg4)' }}>{fmtRelativeShort(c.createdAt)}</td>
+            </tr>
+          ))}
         </tbody>
       </table>
     </div>
   );
 }
 
-function NetAffiliates({ affs }) {
-  if (affs.length === 0) {
-    return <div className="empty">Nenhum afiliado vinculado a esta network</div>;
-  }
+function NetPayouts({ payouts, onGenerate, onMarkPaid, accruedUsd, accruedCount }) {
   return (
-    <div className="panel" style={{ padding: 0 }}>
-      <div className="panel-head" style={{ padding: '14px 18px 8px' }}>
-        <div className="panel-title">
-          <span className="panel-eyebrow">AFILIADOS DA NETWORK</span>
-          <div className="panel-sub">{affs.length} vinculados · click pra abrir o perfil completo</div>
+    <div style={{ display: 'grid', gap: 12 }}>
+      <div className="panel" style={{ background: 'rgba(91,200,255,0.04)' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12 }}>
+          <div>
+            <div style={{ fontFamily: 'var(--f-mono)', fontSize: 10, color: 'var(--fg5)', letterSpacing: '0.12em' }}>PRONTO PRA PAYOUT</div>
+            <div style={{ fontSize: 24, color: 'var(--glow-cyan)', fontFamily: 'var(--f-display)', marginTop: 4 }}>
+              {fmtCurrency(Number(accruedUsd), 'USD', 2)}
+            </div>
+            <div style={{ fontSize: 11, color: 'var(--fg5)' }}>{fmtInt(accruedCount)} comissões accrued</div>
+          </div>
+          <button className="btn btn-primary" onClick={onGenerate} disabled={!accruedCount}>
+            <Icon name="file-text" size={11}/> Gerar payout
+          </button>
         </div>
-        <button className="btn btn-ghost"><Icon name="user-plus" size={11}/> Vincular afiliado</button>
       </div>
-      <div className="tbl-wrap" style={{ margin: 0, padding: '0 4px' }}>
-        <table className="tbl">
-          <thead>
-            <tr>
-              <th>Afiliado</th>
-              <th className="num">Vendas mês</th>
-              <th className="num">Gross gerado</th>
-              <th className="num">Comissão gerada</th>
-              <th>Última venda</th>
-              <th></th>
-            </tr>
-          </thead>
-          <tbody>
-            {affs.map((a) => (
-              <tr key={a.affId}>
-                <td>
-                  <span className="cell-aff">
-                    <span className="av" style={{ background: avatarColor(a.affId) }}>{initials(a.nickname)}</span>
-                    <span className="meta"><span className="nm">{a.nickname}</span><span className="id">{a.affId}</span></span>
-                  </span>
-                </td>
-                <td className="num cell-mono">{fmtInt(a.salesMonth)}</td>
-                <td className="num cell-mono">{fmtCurrency(a.grossMonth, 'USD', 0)}</td>
-                <td className="num cell-mono" style={{ color: 'var(--success)' }}>{fmtCurrency(a.commissionMonth, 'USD', 0)}</td>
-                <td className="cell-mono" style={{ fontSize: 11, color: 'var(--fg4)' }}>{a.lastSale}</td>
-                <td><button className="btn btn-ghost" style={{ fontSize: 11 }}>Desvincular</button></td>
+
+      {payouts.length === 0 ? (
+        <div style={{ padding: 24, textAlign: 'center', color: 'var(--fg4)', fontSize: 12 }}>Nenhum payout gerado ainda.</div>
+      ) : (
+        <div className="tbl-wrap">
+          <table className="tbl">
+            <thead>
+              <tr>
+                <th>Período</th>
+                <th className="num">Comissões</th>
+                <th className="num">Total</th>
+                <th>Status</th>
+                <th>Pago em</th>
+                <th>Por</th>
+                <th></th>
               </tr>
-            ))}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              {payouts.map((p) => (
+                <tr key={p.id}>
+                  <td style={{ fontSize: 11 }}>{fmtDateShort(p.periodStart)} → {fmtDateShort(p.periodEnd)}</td>
+                  <td className="num cell-mono">{fmtInt(p.commissionsCount)}</td>
+                  <td className="num cell-mono">{fmtCurrency(Number(p.totalUsd), 'USD', 2)}</td>
+                  <td><span className={`badge ${p.status === 'PAID' ? 'ok' : 'warn'}`}>{p.status}</span></td>
+                  <td style={{ fontSize: 11 }}>{p.paidAt ? fmtDateShort(p.paidAt) : '—'}</td>
+                  <td style={{ fontSize: 11, color: 'var(--fg4)' }}>{p.paidByName || '—'}</td>
+                  <td>
+                    {p.status === 'PENDING' && (
+                      <button onClick={() => onMarkPaid(p)} className="btn btn-ghost" style={{ fontSize: 10 }}>
+                        <Icon name="check" size={10}/> Marcar pago
+                      </button>
+                    )}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function NetContract({ network: n, networkId }) {
+  const c = n.currentContract;
+  return (
+    <div style={{ display: 'grid', gap: 12 }}>
+      <div className="panel">
+        <div className="panel-head">
+          <div className="panel-title">
+            <span className="panel-eyebrow">CONTRATO {c ? `· V${c.version}` : ''}</span>
+            <div className="panel-sub">
+              {c
+                ? (c.signedAt
+                    ? `Assinado em ${fmtDateLong(c.signedAt)}`
+                    : 'Aguardando aceite do partner. Versão atual nasce não-assinada.')
+                : 'Nenhum contrato gerado ainda.'}
+            </div>
+          </div>
+          {c && (
+            <a href={window.NSApi.adminContractPdfUrl(networkId)} target="_blank" rel="noopener noreferrer"
+               className="btn btn-primary" style={{ textDecoration: 'none' }}>
+              <Icon name="download" size={11}/> Baixar PDF
+            </a>
+          )}
+        </div>
+        <div style={{ fontSize: 12, color: 'var(--fg4)', lineHeight: 1.6 }}>
+          O contrato é gerado automaticamente a partir dos termos da network (nome, comissão, período de pagamento, billing e início).
+          Quando você edita esses termos, uma nova versão é criada e o partner precisa re-assinar antes do próximo login.
+        </div>
       </div>
     </div>
   );
 }
 
-function NetPayouts({ payouts, partnerView }) {
-  if (payouts.length === 0) {
-    return <div className="empty">Nenhum payout realizado ainda</div>;
+function AttachAffiliateModal({ networkId, onClose, onSaved }) {
+  const [list, setList] = useState({ status: 'loading', items: [] });
+  const [q, setQ] = useState('');
+  const [selected, setSelected] = useState(new Set());
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    setList((s) => ({ ...s, status: 'loading' }));
+    const t = setTimeout(() => {
+      window.NSApi.adminListAvailableAffiliates(q)
+        .then((data) => { if (!cancelled) setList({ status: 'ready', items: data.affiliates || [] }); })
+        .catch(() => { if (!cancelled) setList({ status: 'ready', items: [] }); });
+    }, 200);
+    return () => { cancelled = true; clearTimeout(t); };
+  }, [q]);
+
+  function toggle(id) {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
   }
-  return (
-    <div className="panel" style={{ padding: 0 }}>
-      <div className="panel-head" style={{ padding: '14px 18px 8px' }}>
-        <div className="panel-title">
-          <span className="panel-eyebrow">HISTÓRICO DE PAYOUTS</span>
-          <div className="panel-sub">{payouts.length} batches · click pra ver receipt detalhado</div>
+
+  async function attach() {
+    setBusy(true);
+    setError(null);
+    try {
+      const r = await window.NSApi.adminAttachAffiliates(networkId, Array.from(selected));
+      if (r.attached.length === 0 && r.conflicts.length > 0) {
+        setError('Todos os afiliados selecionados estão em conflito: ' + r.conflicts.map((c) => c.reason).join(', '));
+        setBusy(false);
+        return;
+      }
+      onSaved();
+    } catch (err) {
+      setError(err.message || 'erro');
+      setBusy(false);
+    }
+  }
+
+  return ReactDOM.createPortal((
+    <div className="modal-backdrop" onClick={onClose}>
+      <div className="modal-card" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 640 }}>
+        <div className="modal-head">
+          <div>
+            <span className="eyebrow">VINCULAR AFILIADOS</span>
+            <h3 style={{ margin: '4px 0', fontSize: 18, color: 'var(--fg1)' }}>Adicionar à network</h3>
+            <div style={{ fontFamily: 'var(--f-mono)', fontSize: 11, color: 'var(--fg4)' }}>
+              Apenas afiliados não vinculados a outra network aparecem aqui.
+            </div>
+          </div>
+          <button className="icon-btn" onClick={onClose}><Icon name="x" size={14}/></button>
+        </div>
+        <div className="modal-body">
+          <input
+            type="text"
+            placeholder="Buscar por nickname ou externalId..."
+            value={q}
+            onChange={(e) => setQ(e.target.value)}
+            style={{
+              padding: '9px 12px', fontSize: 13, color: 'var(--fg1)',
+              background: 'rgba(91,200,255,0.05)', border: '1px solid rgba(91,200,255,0.2)',
+              borderRadius: 6,
+            }}
+          />
+          <div style={{ maxHeight: 360, overflowY: 'auto', display: 'grid', gap: 4 }}>
+            {list.status === 'loading' && <div style={{ color: 'var(--fg5)', fontSize: 12 }}>Carregando...</div>}
+            {list.status === 'ready' && list.items.length === 0 && (
+              <div style={{ color: 'var(--fg5)', fontSize: 12, padding: 12, textAlign: 'center' }}>
+                Nenhum afiliado disponível.
+              </div>
+            )}
+            {list.items.map((a) => (
+              <label key={a.id} style={{
+                display: 'flex', alignItems: 'center', gap: 10, padding: '8px 10px',
+                background: selected.has(a.id) ? 'rgba(91,200,255,0.08)' : 'transparent',
+                border: '1px solid var(--border-soft)', borderRadius: 6, cursor: 'pointer',
+              }}>
+                <input type="checkbox" checked={selected.has(a.id)} onChange={() => toggle(a.id)}/>
+                <div style={{ flex: 1 }}>
+                  <div style={{ color: 'var(--fg1)', fontSize: 13 }}>{a.nickname || a.externalId}</div>
+                  <div style={{ fontFamily: 'var(--f-mono)', fontSize: 10, color: 'var(--fg5)' }}>
+                    {a.platformSlug === 'digistore24' ? 'D24' : 'CB'} · {a.externalId} · {fmtInt(a.ordersCount)} pedidos
+                  </div>
+                </div>
+              </label>
+            ))}
+          </div>
+          {error && (
+            <div style={{ fontSize: 12, color: 'var(--danger)', background: 'rgba(239,68,68,0.08)',
+                          border: '1px solid rgba(239,68,68,0.25)', padding: '8px 10px', borderRadius: 6 }}>
+              {error}
+            </div>
+          )}
+          <div style={{ display: 'flex', gap: 8, marginTop: 4, paddingTop: 12, borderTop: '1px solid var(--border-soft)' }}>
+            <button className="btn btn-primary" onClick={attach} disabled={busy || selected.size === 0} style={{ flex: 1 }}>
+              {busy ? 'VINCULANDO...' : `VINCULAR ${selected.size} AFILIADO(S)`}
+            </button>
+          </div>
         </div>
       </div>
-      <div className="tbl-wrap" style={{ margin: 0, padding: '0 4px' }}>
-        <table className="tbl">
-          <thead>
-            <tr>
-              <th>Batch ID</th>
-              <th>Data</th>
-              <th className="num">Comissões</th>
-              <th className="num">Total</th>
-              <th>Método</th>
-              <th>Status</th>
-              <th></th>
-            </tr>
-          </thead>
-          <tbody>
-            {payouts.map((p) => (
-              <tr key={p.id}>
-                <td className="cell-mono" style={{ color: 'var(--glow-cyan)', fontSize: 11 }}>{p.id}</td>
-                <td className="cell-mono">{fmtDateShort(p.date)}</td>
-                <td className="num cell-mono">{fmtInt(p.count)}</td>
-                <td className="num cell-mono" style={{ color: 'var(--success)' }}>{fmtCurrency(p.total, 'USD', 0)}</td>
-                <td className="cell-mono" style={{ color: 'var(--fg3)' }}>{p.method.toUpperCase()}</td>
-                <td><span className="badge ok">PAGO</span></td>
-                <td><button className="btn btn-ghost" style={{ fontSize: 11 }}><Icon name="download" size={10}/> Receipt</button></td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
     </div>
-  );
+  ), document.body);
 }
 
-function NetContract({ n }) {
-  const rateLabel = n.rate.type === 'fixed' ? `$${n.rate.value} fixo por venda FE` : `${(n.rate.value * 100).toFixed(2)}% do gross`;
-  return (
-    <div className="panel">
-      <div className="panel-head">
-        <div className="panel-title">
-          <span className="panel-eyebrow">CONTRATO E CONFIGURAÇÃO</span>
-          <div className="panel-sub">Termos vigentes — alterações criam nova snapshot pra novas vendas</div>
+function MarkPaidModal({ networkId, payout, onClose, onSaved }) {
+  const [paymentMethod, setPaymentMethod] = useState('wise');
+  const [notes, setNotes] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState(null);
+
+  async function confirm() {
+    setBusy(true);
+    setError(null);
+    try {
+      await window.NSApi.adminMarkPayoutPaid(networkId, payout.id, {
+        paymentMethod: paymentMethod || null,
+        notes: notes || null,
+      });
+      onSaved();
+    } catch (err) {
+      setError(err.message || 'erro');
+      setBusy(false);
+    }
+  }
+
+  return ReactDOM.createPortal((
+    <div className="modal-backdrop" onClick={onClose}>
+      <div className="modal-card" onClick={(e) => e.stopPropagation()}>
+        <div className="modal-head">
+          <div>
+            <span className="eyebrow">MARCAR COMO PAGO</span>
+            <h3 style={{ margin: '4px 0', fontSize: 18, color: 'var(--fg1)' }}>
+              Confirmar pagamento de {fmtCurrency(Number(payout.totalUsd), 'USD', 2)}
+            </h3>
+            <div style={{ fontFamily: 'var(--f-mono)', fontSize: 11, color: 'var(--fg4)' }}>
+              {payout.commissionsCount} comissões · período {fmtDateShort(payout.periodStart)} → {fmtDateShort(payout.periodEnd)}
+            </div>
+          </div>
+          <button className="icon-btn" onClick={onClose}><Icon name="x" size={14}/></button>
         </div>
-        <button className="btn btn-ghost"><Icon name="edit" size={11}/> Editar</button>
-      </div>
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 14 }}>
-        <ContractField label="Comissão base" value={rateLabel}/>
-        <ContractField label="Status" value={n.status === 'active' ? 'Ativo' : 'Pausado'}/>
-        <ContractField label="Início do contrato" value={fmtDateShort(n.contractStart)}/>
-        <ContractField label="Fim previsto" value="indeterminado"/>
-        <ContractField label="Refund window" value="60 dias (ClickBank padrão)"/>
-        <ContractField label="Cadência de payout" value="manual on-demand"/>
-        <ContractField label="Threshold mínimo" value="$100"/>
-        <ContractField label="Email de billing" value={`billing@${n.slug}.com`}/>
-        <ContractField label="Escopo" value="Todas as famílias de produto"/>
-        <ContractField label="Inclui upsell/downsell" value="Não — só FE"/>
+        <div className="modal-body">
+          <UserField label="Método de pagamento (opcional)" value={paymentMethod} onChange={setPaymentMethod} type="text"/>
+          <div style={{ display: 'grid', gap: 6 }}>
+            <span style={{ fontFamily: 'var(--f-mono)', fontSize: 10, letterSpacing: '0.12em', color: 'var(--fg4)' }}>NOTAS (OPCIONAL)</span>
+            <textarea
+              value={notes}
+              onChange={(e) => setNotes(e.target.value)}
+              rows={3}
+              placeholder="ex: TX hash, ref do transfer, etc"
+              style={{
+                padding: '9px 12px', fontSize: 13, color: 'var(--fg1)',
+                background: 'rgba(91,200,255,0.05)', border: '1px solid rgba(91,200,255,0.2)',
+                borderRadius: 6, fontFamily: 'var(--f-sans)', resize: 'vertical',
+              }}
+            />
+          </div>
+          {error && (
+            <div style={{ fontSize: 12, color: 'var(--danger)', background: 'rgba(239,68,68,0.08)',
+                          border: '1px solid rgba(239,68,68,0.25)', padding: '8px 10px', borderRadius: 6 }}>
+              {error}
+            </div>
+          )}
+          <div style={{ display: 'flex', gap: 8, marginTop: 4, paddingTop: 12, borderTop: '1px solid var(--border-soft)' }}>
+            <button className="btn btn-primary" onClick={confirm} disabled={busy} style={{ flex: 1 }}>
+              {busy ? 'CONFIRMANDO...' : 'CONFIRMAR PAGAMENTO'}
+            </button>
+          </div>
+        </div>
       </div>
     </div>
-  );
+  ), document.body);
 }
 
 function ContractField({ label, value }) {
@@ -4062,8 +4383,310 @@ function ContractField({ label, value }) {
   );
 }
 
+// ==========================================================================
+// PARTNER SHELL — view simplificada pra role NETWORK_PARTNER. Substitui o
+// dashboard inteiro: só mostra dados da própria network do partner. No
+// primeiro login (ou quando admin altera termos comerciais), o partner
+// vê o contrato em PDF + checkbox de aceite antes de acessar qualquer
+// outra coisa.
+// ==========================================================================
+
+function PartnerShell({ user, onLogout }) {
+  const [state, setState] = useState({ status: 'loading', data: null, error: null });
+  const [refresh, setRefresh] = useState(0);
+  const [signing, setSigning] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    setState((s) => ({ ...s, status: 'loading' }));
+    window.NSApi.fetchNetworkMe()
+      .then((data) => { if (!cancelled) setState({ status: 'ready', data, error: null }); })
+      .catch((err) => { if (!cancelled) setState({ status: 'error', data: null, error: err.message || 'erro' }); });
+    return () => { cancelled = true; };
+  }, [refresh]);
+
+  async function signContract() {
+    setSigning(true);
+    try {
+      await window.NSApi.networkSignContract();
+      setRefresh((n) => n + 1);
+    } catch (err) {
+      alert('Erro: ' + err.message);
+    }
+    setSigning(false);
+  }
+
+  if (state.status === 'loading') {
+    return <div style={{ padding: 40, textAlign: 'center', color: 'var(--fg4)' }}>Carregando...</div>;
+  }
+  if (state.status === 'error') {
+    return <div style={{ padding: 40, textAlign: 'center', color: 'var(--danger)' }}>Erro: {state.error}</div>;
+  }
+
+  const data = state.data;
+  const n = data.network;
+  const c = n.currentContract;
+  const needsSign = c && c.needsSignature;
+
+  if (needsSign) {
+    return <ContractAcceptanceGate network={n} onSign={signContract} signing={signing} onLogout={onLogout}/>;
+  }
+
+  return (
+    <div className="app">
+      <FXLayers/>
+      <aside className="side">
+        <div className="side-logo">
+          <div className="wm" style={{ width: 71, fontSize: 24 }}>north<em>scale</em></div>
+        </div>
+        <div style={{ flex: 1 }}>
+          <div className="side-group-label">Minha Network</div>
+          <nav className="side-nav">
+            <button className="side-item is-active">
+              <Icon name="layers" size={14}/> {n.name}
+            </button>
+          </nav>
+        </div>
+        <div className="side-foot">
+          <div className="user-chip" onClick={onLogout} style={{ cursor: 'pointer' }} title="Logout">
+            <div className="av" style={{ background: avatarColor(user.email) }}>{initials(user.name || user.email)}</div>
+            <div className="who">
+              <span className="nm">{user.name || user.email}</span>
+              <span className="rl">PARTNER · {n.status}</span>
+            </div>
+          </div>
+        </div>
+      </aside>
+
+      <div className="main">
+        <header className="top">
+          <div className="top-title">
+            <div className="top-crumb"><span className="cur">PARTNER · MINHA NETWORK</span></div>
+            <h1 className="top-h1" style={{ fontSize: 25 }}>{n.name}</h1>
+          </div>
+          <div className="top-spacer"/>
+          <div className="top-actions">
+            <a href={window.NSApi.networkContractPdfUrl} target="_blank" rel="noopener noreferrer"
+               className="btn btn-ghost" style={{ textDecoration: 'none' }}>
+              <Icon name="download" size={12}/> Contrato (PDF)
+            </a>
+          </div>
+        </header>
+
+        <div className="page">
+          <div className="page-in">
+            <PartnerOverview data={data}/>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function PartnerOverview({ data }) {
+  const n = data.network;
+  const next = n.nextPayout;
+  return (
+    <div style={{ display: 'grid', gap: 16 }}>
+      <div className="kpi-grid">
+        <NetKpi label="A RECEBER (ACUMULADO)" icon="wallet"
+          value={fmtCurrency(Number(next.accruedUsd), 'USD', 0)}
+          hint={`${fmtInt(next.accruedCount)} comissões accrued`}/>
+        <NetKpi label="AOV (30D)" icon="trending-up"
+          value={fmtCurrency(Number(n.networkAovUsd), 'USD', 0)}
+          hint="média dos seus afiliados"/>
+        <NetKpi label="PRÓXIMO PAGAMENTO" icon="calendar"
+          value={new Date(next.at).toLocaleDateString('pt-BR', { day: '2-digit', month: 'short' })}
+          hint={`a cada ${paymentPeriodLabel(n.paymentPeriodValue, n.paymentPeriodUnit)}`}/>
+        <NetKpi label="ÚLTIMO PAGAMENTO" icon="check-circle"
+          value={next.lastPayoutAt ? new Date(next.lastPayoutAt).toLocaleDateString('pt-BR', { day: '2-digit', month: 'short' }) : '—'}
+          hint={next.lastPayoutAt ? fmtRelativeShort(next.lastPayoutAt) : 'nenhum ainda'}/>
+      </div>
+
+      <div className="panel">
+        <div className="panel-head">
+          <div className="panel-title">
+            <span className="panel-eyebrow">CONTRATO VIGENTE</span>
+            <div className="panel-sub">
+              {n.currentContract
+                ? `Versão ${n.currentContract.version} · Assinado em ${fmtDateLong(n.currentContract.signedAt)}`
+                : 'Sem contrato'}
+            </div>
+          </div>
+          <a href={window.NSApi.networkContractPdfUrl} target="_blank" rel="noopener noreferrer"
+             className="btn btn-ghost" style={{ textDecoration: 'none' }}>
+            <Icon name="download" size={11}/> Baixar PDF
+          </a>
+        </div>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 14 }}>
+          <ContractField label="Comissão" value={commissionRateLabel(n.commissionType, n.commissionValue)}/>
+          <ContractField label="Período de pagamento" value={paymentPeriodLabel(n.paymentPeriodValue, n.paymentPeriodUnit)}/>
+          <ContractField label="Início do contrato" value={fmtDateShort(n.contractStart)}/>
+          <ContractField label="Email de billing" value={n.billingEmail || '(não informado)'}/>
+        </div>
+      </div>
+
+      <div className="panel" style={{ padding: 0 }}>
+        <div className="panel-head" style={{ padding: '14px 18px 10px' }}>
+          <div className="panel-title">
+            <span className="panel-eyebrow">MEUS AFILIADOS · {data.affiliates.length}</span>
+            <div className="panel-sub">Vendas FE deles geram comissão pra você automaticamente.</div>
+          </div>
+        </div>
+        {data.affiliates.length === 0 ? (
+          <div style={{ padding: 24, textAlign: 'center', color: 'var(--fg4)', fontSize: 12 }}>Nenhum afiliado vinculado ainda.</div>
+        ) : (
+          <div className="tbl-wrap" style={{ margin: 0, padding: '0 4px' }}>
+            <table className="tbl">
+              <thead><tr><th>Afiliado</th><th>Plataforma</th><th>Última venda</th><th>Vinculado em</th></tr></thead>
+              <tbody>
+                {data.affiliates.map((a, i) => (
+                  <tr key={i}>
+                    <td>
+                      <div style={{ color: 'var(--fg1)', fontSize: 13 }}>{a.nickname || a.externalId}</div>
+                      <div style={{ fontFamily: 'var(--f-mono)', fontSize: 10, color: 'var(--fg5)' }}>{a.externalId}</div>
+                    </td>
+                    <td><span className={`plat plat-${a.platformSlug === 'digistore24' ? 'd24' : 'cb'}`}>{a.platformSlug === 'digistore24' ? 'D24' : 'CB'}</span></td>
+                    <td style={{ fontFamily: 'var(--f-mono)', fontSize: 11, color: 'var(--fg4)' }}>{fmtRelativeShort(a.lastOrderAt)}</td>
+                    <td style={{ fontFamily: 'var(--f-mono)', fontSize: 11, color: 'var(--fg4)' }}>{fmtDateShort(a.attachedAt)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+
+      <div className="panel" style={{ padding: 0 }}>
+        <div className="panel-head" style={{ padding: '14px 18px 10px' }}>
+          <div className="panel-title">
+            <span className="panel-eyebrow">COMISSÕES RECENTES</span>
+            <div className="panel-sub">Últimas 100 vendas que geraram comissão pra você</div>
+          </div>
+        </div>
+        {data.commissions.length === 0 ? (
+          <div style={{ padding: 24, textAlign: 'center', color: 'var(--fg4)', fontSize: 12 }}>Nenhuma comissão ainda.</div>
+        ) : (
+          <div className="tbl-wrap" style={{ margin: 0, padding: '0 4px' }}>
+            <table className="tbl">
+              <thead><tr><th>Order</th><th>Afiliado</th><th>Country</th><th className="num">Comissão</th><th>Status</th><th>Data</th></tr></thead>
+              <tbody>
+                {data.commissions.map((c) => (
+                  <tr key={c.id}>
+                    <td className="cell-mono" style={{ fontSize: 11 }}>{c.orderExternalId}</td>
+                    <td>{c.affiliateNickname || c.affiliateExternalId}</td>
+                    <td className="cell-mono">{c.country || '—'}</td>
+                    <td className="num cell-mono" style={{ color: 'var(--glow-cyan)' }}>{fmtCurrency(Number(c.amountUsd), 'USD', 2)}</td>
+                    <td><span className={`badge ${c.status === 'PAID' ? 'ok' : 'neutral'}`}>{c.status}</span></td>
+                    <td style={{ fontFamily: 'var(--f-mono)', fontSize: 11, color: 'var(--fg4)' }}>{fmtRelativeShort(c.createdAt)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+
+      <div className="panel" style={{ padding: 0 }}>
+        <div className="panel-head" style={{ padding: '14px 18px 10px' }}>
+          <div className="panel-title">
+            <span className="panel-eyebrow">HISTÓRICO DE PAGAMENTOS</span>
+            <div className="panel-sub">Transparência total: cada payout, status e método</div>
+          </div>
+        </div>
+        {data.payouts.length === 0 ? (
+          <div style={{ padding: 24, textAlign: 'center', color: 'var(--fg4)', fontSize: 12 }}>Nenhum pagamento ainda.</div>
+        ) : (
+          <div className="tbl-wrap" style={{ margin: 0, padding: '0 4px' }}>
+            <table className="tbl">
+              <thead><tr><th>Período</th><th className="num">Comissões</th><th className="num">Total</th><th>Status</th><th>Pago em</th><th>Método</th></tr></thead>
+              <tbody>
+                {data.payouts.map((p) => (
+                  <tr key={p.id}>
+                    <td style={{ fontSize: 11 }}>{fmtDateShort(p.periodStart)} → {fmtDateShort(p.periodEnd)}</td>
+                    <td className="num cell-mono">{fmtInt(p.commissionsCount)}</td>
+                    <td className="num cell-mono">{fmtCurrency(Number(p.totalUsd), 'USD', 2)}</td>
+                    <td><span className={`badge ${p.status === 'PAID' ? 'ok' : 'warn'}`}>{p.status}</span></td>
+                    <td style={{ fontSize: 11 }}>{p.paidAt ? fmtDateShort(p.paidAt) : '—'}</td>
+                    <td style={{ fontSize: 11, color: 'var(--fg4)' }}>{p.paymentMethod || '—'}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function ContractAcceptanceGate({ network, onSign, signing, onLogout }) {
+  const [agreed, setAgreed] = useState(false);
+  return (
+    <div className="app">
+      <FXLayers/>
+      <div style={{
+        position: 'fixed', inset: 0, display: 'grid', placeItems: 'center',
+        padding: 24, overflowY: 'auto', zIndex: 1,
+      }}>
+        <div className="panel" style={{ maxWidth: 720, width: '100%', position: 'relative', zIndex: 1 }}>
+          <div className="panel-head">
+            <div className="panel-title">
+              <span className="panel-eyebrow">CONTRATO DE PARCERIA · {network.name.toUpperCase()}</span>
+              <div className="panel-sub">
+                Antes de acessar o portal, leia e aceite o contrato. Versão {network.currentContract.version}.
+              </div>
+            </div>
+            <button onClick={onLogout} className="btn btn-ghost" style={{ fontSize: 11 }}>
+              <Icon name="x" size={11}/> Sair
+            </button>
+          </div>
+
+          <div style={{ display: 'grid', gap: 14 }}>
+            <iframe
+              src={window.NSApi.networkContractPdfUrl}
+              style={{ width: '100%', height: 480, border: '1px solid var(--border)', borderRadius: 6, background: '#fff' }}
+              title="Contrato"
+            />
+
+            <a href={window.NSApi.networkContractPdfUrl} target="_blank" rel="noopener noreferrer"
+               style={{ fontSize: 12, color: 'var(--glow-cyan)', textDecoration: 'none', fontFamily: 'var(--f-mono)' }}>
+              <Icon name="download" size={11}/> Baixar PDF em uma nova aba
+            </a>
+
+            <label style={{
+              display: 'flex', alignItems: 'flex-start', gap: 10, padding: 12,
+              background: 'rgba(91,200,255,0.06)', border: '1px solid var(--border-soft)',
+              borderRadius: 6, cursor: 'pointer',
+            }}>
+              <input type="checkbox" checked={agreed} onChange={(e) => setAgreed(e.target.checked)} style={{ marginTop: 3 }}/>
+              <div>
+                <div style={{ color: 'var(--fg1)', fontSize: 13 }}>Li e concordo com o contrato acima</div>
+                <div style={{ fontSize: 11, color: 'var(--fg5)', marginTop: 4 }}>
+                  Seu aceite é registrado com data, hora e endereço IP como evidência probatória,
+                  conforme MP 2.200-2/2001.
+                </div>
+              </div>
+            </label>
+
+            <button
+              className="btn btn-primary"
+              onClick={onSign}
+              disabled={!agreed || signing}
+              style={{ width: '100%', padding: 14, fontSize: 13 }}
+            >
+              {signing ? 'REGISTRANDO ACEITE...' : 'ACEITAR E ENTRAR NO PORTAL'}
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 Object.assign(window, {
   FunnelPage, LeaderboardPage, AffiliateDrawer, AllAffiliatesPage,
   ProductsPage, TransactionsPage, IntegrationsPage, FXPage, UsersPage,
   HealthPage, CostsPage, InsightsPage, NetworksPage,
+  PartnerShell,
 });

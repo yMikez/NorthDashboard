@@ -18,6 +18,7 @@ function Sidebar({ active, onNav, user }) {
       items: [
         { id: 'leaderboard', label: 'Ranking', icon: 'trophy' },
         { id: 'all-affiliates', label: 'Todos os afiliados', icon: 'users' },
+        { id: 'networks', label: 'Networks', icon: 'layers' },
       ]
     },
     {
@@ -45,7 +46,6 @@ function Sidebar({ active, onNav, user }) {
     label: 'Admin',
     items: [
       { id: 'users', label: 'Usuários', icon: 'user-plus' },
-      { id: 'networks', label: 'Networks', icon: 'layers' },
     ],
   };
   const groups = isAdmin
