@@ -979,7 +979,10 @@ body { overflow-x: hidden; }
   background: rgba(3, 6, 23, 0.72);
   backdrop-filter: blur(6px);
   -webkit-backdrop-filter: blur(6px);
-  z-index: 50;
+  /* Acima da topbar (.top, z 3) e do drawer (.drawer, z 51). Sticky+
+     backdrop-filter da topbar criam stacking context próprio que em
+     alguns browsers competia com o modal — z 100 resolve sem ambiguidade. */
+  z-index: 100;
   animation: fadeIn 200ms var(--ease-smooth);
   display: grid;
   place-items: center;
