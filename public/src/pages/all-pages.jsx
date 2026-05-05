@@ -3885,6 +3885,7 @@ function NetworkDetailDrawer({ networkId, onClose, onChanged, onEdit }) {
   const [attaching, setAttaching] = useState(false);
   const [markPaid, setMarkPaid] = useState(null);
   const [commissionsStatus, setCommissionsStatus] = useState('');
+  const [deleting, setDeleting] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -3919,6 +3920,36 @@ function NetworkDetailDrawer({ networkId, onClose, onChanged, onEdit }) {
       reload();
     } catch (err) {
       alert('Erro: ' + err.message);
+    }
+  }
+
+  async function deleteNetwork() {
+    const n = state.data?.network;
+    if (!n) return;
+    // Confirmação dupla pela severidade — cascade delete pesado.
+    const msg = `⚠ DELETAR a network "${n.name}"?\n\n` +
+      `Isso vai REMOVER PERMANENTEMENTE:\n` +
+      `• ${state.data.affiliates.length} vínculo(s) de afiliado\n` +
+      `• Todas as comissões geradas (${state.data.commissionsTotal || 0})\n` +
+      `• Todos os payouts (${state.data.payoutsTotal || 0}) e o histórico de pagamento\n` +
+      `• Todas as versões do contrato\n\n` +
+      `Os usuários partner vinculados ficam SEM network — vão precisar\n` +
+      `ser re-atribuídos ou desativados manualmente.\n\n` +
+      `Esta ação NÃO pode ser desfeita. Continuar?`;
+    if (!confirm(msg)) return;
+    const confirmName = prompt(`Pra confirmar, digite o nome da network exatamente:\n\n${n.name}`);
+    if (confirmName !== n.name) {
+      if (confirmName !== null) alert('Nome não confere — delete cancelado.');
+      return;
+    }
+    setDeleting(true);
+    try {
+      await window.NSApi.adminDeleteNetwork(networkId);
+      onChanged?.();
+      onClose();
+    } catch (err) {
+      alert('Erro ao deletar: ' + err.message);
+      setDeleting(false);
     }
   }
 
@@ -3976,6 +4007,21 @@ function NetworkDetailDrawer({ networkId, onClose, onChanged, onEdit }) {
           <div style={{ display: 'flex', gap: 6 }}>
             <button className="btn btn-ghost" onClick={() => onEdit(n)} title="Editar termos">
               <Icon name="edit" size={11}/> Editar
+            </button>
+            <button
+              onClick={deleteNetwork}
+              disabled={deleting}
+              title="Deletar network (cascade — irreversível)"
+              style={{
+                padding: '6px 10px', fontFamily: 'var(--f-mono)', fontSize: 11,
+                letterSpacing: '0.06em', color: 'var(--danger)',
+                background: 'rgba(239,68,68,0.06)',
+                border: '1px solid rgba(239,68,68,0.25)', borderRadius: 6,
+                cursor: deleting ? 'not-allowed' : 'pointer',
+                display: 'inline-flex', alignItems: 'center', gap: 4,
+              }}
+            >
+              <Icon name="trash" size={11}/> {deleting ? 'DELETANDO...' : 'Deletar'}
             </button>
             <button className="icon-btn" onClick={onClose}><Icon name="x" size={14}/></button>
           </div>
