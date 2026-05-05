@@ -196,8 +196,16 @@ export async function POST(req: Request) {
       },
     });
 
-    // Gerar contrato v1 imediatamente — o partner vai precisar assinar.
-    const contract = await generateContractVersion(created.id);
+    // Gerar contrato v1 imediatamente. NON-FATAL: se falhar (filesystem
+    // sem permissão, pdfkit error, etc.), a network já está no DB e o
+    // contract.pdf endpoint pode regenerar via readPdfWithRegen quando
+    // for solicitado. Não devolvemos 500 só por isso.
+    let contract: Awaited<ReturnType<typeof generateContractVersion>> | null = null;
+    try {
+      contract = await generateContractVersion(created.id);
+    } catch (err) {
+      logger.error({ err, networkId: created.id }, 'admin.networks.create — contract generation failed (network created OK, contract pode ser gerado depois via /contract.pdf)');
+    }
 
     await audit({
       actorUserId: auth.user.id,
@@ -207,6 +215,7 @@ export async function POST(req: Request) {
       after: {
         name, slug, commissionType, commissionValue: commissionValueNum,
         paymentPeriodValue, paymentPeriodUnit, billingEmail,
+        contractGenerated: contract !== null,
       },
     });
 
@@ -225,7 +234,7 @@ export async function POST(req: Request) {
         contractStart: created.contractStart.toISOString(),
         billingEmail: created.billingEmail,
         notes: created.notes,
-        contractVersion: contract.version,
+        contractVersion: contract?.version ?? null,
         contractSigned: false,
       },
     }, { status: 201 });

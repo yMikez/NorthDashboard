@@ -23,7 +23,15 @@ ENV NEXT_TELEMETRY_DISABLED=1
 RUN addgroup --system --gid 1001 nodejs \
   && adduser --system --uid 1001 nextjs
 
-COPY --from=builder /app/public ./public
+# public/ owned by nextjs pra escrita em runtime (uploads/contracts/* — PDF
+# de contrato gerado por pdfkit). Sem chown, o volume mount herdava root
+# e o write falhava com EACCES (container roda como uid 1001).
+COPY --from=builder --chown=nextjs:nodejs /app/public ./public
+# Pré-criar o diretório de contracts ANTES do USER nextjs garante que o
+# Docker volume init copie a estrutura com permissão correta. Sem isso,
+# o volume nasce vazio e owned by root no primeiro mount.
+RUN mkdir -p /app/public/uploads/contracts \
+  && chown -R nextjs:nodejs /app/public/uploads
 COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
 COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
 COPY --from=builder /app/prisma ./prisma
