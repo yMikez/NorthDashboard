@@ -4377,14 +4377,25 @@ function NetContract({ network: n, networkId }) {
 }
 
 function AttachAffiliateModal({ networkId, onClose, onSaved }) {
+  // Modo primário: pré-cadastrar afiliado por (platform, externalId).
+  // Quando o webhook chegar com esse ID, upsertOrder reusa o row e a
+  // vinculação à network já está em vigor.
+  const [platformSlug, setPlatformSlug] = useState('clickbank');
+  const [externalId, setExternalId] = useState('');
+  const [nickname, setNickname] = useState('');
+
+  // Modo secundário: lista de afiliados conhecidos (já com vendas no DB).
+  const [showKnown, setShowKnown] = useState(false);
   const [list, setList] = useState({ status: 'loading', items: [], pagination: null });
   const [q, setQ] = useState('');
   const [page, setPage] = useState(1);
   const [selected, setSelected] = useState(new Set());
+
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(null);
 
   useEffect(() => {
+    if (!showKnown) return;
     let cancelled = false;
     setList((s) => ({ ...s, status: 'loading' }));
     const t = setTimeout(() => {
@@ -4393,9 +4404,8 @@ function AttachAffiliateModal({ networkId, onClose, onSaved }) {
         .catch(() => { if (!cancelled) setList({ status: 'ready', items: [], pagination: null }); });
     }, 200);
     return () => { cancelled = true; clearTimeout(t); };
-  }, [q, page]);
+  }, [showKnown, q, page]);
 
-  // Reset page quando q muda (mas mantém o debounce do useEffect acima).
   useEffect(() => { setPage(1); }, [q]);
 
   function toggle(id) {
@@ -4406,7 +4416,32 @@ function AttachAffiliateModal({ networkId, onClose, onSaved }) {
     });
   }
 
-  async function attach() {
+  async function attachByExternal() {
+    if (!externalId.trim()) {
+      setError('preencha o ID do afiliado');
+      return;
+    }
+    setBusy(true);
+    setError(null);
+    try {
+      const r = await window.NSApi.adminAttachAffiliateByExternal(networkId, [{
+        platformSlug,
+        externalId: externalId.trim(),
+        nickname: nickname.trim() || null,
+      }]);
+      if (r.attached.length === 0 && r.conflicts.length > 0) {
+        setError(r.conflicts[0].reason);
+        setBusy(false);
+        return;
+      }
+      onSaved();
+    } catch (err) {
+      setError(err.message || 'erro');
+      setBusy(false);
+    }
+  }
+
+  async function attachKnown() {
     setBusy(true);
     setError(null);
     try {
@@ -4423,73 +4458,146 @@ function AttachAffiliateModal({ networkId, onClose, onSaved }) {
     }
   }
 
+  const inputStyle = {
+    padding: '9px 12px', fontSize: 13, color: 'var(--fg1)',
+    background: 'rgba(91,200,255,0.05)', border: '1px solid rgba(91,200,255,0.2)',
+    borderRadius: 6,
+  };
+
   return ReactDOM.createPortal((
     <div className="modal-backdrop" onClick={onClose}>
       <div className="modal-card" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 640 }}>
         <div className="modal-head">
           <div>
-            <span className="eyebrow">VINCULAR AFILIADOS</span>
+            <span className="eyebrow">VINCULAR AFILIADO</span>
             <h3 style={{ margin: '4px 0', fontSize: 18, color: 'var(--fg1)' }}>Adicionar à network</h3>
             <div style={{ fontFamily: 'var(--f-mono)', fontSize: 11, color: 'var(--fg4)' }}>
-              Apenas afiliados não vinculados a outra network aparecem aqui.
+              Pré-cadastra por ID — vendas futuras desse afiliado já caem pra network.
             </div>
           </div>
           <button className="icon-btn" onClick={onClose}><Icon name="x" size={14}/></button>
         </div>
         <div className="modal-body">
-          <input
-            type="text"
-            placeholder="Buscar por nickname ou externalId..."
-            value={q}
-            onChange={(e) => setQ(e.target.value)}
-            style={{
-              padding: '9px 12px', fontSize: 13, color: 'var(--fg1)',
-              background: 'rgba(91,200,255,0.05)', border: '1px solid rgba(91,200,255,0.2)',
-              borderRadius: 6,
-            }}
-          />
-          <div style={{ maxHeight: 360, overflowY: 'auto', display: 'grid', gap: 4 }}>
-            {list.status === 'loading' && <div style={{ color: 'var(--fg5)', fontSize: 12 }}>Carregando...</div>}
-            {list.status === 'ready' && list.items.length === 0 && (
-              <div style={{ color: 'var(--fg5)', fontSize: 12, padding: 12, textAlign: 'center' }}>
-                Nenhum afiliado disponível.
+
+          {/* Form primário: adicionar por ID */}
+          <div style={{ display: 'grid', gap: 10 }}>
+            <div style={{ display: 'grid', gap: 6 }}>
+              <span style={{ fontFamily: 'var(--f-mono)', fontSize: 10, letterSpacing: '0.12em', color: 'var(--fg4)' }}>PLATAFORMA</span>
+              <div className="seg" style={{ width: 'fit-content' }}>
+                {[['clickbank', 'ClickBank'], ['digistore24', 'Digistore24']].map(([k, l]) => (
+                  <button key={k} className={platformSlug === k ? 'is-active' : ''} onClick={() => setPlatformSlug(k)}>{l}</button>
+                ))}
               </div>
-            )}
-            {list.items.map((a) => (
-              <label key={a.id} style={{
-                display: 'flex', alignItems: 'center', gap: 10, padding: '8px 10px',
-                background: selected.has(a.id) ? 'rgba(91,200,255,0.08)' : 'transparent',
-                border: '1px solid var(--border-soft)', borderRadius: 6, cursor: 'pointer',
-              }}>
-                <input type="checkbox" checked={selected.has(a.id)} onChange={() => toggle(a.id)}/>
-                <div style={{ flex: 1 }}>
-                  <div style={{ color: 'var(--fg1)', fontSize: 13 }}>{a.nickname || a.externalId}</div>
-                  <div style={{ fontFamily: 'var(--f-mono)', fontSize: 10, color: 'var(--fg5)' }}>
-                    {a.platformSlug === 'digistore24' ? 'D24' : 'CB'} · {a.externalId} · {fmtInt(a.ordersCount)} pedidos
-                  </div>
-                </div>
-              </label>
-            ))}
+            </div>
+
+            <div style={{ display: 'grid', gap: 6 }}>
+              <span style={{ fontFamily: 'var(--f-mono)', fontSize: 10, letterSpacing: '0.12em', color: 'var(--fg4)' }}>ID DO AFILIADO (NICKNAME NA PLATAFORMA)</span>
+              <input
+                type="text"
+                placeholder="ex: fenix2025"
+                value={externalId}
+                onChange={(e) => setExternalId(e.target.value)}
+                style={inputStyle}
+                autoFocus
+              />
+              <div style={{ fontSize: 11, color: 'var(--fg5)' }}>
+                Esse é o nickname que aparece no campo Affiliate dos webhooks da plataforma.
+              </div>
+            </div>
+
+            <div style={{ display: 'grid', gap: 6 }}>
+              <span style={{ fontFamily: 'var(--f-mono)', fontSize: 10, letterSpacing: '0.12em', color: 'var(--fg4)' }}>NOME DE EXIBIÇÃO (OPCIONAL)</span>
+              <input
+                type="text"
+                placeholder="ex: Fenix Media — João Silva"
+                value={nickname}
+                onChange={(e) => setNickname(e.target.value)}
+                style={inputStyle}
+              />
+            </div>
+
+            <button
+              className="btn btn-primary"
+              onClick={attachByExternal}
+              disabled={busy || !externalId.trim()}
+              style={{ marginTop: 4 }}
+            >
+              {busy ? 'VINCULANDO...' : 'VINCULAR'}
+            </button>
           </div>
-          {list.pagination && list.pagination.total > list.pagination.pageSize && (
-            <Pagination
-              page={list.pagination.page}
-              pageSize={list.pagination.pageSize}
-              total={list.pagination.total}
-              hasMore={list.pagination.hasMore}
-              onChange={setPage}
-            />
-          )}
+
           {error && (
             <div style={{ fontSize: 12, color: 'var(--danger)', background: 'rgba(239,68,68,0.08)',
                           border: '1px solid rgba(239,68,68,0.25)', padding: '8px 10px', borderRadius: 6 }}>
               {error}
             </div>
           )}
-          <div style={{ display: 'flex', gap: 8, marginTop: 4, paddingTop: 12, borderTop: '1px solid var(--border-soft)' }}>
-            <button className="btn btn-primary" onClick={attach} disabled={busy || selected.size === 0} style={{ flex: 1 }}>
-              {busy ? 'VINCULANDO...' : `VINCULAR ${selected.size} AFILIADO(S)`}
+
+          {/* Modo secundário: escolher de afiliados conhecidos */}
+          <div style={{ borderTop: '1px solid var(--border-soft)', paddingTop: 14 }}>
+            <button
+              onClick={() => setShowKnown((v) => !v)}
+              style={{
+                background: 'transparent', border: 0, cursor: 'pointer',
+                fontFamily: 'var(--f-mono)', fontSize: 11, color: 'var(--glow-cyan)',
+                letterSpacing: '0.06em', padding: 0,
+                display: 'flex', alignItems: 'center', gap: 6,
+              }}
+            >
+              <Icon name={showKnown ? 'chevron-down' : 'chevron-right'} size={11}/>
+              Ou escolher de afiliados já conhecidos ({list.pagination?.total ?? '...'})
             </button>
+
+            {showKnown && (
+              <div style={{ display: 'grid', gap: 10, marginTop: 12 }}>
+                <input
+                  type="text"
+                  placeholder="Buscar por nickname ou externalId..."
+                  value={q}
+                  onChange={(e) => setQ(e.target.value)}
+                  style={inputStyle}
+                />
+                <div style={{ maxHeight: 240, overflowY: 'auto', display: 'grid', gap: 4 }}>
+                  {list.status === 'loading' && <div style={{ color: 'var(--fg5)', fontSize: 12 }}>Carregando...</div>}
+                  {list.status === 'ready' && list.items.length === 0 && (
+                    <div style={{ color: 'var(--fg5)', fontSize: 12, padding: 12, textAlign: 'center' }}>
+                      Nenhum afiliado disponível.
+                    </div>
+                  )}
+                  {list.items.map((a) => (
+                    <label key={a.id} style={{
+                      display: 'flex', alignItems: 'center', gap: 10, padding: '8px 10px',
+                      background: selected.has(a.id) ? 'rgba(91,200,255,0.08)' : 'transparent',
+                      border: '1px solid var(--border-soft)', borderRadius: 6, cursor: 'pointer',
+                    }}>
+                      <input type="checkbox" checked={selected.has(a.id)} onChange={() => toggle(a.id)}/>
+                      <div style={{ flex: 1 }}>
+                        <div style={{ color: 'var(--fg1)', fontSize: 13 }}>{a.nickname || a.externalId}</div>
+                        <div style={{ fontFamily: 'var(--f-mono)', fontSize: 10, color: 'var(--fg5)' }}>
+                          {a.platformSlug === 'digistore24' ? 'D24' : 'CB'} · {a.externalId} · {fmtInt(a.ordersCount)} pedidos
+                        </div>
+                      </div>
+                    </label>
+                  ))}
+                </div>
+                {list.pagination && list.pagination.total > list.pagination.pageSize && (
+                  <Pagination
+                    page={list.pagination.page}
+                    pageSize={list.pagination.pageSize}
+                    total={list.pagination.total}
+                    hasMore={list.pagination.hasMore}
+                    onChange={setPage}
+                  />
+                )}
+                <button
+                  className="btn btn-primary"
+                  onClick={attachKnown}
+                  disabled={busy || selected.size === 0}
+                >
+                  {busy ? 'VINCULANDO...' : `VINCULAR ${selected.size} SELECIONADO(S)`}
+                </button>
+              </div>
+            )}
           </div>
         </div>
       </div>

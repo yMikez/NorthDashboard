@@ -417,6 +417,20 @@ async function adminAttachAffiliates(networkId, affiliateIds) {
   return data;
 }
 
+// Pré-cadastra afiliado por (platformSlug, externalId) e vincula à network.
+// Find-or-create no backend — quando o webhook chegar com esse ID, o
+// upsertOrder reusa o row e a vinculação persiste.
+async function adminAttachAffiliateByExternal(networkId, byExternal) {
+  const res = await fetch(`/api/admin/networks/${encodeURIComponent(networkId)}/affiliates`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+    body: JSON.stringify({ byExternal }),
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.error || `${res.status}`);
+  return data;
+}
+
 async function adminDetachAffiliate(networkId, affiliateId) {
   const res = await fetch(
     `/api/admin/networks/${encodeURIComponent(networkId)}/affiliates/${encodeURIComponent(affiliateId)}`,
@@ -505,6 +519,7 @@ window.NSApi = {
   adminDeleteNetwork,
   adminListAvailableAffiliates,
   adminAttachAffiliates,
+  adminAttachAffiliateByExternal,
   adminDetachAffiliate,
   adminCreatePayout,
   adminMarkPayoutPaid,
