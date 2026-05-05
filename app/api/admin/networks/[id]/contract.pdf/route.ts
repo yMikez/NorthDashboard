@@ -7,7 +7,7 @@
 import { NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { requireAdmin } from '@/lib/auth/guard';
-import { readPdf } from '@/lib/services/contractTemplate';
+import { readPdfWithRegen } from '@/lib/services/contractTemplate';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -23,15 +23,15 @@ export async function GET(
   const contract = await db.networkContract.findFirst({
     where: { networkId },
     orderBy: { version: 'desc' },
-    select: { pdfPath: true, version: true },
+    select: { id: true, version: true },
   });
   if (!contract) {
     return NextResponse.json({ error: 'contrato não encontrado' }, { status: 404 });
   }
 
-  const buf = readPdf(contract.pdfPath);
+  const buf = await readPdfWithRegen(contract.id);
   if (!buf) {
-    return NextResponse.json({ error: 'PDF físico não encontrado no disco' }, { status: 500 });
+    return NextResponse.json({ error: 'falha ao gerar PDF' }, { status: 500 });
   }
 
   return new NextResponse(buf as unknown as BodyInit, {

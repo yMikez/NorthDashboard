@@ -8,7 +8,17 @@ import { db } from '@/lib/db';
 import { requireAdmin } from '@/lib/auth/guard';
 import { audit } from '@/lib/services/networkAuditLog';
 import { markPayoutAsPaid } from '@/lib/services/payoutCalc';
+import { sendPayoutPaid } from '@/lib/services/emails/payoutPaid';
 import { logger } from '@/lib/logger';
+
+function fmtUsd(n: string | number): string {
+  const v = typeof n === 'number' ? n : Number(n);
+  return v.toFixed(2).replace(/\B(?=(\d{3})+(?!\d))/g, '.').replace(/\.(\d{2})$/, ',$1');
+}
+function fmtDate(d: Date | string): string {
+  const dt = typeof d === 'string' ? new Date(d) : d;
+  return `${String(dt.getDate()).padStart(2, '0')}/${String(dt.getMonth() + 1).padStart(2, '0')}/${dt.getFullYear()}`;
+}
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -71,6 +81,36 @@ export async function PATCH(
     { actorId: auth.user.id, networkId, payoutId, paymentMethod },
     'admin.networks.payouts.mark_paid',
   );
+
+  // Email pro partner. Recipient: billingEmail da network, fallback pro
+  // primeiro user partner. Se nenhum, skip + log.
+  try {
+    const network = await db.network.findUniqueOrThrow({
+      where: { id: networkId },
+      select: { name: true, billingEmail: true, partnerUsers: { select: { email: true }, take: 1 } },
+    });
+    const fullPayout = await db.networkPayout.findUniqueOrThrow({
+      where: { id: payoutId },
+      select: { totalUsd: true, commissionsCount: true, periodStart: true, periodEnd: true },
+    });
+    const recipient = network.billingEmail || network.partnerUsers[0]?.email || null;
+    if (recipient) {
+      sendPayoutPaid({
+        to: recipient,
+        networkName: network.name,
+        totalUsd: fmtUsd(fullPayout.totalUsd.toString()),
+        commissionsCount: fullPayout.commissionsCount,
+        periodStart: fmtDate(fullPayout.periodStart),
+        periodEnd: fmtDate(fullPayout.periodEnd),
+        paymentMethod,
+        notes,
+      }).catch((err) => logger.error({ err }, '[payouts.mark_paid] email failed'));
+    } else {
+      logger.warn({ networkId, payoutId }, '[payouts.mark_paid] no recipient — skipping email');
+    }
+  } catch (err) {
+    logger.error({ err }, '[payouts.mark_paid] failed to dispatch email');
+  }
 
   return NextResponse.json({ ok: true });
 }

@@ -10,8 +10,9 @@ import { Prisma } from '@prisma/client';
 import { db } from '@/lib/db';
 import { requireAdmin } from '@/lib/auth/guard';
 import { audit } from '@/lib/services/networkAuditLog';
-import { generateContractVersion, commercialTermsChanged } from '@/lib/services/contractTemplate';
+import { generateContractVersion, commercialTermsChanged, buildContext } from '@/lib/services/contractTemplate';
 import { estimateNextPayout } from '@/lib/services/payoutCalc';
+import { sendContractRevision } from '@/lib/services/emails/contractRevision';
 import { logger } from '@/lib/logger';
 
 export const runtime = 'nodejs';
@@ -246,6 +247,48 @@ export async function PATCH(
     const contract = await generateContractVersion(id);
     newContractVersion = contract.version;
     logger.info({ networkId: id, version: contract.version }, 'admin.networks.patch newContractVersion');
+
+    // Email pro partner avisando da revisão. Lista campos que mudaram com
+    // before/after pra contexto.
+    try {
+      const network = await db.network.findUniqueOrThrow({
+        where: { id },
+        select: { name: true, billingEmail: true, partnerUsers: { select: { email: true }, take: 1 } },
+      });
+      const recipient = network.billingEmail || network.partnerUsers[0]?.email || null;
+      if (recipient) {
+        const ctxBefore = buildContext(before, contract.version - 1);
+        const ctxAfter = buildContext(updated, contract.version);
+        const changes: Array<{ field: string; before: string; after: string }> = [];
+        if (before.name !== updated.name) {
+          changes.push({ field: 'Nome da network', before: before.name, after: updated.name });
+        }
+        if (ctxBefore.commissionDescription !== ctxAfter.commissionDescription) {
+          changes.push({ field: 'Comissão', before: ctxBefore.commissionDescription, after: ctxAfter.commissionDescription });
+        }
+        if (ctxBefore.paymentPeriodText !== ctxAfter.paymentPeriodText) {
+          changes.push({ field: 'Período de pagamento', before: ctxBefore.paymentPeriodText, after: ctxAfter.paymentPeriodText });
+        }
+        if ((before.billingEmail || '') !== (updated.billingEmail || '')) {
+          changes.push({ field: 'E-mail de billing', before: before.billingEmail || '(não informado)', after: updated.billingEmail || '(não informado)' });
+        }
+        if (before.contractStart.getTime() !== updated.contractStart.getTime()) {
+          changes.push({ field: 'Início do contrato', before: ctxBefore.contractStart, after: ctxAfter.contractStart });
+        }
+        if (changes.length > 0) {
+          sendContractRevision({
+            to: recipient,
+            networkName: updated.name,
+            newVersion: contract.version,
+            changes,
+          }).catch((err) => logger.error({ err }, '[networks.patch] contractRevision email failed'));
+        }
+      } else {
+        logger.warn({ networkId: id }, '[networks.patch] no recipient for contract revision email');
+      }
+    } catch (err) {
+      logger.error({ err }, '[networks.patch] failed to dispatch revision email');
+    }
   }
 
   await audit({

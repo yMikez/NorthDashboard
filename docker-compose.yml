@@ -12,6 +12,12 @@ services:
     networks:
       - internal
       - web
+    volumes:
+      # PDFs de contrato persistem aqui pra sobreviver a rebuilds.
+      # Se o arquivo sumir, o endpoint regenera do markdown gravado em
+      # NetworkContract.contentMd (ver readPdfWithRegen). Backup
+      # sugerido: rsync semanal do host pra storage externo.
+      - contracts_data:/app/public/uploads/contracts
     # No 'ports' here — reverse proxy on host (supportchat-caddy or Traefik) reaches us
     # via Docker network at dashboard-app:3000.
 
@@ -35,6 +41,7 @@ services:
 
 volumes:
   postgres_data:
+  contracts_data:
 
 networks:
   internal:

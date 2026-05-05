@@ -239,13 +239,63 @@ export async function generateContractVersion(networkId: string): Promise<Networ
 }
 
 /**
- * Read a contract PDF from disk. Returns null if file is missing
- * (e.g., contract row exists but file was deleted manually).
+ * Read a contract PDF from disk. Sync read pra signature simples; chamado
+ * de Route Handlers que já são async, mas o read é fast. Retorna null se
+ * arquivo somiu — caller usa readPdfWithRegen pra fallback.
  */
 export function readPdf(pdfPath: string): Buffer | null {
   const fullPath = path.join(process.cwd(), 'public', 'uploads', pdfPath);
   if (!fs.existsSync(fullPath)) return null;
   return fs.readFileSync(fullPath);
+}
+
+/**
+ * Resiliência: lê o PDF do disco; se sumiu (rebuild sem volume mount,
+ * delete acidental, etc.), regenera a partir do contentMd persistido em
+ * NetworkContract — que é a fonte de verdade. PDF é só uma renderização.
+ *
+ * Importante: a regeneração usa os termos ATUAIS da network (commission,
+ * período, billing) — então se a versão antiga foi assinada, e os termos
+ * mudaram desde então, a regeneração reflete os termos NOVOS, não os do
+ * momento da assinatura.
+ *
+ * Pra preservar fidelidade jurídica, gravamos o `contentMd` snapshot na
+ * versão. Esta função usa o markdown gravado quando regenera, então o
+ * conteúdo (cláusulas, valores) bate com o que foi assinado. Só o layout
+ * muda se pdfkit/fontes mudarem.
+ */
+export async function readPdfWithRegen(contractId: string): Promise<Buffer | null> {
+  const contract = await db.networkContract.findUnique({
+    where: { id: contractId },
+    select: { id: true, networkId: true, version: true, contentMd: true, pdfPath: true },
+  });
+  if (!contract) return null;
+
+  const cached = readPdf(contract.pdfPath);
+  if (cached) return cached;
+
+  // Cache miss → regenera do markdown gravado. Re-renderiza pra PDF + grava
+  // de volta no disco pra próximas requests não pagarem o mesmo custo.
+  const network = await db.network.findUniqueOrThrow({
+    where: { id: contract.networkId },
+    select: {
+      name: true, commissionType: true, commissionValue: true,
+      paymentPeriodValue: true, paymentPeriodUnit: true, contractStart: true,
+      billingEmail: true,
+    },
+  });
+  const ctx = buildContext(network, contract.version);
+  const pdf = await renderPdf(ctx);
+
+  ensureDir();
+  const fullPath = path.join(process.cwd(), 'public', 'uploads', contract.pdfPath);
+  try {
+    fs.writeFileSync(fullPath, pdf);
+  } catch {
+    // Falha ao escrever no disco (volume read-only, etc.) — não fatal,
+    // só não vamos cachear. Próximas requests vão regenerar de novo.
+  }
+  return pdf;
 }
 
 /**

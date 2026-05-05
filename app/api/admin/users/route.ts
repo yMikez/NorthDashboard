@@ -10,6 +10,8 @@ import { requireAdmin } from '@/lib/auth/guard';
 import { hashPassword, validatePasswordStrength } from '@/lib/auth/password';
 import { sanitizeTabs } from '@/lib/auth/tabs';
 import { parsePagination, paginatedResponse } from '@/lib/pagination';
+import { sendPartnerWelcome } from '@/lib/services/emails/partnerWelcome';
+import { buildContext } from '@/lib/services/contractTemplate';
 import { logger } from '@/lib/logger';
 
 export const runtime = 'nodejs';
@@ -134,6 +136,34 @@ export async function POST(req: Request) {
       },
     });
     logger.info({ actorId: auth.user.id, userId: created.id, email, role }, 'admin.users.create');
+
+    // Welcome email pra partners. Fail-soft: se SMTP falhar, log + segue.
+    if (role === 'NETWORK_PARTNER' && created.networkId) {
+      try {
+        const network = await db.network.findUniqueOrThrow({
+          where: { id: created.networkId },
+          select: {
+            name: true, commissionType: true, commissionValue: true,
+            paymentPeriodValue: true, paymentPeriodUnit: true, contractStart: true,
+            billingEmail: true,
+          },
+        });
+        const ctx = buildContext(network, 1);
+        // Fire and forget — não bloquear a criação do user em caso de SMTP lento.
+        sendPartnerWelcome({
+          to: created.email,
+          partnerName: created.name,
+          networkName: network.name,
+          loginEmail: created.email,
+          loginPassword: password,
+          commissionDescription: ctx.commissionDescription,
+          paymentPeriodText: ctx.paymentPeriodText,
+        }).catch((err) => logger.error({ err }, '[users.create] partnerWelcome failed'));
+      } catch (err) {
+        logger.error({ err }, '[users.create] failed to dispatch welcome email');
+      }
+    }
+
     return NextResponse.json({
       user: {
         ...created,
