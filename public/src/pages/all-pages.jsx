@@ -70,7 +70,7 @@ function FunnelPage({ filters }) {
   const summary = view.summary;
 
   // Adapt to FunnelChart shape: { label, volume }
-  const chartStages = stages.map((s) => ({ label: s.label, volume: s.volume }));
+  const chartStages = stages.map((s) => ({ label: s.label, volume: s.volume, revenue: s.revenue }));
 
   return (
     <div className="page-in">
@@ -158,7 +158,7 @@ function FunnelPage({ filters }) {
             <span className="legend-dot cyan"><span/>{fmtInt(summary.feGroups)} FE → {fmtInt(summary.totalGroups)} grupos totais</span>
           </div>
         </div>
-        <FunnelChart stages={chartStages}/>
+        <FunnelChart stages={chartStages} currency={cur}/>
       </div>
 
       <div className="grid-2">

@@ -280,12 +280,13 @@ function CountryBars({ data, currency = 'USD', onCountryClick }) {
 }
 
 // ---------- Funnel chart ----------
-function FunnelChart({ stages }) {
+function FunnelChart({ stages, currency }) {
   if (!stages || stages.length === 0) {
     return <div className="funnel" style={{ padding: 24, textAlign: 'center', color: 'var(--fg4)', fontSize: 12 }}>Sem dados de funil no período</div>;
   }
   const topVol = stages[0].volume || 0;
   const maxBarW = 88; // %
+  const cur = currency || 'USD';
   return (
     <div className="funnel">
       {stages.map((s, i) => {
@@ -294,6 +295,7 @@ function FunnelChart({ stages }) {
         const prevVol = i > 0 ? (stages[i - 1].volume || 0) : 0;
         const dropPct = i > 0 && prevVol > 0 ? 1 - (s.volume / prevVol) : 0;
         const dropClass = dropPct > 0.7 ? 'bad' : dropPct > 0.4 ? 'warn' : 'ok';
+        const hasRevenue = s.revenue != null && s.revenue !== undefined;
         return (
           <div key={i} className="funnel-row">
             <div className="funnel-stage">
@@ -307,6 +309,15 @@ function FunnelChart({ stages }) {
             </div>
             <div className="funnel-meta">
               <span className="vol">{fmtInt(s.volume)}</span>
+              {hasRevenue && (
+                <span style={{
+                  fontFamily: 'var(--f-mono)', fontSize: 11,
+                  color: s.revenue > 0 ? 'var(--glow-cyan)' : 'var(--fg5)',
+                  letterSpacing: '0.02em',
+                }}>
+                  {fmtCurrency(s.revenue, cur, 0)}
+                </span>
+              )}
               {i > 0 && (
                 <span className={`funnel-drop ${dropClass}`}>
                   <Icon name="trending-down" size={10}/>
