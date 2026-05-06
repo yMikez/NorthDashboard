@@ -930,7 +930,16 @@ export async function getFunnel(
     { fromFamily: string; toFamily: string; sessions: Set<string>; revenue: number }
   >();
 
-  // Pass 2: non-FE orders — same-family vs cross-sell.
+  // Pass 2: non-FE orders. CADA order contabiliza no funil da família FE
+  // da sessão — incluindo cross-sells. Decisão de produto: o "funil de X"
+  // é tudo que aconteceu nas sessões iniciadas com X, independente de
+  // qual produto foi vendido em cada etapa. Se sessão começou em
+  // NeuroMind FE e o UP3 foi NightCalm, esse UP3 é parte do funil de
+  // NeuroMind.
+  //
+  // Cross-sells continuam sendo TRACKEADOS separadamente (crossSellMap)
+  // como metadata complementar — útil pra aba "pra onde costumamos
+  // cross-sellar" — mas NÃO são mais excluídos das stages.
   for (const o of orders) {
     if (o.productType === 'FRONTEND') continue;
     const groupKey = `${o.platform.slug}:${o.parentExternalId ?? o.externalId}`;
@@ -941,8 +950,8 @@ export async function getFunnel(
     const orderFamily = o.product.family;
     const cls = classifyOrderInGroup(t, g.feProductFamily, orderFamily);
 
+    // Track cross-sell metadata pra reporting separado (não afeta stages).
     if (cls === 'CROSS_SELL') {
-      // CROSS_SELL implies both families are non-null (per classifier).
       const fromFamily = g.feProductFamily as string;
       const toFamily = orderFamily as string;
       const key = `${fromFamily}→${toFamily}`;
@@ -956,9 +965,7 @@ export async function getFunnel(
       if (!existing) crossSellMap.set(key, entry);
       entry.sessions.add(groupKey);
       entry.revenue += gross;
-      // Skip stage accounting — cross-sell doesn't count toward FE family's
-      // take rate.
-      continue;
+      // NÃO faz continue — orders cross-sell CONTAM no funil da família FE.
     }
 
     if (t === 'BUMP') {
