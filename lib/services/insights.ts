@@ -88,6 +88,23 @@ async function computeAll(): Promise<InsightsResponse> {
     () => insightD1(filters),
     () => insightD4(filters),
     () => insightD5(filters),
+    // ---- novos (PROFIT) ----
+    () => insightProfitRoas(),
+    () => insightProfitRefundCost(prodResp),
+    () => insightProfitUpsellZero(prodResp),
+    () => insightProfitAffUnderpriced(affResp),
+    // ---- novos (AFFILIATES) ----
+    () => insightAffTrafficDrop(),
+    () => insightAffRefundFingerprint(affResp),
+    // ---- novos (FUNNEL) ----
+    () => insightFunnelTakerateDrop(),
+    () => insightFunnelNoUpsell(),
+    () => insightFunnelDownsellSaver(),
+    () => insightFunnelTakerateImprove(prodResp),
+    // ---- novos (OPERATIONS) ----
+    () => insightOpsPeakByDay(filters),
+    () => insightOpsDowDip(filters),
+    () => insightOpsPlatformStale(),
   ]) {
     try {
       const arr = await fn();
@@ -492,6 +509,718 @@ async function insightD5(filters: MetricsFilters): Promise<Insight[]> {
       { label: 'Volume retroativo', value: fmt(total) },
     ],
   }];
+}
+
+// ============================================================
+// P-ROAS — Família com ROAS negativo nos últimos 14d
+//   Janela menor que os 30d gerais pra surfar problemas frescos:
+//   net - cpa - cogs - fulfillment < 0 com volume material.
+//   Action: pausar campanhas ou revisar CPA imediato.
+// ============================================================
+async function insightProfitRoas(): Promise<Insight[]> {
+  const since = new Date(Date.now() - 14 * 24 * 3600 * 1000);
+  const rows = await db.$queryRaw<Array<{
+    family: string;
+    net: Prisma.Decimal;
+    cpa: Prisma.Decimal;
+    cogs: Prisma.Decimal;
+    fulfillment: Prisma.Decimal;
+    orders: bigint;
+  }>>(Prisma.sql`
+    SELECT p.family AS family,
+           COALESCE(SUM(o."netAmountUsd"), 0)::numeric(14,2) AS net,
+           COALESCE(SUM(o."cpaPaidUsd"), 0)::numeric(14,2) AS cpa,
+           COALESCE(SUM(o."cogsUsd"), 0)::numeric(14,2) AS cogs,
+           COALESCE(SUM(o."fulfillmentUsd"), 0)::numeric(14,2) AS fulfillment,
+           COUNT(*)::bigint AS orders
+    FROM "Order" o
+    JOIN "Product" p ON p.id = o."productId"
+    WHERE o."orderedAt" >= ${since}
+      AND o.status = 'APPROVED'
+      AND p.family IS NOT NULL
+    GROUP BY p.family
+    HAVING COUNT(*) >= 10
+  `);
+
+  const losers = rows.map((r) => {
+    const net = Number(r.net), cpa = Number(r.cpa), cogs = Number(r.cogs), ff = Number(r.fulfillment);
+    return { family: r.family, profit: net - cpa - cogs - ff, net, cpa, cogs, ff, orders: Number(r.orders) };
+  }).filter((r) => r.profit < 0);
+
+  if (losers.length === 0) return [];
+  losers.sort((a, b) => a.profit - b.profit);
+  const out: Insight[] = [];
+  for (const l of losers.slice(0, 3)) {
+    out.push({
+      id: `p-roas-neg-${l.family.toLowerCase()}`,
+      category: 'profit',
+      severity: 'alert',
+      headline: `${l.family} com ROAS negativo: ${fmt(l.profit)} em 14d`,
+      body: `Net ${fmt(l.net)} − CPA ${fmt(l.cpa)} − COGS ${fmt(l.cogs)} − Fulfillment ${fmt(l.ff)} = ${fmt(l.profit)}. Pausar campanhas ou rever CPA imediato.`,
+      metrics: [
+        { label: 'Pedidos (14d)', value: String(l.orders) },
+        { label: 'Margem por pedido', value: fmt(l.profit / Math.max(1, l.orders)) },
+      ],
+      cta: { label: 'Abrir Produtos', href: '/products' },
+    });
+  }
+  return out;
+}
+
+// ============================================================
+// P-REFUND-COST — SKU com refunds devorando margem
+//   Refund-rate só conta % de pedidos; aqui mostramos o tamanho do
+//   buraco em USD (revenue perdida + COGS/fulfillment já enviados).
+// ============================================================
+async function insightProfitRefundCost(prod: ProductsResponse): Promise<Insight[]> {
+  // Buscar refunded gross + cogs por SKU diretamente (getProducts agrega
+  // mas não expõe refunded_gross/refunded_cogs separados). Janela 30d.
+  const since = new Date(Date.now() - WINDOW_DAYS * 24 * 3600 * 1000);
+  const rows = await db.$queryRaw<Array<{
+    externalId: string;
+    name: string;
+    refundedGross: Prisma.Decimal;
+    refundedCogs: Prisma.Decimal;
+    refundedFulfillment: Prisma.Decimal;
+    refunds: bigint;
+    total: bigint;
+  }>>(Prisma.sql`
+    SELECT p."externalId" AS "externalId",
+           p.name AS name,
+           COALESCE(SUM(o."originalGrossUsd") FILTER (WHERE o.status='REFUNDED'), 0)::numeric(14,2) AS "refundedGross",
+           COALESCE(SUM(o."cogsUsd") FILTER (WHERE o.status='REFUNDED'), 0)::numeric(14,2) AS "refundedCogs",
+           COALESCE(SUM(o."fulfillmentUsd") FILTER (WHERE o.status='REFUNDED'), 0)::numeric(14,2) AS "refundedFulfillment",
+           COUNT(*) FILTER (WHERE o.status='REFUNDED')::bigint AS refunds,
+           COUNT(*)::bigint AS total
+    FROM "Order" o
+    JOIN "Product" p ON p.id = o."productId"
+    WHERE o."orderedAt" >= ${since}
+    GROUP BY p."externalId", p.name
+    HAVING COUNT(*) >= 20
+       AND COUNT(*) FILTER (WHERE o.status='REFUNDED')::float / COUNT(*) >= 0.15
+  `);
+
+  if (rows.length === 0) return [];
+  const items = rows.map((r) => {
+    const refundedGross = Math.abs(Number(r.refundedGross));
+    const sunkCogs = Math.abs(Number(r.refundedCogs)) + Math.abs(Number(r.refundedFulfillment));
+    const lost = refundedGross + sunkCogs;
+    const refunds = Number(r.refunds), total = Number(r.total);
+    return { ...r, externalId: r.externalId, name: r.name, refundedGross, sunkCogs, lost, refunds, total, rate: refunds / total };
+  }).sort((a, b) => b.lost - a.lost);
+
+  const top = items[0];
+  const others = items.slice(1, 3).map((i) => `${i.name} (${pct(i.rate)} · ${fmt(i.lost)})`).join(' · ');
+
+  return [{
+    id: 'p-refund-cost',
+    category: 'profit',
+    severity: 'alert',
+    headline: `${top.name}: ${pct(top.rate)} de refund engoliu ${fmt(top.lost)} em 30d`,
+    body: `Inclui receita perdida (${fmt(top.refundedGross)}) + COGS/fulfillment já enviados (${fmt(top.sunkCogs)}). Threshold da listagem: refund-rate ≥ 15% e ≥ 20 pedidos.`,
+    metrics: [
+      { label: 'Refunds / Total', value: `${top.refunds} / ${top.total}` },
+      { label: 'Outros impactados', value: others || 'só este SKU' },
+    ],
+    cta: { label: 'Abrir Produtos', href: '/products' },
+  }];
+}
+
+// ============================================================
+// P-UPSELL-ZERO — Backend rodando perto do zero de margem
+//   SKU UP/DW com take-rate decente mas margem unitária mínima.
+//   Esforço alto pra retorno baixo: vale repensar o slot.
+// ============================================================
+function insightProfitUpsellZero(prod: ProductsResponse): Insight[] {
+  const candidates = prod.products
+    .filter((p) =>
+      (p.productType === 'UPSELL' || p.productType === 'DOWNSELL') &&
+      p.orders >= 20,
+    )
+    .map((p) => ({ ...p, profitPerSale: (p.estimatedProfit ?? 0) / Math.max(1, p.orders) }))
+    .filter((p) => p.profitPerSale < 5 && p.profitPerSale > -5) // perto de zero
+    .sort((a, b) => a.profitPerSale - b.profitPerSale);
+
+  if (candidates.length === 0) return [];
+  const out: Insight[] = [];
+  for (const c of candidates.slice(0, 3)) {
+    out.push({
+      id: `p-upsell-zero-${c.externalId}`,
+      category: 'profit',
+      severity: 'insight',
+      headline: `${c.name} rende ${fmt(c.profitPerSale)} por venda`,
+      body: `Esse backend converte (${c.orders} pedidos em 30d) mas a margem por venda após COGS/fulfillment é desprezível. Considere: subir o preço, reduzir COGS (negociar fornecedor), ou substituir por outro produto no mesmo slot.`,
+      metrics: [
+        { label: 'Receita / Lucro 30d', value: `${fmt(c.revenue)} / ${fmt(c.estimatedProfit ?? 0)}` },
+        { label: 'Margem unitária', value: fmt(c.profitPerSale) },
+      ],
+    });
+  }
+  return out;
+}
+
+// ============================================================
+// P-AFF-UNDERPRICED — Afiliado AOV alto pagando CPA padrão
+//   AOV global ≥ 2× mediana mas CPA por venda na média do catálogo.
+//   Risco: concorrência leva ele com tier mais alto.
+// ============================================================
+function insightProfitAffUnderpriced(aff: AffiliatesResponse): Insight[] {
+  const eligible = aff.affiliates.filter((a) => a.attributedSessions >= 10 && a.attributedRevenue > 0);
+  if (eligible.length < 5) return [];
+
+  const aovs = eligible.map((a) => a.attributedRevenue / a.attributedSessions);
+  const sorted = [...aovs].sort((a, b) => a - b);
+  const median = sorted[Math.floor(sorted.length / 2)];
+  if (median <= 0) return [];
+
+  const cpasPerSale = eligible
+    .map((a) => a.orders > 0 ? a.cpa / a.orders : 0)
+    .filter((c) => c > 0);
+  const medianCpa = [...cpasPerSale].sort((a, b) => a - b)[Math.floor(cpasPerSale.length / 2)] ?? 0;
+
+  const winners = eligible
+    .map((a) => ({
+      ...a,
+      aov: a.attributedRevenue / a.attributedSessions,
+      cpaPerSale: a.orders > 0 ? a.cpa / a.orders : 0,
+    }))
+    .filter((a) => a.aov >= median * 2 && a.cpaPerSale <= medianCpa * 1.3)
+    .sort((a, b) => b.aov - a.aov);
+
+  if (winners.length === 0) return [];
+  const top = winners.slice(0, 3).map((w) =>
+    `${w.nickname || w.externalId} (AOV ${fmt(w.aov)} · CPA/venda ${fmt(w.cpaPerSale)})`,
+  ).join(' · ');
+
+  return [{
+    id: 'p-aff-underpriced',
+    category: 'profit',
+    severity: 'insight',
+    headline: `${winners.length} ${winners.length === 1 ? 'afiliado entrega' : 'afiliados entregam'} AOV alto pagando CPA padrão`,
+    body: `AOV global ≥ 2× a mediana (${fmt(median)}) mas CPA na média do mercado. Risco: concorrente leva eles com tier maior. Considere boost de CPA condicionado a manter quality bar.`,
+    metrics: [
+      { label: 'Casos', value: top },
+      { label: 'Mediana AOV / CPA', value: `${fmt(median)} / ${fmt(medianCpa)}` },
+    ],
+    cta: { label: 'Abrir Ranking', href: '/leaderboard' },
+  }];
+}
+
+// ============================================================
+// A-TRAFFIC-DROP — Afiliado com queda brusca de tráfego
+//   Pedidos esta semana < 40% da média semanal das 4 anteriores
+//   AND média prévia ≥ 5/sem (pra evitar ruído de afiliado pequeno).
+//   Mensagem CONVITE pra investigar (não acusação): pode ser pausa
+//   programada, problema técnico, mudança de estratégia.
+// ============================================================
+async function insightAffTrafficDrop(): Promise<Insight[]> {
+  const now = new Date();
+  const oneWeekAgo = new Date(now.getTime() - 7 * 24 * 3600 * 1000);
+  const fiveWeeksAgo = new Date(now.getTime() - 35 * 24 * 3600 * 1000);
+
+  const rows = await db.$queryRaw<Array<{
+    affiliateId: string;
+    thisWeek: bigint;
+    prior4w: bigint;
+    externalId: string;
+    nickname: string | null;
+    platformSlug: string;
+  }>>(Prisma.sql`
+    SELECT o."affiliateId" AS "affiliateId",
+           COUNT(*) FILTER (WHERE o."orderedAt" >= ${oneWeekAgo})::bigint AS "thisWeek",
+           COUNT(*) FILTER (WHERE o."orderedAt" >= ${fiveWeeksAgo} AND o."orderedAt" < ${oneWeekAgo})::bigint AS "prior4w",
+           a."externalId" AS "externalId",
+           a.nickname AS nickname,
+           pl.slug AS "platformSlug"
+    FROM "Order" o
+    JOIN "Affiliate" a ON a.id = o."affiliateId"
+    JOIN "Platform" pl ON pl.id = a."platformId"
+    WHERE o."affiliateId" IS NOT NULL
+      AND o."orderedAt" >= ${fiveWeeksAgo}
+    GROUP BY o."affiliateId", a."externalId", a.nickname, pl.slug
+    HAVING COUNT(*) FILTER (WHERE o."orderedAt" >= ${fiveWeeksAgo} AND o."orderedAt" < ${oneWeekAgo}) >= 20
+  `);
+
+  const drops = rows.map((r) => {
+    const thisWeek = Number(r.thisWeek);
+    const priorAvg = Number(r.prior4w) / 4;
+    const ratio = priorAvg > 0 ? thisWeek / priorAvg : 1;
+    return { ...r, thisWeek, priorAvg, ratio };
+  }).filter((r) => r.ratio < 0.4 && r.priorAvg >= 5)
+    .sort((a, b) => a.ratio - b.ratio);
+
+  if (drops.length === 0) return [];
+  const out: Insight[] = [];
+  for (const d of drops.slice(0, 3)) {
+    out.push({
+      id: `a-traffic-drop-${d.affiliateId}`,
+      category: 'affiliates',
+      severity: 'alert',
+      headline: `${d.nickname || d.externalId}: queda brusca de tráfego (-${pct(1 - d.ratio)})`,
+      body: `Esta semana: ${d.thisWeek} pedidos. Média das 4 semanas anteriores: ${d.priorAvg.toFixed(1)}/sem. Vale chamar pra entender — pausou campanha? mudou de produto? problema com link/postback? Iniciar conversa antes de presumir churn.`,
+      metrics: [
+        { label: 'Esta semana / média prévia', value: `${d.thisWeek} / ${d.priorAvg.toFixed(1)}` },
+        { label: 'Plataforma', value: d.platformSlug === 'digistore24' ? 'D24' : 'CB' },
+      ],
+      cta: { label: 'Abrir afiliado', href: `/all-affiliates?aff=${encodeURIComponent(d.externalId)}` },
+    });
+  }
+  return out;
+}
+
+// ============================================================
+// A-REFUND-FINGERPRINT — Afiliado com refund-rate anormal
+//   refund-rate ≥ 2× a média global E pedidos ≥ 10 (anti-ruído).
+// ============================================================
+function insightAffRefundFingerprint(aff: AffiliatesResponse): Insight[] {
+  const all = aff.affiliates.filter((a) => a.allOrders >= 10);
+  if (all.length === 0) return [];
+  const totalOrders = all.reduce((s, a) => s + a.allOrders, 0);
+  const totalRefunds = all.reduce((s, a) => s + a.refunds, 0);
+  if (totalOrders === 0) return [];
+  const globalRate = totalRefunds / totalOrders;
+  if (globalRate < 0.01) return []; // base muito baixa, não vale comparar
+
+  const offenders = all
+    .filter((a) => a.refundRate >= globalRate * 2 && (a.refundRate - globalRate) > 0.02)
+    .sort((a, b) => b.refundRate - a.refundRate);
+
+  if (offenders.length === 0) return [];
+  const top = offenders.slice(0, 3).map((o) =>
+    `${o.nickname || o.externalId} (${pct(o.refundRate)} · ${o.refunds}/${o.allOrders})`,
+  ).join(' · ');
+
+  return [{
+    id: 'a-refund-fingerprint',
+    category: 'affiliates',
+    severity: 'alert',
+    headline: `${offenders.length} ${offenders.length === 1 ? 'afiliado tem' : 'afiliados têm'} refund-rate anormal (≥ 2× média)`,
+    body: `Padrão típico de tráfego de baixa qualidade ou audiência incompatível com a oferta. Vale revisar fonte do tráfego ou pausar antes que afete reputação na plataforma.`,
+    metrics: [
+      { label: 'Casos', value: top },
+      { label: 'Média global', value: pct(globalRate) },
+    ],
+    cta: { label: 'Abrir Ranking', href: '/leaderboard?sortBy=refundRate' },
+  }];
+}
+
+// ============================================================
+// F-TAKERATE-DROP — Take-rate em queda
+//   Por (família, step), compara take-rate desta semana vs média
+//   das 4 anteriores. Drop > 30% E volume material (≥ 20 FE/sem).
+// ============================================================
+async function insightFunnelTakerateDrop(): Promise<Insight[]> {
+  const now = new Date();
+  const oneWeekAgo = new Date(now.getTime() - 7 * 24 * 3600 * 1000);
+  const fiveWeeksAgo = new Date(now.getTime() - 35 * 24 * 3600 * 1000);
+
+  // Volume por (família, productType, funnelStep) em duas janelas.
+  const rows = await db.$queryRaw<Array<{
+    family: string;
+    productType: string;
+    funnelStep: number | null;
+    thisWeek: bigint;
+    prior4w: bigint;
+  }>>(Prisma.sql`
+    SELECT p.family AS family,
+           o."productType"::text AS "productType",
+           o."funnelStep" AS "funnelStep",
+           COUNT(*) FILTER (WHERE o."orderedAt" >= ${oneWeekAgo} AND o.status='APPROVED')::bigint AS "thisWeek",
+           COUNT(*) FILTER (WHERE o."orderedAt" >= ${fiveWeeksAgo} AND o."orderedAt" < ${oneWeekAgo} AND o.status='APPROVED')::bigint AS "prior4w"
+    FROM "Order" o
+    JOIN "Product" p ON p.id = o."productId"
+    WHERE o."orderedAt" >= ${fiveWeeksAgo}
+      AND p.family IS NOT NULL
+    GROUP BY p.family, o."productType", o."funnelStep"
+  `);
+
+  // Pivot: pra cada família, FE this/prior + UP/DW por step this/prior.
+  type StepCounts = { thisWeek: number; prior4w: number };
+  const fam = new Map<string, { fe: StepCounts; ups: Map<number, StepCounts>; dws: Map<number, StepCounts> }>();
+  for (const r of rows) {
+    const f = fam.get(r.family) ?? { fe: { thisWeek: 0, prior4w: 0 }, ups: new Map(), dws: new Map() };
+    fam.set(r.family, f);
+    const tw = Number(r.thisWeek), pw = Number(r.prior4w);
+    if (r.productType === 'FRONTEND') {
+      f.fe.thisWeek += tw; f.fe.prior4w += pw;
+    } else if (r.productType === 'UPSELL' && r.funnelStep != null) {
+      const c = f.ups.get(r.funnelStep) ?? { thisWeek: 0, prior4w: 0 };
+      c.thisWeek += tw; c.prior4w += pw; f.ups.set(r.funnelStep, c);
+    } else if (r.productType === 'DOWNSELL' && r.funnelStep != null) {
+      const c = f.dws.get(r.funnelStep) ?? { thisWeek: 0, prior4w: 0 };
+      c.thisWeek += tw; c.prior4w += pw; f.dws.set(r.funnelStep, c);
+    }
+  }
+
+  const drops: Array<{ family: string; label: string; thisRate: number; priorRate: number; drop: number }> = [];
+  for (const [family, data] of fam) {
+    const priorFEPerWeek = data.fe.prior4w / 4;
+    if (priorFEPerWeek < 20 || data.fe.thisWeek < 5) continue; // amostra pequena
+    for (const [step, c] of data.ups) {
+      const thisRate = data.fe.thisWeek > 0 ? c.thisWeek / data.fe.thisWeek : 0;
+      const priorRate = data.fe.prior4w > 0 ? c.prior4w / data.fe.prior4w : 0;
+      if (priorRate < 0.05) continue; // baseline muito baixa
+      const drop = priorRate > 0 ? (priorRate - thisRate) / priorRate : 0;
+      if (drop > 0.3) drops.push({ family, label: `Upsell ${step - 1}`, thisRate, priorRate, drop });
+    }
+    for (const [step, c] of data.dws) {
+      const thisRate = data.fe.thisWeek > 0 ? c.thisWeek / data.fe.thisWeek : 0;
+      const priorRate = data.fe.prior4w > 0 ? c.prior4w / data.fe.prior4w : 0;
+      if (priorRate < 0.05) continue;
+      const drop = priorRate > 0 ? (priorRate - thisRate) / priorRate : 0;
+      if (drop > 0.3) drops.push({ family, label: `Downsell ${step - 1}`, thisRate, priorRate, drop });
+    }
+  }
+
+  if (drops.length === 0) return [];
+  drops.sort((a, b) => b.drop - a.drop);
+  const out: Insight[] = [];
+  for (const d of drops.slice(0, 3)) {
+    out.push({
+      id: `f-takerate-drop-${d.family.toLowerCase()}-${d.label.replace(/\s/g, '')}`,
+      category: 'funnel',
+      severity: 'alert',
+      headline: `${d.label} do ${d.family}: take-rate caiu ${pct(d.drop)} esta semana`,
+      body: `${pct(d.priorRate)} (média 4 semanas anteriores) → ${pct(d.thisRate)} (esta semana). Possíveis causas: mudança no checkout, oferta esgotada/pausada, problema com o vídeo da página, bug no postback. Investigar antes de virar tendência.`,
+      metrics: [
+        { label: 'Take-rate antes / agora', value: `${pct(d.priorRate)} → ${pct(d.thisRate)}` },
+      ],
+      cta: { label: 'Abrir Funil', href: '/funnel' },
+    });
+  }
+  return out;
+}
+
+// ============================================================
+// F-NO-UPSELL — Família vendendo só FE
+//   Razão (sessões com qualquer não-FE) / (sessões com FE) < 5%
+//   E ≥ 20 FE no período. Indica funil sem upsell ofertado ou
+//   conversão tão ruim que vira ruído.
+// ============================================================
+async function insightFunnelNoUpsell(): Promise<Insight[]> {
+  const since = new Date(Date.now() - WINDOW_DAYS * 24 * 3600 * 1000);
+  const rows = await db.$queryRaw<Array<{
+    family: string;
+    feSessions: bigint;
+    nonFeSessions: bigint;
+    feRevenue: Prisma.Decimal;
+  }>>(Prisma.sql`
+    WITH session_data AS (
+      SELECT pl.slug || ':' || COALESCE(o."parentExternalId", o."externalId") AS session_key,
+             p.family AS family,
+             BOOL_OR(o."productType"='FRONTEND' AND o.status='APPROVED') AS has_fe,
+             BOOL_OR(o."productType" <> 'FRONTEND' AND o.status='APPROVED') AS has_non_fe,
+             SUM(CASE WHEN o."productType"='FRONTEND' AND o.status='APPROVED' THEN o."grossAmountUsd" ELSE 0 END) AS fe_rev
+      FROM "Order" o
+      JOIN "Product" p ON p.id = o."productId"
+      JOIN "Platform" pl ON pl.id = o."platformId"
+      WHERE o."orderedAt" >= ${since}
+        AND p.family IS NOT NULL
+      GROUP BY 1, 2
+    )
+    SELECT family,
+           COUNT(*) FILTER (WHERE has_fe)::bigint AS "feSessions",
+           COUNT(*) FILTER (WHERE has_fe AND has_non_fe)::bigint AS "nonFeSessions",
+           COALESCE(SUM(fe_rev) FILTER (WHERE has_fe), 0)::numeric(14,2) AS "feRevenue"
+    FROM session_data
+    GROUP BY family
+    HAVING COUNT(*) FILTER (WHERE has_fe) >= 20
+  `);
+
+  const noUpsell = rows.map((r) => ({
+    family: r.family,
+    feSessions: Number(r.feSessions),
+    nonFeSessions: Number(r.nonFeSessions),
+    feRevenue: Number(r.feRevenue),
+    rate: Number(r.feSessions) > 0 ? Number(r.nonFeSessions) / Number(r.feSessions) : 0,
+  })).filter((r) => r.rate < 0.05);
+
+  if (noUpsell.length === 0) return [];
+
+  // Benchmark: maior rate da janela pra estimar potencial perdido.
+  const bench = rows.map((r) =>
+    Number(r.feSessions) > 0 ? Number(r.nonFeSessions) / Number(r.feSessions) : 0,
+  ).reduce((a, b) => Math.max(a, b), 0);
+
+  const out: Insight[] = [];
+  for (const f of noUpsell) {
+    const lostFactor = Math.max(0, bench - f.rate); // diff sobre o benchmark
+    const estLost = f.feRevenue * lostFactor; // estimativa simplificada
+    out.push({
+      id: `f-no-upsell-${f.family.toLowerCase()}`,
+      category: 'funnel',
+      severity: 'insight',
+      headline: `${f.family}: ${pct(f.rate)} das sessões compram algo além do FE`,
+      body: `Funil parece estar só apresentando o FE. Benchmark do catálogo: ${pct(bench)}. Estimativa do que está sendo deixado na mesa em 30d: ${fmt(estLost)}. Verificar se UP/DW estão configurados na sales page e se o postback do upsell está funcionando.`,
+      metrics: [
+        { label: 'Sessões FE / com extras', value: `${f.feSessions} / ${f.nonFeSessions}` },
+        { label: 'Benchmark do catálogo', value: pct(bench) },
+      ],
+      cta: { label: 'Abrir Funil', href: `/funnel?fam=${encodeURIComponent(f.family)}` },
+    });
+  }
+  return out;
+}
+
+// ============================================================
+// F-DOWNSELL-SAVER — Downsell recuperando rejeições do upsell
+//   De sessões que recusaram UP1 (FE ✓ / UP1 ✗), quantas % aceitam DW1?
+//   Se ≥ 30%, é um modelo replicável pras outras famílias.
+// ============================================================
+async function insightFunnelDownsellSaver(): Promise<Insight[]> {
+  const since = new Date(Date.now() - WINDOW_DAYS * 24 * 3600 * 1000);
+  const rows = await db.$queryRaw<Array<{
+    family: string;
+    rejectedUp1: bigint;
+    recoveredDw1: bigint;
+    dw1Revenue: Prisma.Decimal;
+  }>>(Prisma.sql`
+    WITH session_data AS (
+      SELECT pl.slug || ':' || COALESCE(o."parentExternalId", o."externalId") AS session_key,
+             p.family AS family,
+             BOOL_OR(o."productType"='FRONTEND' AND o.status='APPROVED') AS has_fe,
+             BOOL_OR(o."productType"='UPSELL' AND o."funnelStep"=2 AND o.status='APPROVED') AS has_up1,
+             BOOL_OR(o."productType"='DOWNSELL' AND o."funnelStep"=2 AND o.status='APPROVED') AS has_dw1,
+             SUM(CASE WHEN o."productType"='DOWNSELL' AND o."funnelStep"=2 AND o.status='APPROVED'
+                      THEN o."grossAmountUsd" ELSE 0 END) AS dw1_rev
+      FROM "Order" o
+      JOIN "Product" p ON p.id = o."productId"
+      JOIN "Platform" pl ON pl.id = o."platformId"
+      WHERE o."orderedAt" >= ${since}
+        AND p.family IS NOT NULL
+      GROUP BY 1, 2
+    )
+    SELECT family,
+           COUNT(*) FILTER (WHERE has_fe AND NOT has_up1)::bigint AS "rejectedUp1",
+           COUNT(*) FILTER (WHERE has_fe AND NOT has_up1 AND has_dw1)::bigint AS "recoveredDw1",
+           COALESCE(SUM(dw1_rev) FILTER (WHERE has_fe AND NOT has_up1 AND has_dw1), 0)::numeric(14,2) AS "dw1Revenue"
+    FROM session_data
+    GROUP BY family
+    HAVING COUNT(*) FILTER (WHERE has_fe AND NOT has_up1) >= 20
+  `);
+
+  const savers = rows.map((r) => {
+    const rejected = Number(r.rejectedUp1);
+    const recovered = Number(r.recoveredDw1);
+    return {
+      family: r.family,
+      rejected,
+      recovered,
+      revenue: Number(r.dw1Revenue),
+      recoveryRate: rejected > 0 ? recovered / rejected : 0,
+    };
+  }).filter((r) => r.recoveryRate >= 0.3 && r.recovered >= 10)
+    .sort((a, b) => b.recoveryRate - a.recoveryRate);
+
+  if (savers.length === 0) return [];
+  const top = savers[0];
+  const others = savers.slice(1, 3).map((s) => `${s.family} ${pct(s.recoveryRate)}`).join(' · ');
+
+  return [{
+    id: 'f-downsell-saver',
+    category: 'funnel',
+    severity: 'good',
+    headline: `${top.family}: DW1 recupera ${pct(top.recoveryRate)} de quem rejeitou UP1`,
+    body: `${top.recovered} sessões recuperadas via DW1, gerando ${fmt(top.revenue)} extra em 30d. Modelo digno de replicar nas outras famílias. Revisar oferta DW + condições de gatilho.`,
+    metrics: [
+      { label: 'Rejeições UP1 / Recuperações DW1', value: `${top.rejected} / ${top.recovered}` },
+      { label: 'Outras famílias com bom recovery', value: others || '—' },
+    ],
+    cta: { label: 'Abrir Funil', href: '/funnel' },
+  }];
+}
+
+// ============================================================
+// F-TAKERATE-IMPROVE — Step com take-rate baixo, sugerir mudanças
+//   Backend SKU com take-rate < 5% E volume elevado de sessões FE
+//   relacionadas (≥ 30 FE da mesma família). Não sugere remover —
+//   sugere o que testar pra subir conversão.
+// ============================================================
+function insightFunnelTakerateImprove(prod: ProductsResponse): Insight[] {
+  // Computar take-rate aproximada por SKU backend = orders / FE da família.
+  const fePerFamily = new Map<string, number>();
+  for (const p of prod.products) {
+    if (p.productType === 'FRONTEND' && p.family) {
+      fePerFamily.set(p.family, (fePerFamily.get(p.family) ?? 0) + p.orders);
+    }
+  }
+  if (fePerFamily.size === 0) return [];
+
+  // Benchmark: take-rate médio por productType no catálogo (UPSELL vs
+  // DOWNSELL). Não temos funnelStep no Product (é per-order), então
+  // benchmark fica por categoria — menos preciso mas acionável.
+  const benchAcc = new Map<string, { sum: number; n: number }>();
+  for (const p of prod.products) {
+    if ((p.productType !== 'UPSELL' && p.productType !== 'DOWNSELL') || !p.family) continue;
+    const fe = fePerFamily.get(p.family) ?? 0;
+    if (fe < 30 || p.orders < 1) continue;
+    const rate = p.orders / fe;
+    const key = p.productType;
+    const acc = benchAcc.get(key) ?? { sum: 0, n: 0 };
+    acc.sum += rate; acc.n += 1; benchAcc.set(key, acc);
+  }
+
+  const candidates = prod.products
+    .filter((p) => (p.productType === 'UPSELL' || p.productType === 'DOWNSELL') && p.family)
+    .map((p) => {
+      const fe = fePerFamily.get(p.family!) ?? 0;
+      const rate = fe > 0 ? p.orders / fe : 0;
+      const bench = benchAcc.get(p.productType);
+      const benchRate = bench && bench.n > 0 ? bench.sum / bench.n : 0;
+      return { ...p, fe, rate, benchRate };
+    })
+    .filter((p) => p.fe >= 30 && p.rate < 0.05 && p.benchRate > p.rate * 1.5)
+    .sort((a, b) => (a.rate - a.benchRate) - (b.rate - b.benchRate)); // pior gap primeiro
+
+  if (candidates.length === 0) return [];
+  const out: Insight[] = [];
+  for (const c of candidates.slice(0, 3)) {
+    const typeLabel = c.productType === 'UPSELL' ? 'Upsell' : 'Downsell';
+    out.push({
+      id: `f-takerate-improve-${c.externalId}`,
+      category: 'funnel',
+      severity: 'insight',
+      headline: `${c.name}: take-rate ${pct(c.rate)} (benchmark ${typeLabel.toLowerCase()}s do catálogo: ${pct(c.benchRate)})`,
+      body: `Conversão muito abaixo do que outros ${typeLabel.toLowerCase()}s do catálogo entregam. Pra subir: testar variação de preço (downstep ou upstep), revisar copy/headline da oferta, simplificar checkout, mudar a posição no funil (ex: trocar com outro ${typeLabel.toLowerCase()}), ou substituir por um produto com mais aderência ao FE da família.`,
+      metrics: [
+        { label: 'Vendas / FE da família', value: `${c.orders} / ${c.fe}` },
+        { label: 'Gap vs benchmark', value: `-${pct(c.benchRate - c.rate)}` },
+      ],
+      cta: { label: 'Abrir Produtos', href: '/products' },
+    });
+  }
+  return out;
+}
+
+// ============================================================
+// O-PEAK-BY-DAY — Hora de pico de cada dia da semana
+//   Pra cada DOW, encontra o slot horário com mais vendas APROVADAS.
+//   Útil pra programar campanhas + oncall.
+// ============================================================
+async function insightOpsPeakByDay(filters: MetricsFilters): Promise<Insight[]> {
+  const rows = await db.$queryRaw<Array<{ dow: number; hour: number; orders: bigint; revenue: Prisma.Decimal }>>(Prisma.sql`
+    SELECT EXTRACT(DOW FROM "orderedAt")::int AS dow,
+           EXTRACT(HOUR FROM "orderedAt")::int AS hour,
+           COUNT(*) FILTER (WHERE status='APPROVED')::bigint AS orders,
+           COALESCE(SUM("grossAmountUsd") FILTER (WHERE status='APPROVED'), 0)::numeric(14,2) AS revenue
+    FROM "Order"
+    WHERE "orderedAt" >= ${filters.startDate} AND "orderedAt" <= ${filters.endDate}
+    GROUP BY 1, 2
+    HAVING COUNT(*) FILTER (WHERE status='APPROVED') > 0
+  `);
+  if (rows.length === 0) return [];
+
+  // Pra cada dow, pega o slot com mais orders.
+  const peakByDow = new Map<number, { hour: number; orders: number; revenue: number }>();
+  for (const r of rows) {
+    const orders = Number(r.orders), revenue = Number(r.revenue);
+    const cur = peakByDow.get(r.dow);
+    if (!cur || orders > cur.orders) peakByDow.set(r.dow, { hour: r.hour, orders, revenue });
+  }
+
+  const dows = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
+  const ordered = [1, 2, 3, 4, 5, 6, 0]; // Mon-first
+  const lines = ordered
+    .filter((d) => peakByDow.has(d))
+    .map((d) => {
+      const p = peakByDow.get(d)!;
+      return `${dows[d]} ${String(p.hour).padStart(2, '0')}h (${p.orders} · ${fmt(p.revenue)})`;
+    });
+
+  if (lines.length === 0) return [];
+
+  return [{
+    id: 'o-peak-by-day',
+    category: 'operations',
+    severity: 'insight',
+    headline: `Hora de pico por dia da semana`,
+    body: `Slot horário (UTC) com mais vendas aprovadas em cada dia, baseado em 30d. Use pra programar push de campanhas e garantir oncall presente.`,
+    metrics: lines.map((l) => ({ label: l.split(' ')[0], value: l.substring(l.indexOf(' ') + 1) })),
+    cta: { label: 'Ver heatmap', href: '/overview' },
+  }];
+}
+
+// ============================================================
+// O-DOW-DIP — Dia da semana com queda significativa
+//   Compara revenue diária média de cada DOW vs média geral.
+//   Se algum DOW está -25% ou mais abaixo, sinaliza.
+// ============================================================
+async function insightOpsDowDip(filters: MetricsFilters): Promise<Insight[]> {
+  const rows = await db.$queryRaw<Array<{ dow: number; revenue: Prisma.Decimal; orders: bigint; days: bigint }>>(Prisma.sql`
+    SELECT EXTRACT(DOW FROM "orderedAt")::int AS dow,
+           COALESCE(SUM("grossAmountUsd") FILTER (WHERE status='APPROVED'), 0)::numeric(14,2) AS revenue,
+           COUNT(*) FILTER (WHERE status='APPROVED')::bigint AS orders,
+           COUNT(DISTINCT DATE("orderedAt"))::bigint AS days
+    FROM "Order"
+    WHERE "orderedAt" >= ${filters.startDate} AND "orderedAt" <= ${filters.endDate}
+    GROUP BY 1
+  `);
+  if (rows.length < 7) return []; // sem dado de algum DOW
+
+  const perDay = rows.map((r) => ({
+    dow: r.dow,
+    avgRev: Number(r.days) > 0 ? Number(r.revenue) / Number(r.days) : 0,
+    orders: Number(r.orders),
+  }));
+  const overallAvg = perDay.reduce((s, x) => s + x.avgRev, 0) / perDay.length;
+  if (overallAvg <= 0) return [];
+
+  const dows = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
+  const dips = perDay
+    .map((d) => ({ ...d, drop: (overallAvg - d.avgRev) / overallAvg }))
+    .filter((d) => d.drop > 0.25)
+    .sort((a, b) => b.drop - a.drop);
+
+  if (dips.length === 0) return [];
+  const top = dips[0];
+  return [{
+    id: 'o-dow-dip',
+    category: 'operations',
+    severity: 'insight',
+    headline: `${dows[top.dow]} rende -${pct(top.drop)} vs média diária`,
+    body: `Revenue média de ${dows[top.dow]} (${fmt(top.avgRev)}/dia) está significativamente abaixo da média semanal (${fmt(overallAvg)}/dia). Considere reduzir bid de ads neste DOW e realocar pros dias mais quentes.`,
+    metrics: [
+      { label: `${dows[top.dow]} média`, value: `${fmt(top.avgRev)}/dia` },
+      { label: 'Média geral', value: `${fmt(overallAvg)}/dia` },
+    ],
+  }];
+}
+
+// ============================================================
+// O-PLATFORM-STALE — Plataforma sem sync recente
+//   lastSyncAt > 6h atrás indica webhook/IPN possivelmente quebrado.
+//   Operação crítica: venda chegando pra plataforma e não pra cá =
+//   afiliado/contabilidade desincronizado.
+// ============================================================
+async function insightOpsPlatformStale(): Promise<Insight[]> {
+  const platforms = await db.platform.findMany({
+    select: { slug: true, displayName: true, lastSyncAt: true, isActive: true },
+    where: { isActive: true },
+  });
+  const stale = platforms.filter((p) => {
+    if (!p.lastSyncAt) return false; // nunca sincronizou — caso separado
+    const ageMs = Date.now() - p.lastSyncAt.getTime();
+    return ageMs > 6 * 3600 * 1000;
+  });
+
+  if (stale.length === 0) return [];
+  const out: Insight[] = [];
+  for (const p of stale) {
+    const ageH = Math.floor((Date.now() - (p.lastSyncAt as Date).getTime()) / 3600 / 1000);
+    out.push({
+      id: `o-platform-stale-${p.slug}`,
+      category: 'operations',
+      severity: 'alert',
+      headline: `${p.displayName} sem sync há ${ageH}h`,
+      body: `Última atividade registrada: ${fmtDateAgo(p.lastSyncAt as Date)}. Pode ser webhook/IPN quebrado, mudança de URL no painel da plataforma, ou bloqueio de IP. Verificar antes que vendas comecem a sumir do dashboard.`,
+      metrics: [
+        { label: 'Última sync', value: (p.lastSyncAt as Date).toISOString() },
+        { label: 'Threshold', value: '6h' },
+      ],
+      cta: { label: 'Abrir Plataformas', href: '/platforms' },
+    });
+  }
+  return out;
 }
 
 // ============================================================
