@@ -334,9 +334,19 @@ function LeaderboardPage({ filters, onOpenAffiliate }) {
   const all = state.data?.affiliates || [];
   const summary = state.data?.summary || { activeNow: 0, activePrev: 0, concentration: 0, newAff: 0, churnedAff: 0 };
 
+  // AOV global = receita atribuída (funil completo das sessões trazidas
+  // pelo afiliado) / sessões trazidas. Captura quanto vale em média
+  // cada lead que ele entrega — diferente do AOV por pedido (que ignora
+  // upsells e bumps quando a plataforma atribui pra outro affiliateId).
+  function aovOf(a) {
+    if (!a || !a.attributedSessions) return 0;
+    return a.attributedRevenue / a.attributedSessions;
+  }
+
   const rows = all.filter((a) => a.allOrders >= minOrders).sort((a, b) => {
     switch (sortBy) {
       case 'orders': return b.orders - a.orders;
+      case 'aov': return aovOf(b) - aovOf(a);
       case 'netMargin': return b.netMargin - a.netMargin;
       case 'profit': return (b.estimatedProfit ?? 0) - (a.estimatedProfit ?? 0);
       case 'attributedProfit': return (b.attributedProfit ?? 0) - (a.attributedProfit ?? 0);
@@ -393,7 +403,7 @@ function LeaderboardPage({ filters, onOpenAffiliate }) {
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '4px 0 12px', flexWrap: 'wrap' }}>
         <span className="f-label">ORDENAR POR</span>
         <div className="seg">
-          {[['revenue','Receita'],['attributedProfit','Lucro atribuído'],['profit','Lucro direto'],['orders','Pedidos'],['netMargin','Margem'],['approvalRate','Aprovação'],['refundRate','Reembolsos'],['chargebackRate','Chargebacks']].map(([k,l]) => (
+          {[['revenue','Receita'],['aov','AOV'],['attributedProfit','Lucro atribuído'],['profit','Lucro direto'],['orders','Pedidos'],['netMargin','Margem'],['approvalRate','Aprovação'],['refundRate','Reembolsos'],['chargebackRate','Chargebacks']].map(([k,l]) => (
             <button key={k} className={sortBy === k ? 'is-active' : ''} onClick={() => setSortBy(k)}>{l}</button>
           ))}
         </div>
@@ -419,6 +429,7 @@ function LeaderboardPage({ filters, onOpenAffiliate }) {
                 <th>Plataforma</th>
                 <th className="num">Pedidos</th>
                 <th className="num">Receita</th>
+                <th className="num" title="AOV global = receita do funil completo (FE+UPs+DWs+bumps das sessões trazidas) ÷ sessões. Mostra quanto vale em média cada lead.">AOV global</th>
                 <th>Aprovação</th>
                 <th className="num">Reembolso</th>
                 <th className="num">Chargeback</th>
@@ -432,10 +443,10 @@ function LeaderboardPage({ filters, onOpenAffiliate }) {
             </thead>
             <tbody>
               {state.status === 'loading' && (
-                <tr><td colSpan={14} style={{ textAlign: 'center', padding: 24, opacity: 0.6 }}>Carregando...</td></tr>
+                <tr><td colSpan={15} style={{ textAlign: 'center', padding: 24, opacity: 0.6 }}>Carregando...</td></tr>
               )}
               {state.status === 'ready' && rows.length === 0 && (
-                <tr><td colSpan={14} style={{ textAlign: 'center', padding: 24, opacity: 0.6 }}>
+                <tr><td colSpan={15} style={{ textAlign: 'center', padding: 24, opacity: 0.6 }}>
                   Nenhum afiliado com pelo menos {minOrders} pedido{minOrders > 1 ? 's' : ''} no período
                 </td></tr>
               )}
@@ -461,6 +472,14 @@ function LeaderboardPage({ filters, onOpenAffiliate }) {
                     <td><span className={`plat ${platClass}`}>{platShort}</span></td>
                     <td className="num cell-mono">{fmtInt(r.orders)}</td>
                     <td className="num cell-mono" style={{ color: 'var(--fg1)' }}>{fmtCurrency(r.revenue, cur, 0)}</td>
+                    <td className="num cell-mono" style={{ color: 'var(--glow-cyan)' }}>
+                      {r.attributedSessions > 0 ? fmtCurrency(aovOf(r), cur, 0) : '—'}
+                      {r.attributedSessions > 0 && (
+                        <span style={{ display: 'block', fontSize: 9, color: 'var(--fg5)', fontWeight: 400, marginTop: 1 }}>
+                          {r.attributedSessions} sess.
+                        </span>
+                      )}
+                    </td>
                     <td>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                         <span className={`cell-mono ${apClass}`} style={{ minWidth: 44 }}>{(r.approvalRate * 100).toFixed(1)}%</span>
