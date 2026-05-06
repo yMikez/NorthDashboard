@@ -105,6 +105,14 @@ async function computeAll(): Promise<InsightsResponse> {
     () => insightOpsPeakByDay(filters),
     () => insightOpsDowDip(filters),
     () => insightOpsPlatformStale(),
+    // ---- Quality cohort (refunds/chargebacks) ----
+    () => insightRefundTime(),
+    () => insightSkuRefundRank(),
+    () => insightSkuCbRank(),
+    () => insightFeVsFunnelRefund(),
+    () => insightAffD60Cohort(),
+    () => insightAffBadQualityRank(affResp),
+    () => insightVslQuality(),
   ]) {
     try {
       const arr = await fn();
@@ -1221,6 +1229,474 @@ async function insightOpsPlatformStale(): Promise<Insight[]> {
     });
   }
   return out;
+}
+
+// ============================================================
+// Q-REFUND-TIME — Tempo médio até refund (multi-dim breakdown)
+//   Janela: refunds dos últimos 90d (com refundedAt populated).
+//   Calcula avg dias por dimensão (SKU, afiliado, plataforma, país)
+//   pra revelar onde o refund acontece "tarde demais" (refund tardio
+//   vs refund imediato indica diferentes problemas: reembolso tardio
+//   sugere insatisfação pós-uso; reembolso imediato sugere arrependimento
+//   ou checkout defeituoso).
+// ============================================================
+async function insightRefundTime(): Promise<Insight[]> {
+  const since = new Date(Date.now() - 90 * 24 * 3600 * 1000);
+
+  const [globalRow, byPlatform, bySku, byAff, byCountry] = await Promise.all([
+    db.$queryRaw<Array<{ avgDays: number; n: bigint }>>(Prisma.sql`
+      SELECT AVG(EXTRACT(EPOCH FROM ("refundedAt" - "orderedAt")) / 86400)::float AS "avgDays",
+             COUNT(*)::bigint AS n
+      FROM "Order"
+      WHERE status = 'REFUNDED'
+        AND "refundedAt" IS NOT NULL
+        AND "orderedAt" >= ${since}
+    `),
+    db.$queryRaw<Array<{ slug: string; avgDays: number; n: bigint }>>(Prisma.sql`
+      SELECT pl.slug AS slug,
+             AVG(EXTRACT(EPOCH FROM (o."refundedAt" - o."orderedAt")) / 86400)::float AS "avgDays",
+             COUNT(*)::bigint AS n
+      FROM "Order" o JOIN "Platform" pl ON pl.id = o."platformId"
+      WHERE o.status='REFUNDED' AND o."refundedAt" IS NOT NULL AND o."orderedAt" >= ${since}
+      GROUP BY pl.slug
+      HAVING COUNT(*) >= 5
+    `),
+    db.$queryRaw<Array<{ name: string; avgDays: number; n: bigint }>>(Prisma.sql`
+      SELECT p.name AS name,
+             AVG(EXTRACT(EPOCH FROM (o."refundedAt" - o."orderedAt")) / 86400)::float AS "avgDays",
+             COUNT(*)::bigint AS n
+      FROM "Order" o JOIN "Product" p ON p.id = o."productId"
+      WHERE o.status='REFUNDED' AND o."refundedAt" IS NOT NULL AND o."orderedAt" >= ${since}
+      GROUP BY p.name
+      HAVING COUNT(*) >= 10
+      ORDER BY "avgDays" DESC
+      LIMIT 3
+    `),
+    db.$queryRaw<Array<{ aff: string; avgDays: number; n: bigint }>>(Prisma.sql`
+      SELECT COALESCE(a.nickname, a."externalId") AS aff,
+             AVG(EXTRACT(EPOCH FROM (o."refundedAt" - o."orderedAt")) / 86400)::float AS "avgDays",
+             COUNT(*)::bigint AS n
+      FROM "Order" o JOIN "Affiliate" a ON a.id = o."affiliateId"
+      WHERE o.status='REFUNDED' AND o."refundedAt" IS NOT NULL AND o."orderedAt" >= ${since}
+      GROUP BY 1
+      HAVING COUNT(*) >= 10
+      ORDER BY "avgDays" DESC
+      LIMIT 3
+    `),
+    db.$queryRaw<Array<{ country: string; avgDays: number; n: bigint }>>(Prisma.sql`
+      SELECT COALESCE(country, '—') AS country,
+             AVG(EXTRACT(EPOCH FROM ("refundedAt" - "orderedAt")) / 86400)::float AS "avgDays",
+             COUNT(*)::bigint AS n
+      FROM "Order"
+      WHERE status='REFUNDED' AND "refundedAt" IS NOT NULL AND "orderedAt" >= ${since}
+      GROUP BY 1
+      HAVING COUNT(*) >= 10
+      ORDER BY "avgDays" DESC
+      LIMIT 3
+    `),
+  ]);
+
+  if (globalRow.length === 0 || Number(globalRow[0].n) === 0) return [];
+  const global = globalRow[0];
+
+  const fmtRow = (label: string, days: number, n: bigint) =>
+    `${label}: ${days.toFixed(1)}d (${n} refunds)`;
+
+  return [{
+    id: 'q-refund-time',
+    category: 'operations',
+    severity: 'insight',
+    headline: `Tempo médio até refund: ${global.avgDays.toFixed(1)} dias (${Number(global.n)} casos em 90d)`,
+    body: `Refund tardio (>30d) costuma ser insatisfação após uso; refund rápido (<7d) costuma ser arrependimento ou problema no checkout. Quebra por dimensão abaixo identifica onde o problema concentra.`,
+    metrics: [
+      { label: 'Por plataforma',
+        value: byPlatform.map((r) => `${r.slug === 'digistore24' ? 'D24' : 'CB'} ${r.avgDays.toFixed(1)}d`).join(' · ') || '—' },
+      { label: 'SKUs com refund mais tardio',
+        value: bySku.map((r) => fmtRow(r.name, r.avgDays, r.n)).join(' · ') || '—' },
+      { label: 'Afiliados com refund mais tardio',
+        value: byAff.map((r) => fmtRow(r.aff, r.avgDays, r.n)).join(' · ') || '—' },
+      { label: 'Países com refund mais tardio',
+        value: byCountry.map((r) => fmtRow(r.country, r.avgDays, r.n)).join(' · ') || '—' },
+    ],
+  }];
+}
+
+// ============================================================
+// Q-SKU-REFUND-RANK — SKU com refund-rate maior que irmãos da família
+//   Compara FE SKUs da mesma família (geralmente bottle counts diferentes).
+//   Se max/min ≥ 2× E ambos com volume material, sinaliza desbalanço.
+//   Útil pra identificar packs que não casam com expectativa do cliente.
+// ============================================================
+async function insightSkuRefundRank(): Promise<Insight[]> {
+  const since = new Date(Date.now() - WINDOW_DAYS * 24 * 3600 * 1000);
+  const rows = await db.$queryRaw<Array<{
+    family: string; bottles: number | null; name: string; externalId: string;
+    refundRate: number; total: bigint; refunds: bigint;
+  }>>(Prisma.sql`
+    SELECT p.family AS family,
+           p.bottles AS bottles,
+           p.name AS name,
+           p."externalId" AS "externalId",
+           COUNT(*) FILTER (WHERE o.status='REFUNDED')::float / NULLIF(COUNT(*),0) AS "refundRate",
+           COUNT(*)::bigint AS total,
+           COUNT(*) FILTER (WHERE o.status='REFUNDED')::bigint AS refunds
+    FROM "Order" o JOIN "Product" p ON p.id = o."productId"
+    WHERE o."orderedAt" >= ${since}
+      AND p.family IS NOT NULL
+      AND o."productType" = 'FRONTEND'
+    GROUP BY p.family, p.bottles, p.name, p."externalId"
+    HAVING COUNT(*) >= 20
+  `);
+
+  // Group by family, find max/min refund rate ratio.
+  const byFamily = new Map<string, typeof rows>();
+  for (const r of rows) {
+    const arr = byFamily.get(r.family) ?? [];
+    arr.push(r);
+    byFamily.set(r.family, arr);
+  }
+
+  const insights: Insight[] = [];
+  for (const [family, skus] of byFamily) {
+    if (skus.length < 2) continue;
+    const sorted = [...skus].sort((a, b) => b.refundRate - a.refundRate);
+    const worst = sorted[0], best = sorted[sorted.length - 1];
+    if (best.refundRate <= 0) continue;
+    const ratio = worst.refundRate / best.refundRate;
+    if (ratio < 2) continue;
+    const worstBottles = worst.bottles != null ? `${worst.bottles} Bottles` : 'pack';
+    const bestBottles = best.bottles != null ? `${best.bottles} Bottles` : 'pack';
+    insights.push({
+      id: `q-sku-refund-${family.toLowerCase()}`,
+      category: 'funnel',
+      severity: 'alert',
+      headline: `${family}: ${worstBottles} tem refund ${ratio.toFixed(1)}× maior que ${bestBottles}`,
+      body: `${pct(worst.refundRate)} (${Number(worst.refunds)}/${Number(worst.total)}) vs ${pct(best.refundRate)} (${Number(best.refunds)}/${Number(best.total)}). Cliente provavelmente está esperando coisa diferente do que recebe — revisar copy do pack, expectativa de duração, ou consider remover/repensar a SKU pior.`,
+      metrics: [
+        { label: 'SKU mais refundado', value: `${worst.name} · ${pct(worst.refundRate)}` },
+        { label: 'SKU mais saudável', value: `${best.name} · ${pct(best.refundRate)}` },
+      ],
+      cta: { label: 'Abrir Produtos', href: '/products' },
+    });
+  }
+  return insights;
+}
+
+// ============================================================
+// Q-SKU-CB-RANK — SKUs com maior chargeback rate
+//   CB rate ≥ 0.5% E volume ≥ 50. Top 3.
+//   Chargeback é o tipo de refund mais caro: dispute fee + reputation
+//   damage na plataforma + potencial freeze da conta vendor.
+// ============================================================
+async function insightSkuCbRank(): Promise<Insight[]> {
+  const since = new Date(Date.now() - WINDOW_DAYS * 24 * 3600 * 1000);
+  const rows = await db.$queryRaw<Array<{
+    name: string; externalId: string; cbRate: number; cbs: bigint; total: bigint;
+  }>>(Prisma.sql`
+    SELECT p.name AS name,
+           p."externalId" AS "externalId",
+           COUNT(*) FILTER (WHERE o.status='CHARGEBACK')::float / NULLIF(COUNT(*),0) AS "cbRate",
+           COUNT(*) FILTER (WHERE o.status='CHARGEBACK')::bigint AS cbs,
+           COUNT(*)::bigint AS total
+    FROM "Order" o JOIN "Product" p ON p.id = o."productId"
+    WHERE o."orderedAt" >= ${since}
+    GROUP BY p.name, p."externalId"
+    HAVING COUNT(*) >= 50
+       AND COUNT(*) FILTER (WHERE o.status='CHARGEBACK')::float / COUNT(*) >= 0.005
+    ORDER BY "cbRate" DESC
+    LIMIT 3
+  `);
+
+  if (rows.length === 0) return [];
+  const top = rows[0];
+  const others = rows.slice(1).map((r) => `${r.name} ${pct(r.cbRate)}`).join(' · ');
+  return [{
+    id: 'q-sku-cb-rank',
+    category: 'funnel',
+    severity: 'alert',
+    headline: `${top.name}: maior chargeback rate da operação (${pct(top.cbRate)})`,
+    body: `${Number(top.cbs)} chargebacks em ${Number(top.total)} pedidos nos últimos 30d. CB sai caro (dispute fee + reputation com a plataforma + risco de account freeze). Revisar: tráfego do SKU, descrição que aparece no extrato do cartão, política de cobrança recorrente.`,
+    metrics: [
+      { label: 'CB rate', value: pct(top.cbRate) },
+      { label: 'Outros SKUs em risco', value: others || '—' },
+    ],
+    cta: { label: 'Abrir Produtos', href: '/products' },
+  }];
+}
+
+// ============================================================
+// Q-FE-VS-FUNNEL-REFUND — Cliente que aceita upsell tem menos refund?
+//   Sessões agrupadas por "FE only" vs "FE + qualquer extra (UP/DW/BUMP)".
+//   Compara refund-rate entre os dois cohorts. Se sessão com upsell
+//   refunda significativamente menos, é argumento pra investir mais
+//   em upsell (não só pelo AOV mas pela qualidade do cliente).
+// ============================================================
+async function insightFeVsFunnelRefund(): Promise<Insight[]> {
+  const since = new Date(Date.now() - WINDOW_DAYS * 24 * 3600 * 1000);
+  const rows = await db.$queryRaw<Array<{
+    feOnlySessions: bigint; feOnlyRefunded: bigint;
+    funnelSessions: bigint; funnelRefunded: bigint;
+  }>>(Prisma.sql`
+    WITH session_data AS (
+      SELECT pl.slug || ':' || COALESCE(o."parentExternalId", o."externalId") AS session_key,
+             BOOL_OR(o."productType"='FRONTEND' AND o.status='APPROVED') AS has_fe_approved,
+             BOOL_OR(o."productType" <> 'FRONTEND' AND o.status='APPROVED') AS has_extra,
+             BOOL_OR(o.status='REFUNDED') AS has_refund
+      FROM "Order" o
+      JOIN "Platform" pl ON pl.id = o."platformId"
+      WHERE o."orderedAt" >= ${since}
+      GROUP BY 1
+    )
+    SELECT
+      COUNT(*) FILTER (WHERE has_fe_approved AND NOT has_extra)::bigint AS "feOnlySessions",
+      COUNT(*) FILTER (WHERE has_fe_approved AND NOT has_extra AND has_refund)::bigint AS "feOnlyRefunded",
+      COUNT(*) FILTER (WHERE has_fe_approved AND has_extra)::bigint AS "funnelSessions",
+      COUNT(*) FILTER (WHERE has_fe_approved AND has_extra AND has_refund)::bigint AS "funnelRefunded"
+    FROM session_data
+  `);
+
+  const r = rows[0];
+  if (!r) return [];
+  const feOnly = Number(r.feOnlySessions);
+  const feOnlyRef = Number(r.feOnlyRefunded);
+  const funnel = Number(r.funnelSessions);
+  const funnelRef = Number(r.funnelRefunded);
+  if (feOnly < 50 || funnel < 50) return []; // amostras pequenas
+
+  const feOnlyRate = feOnlyRef / feOnly;
+  const funnelRate = funnelRef / funnel;
+  if (feOnlyRate <= 0) return [];
+  const diff = (feOnlyRate - funnelRate) / feOnlyRate; // % menor
+  if (Math.abs(diff) < 0.15) return []; // sem diff material
+
+  if (funnelRate < feOnlyRate) {
+    return [{
+      id: 'q-fe-vs-funnel-refund',
+      category: 'funnel',
+      severity: 'good',
+      headline: `Clientes que aceitam upsell têm ${pct(diff)} menos refund`,
+      body: `Sessões só com FE: ${pct(feOnlyRate)} de refund-rate. Sessões com FE + UP/DW/BUMP: ${pct(funnelRate)}. Cliente que escala o ticket também tem mais commitment com a compra — argumento pra investir em otimizar a apresentação do upsell (não só pelo AOV imediato).`,
+      metrics: [
+        { label: 'FE only · sessões / refunds', value: `${feOnly} / ${feOnlyRef}` },
+        { label: 'FE + funil · sessões / refunds', value: `${funnel} / ${funnelRef}` },
+      ],
+    }];
+  }
+  // Inverso: clientes que aceitam upsell refundam MAIS (red flag).
+  return [{
+    id: 'q-fe-vs-funnel-refund-inverse',
+    category: 'funnel',
+    severity: 'alert',
+    headline: `Clientes que aceitam upsell refundam ${pct(-diff)} MAIS que FE-only`,
+    body: `Sessões só com FE: ${pct(feOnlyRate)}. Sessões com upsell: ${pct(funnelRate)}. Padrão invertido — cliente entra no funil, escala ticket e depois se arrepende. Indica oferta de upsell agressiva ou pressão de venda. Revisar copy.`,
+    metrics: [
+      { label: 'FE only · sessões / refunds', value: `${feOnly} / ${feOnlyRef}` },
+      { label: 'FE + funil · sessões / refunds', value: `${funnel} / ${funnelRef}` },
+    ],
+  }];
+}
+
+// ============================================================
+// Q-AFF-D60-COHORT — Afiliado positivo no curto, prejuízo no D60
+//   Pega cohort de vendas 60-90d atrás. Soma originalGrossUsd
+//   (revenue na hora da venda) e CPA/COGS/fulfillment. Subtrai
+//   refund_loss = soma de originalGrossUsd das vendas refundadas
+//   dentro de 60d. Se profit no momento da venda era positivo mas
+//   D60 é negativo, afiliado traz cliente que não fica.
+// ============================================================
+async function insightAffD60Cohort(): Promise<Insight[]> {
+  const ninetyAgo = new Date(Date.now() - 90 * 24 * 3600 * 1000);
+  const sixtyAgo = new Date(Date.now() - 60 * 24 * 3600 * 1000);
+
+  const rows = await db.$queryRaw<Array<{
+    affiliateId: string;
+    externalId: string;
+    nickname: string | null;
+    grossAtSale: Prisma.Decimal;
+    cpa: Prisma.Decimal;
+    cogs: Prisma.Decimal;
+    fulfillment: Prisma.Decimal;
+    sales: bigint;
+    refundLoss: Prisma.Decimal;
+    refunds: bigint;
+  }>>(Prisma.sql`
+    WITH cohort AS (
+      SELECT o."affiliateId" AS aff_id,
+             o."originalGrossUsd" AS gross,
+             o."cpaPaidUsd" AS cpa,
+             o."cogsUsd" AS cogs,
+             o."fulfillmentUsd" AS ff,
+             o.status AS status,
+             o."refundedAt" AS refunded_at,
+             o."orderedAt" AS ordered_at
+      FROM "Order" o
+      WHERE o."orderedAt" >= ${ninetyAgo}
+        AND o."orderedAt" < ${sixtyAgo}
+        AND o."affiliateId" IS NOT NULL
+        AND o."originalGrossUsd" IS NOT NULL
+    )
+    SELECT c.aff_id AS "affiliateId",
+           a."externalId" AS "externalId",
+           a.nickname AS nickname,
+           COALESCE(SUM(c.gross), 0)::numeric(14,2) AS "grossAtSale",
+           COALESCE(SUM(c.cpa), 0)::numeric(14,2) AS cpa,
+           COALESCE(SUM(c.cogs), 0)::numeric(14,2) AS cogs,
+           COALESCE(SUM(c.ff), 0)::numeric(14,2) AS fulfillment,
+           COUNT(*)::bigint AS sales,
+           COALESCE(SUM(c.gross) FILTER (
+             WHERE c.status='REFUNDED'
+               AND c.refunded_at IS NOT NULL
+               AND (c.refunded_at - c.ordered_at) <= INTERVAL '60 days'
+           ), 0)::numeric(14,2) AS "refundLoss",
+           COUNT(*) FILTER (
+             WHERE c.status='REFUNDED'
+               AND c.refunded_at IS NOT NULL
+               AND (c.refunded_at - c.ordered_at) <= INTERVAL '60 days'
+           )::bigint AS refunds
+    FROM cohort c
+    JOIN "Affiliate" a ON a.id = c.aff_id
+    GROUP BY c.aff_id, a."externalId", a.nickname
+    HAVING COUNT(*) >= 10
+  `);
+
+  const items = rows.map((r) => {
+    const gross = Number(r.grossAtSale);
+    const cpa = Number(r.cpa);
+    const cogs = Number(r.cogs);
+    const ff = Number(r.fulfillment);
+    const refundLoss = Math.abs(Number(r.refundLoss));
+    // Estimativa: profit_at_sale ≈ gross - cogs - fulfillment - cpa
+    // (simplificação: ignora fees/tax que ficam ~5-10% do gross).
+    const profitAtSale = gross - cogs - ff - cpa;
+    const d60Profit = profitAtSale - refundLoss;
+    return {
+      ...r,
+      sales: Number(r.sales),
+      refunds: Number(r.refunds),
+      gross, cpa, cogs, ff, refundLoss,
+      profitAtSale, d60Profit,
+      flip: profitAtSale > 0 && d60Profit < 0,
+    };
+  }).filter((r) => r.flip)
+    .sort((a, b) => a.d60Profit - b.d60Profit);
+
+  if (items.length === 0) return [];
+  const out: Insight[] = [];
+  for (const i of items.slice(0, 3)) {
+    out.push({
+      id: `q-aff-d60-${i.affiliateId}`,
+      category: 'affiliates',
+      severity: 'alert',
+      headline: `${i.nickname || i.externalId}: ROAS positivo na venda, prejuízo no D60`,
+      body: `Vendas há 60-90d: ${i.sales} pedidos, ${fmt(i.gross)} em revenue. Profit no momento da venda: ${fmt(i.profitAtSale)}. Refunds nas mesmas vendas dentro de 60d: ${i.refunds} casos, ${fmt(i.refundLoss)} de loss. D60 verdadeiro: ${fmt(i.d60Profit)}. Cliente desse afiliado não fica — qualidade do tráfego ou copy não match com produto.`,
+      metrics: [
+        { label: 'Profit na venda → D60', value: `${fmt(i.profitAtSale)} → ${fmt(i.d60Profit)}` },
+        { label: 'Refund loss / vendas', value: `${i.refunds} / ${i.sales}` },
+      ],
+      cta: { label: 'Abrir afiliado', href: `/all-affiliates?aff=${encodeURIComponent(i.externalId)}` },
+    });
+  }
+  return out;
+}
+
+// ============================================================
+// Q-AFF-BAD-QUALITY-RANK — Top 5 afiliados por refund + CB rate
+//   Diferente do A-REFUND-FINGERPRINT (alerta por outliers >2× média),
+//   este dá ranking ordenado pra revisão sistemática mensal — quem está
+//   no topo da fila pra ser auditado.
+// ============================================================
+function insightAffBadQualityRank(aff: AffiliatesResponse): Insight[] {
+  const ranked = aff.affiliates
+    .filter((a) => a.allOrders >= 10)
+    .map((a) => ({ ...a, badRate: a.refundRate + a.cbRate }))
+    .sort((a, b) => b.badRate - a.badRate);
+
+  if (ranked.length < 3) return [];
+  const top5 = ranked.slice(0, 5);
+  // Se nenhum no top 5 está com taxa minimamente preocupante, não emite.
+  if (top5[0].badRate < 0.05) return [];
+
+  const lines = top5.map((a, i) =>
+    `${i + 1}. ${a.nickname || a.externalId}: ${pct(a.badRate)} (refund ${pct(a.refundRate)} + CB ${pct(a.cbRate)})`,
+  );
+
+  return [{
+    id: 'q-aff-bad-quality-rank',
+    category: 'affiliates',
+    severity: 'insight',
+    headline: `Top 5 afiliados com pior qualidade de lead (refund + CB)`,
+    body: `Ranking pra revisão sistemática. Estar nessa lista não significa fraude — significa que o tráfego trazido por eles tem maior taxa de devolução/contestação que o restante da rede. Boa rotina mensal: olhar essa lista e decidir audit/educação/pause.`,
+    metrics: lines.map((l) => {
+      const idx = l.indexOf('. ');
+      return { label: l.slice(0, idx), value: l.slice(idx + 2) };
+    }),
+    cta: { label: 'Abrir Ranking', href: '/leaderboard?sortBy=refundRate' },
+  }];
+}
+
+// ============================================================
+// Q-VSL-QUALITY — Variante (VSL) com refund/CB anormal
+//   Compara variantes da mesma família (vs2, vsnova, etc — Product.variant).
+//   Se uma variante tem (refund_rate + cb_rate) ≥ 1.5× as outras da família,
+//   sinaliza. VSL pode converter mais mas trazer cliente pior.
+// ============================================================
+async function insightVslQuality(): Promise<Insight[]> {
+  const since = new Date(Date.now() - WINDOW_DAYS * 24 * 3600 * 1000);
+  const rows = await db.$queryRaw<Array<{
+    family: string; variant: string; name: string;
+    refundRate: number; cbRate: number; total: bigint;
+  }>>(Prisma.sql`
+    SELECT p.family AS family,
+           p.variant AS variant,
+           p.name AS name,
+           COUNT(*) FILTER (WHERE o.status='REFUNDED')::float / NULLIF(COUNT(*),0) AS "refundRate",
+           COUNT(*) FILTER (WHERE o.status='CHARGEBACK')::float / NULLIF(COUNT(*),0) AS "cbRate",
+           COUNT(*)::bigint AS total
+    FROM "Order" o JOIN "Product" p ON p.id = o."productId"
+    WHERE o."orderedAt" >= ${since}
+      AND p.family IS NOT NULL
+      AND p.variant IS NOT NULL
+    GROUP BY p.family, p.variant, p.name
+    HAVING COUNT(*) >= 20
+  `);
+
+  // Group by family, find outliers per family.
+  const byFamily = new Map<string, typeof rows>();
+  for (const r of rows) {
+    const arr = byFamily.get(r.family) ?? [];
+    arr.push(r);
+    byFamily.set(r.family, arr);
+  }
+
+  const insights: Insight[] = [];
+  for (const [family, variants] of byFamily) {
+    if (variants.length < 2) continue;
+    const withScore = variants.map((v) => ({ ...v, badRate: v.refundRate + v.cbRate }));
+    const avgOthers = (target: typeof withScore[number]) => {
+      const others = withScore.filter((v) => v.variant !== target.variant);
+      if (others.length === 0) return 0;
+      return others.reduce((s, v) => s + v.badRate, 0) / others.length;
+    };
+    const sorted = [...withScore].sort((a, b) => b.badRate - a.badRate);
+    const worst = sorted[0];
+    const baseline = avgOthers(worst);
+    if (baseline === 0 || worst.badRate < baseline * 1.5) continue;
+    if (worst.badRate < 0.05) continue; // sem materialidade
+
+    insights.push({
+      id: `q-vsl-${family.toLowerCase()}-${worst.variant.toLowerCase()}`,
+      category: 'funnel',
+      severity: 'alert',
+      headline: `${family} variante ${worst.variant}: refund+CB ${(worst.badRate / baseline).toFixed(1)}× maior que outras variantes`,
+      body: `Variantes da mesma família costumam ter qualidade comparável. ${worst.variant} (${worst.name}) tem refund ${pct(worst.refundRate)} + CB ${pct(worst.cbRate)} = ${pct(worst.badRate)}. Outras variantes da família: ${pct(baseline)} médio. Possível: VSL/copy promete coisa que produto não entrega, ou audiência atraída pela vs específica é diferente.`,
+      metrics: [
+        { label: 'Variante com problema', value: `${worst.variant} · ${pct(worst.badRate)}` },
+        { label: 'Média das outras variantes', value: pct(baseline) },
+      ],
+      cta: { label: 'Abrir Produtos', href: '/products' },
+    });
+  }
+  return insights;
 }
 
 // ============================================================
