@@ -1164,6 +1164,10 @@ export function aggregateGroups(
   if (upStepsSorted.length === 0) upStepsSorted.push(2);
   if (dwStepsSorted.length === 0) dwStepsSorted.push(2);
 
+  // Bump fica fora da visualização do funil (decisão de produto: bump é
+  // um add-on do checkout, não um estágio de conversão sequencial).
+  // bumpRevenue e bumpGroups continuam sendo usados pra cálculo de AOV
+  // total e revenueLiftFromUpsells — só não aparecem como stage.
   const stages: FunnelStage[] = [
     {
       id: 'frontend',
@@ -1171,13 +1175,6 @@ export function aggregateGroups(
       volume: feGroups,
       revenue: round2(feRevenue),
       takeRate: 1.0,
-    },
-    {
-      id: 'bump',
-      label: 'Order Bump',
-      volume: bumpGroups,
-      revenue: round2(bumpRevenue),
-      takeRate: feGroups ? round4(bumpGroups / feGroups) : 0,
     },
   ];
   for (const step of upStepsSorted) {

@@ -244,7 +244,7 @@ describe('aggregateGroups', () => {
     const out = aggregateGroups(groups, groups.length);
     const ids = out.stages.map((s) => s.id);
     expect(ids).toEqual([
-      'frontend', 'bump',
+      'frontend',
       'upsell1', 'upsell2', 'upsell3',
       'downsell1', 'downsell2', 'downsell3',
     ]);
