@@ -800,12 +800,18 @@ function AllAffiliatesPage({ filters, onOpenAffiliate }) {
     ? affsWithFeCpa.reduce((s, r) => s + r.cpaPerFe, 0) / affsWithFeCpa.length
     : 0;
 
-  // Tertile thresholds pro AOV. Usa p33 e p67 — robusto a outliers,
-  // sempre garante 1/3 verde / 1/3 amarelo / 1/3 vermelho (ranking
-  // comparativo entre afiliados). Só aplica cor se houver ≥ 6 afiliados
-  // com AOV > 0 (amostra mínima pra divisão fazer sentido).
+  // AOV = faturamento total do afiliado / pedidos FE dele.
+  //
+  // Lente DIRETA (não session-attribution): só conta orders onde o
+  // afiliado está no affiliateId. Não inclui cross-sells da sessão
+  // (UPs de outra família que o cliente comprou) nem UPs sem CPA
+  // contratado pra ele. Reflete o ticket médio do funil PRÓPRIO do
+  // afiliado — bate com a fórmula esperada do usuário.
+  //
+  // r.revenue: sum de grossAmountUsd dos APPROVED do afiliado
+  // r.feApprovedCount: count de FE+APPROVED do afiliado
   function aovOf(r) {
-    return r.attributedSessions > 0 ? r.attributedRevenue / r.attributedSessions : 0;
+    return r.feApprovedCount > 0 ? r.revenue / r.feApprovedCount : 0;
   }
   const aovs = all.map(aovOf).filter((v) => v > 0).sort((a, b) => a - b);
   const enoughSample = aovs.length >= 6;
@@ -921,7 +927,7 @@ function AllAffiliatesPage({ filters, onOpenAffiliate }) {
                     <td className="num cell-mono">{fmtInt(r.orders)}</td>
                     <td className="num">
                       {aov > 0 ? (
-                        <span style={aovPillStyle(tier)} title={`${r.attributedSessions} sessões trazidas`}>
+                        <span style={aovPillStyle(tier)} title={`${r.feApprovedCount} pedidos FE aprovados · ${fmtCurrency(r.revenue, cur, 0)} faturados`}>
                           {fmtCurrency(aov, cur, 0)}
                         </span>
                       ) : (
