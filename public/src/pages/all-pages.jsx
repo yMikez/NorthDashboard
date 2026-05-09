@@ -784,10 +784,20 @@ function AllAffiliatesPage({ filters, onOpenAffiliate }) {
   const totalCpa = all.reduce((s, r) => s + (r.cpa || 0), 0);
   const totalOrders = all.reduce((s, r) => s + (r.orders || 0), 0);
   const affsWithOrders = all.filter((r) => (r.orders || 0) > 0);
-  // CPA médio = média dos CPAs/venda de cada afiliado (macro-média de
-  // micros). Diferente de totalCpa/totalOrders — afiliado de alto volume
-  // não domina. Resposta correta pra "qual o CPA típico que pagamos?".
-  const perAffCpa = affsWithOrders.map((r) => r.cpa / r.orders);
+
+  // CPA médio = média dos CPAs/venda DE FE de cada afiliado.
+  //
+  // Por que dividir pelo nº de FE (attributedSessions) e não pelo total
+  // de pedidos: CPA é pago tipicamente só na venda FE; UPs/DWs/RC não
+  // pagam (ou pagam muito menos). Se um afiliado vende 5 FE a \$220 +
+  // 3 UPs a \$0 CPA, ele tem 8 pedidos no total mas só 5 receberam
+  // CPA. Dividir CPA total por 8 dá \$137 (errado); dividir por 5 dá
+  // \$220 (= o que ele negocia).
+  //
+  // attributedSessions = sessões iniciadas com FE pelo afiliado no
+  // período (do session-attribution pass do backend). Cada sessão = 1 FE.
+  const affsWithFE = all.filter((r) => (r.attributedSessions || 0) > 0);
+  const perAffCpa = affsWithFE.map((r) => r.cpa / r.attributedSessions);
   const cpaAvgPerAff = perAffCpa.length > 0
     ? perAffCpa.reduce((s, v) => s + v, 0) / perAffCpa.length
     : 0;
@@ -852,7 +862,7 @@ function AllAffiliatesPage({ filters, onOpenAffiliate }) {
         <div className="mini-kpi">
           <div className="l">CPA médio dos afiliados</div>
           <div className="v">{fmtCurrency(cpaAvgPerAff, cur, 0)}</div>
-          <div className="s">média dos CPAs/venda individuais</div>
+          <div className="s">média do CPA/FE de cada afiliado · {affsWithFE.length} {affsWithFE.length === 1 ? 'afiliado com FE' : 'afiliados com FE'}</div>
         </div>
       </div>
 
