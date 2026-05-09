@@ -785,21 +785,17 @@ function AllAffiliatesPage({ filters, onOpenAffiliate }) {
   const totalOrders = all.reduce((s, r) => s + (r.orders || 0), 0);
   const affsWithOrders = all.filter((r) => (r.orders || 0) > 0);
 
-  // CPA médio = média dos CPAs/venda DE FE de cada afiliado.
+  // CPA médio dos afiliados = média dos CPAs negociados de cada um.
   //
-  // Por que dividir pelo nº de FE (attributedSessions) e não pelo total
-  // de pedidos: CPA é pago tipicamente só na venda FE; UPs/DWs/RC não
-  // pagam (ou pagam muito menos). Se um afiliado vende 5 FE a \$220 +
-  // 3 UPs a \$0 CPA, ele tem 8 pedidos no total mas só 5 receberam
-  // CPA. Dividir CPA total por 8 dá \$137 (errado); dividir por 5 dá
-  // \$220 (= o que ele negocia).
+  // O backend agora expõe `cpaPerFeApproved` por afiliado: média do
+  // cpaPaidUsd em pedidos FE+APPROVED do período. Imune a refund
+  // (que zera o cpaPaidUsd no IPN) e a tipos sem CPA (UP/DW/RC).
   //
-  // attributedSessions = sessões iniciadas com FE pelo afiliado no
-  // período (do session-attribution pass do backend). Cada sessão = 1 FE.
-  const affsWithFE = all.filter((r) => (r.attributedSessions || 0) > 0);
-  const perAffCpa = affsWithFE.map((r) => r.cpa / r.attributedSessions);
-  const cpaAvgPerAff = perAffCpa.length > 0
-    ? perAffCpa.reduce((s, v) => s + v, 0) / perAffCpa.length
+  // Resultado = média de cpaPerFeApproved entre afiliados que tiveram
+  // FE no período. Reflete o CPA típico que negociamos.
+  const affsWithFeCpa = all.filter((r) => (r.cpaPerFeApproved || 0) > 0);
+  const cpaAvgPerAff = affsWithFeCpa.length > 0
+    ? affsWithFeCpa.reduce((s, r) => s + r.cpaPerFeApproved, 0) / affsWithFeCpa.length
     : 0;
 
   // Tertile thresholds pro AOV. Usa p33 e p67 — robusto a outliers,
@@ -862,7 +858,7 @@ function AllAffiliatesPage({ filters, onOpenAffiliate }) {
         <div className="mini-kpi">
           <div className="l">CPA médio dos afiliados</div>
           <div className="v">{fmtCurrency(cpaAvgPerAff, cur, 0)}</div>
-          <div className="s">média do CPA/FE de cada afiliado · {affsWithFE.length} {affsWithFE.length === 1 ? 'afiliado com FE' : 'afiliados com FE'}</div>
+          <div className="s">média do CPA negociado · {affsWithFeCpa.length} {affsWithFeCpa.length === 1 ? 'afiliado' : 'afiliados'} com FE no período</div>
         </div>
       </div>
 

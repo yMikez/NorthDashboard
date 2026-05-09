@@ -239,6 +239,8 @@ export interface AffiliatesResponse {
     refundRate: number;
     cbRate: number;
     cpa: number;
+    feApprovedCount: number;       // FE+APPROVED no período
+    cpaPerFeApproved: number;      // CPA negociado real do afiliado
     netMargin: number;
     cogs: number;
     fulfillment: number;
@@ -1955,6 +1957,7 @@ export async function getAffiliates(
       fulfillmentUsd: true,
       country: true,
       orderedAt: true,
+      productType: true,
       affiliate: { select: { externalId: true, nickname: true, platformId: true } },
       platform: { select: { slug: true } },
     },
@@ -2095,6 +2098,12 @@ export async function getAffiliates(
     refunds: number;
     chargebacks: number;
     cpa: number;
+    // FE+APPROVED only — pra calcular o CPA negociado real do afiliado
+    // sem ser afetado por refund (que zera o cpaPaidUsd) e sem incluir
+    // UPs/DWs (que tipicamente não pagam CPA). cpaPerFeApproved deste
+    // dataset = feCpaApproved / feApprovedCount.
+    feApprovedCount: number;
+    feCpaApproved: number;
     net: number;
     cogs: number;
     fulfillment: number;
@@ -2134,6 +2143,8 @@ export async function getAffiliates(
           refunds: 0,
           chargebacks: 0,
           cpa: 0,
+          feApprovedCount: 0,
+          feCpaApproved: 0,
           net: 0,
           cogs: 0,
           fulfillment: 0,
@@ -2150,6 +2161,14 @@ export async function getAffiliates(
       if (o.status === 'APPROVED') {
         a.revenue += toNumber(o.grossAmountUsd);
         a.orders++;
+        // Negotiated CPA per affiliate: SÓ FE APPROVED. Outros tipos
+        // de pedido (UP/DW/RC) não pagam CPA, e refunded zera o
+        // cpaPaidUsd. Usar (feCpaApproved / feApprovedCount) como
+        // proxy do CPA negociado.
+        if (o.productType === 'FRONTEND') {
+          a.feApprovedCount++;
+          a.feCpaApproved += toNumber(o.cpaPaidUsd);
+        }
       } else if (o.status === 'REFUNDED') {
         a.refunds++;
       } else if (o.status === 'CHARGEBACK') {
@@ -2211,6 +2230,13 @@ export async function getAffiliates(
       refundRate: allOrders ? round4(refunds / denom) : 0,
       cbRate: allOrders ? round4(chargebacks / denom) : 0,
       cpa: round2(a?.cpa ?? 0),
+      // CPA negociado real do afiliado: média do cpaPaidUsd em FE
+      // APPROVED do período. Imune a refund (que zera cpa) e a tipos
+      // de pedido sem CPA (UP/DW/RC).
+      feApprovedCount: a?.feApprovedCount ?? 0,
+      cpaPerFeApproved: (a?.feApprovedCount ?? 0) > 0
+        ? round2((a!.feCpaApproved) / (a!.feApprovedCount))
+        : 0,
       netMargin: round2((a?.net ?? 0) - (a?.cpa ?? 0)),
       cogs: round2(a?.cogs ?? 0),
       fulfillment: round2(a?.fulfillment ?? 0),
