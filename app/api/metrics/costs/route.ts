@@ -1,6 +1,12 @@
-// Read-only endpoint for the Costs page UI. Mirrors what /api/admin/costs
-// GET returns, but without the bearer requirement — just read access for
-// display. Editing still goes through /api/admin/costs (token-gated).
+// Read-only endpoint for the Fulfillment (ex-Costs) page UI. Mirrors o
+// que /api/admin/costs GET retorna, mas sem bearer — só read pra display.
+// Edit continua passando por /api/admin/costs (token-gated).
+//
+// IMPORTANTE: a lista de famílias agora inclui TODAS que já apareceram
+// em algum Product, mesmo as ainda não catalogadas em ProductFamilyCost.
+// Famílias novas vêm com unitCostUsd = média dos catalogados (placeholder)
+// + flag isCataloged=false pra UI sinalizar que precisa atualização
+// manual.
 
 import { NextResponse } from 'next/server';
 import { db } from '@/lib/db';
@@ -14,16 +20,46 @@ export async function GET() {
   const auth = await requireTab('costs');
   if (!auth.ok) return auth.response;
   try {
-    const [families, rates] = await Promise.all([
+    const [families, rates, productFamilies] = await Promise.all([
       db.productFamilyCost.findMany({ orderBy: { family: 'asc' } }),
       db.fulfillmentRate.findMany({ orderBy: { bottlesMax: 'asc' } }),
+      db.product.findMany({
+        where: { family: { not: null } },
+        distinct: ['family'],
+        select: { family: true },
+        orderBy: { family: 'asc' },
+      }),
     ]);
+
+    const cataloged = new Set(families.map((f) => f.family));
+    const avgUnitCost = families.length > 0
+      ? families.reduce((s, f) => s + Number(f.unitCostUsd), 0) / families.length
+      : 0;
+
+    const allFamilies: Array<{
+      family: string;
+      unitCostUsd: number;
+      updatedAt: string;
+      isCataloged: boolean;
+    }> = families.map((f) => ({
+      family: f.family,
+      unitCostUsd: Number(f.unitCostUsd),
+      updatedAt: f.updatedAt.toISOString(),
+      isCataloged: true,
+    }));
+    for (const p of productFamilies) {
+      if (!p.family || cataloged.has(p.family)) continue;
+      allFamilies.push({
+        family: p.family,
+        unitCostUsd: Number(avgUnitCost.toFixed(2)),
+        updatedAt: new Date(0).toISOString(),
+        isCataloged: false,
+      });
+    }
+    allFamilies.sort((a, b) => a.family.localeCompare(b.family));
+
     return NextResponse.json({
-      families: families.map((f) => ({
-        family: f.family,
-        unitCostUsd: Number(f.unitCostUsd),
-        updatedAt: f.updatedAt.toISOString(),
-      })),
+      families: allFamilies,
       fulfillment: rates.map((r) => ({
         bottlesMax: r.bottlesMax,
         priceUsd: Number(r.priceUsd),

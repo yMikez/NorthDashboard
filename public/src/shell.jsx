@@ -32,7 +32,7 @@ function Sidebar({ active, onNav, user }) {
       label: 'Sistema',
       items: [
         { id: 'platforms', label: 'Plataformas', icon: 'plug' },
-        { id: 'costs', label: 'Custos', icon: 'wallet' },
+        { id: 'costs', label: 'Fulfillment', icon: 'wallet' },
         { id: 'health', label: 'Saúde do dado', icon: 'alert-triangle' },
       ]
     }

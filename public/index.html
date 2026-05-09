@@ -52,7 +52,7 @@ const ROUTES = {
   'transactions':   { title: 'Transações',  em: 'do ledger',   crumbs: ['Catálogo', 'Transações'] },
   'platforms':      { title: 'Plataformas', em: 'conectadas',  crumbs: ['Sistema', 'Plataformas'] },
   'health':         { title: 'Saúde',       em: 'do dado',     crumbs: ['Sistema', 'Saúde do dado'] },
-  'costs':          { title: 'Custos',      em: 'da operação', crumbs: ['Sistema', 'Custos'] },
+  'costs':          { title: 'Fulfillment', em: 'e custo de envio', crumbs: ['Sistema', 'Fulfillment'] },
   'insights':       { title: 'Insights',    em: 'do negócio',  crumbs: ['Análise', 'Insights'] },
   'users':          { title: 'Usuários',    em: 'do dashboard', crumbs: ['Admin', 'Usuários'] },
   'networks':       { title: 'Networks',    em: 'parceiras',   crumbs: ['Admin', 'Networks'] },
@@ -244,7 +244,7 @@ function App({ user }) {
           {hashState.route === 'transactions'   && <TransactionsPage filters={filters}/>}
           {hashState.route === 'platforms'      && <IntegrationsPage filters={filters}/>}
           {hashState.route === 'health'         && <HealthPage/>}
-          {hashState.route === 'costs'          && <CostsPage/>}
+          {hashState.route === 'costs'          && <CostsPage filters={filters}/>}
           {hashState.route === 'insights'       && <InsightsPage/>}
           {hashState.route === 'users'          && <UsersPage currentUser={user}/>}
           {hashState.route === 'networks'       && <NetworksPage/>}

@@ -783,8 +783,14 @@ function AllAffiliatesPage({ filters, onOpenAffiliate }) {
   // KPIs do período
   const totalCpa = all.reduce((s, r) => s + (r.cpa || 0), 0);
   const totalOrders = all.reduce((s, r) => s + (r.orders || 0), 0);
-  const cpaPerSale = totalOrders > 0 ? totalCpa / totalOrders : 0;
-  const affsWithOrders = all.filter((r) => (r.orders || 0) > 0).length;
+  const affsWithOrders = all.filter((r) => (r.orders || 0) > 0);
+  // CPA médio = média dos CPAs/venda de cada afiliado (macro-média de
+  // micros). Diferente de totalCpa/totalOrders — afiliado de alto volume
+  // não domina. Resposta correta pra "qual o CPA típico que pagamos?".
+  const perAffCpa = affsWithOrders.map((r) => r.cpa / r.orders);
+  const cpaAvgPerAff = perAffCpa.length > 0
+    ? perAffCpa.reduce((s, v) => s + v, 0) / perAffCpa.length
+    : 0;
 
   // Tertile thresholds pro AOV. Usa p33 e p67 — robusto a outliers,
   // sempre garante 1/3 verde / 1/3 amarelo / 1/3 vermelho (ranking
@@ -841,12 +847,12 @@ function AllAffiliatesPage({ filters, onOpenAffiliate }) {
         <div className="mini-kpi">
           <div className="l">CPA pago no período</div>
           <div className="v">{fmtCurrency(totalCpa, cur, 0)}</div>
-          <div className="s">total pra {affsWithOrders} {affsWithOrders === 1 ? 'afiliado ativo' : 'afiliados ativos'}</div>
+          <div className="s">total pra {affsWithOrders.length} {affsWithOrders.length === 1 ? 'afiliado ativo' : 'afiliados ativos'}</div>
         </div>
         <div className="mini-kpi">
-          <div className="l">CPA médio por venda</div>
-          <div className="v">{fmtCurrency(cpaPerSale, cur, 2)}</div>
-          <div className="s">{fmtInt(totalOrders)} pedidos no período</div>
+          <div className="l">CPA médio dos afiliados</div>
+          <div className="v">{fmtCurrency(cpaAvgPerAff, cur, 0)}</div>
+          <div className="s">média dos CPAs/venda individuais</div>
         </div>
       </div>
 
@@ -2290,7 +2296,7 @@ const TAB_CATALOG = [
   { group: 'Catálogo',  id: 'products',       label: 'Produtos' },
   { group: 'Catálogo',  id: 'transactions',   label: 'Transações' },
   { group: 'Sistema',   id: 'platforms',      label: 'Plataformas' },
-  { group: 'Sistema',   id: 'costs',          label: 'Custos' },
+  { group: 'Sistema',   id: 'costs',          label: 'Fulfillment' },
   { group: 'Sistema',   id: 'health',         label: 'Saúde do dado' },
 ];
 const TAB_GROUPS = ['Análise', 'Afiliados', 'Catálogo', 'Sistema'];
@@ -3031,10 +3037,51 @@ function fmtAgo(seconds) {
 }
 
 // ---------- COSTS (editable cost tables) ----------
-function CostsPage() {
+function CostsPage({ filters }) {
   const [state, setCostState] = useState({ status: 'loading', data: null, error: null });
   const [draftFamilies, setDraftFamilies] = useState({}); // { [family]: number }
   const [draftRates, setDraftRates] = useState({});       // { [bottlesMax]: number }
+  const [fulfillmentKpi, setFulfillmentKpi] = useState({ status: 'loading', value: 0, orders: 0 });
+  const cur = filters?.currency || 'USD';
+
+  // Fulfillment total no período (do overview KPIs).
+  useEffect(() => {
+    if (!filters) return;
+    let cancelled = false;
+    setFulfillmentKpi((s) => ({ ...s, status: 'loading' }));
+    window.NSApi.fetchOverview(filters)
+      .then((data) => {
+        if (cancelled) return;
+        setFulfillmentKpi({
+          status: 'ready',
+          value: data.kpis?.fulfillment ?? 0,
+          orders: data.kpis?.approvedOrders ?? data.kpis?.orders ?? 0,
+        });
+      })
+      .catch(() => { if (!cancelled) setFulfillmentKpi({ status: 'error', value: 0, orders: 0 }); });
+    return () => { cancelled = true; };
+  }, [filters?.dateRange.start.getTime(), filters?.dateRange.end.getTime(),
+      filters && Array.from(filters.platforms).join(','),
+      filters && Array.from(filters.countries).join(','),
+      filters && Array.from(filters.families).join(',')]);
+
+  // Estimativa pro próximo invoice da transportadora (toda terça-feira).
+  // Calcula quantos dias até a próxima terça e usa a média diária do
+  // período pra projetar o volume parcial até lá.
+  function nextTuesdayInvoiceEstimate() {
+    if (fulfillmentKpi.status !== 'ready' || !filters) return null;
+    const days = Math.max(1, Math.ceil((filters.dateRange.end - filters.dateRange.start) / 86400000));
+    const dailyAvg = fulfillmentKpi.value / days;
+    const today = new Date();
+    const dow = today.getDay(); // 0=Sun, 2=Tue
+    let daysToTue = (2 - dow + 7) % 7;
+    if (daysToTue === 0) daysToTue = 7; // se hoje é terça, próxima é semana q vem
+    // Quantos dias da semana atual JÁ passaram desde a terça anterior.
+    const daysSinceLastTue = 7 - daysToTue;
+    const estimate = dailyAvg * daysSinceLastTue;
+    return { dailyAvg, daysToTue, daysSinceLastTue, estimate };
+  }
+  const tueEst = nextTuesdayInvoiceEstimate();
   // Token persisted in sessionStorage so the user only enters it once per
   // browser session. NOT localStorage — we don't want the secret to leak
   // beyond this tab's lifetime.
@@ -3152,8 +3199,8 @@ function CostsPage() {
     <div className="page-in">
       <div className="page-head">
         <div className="lead">
-          <span className="eyebrow">SISTEMA · CUSTOS DA OPERAÇÃO</span>
-          <h2>Custos <em>de produção e envio</em></h2>
+          <span className="eyebrow">SISTEMA · FULFILLMENT</span>
+          <h2>Fulfillment <em>e custo de envio</em></h2>
           <span className="sub">
             Editar aqui altera os snapshots de orders FUTUROS · "Recalcular" reescreve histórico
           </span>
@@ -3174,6 +3221,32 @@ function CostsPage() {
           </button>
         </div>
       </div>
+
+      {/* KPIs de fulfillment no período */}
+      {filters && (
+        <div className="mini-kpis" style={{ marginBottom: 14 }}>
+          <div className="mini-kpi">
+            <div className="l">Fulfillment no período</div>
+            <div className="v">
+              {fulfillmentKpi.status === 'loading' ? '…' : fmtCurrency(fulfillmentKpi.value, cur, 0)}
+            </div>
+            <div className="s">
+              {fulfillmentKpi.orders > 0
+                ? `~${fmtCurrency(fulfillmentKpi.value / fulfillmentKpi.orders, cur, 2)}/pedido`
+                : 'sem pedidos'}
+            </div>
+          </div>
+          {tueEst && (
+            <div className="mini-kpi" style={{ borderColor: 'rgba(255,180,0,0.3)' }}>
+              <div className="l">Estimativa pra próxima fatura</div>
+              <div className="v" style={{ color: 'var(--warning)' }}>{fmtCurrency(tueEst.estimate, cur, 0)}</div>
+              <div className="s">
+                {tueEst.daysSinceLastTue} {tueEst.daysSinceLastTue === 1 ? 'dia' : 'dias'} desde a última terça · faltam {tueEst.daysToTue} pra próxima · ~{fmtCurrency(tueEst.dailyAvg, cur, 0)}/dia médio
+              </div>
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Token gate */}
       {!token && (
@@ -3243,9 +3316,20 @@ function CostsPage() {
                   return (
                     <tr key={f.family}>
                       <td>
-                        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
                           <span style={{ width: 6, height: 6, borderRadius: '50%', background: familyAccent(f.family) }}/>
                           {f.family}
+                          {f.isCataloged === false && (
+                            <span title="Família ainda não catalogada — usando custo médio como placeholder. Atualize o valor real e salve."
+                              style={{
+                                fontFamily: 'var(--f-mono)', fontSize: 9, letterSpacing: '0.06em',
+                                color: 'var(--warning)', background: 'rgba(255,180,0,0.12)',
+                                border: '1px solid rgba(255,180,0,0.35)', borderRadius: 4,
+                                padding: '1px 6px',
+                              }}>
+                              PLACEHOLDER
+                            </span>
+                          )}
                         </span>
                       </td>
                       <td className="num">

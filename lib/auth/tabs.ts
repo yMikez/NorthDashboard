@@ -34,7 +34,7 @@ export const AVAILABLE_TABS: TabSpec[] = [
   { id: 'products',       label: 'Produtos',            group: 'Catálogo' },
   { id: 'transactions',   label: 'Transações',          group: 'Catálogo' },
   { id: 'platforms',      label: 'Plataformas',         group: 'Sistema' },
-  { id: 'costs',          label: 'Custos',              group: 'Sistema' },
+  { id: 'costs',          label: 'Fulfillment',         group: 'Sistema' },
   { id: 'health',         label: 'Saúde do dado',       group: 'Sistema' },
 ];
 
