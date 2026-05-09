@@ -239,8 +239,10 @@ export interface AffiliatesResponse {
     refundRate: number;
     cbRate: number;
     cpa: number;
-    feApprovedCount: number;       // FE+APPROVED no período
-    cpaPerFeApproved: number;      // CPA negociado real do afiliado
+    feApprovedCount: number;       // FE+APPROVED no período (qualquer cpa)
+    feCpaPaidCount: number;        // FE+APPROVED+cpa>0 (sales que pagaram CPA)
+    cpaPerFe: number;              // CPA negociado (mode dos cpa>0)
+    cpaPerFeApproved: number;      // mean ponderada (deflaciona com cpa=0)
     netMargin: number;
     cogs: number;
     fulfillment: number;
@@ -2098,17 +2100,33 @@ export async function getAffiliates(
     refunds: number;
     chargebacks: number;
     cpa: number;
-    // FE+APPROVED only — pra calcular o CPA negociado real do afiliado
-    // sem ser afetado por refund (que zera o cpaPaidUsd) e sem incluir
-    // UPs/DWs (que tipicamente não pagam CPA). cpaPerFeApproved deste
-    // dataset = feCpaApproved / feApprovedCount.
-    feApprovedCount: number;
-    feCpaApproved: number;
+    // CPA negociado do afiliado: descoberto via MODE (valor mais
+    // frequente) de cpaPaidUsd nas vendas FE+APPROVED+cpa>0.
+    // Em direct response cada afiliado tem 1 CPA fixo por produto
+    // enrolled — esses valores formam um pico claro nos dados.
+    // Mean ponderada deflaciona porque vendas sem CPA contratado
+    // (cpa=0) e refunds (cpa zerado pelo IPN) puxam pra baixo.
+    feApprovedCount: number;       // total FE+APPROVED (qualquer cpa)
+    feCpaPaidCount: number;        // só FE+APPROVED com cpa > 0
+    cpaCounts: Map<number, number>; // distinct cpa value -> count, p/ mode
     net: number;
     cogs: number;
     fulfillment: number;
     byCountry: Map<string, number>;
     sparkline: number[];
+  }
+
+  function modeOf(counts: Map<number, number>): number {
+    // Tie-break: valor MAIOR ganha (proxy de "tier mais alto" se
+    // afiliado tem 2 CPAs com volumes equivalentes).
+    let modeVal = 0, modeCount = 0;
+    for (const [v, c] of counts) {
+      if (c > modeCount || (c === modeCount && v > modeVal)) {
+        modeCount = c;
+        modeVal = v;
+      }
+    }
+    return modeVal;
   }
 
   const SPARK_DAYS = 30;
@@ -2144,7 +2162,8 @@ export async function getAffiliates(
           chargebacks: 0,
           cpa: 0,
           feApprovedCount: 0,
-          feCpaApproved: 0,
+          feCpaPaidCount: 0,
+          cpaCounts: new Map(),
           net: 0,
           cogs: 0,
           fulfillment: 0,
@@ -2161,13 +2180,19 @@ export async function getAffiliates(
       if (o.status === 'APPROVED') {
         a.revenue += toNumber(o.grossAmountUsd);
         a.orders++;
-        // Negotiated CPA per affiliate: SÓ FE APPROVED. Outros tipos
-        // de pedido (UP/DW/RC) não pagam CPA, e refunded zera o
-        // cpaPaidUsd. Usar (feCpaApproved / feApprovedCount) como
-        // proxy do CPA negociado.
+        // Captura CPA negociado: só FE+APPROVED+cpa>0.
+        // Cada valor distinto de cpaPaidUsd vira um bucket no
+        // cpaCounts → mode disso = CPA real do afiliado.
         if (o.productType === 'FRONTEND') {
           a.feApprovedCount++;
-          a.feCpaApproved += toNumber(o.cpaPaidUsd);
+          const cpaVal = toNumber(o.cpaPaidUsd);
+          if (cpaVal > 0) {
+            a.feCpaPaidCount++;
+            // Round to 2 decimals pra agrupar valores quase iguais
+            // (ex: $220.00 e $220 do Decimal vs Number).
+            const key = Math.round(cpaVal * 100) / 100;
+            a.cpaCounts.set(key, (a.cpaCounts.get(key) ?? 0) + 1);
+          }
         }
       } else if (o.status === 'REFUNDED') {
         a.refunds++;
@@ -2230,12 +2255,16 @@ export async function getAffiliates(
       refundRate: allOrders ? round4(refunds / denom) : 0,
       cbRate: allOrders ? round4(chargebacks / denom) : 0,
       cpa: round2(a?.cpa ?? 0),
-      // CPA negociado real do afiliado: média do cpaPaidUsd em FE
-      // APPROVED do período. Imune a refund (que zera cpa) e a tipos
-      // de pedido sem CPA (UP/DW/RC).
+      // CPA negociado do afiliado descoberto via MODE de cpaPaidUsd
+      // em FE+APPROVED+cpa>0. Imune a refund (status filter) e a
+      // sales sem CPA contratado (cpa=0 filter). Ver modeOf() acima.
       feApprovedCount: a?.feApprovedCount ?? 0,
+      feCpaPaidCount: a?.feCpaPaidCount ?? 0,
+      cpaPerFe: a ? round2(modeOf(a.cpaCounts)) : 0,
+      // Mantido pra retrocompat: ainda mean/count, deflaciona com
+      // sales cpa=0 mas algumas views podem querer essa lente.
       cpaPerFeApproved: (a?.feApprovedCount ?? 0) > 0
-        ? round2((a!.feCpaApproved) / (a!.feApprovedCount))
+        ? round2((a!.cpa) / (a!.feApprovedCount))
         : 0,
       netMargin: round2((a?.net ?? 0) - (a?.cpa ?? 0)),
       cogs: round2(a?.cogs ?? 0),

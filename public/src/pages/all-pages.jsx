@@ -785,17 +785,19 @@ function AllAffiliatesPage({ filters, onOpenAffiliate }) {
   const totalOrders = all.reduce((s, r) => s + (r.orders || 0), 0);
   const affsWithOrders = all.filter((r) => (r.orders || 0) > 0);
 
-  // CPA médio dos afiliados = média dos CPAs negociados de cada um.
+  // CPA médio dos afiliados = média dos CPAs NEGOCIADOS de cada um.
   //
-  // O backend agora expõe `cpaPerFeApproved` por afiliado: média do
-  // cpaPaidUsd em pedidos FE+APPROVED do período. Imune a refund
-  // (que zera o cpaPaidUsd no IPN) e a tipos sem CPA (UP/DW/RC).
+  // Backend expõe `cpaPerFe` por afiliado: MODE (valor mais frequente)
+  // de cpaPaidUsd em FE+APPROVED+cpa>0. Em direct response cada
+  // afiliado tem 1 CPA fixo por produto enrolled — esse pico no
+  // histograma é o CPA real. Mean ponderada deflacionava com sales
+  // sem CPA contratado (cpa=0 do platform last-click attribution).
   //
-  // Resultado = média de cpaPerFeApproved entre afiliados que tiveram
-  // FE no período. Reflete o CPA típico que negociamos.
-  const affsWithFeCpa = all.filter((r) => (r.cpaPerFeApproved || 0) > 0);
+  // Macro = média de cpaPerFe entre afiliados que tiveram pelo menos
+  // 1 venda FE+APPROVED com CPA pago no período.
+  const affsWithFeCpa = all.filter((r) => (r.cpaPerFe || 0) > 0);
   const cpaAvgPerAff = affsWithFeCpa.length > 0
-    ? affsWithFeCpa.reduce((s, r) => s + r.cpaPerFeApproved, 0) / affsWithFeCpa.length
+    ? affsWithFeCpa.reduce((s, r) => s + r.cpaPerFe, 0) / affsWithFeCpa.length
     : 0;
 
   // Tertile thresholds pro AOV. Usa p33 e p67 — robusto a outliers,
