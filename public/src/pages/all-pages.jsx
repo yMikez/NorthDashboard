@@ -800,18 +800,19 @@ function AllAffiliatesPage({ filters, onOpenAffiliate }) {
     ? affsWithFeCpa.reduce((s, r) => s + r.cpaPerFe, 0) / affsWithFeCpa.length
     : 0;
 
-  // AOV = faturamento total do afiliado / pedidos FE dele.
+  // AOV = faturamento total da sessão (com cross-sells) / FEs aprovadas.
   //
-  // Lente DIRETA (não session-attribution): só conta orders onde o
-  // afiliado está no affiliateId. Não inclui cross-sells da sessão
-  // (UPs de outra família que o cliente comprou) nem UPs sem CPA
-  // contratado pra ele. Reflete o ticket médio do funil PRÓPRIO do
-  // afiliado — bate com a fórmula esperada do usuário.
+  // Numerador: attributedRevenue — soma do gross dos APPROVED em
+  // todas as sessões trazidas pelo afiliado, INCLUINDO cross-sells
+  // (UPs/DWs/bumps que o cliente comprou na mesma sessão, mesmo que
+  // de outra família). Reflete o valor econômico real do lead.
   //
-  // r.revenue: sum de grossAmountUsd dos APPROVED do afiliado
-  // r.feApprovedCount: count de FE+APPROVED do afiliado
+  // Denominador: feApprovedCount — só pedidos FE+APPROVED do afiliado.
+  // O "número de pedidos de front" da fórmula clássica de AOV.
+  //
+  // Resultado: ticket médio gerado por cada FE que ele traz.
   function aovOf(r) {
-    return r.feApprovedCount > 0 ? r.revenue / r.feApprovedCount : 0;
+    return r.feApprovedCount > 0 ? r.attributedRevenue / r.feApprovedCount : 0;
   }
   const aovs = all.map(aovOf).filter((v) => v > 0).sort((a, b) => a - b);
   const enoughSample = aovs.length >= 6;
@@ -927,7 +928,7 @@ function AllAffiliatesPage({ filters, onOpenAffiliate }) {
                     <td className="num cell-mono">{fmtInt(r.orders)}</td>
                     <td className="num">
                       {aov > 0 ? (
-                        <span style={aovPillStyle(tier)} title={`${r.feApprovedCount} pedidos FE aprovados · ${fmtCurrency(r.revenue, cur, 0)} faturados`}>
+                        <span style={aovPillStyle(tier)} title={`${r.feApprovedCount} FE aprovados · ${fmtCurrency(r.attributedRevenue, cur, 0)} de faturamento (sessão completa com cross-sells)`}>
                           {fmtCurrency(aov, cur, 0)}
                         </span>
                       ) : (
