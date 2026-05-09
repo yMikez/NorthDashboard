@@ -780,6 +780,43 @@ function AllAffiliatesPage({ filters, onOpenAffiliate }) {
     : all
   ).slice().sort((a, b) => b.revenue - a.revenue);
 
+  // KPIs do período
+  const totalCpa = all.reduce((s, r) => s + (r.cpa || 0), 0);
+  const totalOrders = all.reduce((s, r) => s + (r.orders || 0), 0);
+  const cpaPerSale = totalOrders > 0 ? totalCpa / totalOrders : 0;
+  const affsWithOrders = all.filter((r) => (r.orders || 0) > 0).length;
+
+  // Tertile thresholds pro AOV. Usa p33 e p67 — robusto a outliers,
+  // sempre garante 1/3 verde / 1/3 amarelo / 1/3 vermelho (ranking
+  // comparativo entre afiliados). Só aplica cor se houver ≥ 6 afiliados
+  // com AOV > 0 (amostra mínima pra divisão fazer sentido).
+  function aovOf(r) {
+    return r.attributedSessions > 0 ? r.attributedRevenue / r.attributedSessions : 0;
+  }
+  const aovs = all.map(aovOf).filter((v) => v > 0).sort((a, b) => a - b);
+  const enoughSample = aovs.length >= 6;
+  const p33 = enoughSample ? aovs[Math.floor(aovs.length * 0.33)] : 0;
+  const p67 = enoughSample ? aovs[Math.floor(aovs.length * 0.67)] : 0;
+
+  function aovTier(v) {
+    if (!enoughSample || v <= 0) return 'none';
+    if (v >= p67) return 'good';
+    if (v >= p33) return 'mid';
+    return 'bad';
+  }
+  function aovPillStyle(tier) {
+    const base = {
+      display: 'inline-flex', alignItems: 'center', gap: 4,
+      padding: '2px 8px', borderRadius: 999,
+      fontFamily: 'var(--f-mono)', fontSize: 11,
+      letterSpacing: '0.02em', fontWeight: 500,
+    };
+    if (tier === 'good') return { ...base, background: 'rgba(34,197,94,0.14)', color: 'var(--success)', border: '1px solid rgba(34,197,94,0.35)' };
+    if (tier === 'mid') return { ...base, background: 'rgba(255,180,0,0.14)', color: 'var(--warning)', border: '1px solid rgba(255,180,0,0.35)' };
+    if (tier === 'bad') return { ...base, background: 'rgba(239,68,68,0.14)', color: 'var(--danger)', border: '1px solid rgba(239,68,68,0.35)' };
+    return { ...base, background: 'rgba(140,161,200,0.06)', color: 'var(--fg5)', border: '1px solid var(--border-soft)' };
+  }
+
   return (
     <div className="page-in">
       <div className="page-head">
@@ -800,6 +837,31 @@ function AllAffiliatesPage({ filters, onOpenAffiliate }) {
         </div>
       </div>
 
+      <div className="mini-kpis">
+        <div className="mini-kpi">
+          <div className="l">CPA pago no período</div>
+          <div className="v">{fmtCurrency(totalCpa, cur, 0)}</div>
+          <div className="s">total pra {affsWithOrders} {affsWithOrders === 1 ? 'afiliado ativo' : 'afiliados ativos'}</div>
+        </div>
+        <div className="mini-kpi">
+          <div className="l">CPA médio por venda</div>
+          <div className="v">{fmtCurrency(cpaPerSale, cur, 2)}</div>
+          <div className="s">{fmtInt(totalOrders)} pedidos no período</div>
+        </div>
+      </div>
+
+      {enoughSample && (
+        <div style={{
+          fontSize: 11, color: 'var(--fg5)', fontFamily: 'var(--f-mono)',
+          padding: '4px 0 12px', display: 'flex', gap: 12, flexWrap: 'wrap',
+        }}>
+          <span>AOV em terços:</span>
+          <span style={aovPillStyle('good')}>≥ {fmtCurrency(p67, cur, 0)} (top 33%)</span>
+          <span style={aovPillStyle('mid')}>{fmtCurrency(p33, cur, 0)} – {fmtCurrency(p67, cur, 0)} (médio)</span>
+          <span style={aovPillStyle('bad')}>&lt; {fmtCurrency(p33, cur, 0)} (bottom 33%)</span>
+        </div>
+      )}
+
       {state.status === 'error' && (
         <div className="panel" style={{ color: 'var(--danger)' }}>Erro ao carregar: {state.error}</div>
       )}
@@ -811,6 +873,7 @@ function AllAffiliatesPage({ filters, onOpenAffiliate }) {
               <tr>
                 <th>Afiliado</th><th>Plataforma</th>
                 <th className="num">Receita · período</th><th className="num">Pedidos · período</th>
+                <th className="num">AOV · período</th>
                 <th className="num">Aprovação</th><th className="num">Reembolso</th>
                 <th className="num">Receita LTV</th><th className="num">Pedidos LTV</th>
                 <th>1ª venda</th><th>Última venda</th><th></th>
@@ -818,10 +881,10 @@ function AllAffiliatesPage({ filters, onOpenAffiliate }) {
             </thead>
             <tbody>
               {state.status === 'loading' && (
-                <tr><td colSpan={11} style={{ textAlign: 'center', padding: 24, opacity: 0.6 }}>Carregando...</td></tr>
+                <tr><td colSpan={12} style={{ textAlign: 'center', padding: 24, opacity: 0.6 }}>Carregando...</td></tr>
               )}
               {state.status === 'ready' && rows.length === 0 && (
-                <tr><td colSpan={11} style={{ textAlign: 'center', padding: 24, opacity: 0.6 }}>
+                <tr><td colSpan={12} style={{ textAlign: 'center', padding: 24, opacity: 0.6 }}>
                   {query ? 'Nenhum afiliado encontrado' : 'Nenhum afiliado ainda'}
                 </td></tr>
               )}
@@ -829,6 +892,8 @@ function AllAffiliatesPage({ filters, onOpenAffiliate }) {
                 const displayName = r.nickname || r.externalId;
                 const platClass = r.platformSlug === 'digistore24' ? 'plat-d24' : 'plat-cb';
                 const platShort = r.platformSlug === 'digistore24' ? 'D24' : 'CB';
+                const aov = aovOf(r);
+                const tier = aovTier(aov);
                 return (
                   <tr key={`${r.platformSlug}:${r.externalId}`} onClick={() => onOpenAffiliate(r.externalId)}>
                     <td>
@@ -840,6 +905,15 @@ function AllAffiliatesPage({ filters, onOpenAffiliate }) {
                     <td><span className={`plat ${platClass}`}>{platShort}</span></td>
                     <td className="num cell-mono">{fmtCurrency(r.revenue, cur, 0)}</td>
                     <td className="num cell-mono">{fmtInt(r.orders)}</td>
+                    <td className="num">
+                      {aov > 0 ? (
+                        <span style={aovPillStyle(tier)} title={`${r.attributedSessions} sessões trazidas`}>
+                          {fmtCurrency(aov, cur, 0)}
+                        </span>
+                      ) : (
+                        <span style={{ color: 'var(--fg5)', fontFamily: 'var(--f-mono)', fontSize: 11 }}>—</span>
+                      )}
+                    </td>
                     <td className="num cell-mono" style={{ color: r.approvalRate > 0.7 ? 'var(--success)' : r.approvalRate > 0.5 ? 'var(--warning)' : 'var(--danger)' }}>
                       {r.allOrders ? (r.approvalRate * 100).toFixed(1) + '%' : '—'}
                     </td>
