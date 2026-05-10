@@ -637,12 +637,12 @@ function AffiliateDrawer({ affiliateId, filters, onClose }) {
               <div className="s">net − CPA</div>
             </div>
             <div className="mini-kpi">
-              <div className="l">AOV global</div>
+              <div className="l">AOV</div>
               <div className="v">{fmtCurrency(k.aov, cur, 0)}</div>
               <div className="s">
-                {k.attributedSessions > 0
-                  ? `funil completo · ${fmtInt(k.attributedSessions)} sessões`
-                  : 'sem sessões FE no período'}
+                {k.feApprovedCount > 0
+                  ? `receita / ${fmtInt(k.feApprovedCount)} FE aprovados`
+                  : 'sem FE no período'}
               </div>
             </div>
             <div className="mini-kpi">
@@ -800,19 +800,20 @@ function AllAffiliatesPage({ filters, onOpenAffiliate }) {
     ? affsWithFeCpa.reduce((s, r) => s + r.cpaPerFe, 0) / affsWithFeCpa.length
     : 0;
 
-  // AOV = faturamento total da sessão (com cross-sells) / FEs aprovadas.
+  // AOV = faturamento próprio do afiliado / pedidos FE dele.
   //
-  // Numerador: attributedRevenue — soma do gross dos APPROVED em
-  // todas as sessões trazidas pelo afiliado, INCLUINDO cross-sells
-  // (UPs/DWs/bumps que o cliente comprou na mesma sessão, mesmo que
-  // de outra família). Reflete o valor econômico real do lead.
+  // Numerador: revenue — sum de grossAmountUsd dos APPROVED onde
+  // affiliateId = afiliado. Lente DIRETA: só conta orders creditadas
+  // a ele pela plataforma (FE + UPs/DWs onde ele continua sendo o
+  // affiliateId). NÃO inclui cross-sells da sessão que foram
+  // creditados a outros afiliados via last-click cookie.
   //
-  // Denominador: feApprovedCount — só pedidos FE+APPROVED do afiliado.
-  // O "número de pedidos de front" da fórmula clássica de AOV.
+  // Denominador: feApprovedCount — pedidos FE+APPROVED do afiliado.
   //
-  // Resultado: ticket médio gerado por cada FE que ele traz.
+  // Casa com a fórmula clássica que o usuário verifica:
+  // "receita período / pedidos de front" = AOV.
   function aovOf(r) {
-    return r.feApprovedCount > 0 ? r.attributedRevenue / r.feApprovedCount : 0;
+    return r.feApprovedCount > 0 ? r.revenue / r.feApprovedCount : 0;
   }
   const aovs = all.map(aovOf).filter((v) => v > 0).sort((a, b) => a - b);
   const enoughSample = aovs.length >= 6;

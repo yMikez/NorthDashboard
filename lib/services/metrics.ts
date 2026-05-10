@@ -194,10 +194,12 @@ export interface AffiliateDetailResponse {
     cbRate: number;
     cpa: number;
     netMargin: number;
+    // AOV direto = revenue / feApprovedCount. Receita do próprio
+    // afiliado dividida por FEs aprovadas dele. Não conta cross-sells.
     aov: number;
-    // Session-AOV: full-funnel revenue (FE + UPs + DWs + bumps) per FE
-    // session brought by this affiliate. This is the canonical "average
-    // ticket per buyer" metric — same definition Overview/Funnel use.
+    feApprovedCount: number;
+    // Session lens (mantida pra outras views): receita total da sessão
+    // (com cross-sells) ÷ sessões. Lente "valor econômico do lead".
     attributedSessions: number;
     attributedRevenue: number;
   };
@@ -1742,12 +1744,14 @@ export async function getAffiliateDetail(
   let orders = 0;
   let refunds = 0;
   let chargebacks = 0;
+  let feApprovedCount = 0; // FE+APPROVED — denom do AOV direto
   for (const o of periodOrders) {
     net += toNumber(o.netAmountUsd);
     cpa += toNumber(o.cpaPaidUsd);
     if (o.status === 'APPROVED') {
       orders++;
       revenue += toNumber(o.grossAmountUsd);
+      if (o.productType === 'FRONTEND') feApprovedCount++;
     } else if (o.status === 'REFUNDED') refunds++;
     else if (o.status === 'CHARGEBACK') chargebacks++;
   }
@@ -1808,15 +1812,16 @@ export async function getAffiliateDetail(
     cbRate: round4(chargebacks / denom),
     cpa: round2(cpa),
     netMargin: round2(net - cpa),
-    // AOV is now session-AOV (global, full funnel) instead of per-order
-    // average. Falls back to per-order avg when affiliate has no FE
-    // sessions in the period (rare — they may have been forwarded only
-    // upsells, e.g., second-touch attribution).
+    // AOV direto = receita PRÓPRIA do afiliado / FEs aprovadas dele.
+    // Lente direta (orders onde affiliateId = afiliado), NÃO conta
+    // cross-sells da sessão creditadas a outros via last-click.
+    // Fallback pra AOV por pedido quando não há FE no período.
     aov: round2(
-      attributedSessions > 0
-        ? attributedRevenue / attributedSessions
+      feApprovedCount > 0
+        ? revenue / feApprovedCount
         : orders ? revenue / orders : 0,
     ),
+    feApprovedCount,
     attributedSessions,
     attributedRevenue: round2(attributedRevenue),
   };
