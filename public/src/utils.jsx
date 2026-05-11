@@ -266,11 +266,13 @@ function Sparkline({ data, width = 80, height = 26, color = '#5BC8FF', fill = tr
 }
 
 // ---------- FX layers ----------
+// .ns-scan (linhas digitais via repeating-linear-gradient) removida —
+// textura agressiva demais segundo feedback. Mantemos só o gradient orb
+// difuso de .ns-bg.
 function FXLayers() {
   return (
     <>
       <div className="ns-bg"/>
-      <div className="ns-scan"/>
     </>
   );
 }
