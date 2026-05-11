@@ -53,6 +53,7 @@ const ROUTES = {
   'platforms':      { title: 'Plataformas', em: 'conectadas',  crumbs: ['Sistema', 'Plataformas'] },
   'health':         { title: 'Saúde',       em: 'do dado',     crumbs: ['Sistema', 'Saúde do dado'] },
   'costs':          { title: 'Fulfillment', em: 'e custo de envio', crumbs: ['Sistema', 'Fulfillment'] },
+  'chat':           { title: 'Análise',    em: 'com IA',         crumbs: ['Admin', 'Chat'] },
   'insights':       { title: 'Insights',    em: 'do negócio',  crumbs: ['Análise', 'Insights'] },
   'users':          { title: 'Usuários',    em: 'do dashboard', crumbs: ['Admin', 'Usuários'] },
   'networks':       { title: 'Networks',    em: 'parceiras',   crumbs: ['Admin', 'Networks'] },
@@ -245,6 +246,7 @@ function App({ user }) {
           {hashState.route === 'platforms'      && <IntegrationsPage filters={filters}/>}
           {hashState.route === 'health'         && <HealthPage/>}
           {hashState.route === 'costs'          && <CostsPage filters={filters}/>}
+          {hashState.route === 'chat'           && <ChatPage user={user}/>}
           {hashState.route === 'insights'       && <InsightsPage/>}
           {hashState.route === 'users'          && <UsersPage currentUser={user}/>}
           {hashState.route === 'networks'       && <NetworksPage/>}
@@ -252,6 +254,7 @@ function App({ user }) {
       </div>
 
       {drawerAff && <AffiliateDrawer affiliateId={drawerAff} filters={filters} onClose={() => setDrawerAff(null)}/>}
+      <ChatWidget user={user}/>
     </div>
   );
 }

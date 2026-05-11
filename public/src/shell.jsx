@@ -45,6 +45,7 @@ function Sidebar({ active, onNav, user }) {
   const adminOnly = {
     label: 'Admin',
     items: [
+      { id: 'chat', label: 'Análise (IA)', icon: 'sparkles' },
       { id: 'users', label: 'Usuários', icon: 'user-plus' },
     ],
   };

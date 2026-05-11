@@ -489,6 +489,80 @@ async function networkSignContract() {
 
 const networkContractPdfUrl = '/api/network/me/contract.pdf';
 
+/* -------- AI Chat -------- */
+
+async function aiListConversations() {
+  const res = await fetch('/api/chat/conversations', { headers: { Accept: 'application/json' } });
+  if (!res.ok) throw new Error(`${res.status}`);
+  return res.json();
+}
+
+async function aiGetConversation(id) {
+  const res = await fetch(`/api/chat/conversations/${encodeURIComponent(id)}`, { headers: { Accept: 'application/json' } });
+  if (!res.ok) throw new Error(`${res.status}`);
+  return res.json();
+}
+
+async function aiDeleteConversation(id) {
+  const res = await fetch(`/api/chat/conversations/${encodeURIComponent(id)}`, {
+    method: 'DELETE', headers: { Accept: 'application/json' },
+  });
+  if (!res.ok) throw new Error(`${res.status}`);
+  return res.json();
+}
+
+/**
+ * Envia message ao /api/chat e consome o SSE stream. Callbacks:
+ *   onToken({text})       — chunk de texto da resposta
+ *   onToolUse({name})     — tool sendo executada (UI mostra "consultando X...")
+ *   onConversation({id})  — id da conversa (importante quando é nova)
+ *   onDone()              — finalizou
+ *   onError({message})    — erro
+ */
+async function aiSendMessage({ conversationId, message }, callbacks) {
+  const res = await fetch('/api/chat', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Accept: 'text/event-stream' },
+    body: JSON.stringify({ conversationId, message }),
+  });
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    throw new Error(data.error || `${res.status}`);
+  }
+  const reader = res.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = '';
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    buffer += decoder.decode(value, { stream: true });
+    // SSE: separate por \n\n.
+    const parts = buffer.split('\n\n');
+    buffer = parts.pop() || '';
+    for (const part of parts) {
+      if (!part.trim()) continue;
+      const lines = part.split('\n');
+      let event = 'message';
+      let data = '';
+      for (const line of lines) {
+        if (line.startsWith('event: ')) event = line.slice(7).trim();
+        else if (line.startsWith('data: ')) data += line.slice(6);
+      }
+      if (!data) continue;
+      let payload;
+      try { payload = JSON.parse(data); } catch { continue; }
+      switch (event) {
+        case 'conversation': callbacks.onConversation?.(payload); break;
+        case 'token':        callbacks.onToken?.(payload); break;
+        case 'tool_use_start': callbacks.onToolUse?.(payload); break;
+        case 'tool_use_result': callbacks.onToolUseResult?.(payload); break;
+        case 'done':         callbacks.onDone?.(payload); break;
+        case 'error':        callbacks.onError?.(payload); break;
+      }
+    }
+  }
+}
+
 window.NSApi = {
   fetchOverview,
   fetchOrders,
@@ -529,4 +603,8 @@ window.NSApi = {
   fetchNetworkMyPayouts,
   networkSignContract,
   networkContractPdfUrl,
+  aiListConversations,
+  aiGetConversation,
+  aiDeleteConversation,
+  aiSendMessage,
 };

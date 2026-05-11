@@ -3594,6 +3594,25 @@ function InsightTab({ id, label, count, icon, active, onClick }) {
   );
 }
 
+// Abre uma conversa nova no chat pré-carregada com o contexto do insight.
+// Navega pra /chat passando ?seed= que o ChatPage detecta.
+function discussInsightWithAi(insight) {
+  const seed = [
+    `Analise esse insight do dashboard com mais profundidade:`,
+    ``,
+    `**${insight.headline}**`,
+    insight.body ? `\n${insight.body}` : '',
+    insight.metrics && insight.metrics.length > 0
+      ? `\nDados:\n${insight.metrics.map((m) => `- ${m.label}: ${m.value}`).join('\n')}`
+      : '',
+    ``,
+    `O que isso significa? Quais ações concretas você recomenda?`,
+  ].filter(Boolean).join('\n');
+  // sessionStorage pra preservar entre o navigate e o mount do /chat
+  sessionStorage.setItem('ns-chat-seed', seed);
+  location.href = '/chat';
+}
+
 function InsightCard({ insight }) {
   const sevColor = insight.severity === 'alert' ? 'var(--danger)'
     : insight.severity === 'good' ? 'var(--success)' : 'var(--glow-cyan)';
@@ -3629,11 +3648,21 @@ function InsightCard({ insight }) {
             </div>
           )}
         </div>
-        {insight.cta && (
-          <button onClick={onCta} className="btn btn-ghost" style={{ flexShrink: 0, fontSize: 11 }}>
-            {insight.cta.label} <Icon name="chevron-right" size={11}/>
+        <div style={{ display: 'flex', gap: 6, flexShrink: 0, alignItems: 'flex-start' }}>
+          <button
+            onClick={() => discussInsightWithAi(insight)}
+            className="btn btn-ghost"
+            title="Discutir esse insight com a IA"
+            style={{ fontSize: 11 }}
+          >
+            <Icon name="sparkles" size={11}/> Discutir com IA
           </button>
-        )}
+          {insight.cta && (
+            <button onClick={onCta} className="btn btn-ghost" style={{ fontSize: 11 }}>
+              {insight.cta.label} <Icon name="chevron-right" size={11}/>
+            </button>
+          )}
+        </div>
       </div>
       {insight.metrics && insight.metrics.length > 0 && (
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 8, marginTop: 10, paddingTop: 10, borderTop: '1px solid var(--border-soft)' }}>
@@ -5147,9 +5176,415 @@ function ContractAcceptanceGate({ network, onSign, signing, onLogout }) {
   );
 }
 
+// ==========================================================================
+// AI CHAT — análise via Anthropic. Admin-only. Tool-use loop streamado
+// via SSE. Histórico persistido em Conversation + Message.
+//
+// Dois entry points (escolha do usuário "ambos"):
+//   - ChatPage: /chat → full page (sidebar de conversas + área principal)
+//   - ChatWidget: botão flutuante bottom-right em qualquer página
+//
+// Componente interno ChatBody é compartilhado entre os dois.
+// ==========================================================================
+
+function ChatPage({ user }) {
+  const [conversations, setConversations] = useState({ status: 'loading', list: [] });
+  const [selectedId, setSelectedId] = useState(null);
+  const [refreshKey, setRefreshKey] = useState(0);
+  // Seed vindo do "Discutir com IA" em /insights. Lê uma vez e limpa.
+  const [seedMessage, setSeedMessage] = useState(() => {
+    try {
+      const s = sessionStorage.getItem('ns-chat-seed');
+      if (s) sessionStorage.removeItem('ns-chat-seed');
+      return s;
+    } catch { return null; }
+  });
+
+  useEffect(() => {
+    let cancelled = false;
+    window.NSApi.aiListConversations()
+      .then((data) => { if (!cancelled) setConversations({ status: 'ready', list: data.conversations || [] }); })
+      .catch(() => { if (!cancelled) setConversations({ status: 'error', list: [] }); });
+    return () => { cancelled = true; };
+  }, [refreshKey]);
+
+  async function deleteConv(id) {
+    if (!confirm('Deletar essa conversa? Mensagens vão junto.')) return;
+    try {
+      await window.NSApi.aiDeleteConversation(id);
+      if (selectedId === id) setSelectedId(null);
+      setRefreshKey((n) => n + 1);
+    } catch (err) {
+      alert('Erro: ' + err.message);
+    }
+  }
+
+  return (
+    <div className="page-in" style={{ display: 'grid', gridTemplateColumns: '260px 1fr', gap: 14, height: 'calc(100vh - 200px)', minHeight: 540 }}>
+      <div className="panel" style={{ padding: 0, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+        <div style={{ padding: '12px 14px', borderBottom: '1px solid var(--border-soft)' }}>
+          <button
+            onClick={() => setSelectedId(null)}
+            className="btn btn-primary"
+            style={{ width: '100%', justifyContent: 'center' }}
+          >
+            <Icon name="plus" size={11}/> Nova conversa
+          </button>
+        </div>
+        <div style={{ flex: 1, overflowY: 'auto', padding: '6px 0' }}>
+          {conversations.status === 'loading' && (
+            <div style={{ padding: 12, fontSize: 11, color: 'var(--fg5)' }}>Carregando...</div>
+          )}
+          {conversations.status === 'ready' && conversations.list.length === 0 && (
+            <div style={{ padding: 12, fontSize: 11, color: 'var(--fg5)' }}>Nenhuma conversa ainda. Faça uma pergunta pra começar.</div>
+          )}
+          {conversations.list.map((c) => (
+            <div
+              key={c.id}
+              onClick={() => setSelectedId(c.id)}
+              style={{
+                padding: '8px 14px', cursor: 'pointer',
+                background: selectedId === c.id ? 'rgba(91,200,255,0.08)' : 'transparent',
+                borderLeft: selectedId === c.id ? '2px solid var(--glow-cyan)' : '2px solid transparent',
+                display: 'flex', gap: 8, alignItems: 'flex-start',
+              }}
+            >
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontSize: 12, color: 'var(--fg1)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                  {c.title || '(sem título)'}
+                </div>
+                <div style={{ fontFamily: 'var(--f-mono)', fontSize: 9, color: 'var(--fg5)' }}>
+                  {c.messageCount} msg · {fmtRelativeShort(c.updatedAt)}
+                </div>
+              </div>
+              <button
+                onClick={(e) => { e.stopPropagation(); deleteConv(c.id); }}
+                title="Deletar"
+                style={{
+                  background: 'transparent', border: 0, cursor: 'pointer',
+                  color: 'var(--fg5)', padding: 2, opacity: 0.5,
+                }}
+              >
+                <Icon name="trash" size={10}/>
+              </button>
+            </div>
+          ))}
+        </div>
+      </div>
+      <ChatBody
+        conversationId={selectedId}
+        onConversationCreated={(id) => { setSelectedId(id); setRefreshKey((n) => n + 1); }}
+        onMessageSent={() => setRefreshKey((n) => n + 1)}
+        seedMessage={seedMessage}
+        onSeedConsumed={() => setSeedMessage(null)}
+      />
+    </div>
+  );
+}
+
+function ChatWidget({ user }) {
+  const [open, setOpen] = useState(false);
+  const [conversationId, setConversationId] = useState(null);
+
+  if (!user || user.role !== 'ADMIN') return null;
+
+  return (
+    <>
+      {/* Botão flutuante */}
+      {!open && (
+        <button
+          onClick={() => setOpen(true)}
+          title="Análise com IA"
+          style={{
+            position: 'fixed', bottom: 24, right: 24, zIndex: 1000,
+            width: 52, height: 52, borderRadius: '50%',
+            background: 'linear-gradient(135deg, #5BC8FF 0%, #9B7BFF 100%)',
+            border: 0, cursor: 'pointer',
+            boxShadow: '0 8px 20px -4px rgba(91,200,255,0.4)',
+            display: 'grid', placeItems: 'center',
+            color: '#0A1638',
+          }}
+        >
+          <Icon name="sparkles" size={20}/>
+        </button>
+      )}
+      {open && ReactDOM.createPortal((
+        <div style={{
+          position: 'fixed', bottom: 24, right: 24, zIndex: 1000,
+          width: 420, height: 600, maxHeight: 'calc(100vh - 48px)',
+          display: 'flex', flexDirection: 'column',
+          background: 'linear-gradient(180deg, #15275A 0%, #0F1F4D 50%, #0A1638 100%)',
+          border: '1px solid var(--border-strong)',
+          borderRadius: 12, overflow: 'hidden',
+          boxShadow: '0 30px 80px -10px rgba(0,0,0,0.6)',
+        }}>
+          <div style={{
+            padding: '10px 14px', borderBottom: '1px solid var(--border-soft)',
+            display: 'flex', alignItems: 'center', gap: 10,
+            background: 'rgba(91,200,255,0.04)',
+          }}>
+            <Icon name="sparkles" size={14} className=""/>
+            <div style={{ flex: 1 }}>
+              <div style={{ fontFamily: 'var(--f-mono)', fontSize: 10, letterSpacing: '0.12em', color: 'var(--fg4)' }}>ANÁLISE COM IA</div>
+              <div style={{ fontSize: 11, color: 'var(--fg5)' }}>Especialista em analytics nutra DR</div>
+            </div>
+            <a
+              href="/chat"
+              title="Abrir em página inteira"
+              style={{ color: 'var(--fg4)', padding: 4, textDecoration: 'none' }}
+            >
+              <Icon name="external-link" size={12}/>
+            </a>
+            <button onClick={() => setOpen(false)} className="icon-btn" title="Fechar"><Icon name="x" size={12}/></button>
+          </div>
+          <ChatBody
+            conversationId={conversationId}
+            onConversationCreated={setConversationId}
+            compact
+          />
+        </div>
+      ), document.body)}
+    </>
+  );
+}
+
+function ChatBody({ conversationId, onConversationCreated, onMessageSent, compact, seedMessage, onSeedConsumed }) {
+  const [messages, setMessages] = useState([]);
+  const [input, setInput] = useState('');
+  const [streaming, setStreaming] = useState(false);
+  const [currentReply, setCurrentReply] = useState('');
+  const [currentTools, setCurrentTools] = useState([]);
+  const [error, setError] = useState(null);
+  const scrollRef = useRef(null);
+
+  // Seed (do insights → "Discutir com IA"): pré-popula input + foco.
+  useEffect(() => {
+    if (seedMessage && !conversationId && messages.length === 0) {
+      setInput(seedMessage);
+      onSeedConsumed?.();
+    }
+  }, [seedMessage, conversationId]);
+
+  // Load messages quando muda conversationId
+  useEffect(() => {
+    if (!conversationId) {
+      setMessages([]);
+      setCurrentReply('');
+      setCurrentTools([]);
+      return;
+    }
+    let cancelled = false;
+    window.NSApi.aiGetConversation(conversationId)
+      .then((data) => { if (!cancelled) setMessages(data.messages || []); })
+      .catch(() => { if (!cancelled) setMessages([]); });
+    return () => { cancelled = true; };
+  }, [conversationId]);
+
+  // Auto-scroll pro fim
+  useEffect(() => {
+    if (scrollRef.current) {
+      scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+    }
+  }, [messages, currentReply, currentTools]);
+
+  async function send() {
+    const msg = input.trim();
+    if (!msg || streaming) return;
+    setInput('');
+    setStreaming(true);
+    setError(null);
+    setCurrentReply('');
+    setCurrentTools([]);
+
+    // Push user message localmente
+    const userMessage = { id: 'tmp-' + Date.now(), role: 'user', content: msg, createdAt: new Date().toISOString() };
+    setMessages((prev) => [...prev, userMessage]);
+
+    let newConvId = conversationId;
+    try {
+      await window.NSApi.aiSendMessage(
+        { conversationId, message: msg },
+        {
+          onConversation: ({ id }) => {
+            if (!conversationId) {
+              newConvId = id;
+              onConversationCreated?.(id);
+            }
+          },
+          onToken: ({ text }) => setCurrentReply((prev) => prev + text),
+          onToolUse: ({ name }) => setCurrentTools((prev) => [...prev, { name, state: 'running' }]),
+          onToolUseResult: ({ name }) => setCurrentTools((prev) => prev.map((t) =>
+            t.name === name && t.state === 'running' ? { ...t, state: 'done' } : t,
+          )),
+          onError: ({ message }) => setError(message),
+        },
+      );
+      // Push assistant message final
+      setMessages((prev) => {
+        // Refetch full state poderia ser mais limpo, mas evitamos extra round-trip.
+        return [...prev, {
+          id: 'tmp-a-' + Date.now(),
+          role: 'assistant',
+          content: '', // será substituído pela próxima refetch se houver
+          createdAt: new Date().toISOString(),
+        }];
+      });
+      onMessageSent?.();
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setStreaming(false);
+      // Limpa estado de streaming. Mensagem foi salva no DB.
+      // Recarrega histórico pra pegar versão persistida.
+      if (newConvId) {
+        try {
+          const data = await window.NSApi.aiGetConversation(newConvId);
+          setMessages(data.messages || []);
+        } catch { /* mantém otimista */ }
+      }
+      setCurrentReply('');
+      setCurrentTools([]);
+    }
+  }
+
+  function onKey(e) {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      send();
+    }
+  }
+
+  return (
+    <div style={{
+      flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0,
+      background: 'var(--surface, transparent)',
+    }} className={compact ? '' : 'panel'}>
+      <div
+        ref={scrollRef}
+        style={{
+          flex: 1, overflowY: 'auto',
+          padding: compact ? '12px 14px' : '18px 22px',
+          display: 'flex', flexDirection: 'column', gap: 12,
+        }}
+      >
+        {messages.length === 0 && !streaming && (
+          <div style={{ color: 'var(--fg5)', fontSize: 13, padding: '24px 0', textAlign: 'center' }}>
+            <Icon name="sparkles" size={18}/>
+            <div style={{ marginTop: 8 }}>Pergunte o que quiser sobre os dados do dashboard.</div>
+            <div style={{ marginTop: 12, display: 'grid', gap: 6, fontSize: 11, color: 'var(--fg4)' }}>
+              <div>Ex: "Compara receita dessa semana com a semana passada"</div>
+              <div>Ex: "Por que a margem do NeuroMind caiu?"</div>
+              <div>Ex: "Top 3 afiliados com pior refund rate"</div>
+            </div>
+          </div>
+        )}
+        {messages.map((m) => (
+          <ChatMessage key={m.id} message={m} compact={compact}/>
+        ))}
+        {streaming && (
+          <div>
+            {currentTools.length > 0 && (
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 8 }}>
+                {currentTools.map((t, i) => (
+                  <span key={i} style={{
+                    fontFamily: 'var(--f-mono)', fontSize: 10,
+                    padding: '2px 8px', borderRadius: 4,
+                    background: t.state === 'done' ? 'rgba(40,200,120,0.1)' : 'rgba(91,200,255,0.1)',
+                    color: t.state === 'done' ? 'var(--success)' : 'var(--glow-cyan)',
+                    border: `1px solid ${t.state === 'done' ? 'rgba(40,200,120,0.3)' : 'rgba(91,200,255,0.3)'}`,
+                  }}>
+                    {t.state === 'done' ? '✓' : '⋯'} {t.name}
+                  </span>
+                ))}
+              </div>
+            )}
+            {currentReply && (
+              <ChatMessage
+                message={{ role: 'assistant', content: currentReply, createdAt: new Date().toISOString() }}
+                compact={compact}
+                streaming
+              />
+            )}
+            {!currentReply && currentTools.length === 0 && (
+              <div style={{ color: 'var(--fg5)', fontSize: 12 }}>Pensando...</div>
+            )}
+          </div>
+        )}
+        {error && (
+          <div style={{ color: 'var(--danger)', fontSize: 12, background: 'rgba(239,68,68,0.06)', padding: 10, borderRadius: 6 }}>
+            Erro: {error}
+          </div>
+        )}
+      </div>
+      <div style={{
+        padding: compact ? '10px 12px' : '14px 18px',
+        borderTop: '1px solid var(--border-soft)',
+        display: 'flex', gap: 8,
+        background: 'rgba(91,200,255,0.02)',
+      }}>
+        <textarea
+          value={input}
+          onChange={(e) => setInput(e.target.value)}
+          onKeyDown={onKey}
+          placeholder="Pergunte algo sobre seus dados..."
+          rows={compact ? 2 : 3}
+          disabled={streaming}
+          style={{
+            flex: 1, resize: 'none', padding: '8px 10px',
+            fontFamily: 'var(--f-body)', fontSize: 13, color: 'var(--fg1)',
+            background: 'rgba(91,200,255,0.05)',
+            border: '1px solid rgba(91,200,255,0.2)', borderRadius: 6,
+            outline: 'none',
+          }}
+        />
+        <button
+          onClick={send}
+          disabled={streaming || !input.trim()}
+          className="btn btn-primary"
+          style={{ alignSelf: 'flex-end', opacity: streaming || !input.trim() ? 0.5 : 1 }}
+        >
+          <Icon name={streaming ? 'loader' : 'send'} size={12}/>
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function ChatMessage({ message, compact, streaming }) {
+  const isUser = message.role === 'user';
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', alignItems: isUser ? 'flex-end' : 'flex-start' }}>
+      <div style={{
+        maxWidth: '85%',
+        padding: '8px 12px', borderRadius: 8,
+        background: isUser ? 'rgba(91,200,255,0.10)' : 'rgba(255,255,255,0.03)',
+        border: `1px solid ${isUser ? 'rgba(91,200,255,0.25)' : 'var(--border-soft)'}`,
+        fontSize: compact ? 12 : 13, color: 'var(--fg1)',
+        whiteSpace: 'pre-wrap', wordBreak: 'break-word', lineHeight: 1.5,
+      }}>
+        {message.content || (streaming ? '...' : '(vazio)')}
+      </div>
+      {message.toolUses && Array.isArray(message.toolUses) && message.toolUses.length > 0 && (
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginTop: 4 }}>
+          {message.toolUses.map((t, i) => (
+            <span key={i} style={{
+              fontFamily: 'var(--f-mono)', fontSize: 9,
+              padding: '1px 6px', borderRadius: 3,
+              background: 'rgba(40,200,120,0.08)', color: 'var(--success)',
+              border: '1px solid rgba(40,200,120,0.2)',
+            }}>
+              ✓ {t.name}
+            </span>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 Object.assign(window, {
   FunnelPage, LeaderboardPage, AffiliateDrawer, AllAffiliatesPage,
   ProductsPage, TransactionsPage, IntegrationsPage, FXPage, UsersPage,
   HealthPage, CostsPage, InsightsPage, NetworksPage,
-  PartnerShell,
+  PartnerShell, ChatPage, ChatWidget,
 });

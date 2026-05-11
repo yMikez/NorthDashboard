@@ -293,6 +293,7 @@ model User {
   signedContracts NetworkContract[] @relation("ContractSignedBy")
   paidPayouts     NetworkPayout[]   @relation("PayoutPaidBy")
   auditEntries    NetworkAuditLog[] @relation("AuditActor")
+  conversations   Conversation[]    @relation("ConversationsByUser")
 }
 
 model Session {
@@ -477,6 +478,40 @@ model NetworkContract {
 
   @@unique([networkId, version])
   @@index([networkId])
+}
+
+// ============================================================
+// AI ASSISTANT — chat conversations + messages.
+// Tool-use pattern: assistant chama services existentes via tools
+// (get_overview, get_funnel, etc), respostas streamadas via SSE.
+// Admin-only. Histórico persistido pra revisita.
+// ============================================================
+
+model Conversation {
+  id        String    @id @default(cuid())
+  userId    String
+  user      User      @relation("ConversationsByUser", fields: [userId], references: [id], onDelete: Cascade)
+  title     String? // auto-gerado do primeiro user message (truncado)
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  messages  Message[]
+
+  @@index([userId, updatedAt])
+}
+
+// Cada turno do chat. role='user' ou 'assistant'. toolUses guarda
+// metadata pra renderizar no UI ([{name, input, result}]). content
+// armazena a resposta final em texto markdown.
+model Message {
+  id             String       @id @default(cuid())
+  conversationId String
+  conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  role           String // 'user' | 'assistant'
+  content        String
+  toolUses       Json?
+  createdAt      DateTime     @default(now())
+
+  @@index([conversationId, createdAt])
 }
 
 // Audit trail genérico pra mudanças sensíveis em entidades de Network.

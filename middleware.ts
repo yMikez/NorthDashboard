@@ -52,6 +52,7 @@ const SPA_ROUTES = new Set([
   '/costs',
   '/insights',
   '/users',
+  '/chat',
   '/network',          // partner shell base
 ]);
 

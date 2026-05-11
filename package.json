@@ -18,6 +18,7 @@
     "seed:admin": "tsx scripts/seedAdmin.ts"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.95.2",
     "@prisma/client": "^5.22.0",
     "@types/nodemailer": "^8.0.0",
     "@types/pdfkit": "^0.17.6",
