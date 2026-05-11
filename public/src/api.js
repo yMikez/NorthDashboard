@@ -527,6 +527,12 @@ async function aiSendMessage({ conversationId, message }, callbacks) {
   });
   if (!res.ok) {
     const data = await res.json().catch(() => ({}));
+    // 429 = rate_limited; expor message amigável.
+    if (res.status === 429) {
+      const err = new Error(data.message || 'Rate limit atingido');
+      err.code = 'rate_limited';
+      throw err;
+    }
     throw new Error(data.error || `${res.status}`);
   }
   const reader = res.body.getReader();

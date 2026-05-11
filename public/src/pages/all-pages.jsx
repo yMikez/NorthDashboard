@@ -5550,19 +5550,48 @@ function ChatBody({ conversationId, onConversationCreated, onMessageSent, compac
   );
 }
 
+// Renderiza markdown da resposta da IA usando marked + DOMPurify (loaded
+// via CDN no index.html). Fallback pra texto plain se libs não carregaram.
+// User messages NÃO viram markdown — preserva exatamente o que o user
+// digitou (incluindo asteriscos literais, etc).
+function renderMarkdown(text) {
+  if (!text) return '';
+  if (typeof window === 'undefined' || !window.marked || !window.DOMPurify) {
+    return null; // caller renderiza como text plain
+  }
+  try {
+    const raw = window.marked.parse(text, { gfm: true, breaks: true });
+    return window.DOMPurify.sanitize(raw, {
+      ALLOWED_TAGS: ['p', 'br', 'strong', 'em', 'code', 'pre', 'ul', 'ol', 'li',
+                     'h1', 'h2', 'h3', 'h4', 'h5', 'h6',
+                     'blockquote', 'a', 'table', 'thead', 'tbody', 'tr', 'th', 'td',
+                     'hr', 'span', 'div'],
+      ALLOWED_ATTR: ['href', 'title', 'target', 'rel'],
+    });
+  } catch {
+    return null;
+  }
+}
+
 function ChatMessage({ message, compact, streaming }) {
   const isUser = message.role === 'user';
+  const mdHtml = !isUser ? renderMarkdown(message.content) : null;
   return (
     <div style={{ display: 'flex', flexDirection: 'column', alignItems: isUser ? 'flex-end' : 'flex-start' }}>
-      <div style={{
-        maxWidth: '85%',
-        padding: '8px 12px', borderRadius: 8,
-        background: isUser ? 'rgba(91,200,255,0.10)' : 'rgba(255,255,255,0.03)',
-        border: `1px solid ${isUser ? 'rgba(91,200,255,0.25)' : 'var(--border-soft)'}`,
-        fontSize: compact ? 12 : 13, color: 'var(--fg1)',
-        whiteSpace: 'pre-wrap', wordBreak: 'break-word', lineHeight: 1.5,
-      }}>
-        {message.content || (streaming ? '...' : '(vazio)')}
+      <div
+        className={!isUser ? 'chat-md' : ''}
+        style={{
+          maxWidth: '85%',
+          padding: '8px 12px', borderRadius: 8,
+          background: isUser ? 'rgba(91,200,255,0.10)' : 'rgba(255,255,255,0.03)',
+          border: `1px solid ${isUser ? 'rgba(91,200,255,0.25)' : 'var(--border-soft)'}`,
+          fontSize: compact ? 12 : 13, color: 'var(--fg1)',
+          wordBreak: 'break-word', lineHeight: 1.5,
+          whiteSpace: isUser ? 'pre-wrap' : 'normal',
+        }}
+        {...(mdHtml ? { dangerouslySetInnerHTML: { __html: mdHtml } } : {})}
+      >
+        {mdHtml ? null : (message.content || (streaming ? '...' : '(vazio)'))}
       </div>
       {message.toolUses && Array.isArray(message.toolUses) && message.toolUses.length > 0 && (
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginTop: 4 }}>
