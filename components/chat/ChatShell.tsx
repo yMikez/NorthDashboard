@@ -1,10 +1,11 @@
-// Container principal do redesign do chat (Phase 1).
-// 3-col: Sidebar (260/64) + Main (chat) + DetailDrawer (sob demanda).
+// Container principal do redesign do chat.
+// Layout: DashboardNav (SPA-style) + Sidebar conversas + Main chat + Drawer.
 // Estado de conversa, streaming, filtros, tema e atalhos vivem aqui.
 
 'use client';
 
 import * as React from 'react';
+import { DashboardNav } from './DashboardNav';
 import { Sidebar } from './Sidebar';
 import { TopBar, type SyncStatus, type ThemeMode } from './TopBar';
 import { MessageList, EmptyState } from './MessageList';
@@ -295,7 +296,9 @@ export function ChatShell({ user }: { user: ChatUser }) {
   const currentConv = conversations.find((c) => c.id === selectedId) ?? null;
 
   return (
-    <div className="grid grid-cols-[auto_1fr] h-screen bg-background text-foreground">
+    <div className="grid grid-cols-[232px_auto_1fr] h-screen bg-background text-foreground">
+      <DashboardNav user={user} activeId="chat" />
+
       <Sidebar
         user={user}
         collapsed={collapsed}

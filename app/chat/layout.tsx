@@ -1,10 +1,13 @@
-// Layout do redesign do /chat. Importa globals.css (Tailwind + tokens
-// shadcn) localmente — Next.js bundla esse CSS na rota /chat sem
-// afetar /index.html da SPA legacy (que tem seu próprio CSS).
+// Layout do redesign do /chat.
 //
-// O wrapper [data-app-scope='chat'] aplica color/background/font do
-// tema. Necessário pra evitar que estilos vazem pra outras rotas se
-// alguém importar globals.css em outro lugar.
+// CSS chain:
+//   1. /styles/dashboard.css   — define vars (--fg1, --bg, etc) + .side,
+//      .side-item, .user-chip, font-faces da SPA legacy. Permite o
+//      DashboardNav renderizar com look idêntico ao resto do app.
+//   2. ./globals.css           — Tailwind + tokens shadcn (HSL). Escopado
+//      no wrapper [data-app-scope='chat'] pra não vazar.
+//
+// Ordem importa: Tailwind layers vencem onde houver colisão de classe.
 
 import type { ReactNode } from 'react';
 import './globals.css';
@@ -15,8 +18,11 @@ export const metadata = {
 
 export default function ChatLayout({ children }: { children: ReactNode }) {
   return (
-    <div data-app-scope="chat" className="min-h-screen antialiased">
-      {children}
-    </div>
+    <>
+      <link rel="stylesheet" href="/styles/dashboard.css" />
+      <div data-app-scope="chat" className="min-h-screen antialiased">
+        {children}
+      </div>
+    </>
   );
 }

@@ -222,6 +222,13 @@ function App({ user }) {
   const [drawerAff, setDrawerAff] = useStateApp(null);
 
   function onNav(route) {
+    // /chat foi migrado pra rota Next.js native (TS + Tailwind + shadcn).
+    // SPA não renderiza mais o ChatPage inline — full-page nav garante que
+    // o usuário vê a UI nova com layout integrado (dashboard nav + chat).
+    if (route === 'chat') {
+      window.location.href = '/chat';
+      return;
+    }
     setDrawerAff(null);
     // Preserve current querystring (filter state) when switching routes.
     writeRoute(route, new URLSearchParams(location.search));
@@ -251,7 +258,7 @@ function App({ user }) {
           {hashState.route === 'platforms'      && <IntegrationsPage filters={filters}/>}
           {hashState.route === 'health'         && <HealthPage/>}
           {hashState.route === 'costs'          && <CostsPage filters={filters}/>}
-          {hashState.route === 'chat'           && <ChatPage user={user}/>}
+          {/* 'chat' agora vive em /chat (Next.js native). Nav redireciona via window.location. */}
           {hashState.route === 'insights'       && <InsightsPage/>}
           {hashState.route === 'users'          && <UsersPage currentUser={user}/>}
           {hashState.route === 'networks'       && <NetworksPage/>}
