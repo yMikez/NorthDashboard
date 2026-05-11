@@ -1,0 +1,363 @@
+// Container principal do redesign do chat (Phase 1).
+// 3-col: Sidebar (260/64) + Main (chat) + DetailDrawer (sob demanda).
+// Estado de conversa, streaming, filtros, tema e atalhos vivem aqui.
+
+'use client';
+
+import * as React from 'react';
+import { Sidebar } from './Sidebar';
+import { TopBar, type SyncStatus, type ThemeMode } from './TopBar';
+import { MessageList, EmptyState } from './MessageList';
+import { ChatInput } from './ChatInput';
+import { DetailDrawer } from './DetailDrawer';
+import {
+  deleteConversation,
+  getConversation,
+  listConversations,
+  sendMessage,
+} from '@/lib/chat/client';
+import type {
+  Block,
+  ChatUser,
+  Conversation,
+  EntityRef,
+  FilterState,
+  Message,
+} from '@/types/chat';
+
+const INITIAL_FILTERS: FilterState = (() => {
+  const end = new Date();
+  const start = new Date(end.getTime() - 30 * 24 * 3600 * 1000);
+  return {
+    period: {
+      preset: '30d',
+      start: start.toISOString().slice(0, 10),
+      end: end.toISOString().slice(0, 10),
+    },
+    platforms: [],
+    products: [],
+    countries: [],
+    families: [],
+  };
+})();
+
+export function ChatShell({ user }: { user: ChatUser }) {
+  const [collapsed, setCollapsed] = React.useState(false);
+  const [conversations, setConversations] = React.useState<Conversation[]>([]);
+  const [selectedId, setSelectedId] = React.useState<string | null>(null);
+  const [messages, setMessages] = React.useState<Message[]>([]);
+  const [input, setInput] = React.useState('');
+  const [streaming, setStreaming] = React.useState(false);
+  const [streamPartial, setStreamPartial] = React.useState<{
+    content: string;
+    tools: { name: string; id: string }[];
+  } | null>(null);
+  const [filters, setFilters] = React.useState<FilterState>(INITIAL_FILTERS);
+  const [syncStatus, setSyncStatus] = React.useState<SyncStatus>('live');
+  const [theme, setTheme] = React.useState<ThemeMode>('dark');
+  const [model, setModel] = React.useState('claude-opus-4-5');
+  const [drawerEntity, setDrawerEntity] = React.useState<EntityRef | null>(null);
+  const abortRef = React.useRef<AbortController | null>(null);
+
+  // ---- Initial load ----
+  React.useEffect(() => {
+    void refreshConversations();
+  }, []);
+
+  async function refreshConversations() {
+    try {
+      const list = await listConversations();
+      setConversations(list);
+    } catch (err) {
+      console.error('listConversations', err);
+      setSyncStatus('error');
+    }
+  }
+
+  // ---- Theme ----
+  React.useEffect(() => {
+    const root = document.querySelector('[data-app-scope="chat"]');
+    if (!root) return;
+    if (theme === 'dark') root.classList.add('dark');
+    else root.classList.remove('dark');
+  }, [theme]);
+
+  // ---- Conversation load ----
+  React.useEffect(() => {
+    if (!selectedId) {
+      setMessages([]);
+      return;
+    }
+    let cancelled = false;
+    (async () => {
+      try {
+        const { messages: msgs } = await getConversation(selectedId);
+        if (!cancelled) setMessages(msgs);
+      } catch (err) {
+        if (!cancelled) console.error('getConversation', err);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedId]);
+
+  // ---- Keyboard shortcuts ----
+  React.useEffect(() => {
+    function handler(e: KeyboardEvent) {
+      const mod = e.metaKey || e.ctrlKey;
+      if (mod && e.key.toLowerCase() === 'j') {
+        e.preventDefault();
+        startNew();
+      } else if (mod && e.key.toLowerCase() === 'k') {
+        e.preventDefault();
+        const search = document.querySelector<HTMLInputElement>('[data-chat-search]');
+        search?.focus();
+      } else if (e.key === 'Escape' && drawerEntity) {
+        setDrawerEntity(null);
+      }
+    }
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  }, [drawerEntity]);
+
+  // ---- Actions ----
+  function startNew() {
+    if (abortRef.current) abortRef.current.abort();
+    abortRef.current = null;
+    setSelectedId(null);
+    setMessages([]);
+    setInput('');
+    setStreamPartial(null);
+    setStreaming(false);
+  }
+
+  async function handleSend() {
+    const text = input.trim();
+    if (!text || streaming) return;
+
+    const tempUser: Message = {
+      id: 'temp-' + Date.now(),
+      role: 'user',
+      content: text,
+      createdAt: new Date().toISOString(),
+    };
+    setMessages((prev) => [...prev, tempUser]);
+    setInput('');
+    setStreaming(true);
+    setStreamPartial({ content: '', tools: [] });
+    setSyncStatus('syncing');
+
+    const controller = new AbortController();
+    abortRef.current = controller;
+
+    let acc = '';
+    const tools: { name: string; id: string }[] = [];
+    let received: Block[] | null = null;
+
+    await sendMessage(
+      { conversationId: selectedId, message: text },
+      {
+        onConversation: ({ id }) => {
+          setSelectedId(id);
+        },
+        onToken: ({ text: tk }) => {
+          acc += tk;
+          setStreamPartial({ content: acc, tools: [...tools] });
+        },
+        onToolUseStart: ({ name, id }) => {
+          tools.push({ name, id });
+          setStreamPartial({ content: acc, tools: [...tools] });
+        },
+        onToolUseResult: () => {
+          /* no-op for now */
+        },
+        onBlocks: ({ blocks }) => {
+          received = blocks;
+        },
+        onDone: ({ conversationId: cid }) => {
+          const final: Message = {
+            id: 'asst-' + Date.now(),
+            role: 'assistant',
+            content: acc,
+            toolUses: tools.map((t) => ({ name: t.name })),
+            blocks: received ?? undefined,
+            createdAt: new Date().toISOString(),
+          };
+          setMessages((prev) => [...prev, final]);
+          setStreamPartial(null);
+          setStreaming(false);
+          setSyncStatus('live');
+          void refreshConversations();
+          if (cid && cid !== selectedId) setSelectedId(cid);
+        },
+        onError: ({ message }) => {
+          console.error('chat stream error', message);
+          setStreaming(false);
+          setStreamPartial(null);
+          setSyncStatus('error');
+          setMessages((prev) => [
+            ...prev,
+            {
+              id: 'err-' + Date.now(),
+              role: 'assistant',
+              content: `⚠️ Erro: ${message}`,
+              createdAt: new Date().toISOString(),
+            },
+          ]);
+        },
+        onRateLimited: ({ message }) => {
+          setStreaming(false);
+          setStreamPartial(null);
+          setSyncStatus('error');
+          setMessages((prev) => [
+            ...prev,
+            {
+              id: 'rl-' + Date.now(),
+              role: 'assistant',
+              content: `🚫 ${message}`,
+              createdAt: new Date().toISOString(),
+            },
+          ]);
+        },
+      },
+      controller.signal,
+    );
+  }
+
+  function handleStop() {
+    abortRef.current?.abort();
+    abortRef.current = null;
+    setStreaming(false);
+    if (streamPartial && streamPartial.content) {
+      setMessages((prev) => [
+        ...prev,
+        {
+          id: 'asst-' + Date.now(),
+          role: 'assistant',
+          content: streamPartial.content + '\n\n_[geração interrompida]_',
+          toolUses: streamPartial.tools.map((t) => ({ name: t.name })),
+          createdAt: new Date().toISOString(),
+        },
+      ]);
+    }
+    setStreamPartial(null);
+    setSyncStatus('live');
+  }
+
+  async function handleDelete(id: string) {
+    try {
+      await deleteConversation(id);
+      if (selectedId === id) startNew();
+      void refreshConversations();
+    } catch (err) {
+      console.error('deleteConversation', err);
+    }
+  }
+
+  function handleRenameTitle(next: string) {
+    if (!selectedId) return;
+    setConversations((prev) =>
+      prev.map((c) => (c.id === selectedId ? { ...c, title: next } : c)),
+    );
+    // Server-side rename ainda não tem endpoint dedicado; Phase 1 mantém local-only.
+  }
+
+  function handleRenameConv(id: string, title: string) {
+    setConversations((prev) => prev.map((c) => (c.id === id ? { ...c, title } : c)));
+  }
+
+  function handleTogglePin(id: string) {
+    setConversations((prev) =>
+      prev.map((c) => (c.id === id ? { ...c, pinned: !c.pinned } : c)),
+    );
+  }
+
+  function handleExport(id: string) {
+    const conv = conversations.find((c) => c.id === id);
+    if (!conv) return;
+    getConversation(id)
+      .then(({ messages: msgs }) => {
+        const blob = new Blob(
+          [JSON.stringify({ conversation: conv, messages: msgs }, null, 2)],
+          { type: 'application/json' },
+        );
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `conversa-${id.slice(0, 8)}.json`;
+        a.click();
+        URL.revokeObjectURL(url);
+      })
+      .catch((err) => console.error('export', err));
+  }
+
+  const currentConv = conversations.find((c) => c.id === selectedId) ?? null;
+
+  return (
+    <div className="grid grid-cols-[auto_1fr] h-screen bg-background text-foreground">
+      <Sidebar
+        user={user}
+        collapsed={collapsed}
+        onToggleCollapsed={() => setCollapsed((v) => !v)}
+        conversations={conversations}
+        selectedId={selectedId}
+        onSelect={setSelectedId}
+        onNew={startNew}
+        onRename={handleRenameConv}
+        onTogglePin={handleTogglePin}
+        onExport={handleExport}
+        onDelete={(id) => void handleDelete(id)}
+      />
+
+      <main className="flex flex-col h-full overflow-hidden">
+        <TopBar
+          title={currentConv?.title ?? null}
+          onRenameTitle={handleRenameTitle}
+          filters={filters}
+          onChangeFilters={setFilters}
+          syncStatus={syncStatus}
+          onRefresh={() => void refreshConversations()}
+          onExport={() => selectedId && handleExport(selectedId)}
+          onShare={() => {
+            if (!selectedId) return;
+            void navigator.clipboard.writeText(window.location.origin + '/chat?c=' + selectedId);
+          }}
+          theme={theme}
+          onToggleTheme={() => setTheme((t) => (t === 'dark' ? 'light' : 'dark'))}
+        />
+
+        {messages.length === 0 && !streaming ? (
+          <EmptyState onPickPrompt={(q) => setInput(q)} />
+        ) : (
+          <MessageList
+            messages={messages}
+            streaming={streaming}
+            streamingPartial={streamPartial}
+            onRegenerate={() => {
+              const lastUser = [...messages].reverse().find((m) => m.role === 'user');
+              if (!lastUser) return;
+              setInput(lastUser.content);
+            }}
+          />
+        )}
+
+        <ChatInput
+          value={input}
+          onChange={setInput}
+          onSubmit={() => void handleSend()}
+          onStop={handleStop}
+          streaming={streaming}
+          model={model}
+          onChangeModel={setModel}
+        />
+      </main>
+
+      <DetailDrawer
+        entity={drawerEntity}
+        open={drawerEntity != null}
+        onClose={() => setDrawerEntity(null)}
+      />
+    </div>
+  );
+}

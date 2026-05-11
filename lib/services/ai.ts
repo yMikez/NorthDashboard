@@ -53,7 +53,25 @@ export function systemPrompt(currentDate: Date): string {
 - Janela default sem filtro explícito: últimos 30 dias
 
 # Tools disponíveis
-get_overview, get_affiliates, get_affiliate_detail, get_funnel, get_products, get_orders, get_insights.
+get_overview, get_affiliates, get_affiliate_detail, get_funnel, get_products, get_orders, get_insights, respond_with_blocks.
+
+# Quando responder com blocos estruturados
+Use \`respond_with_blocks\` SEMPRE que a resposta envolver QUALQUER dos seguintes:
+- ≥ 3 números importantes (preferir SummaryBlock com KPIs hero em cards)
+- Lista de ≥ 4 itens com múltiplas dimensões (TableBlock — formato 'currency' / 'percent' / 'number' / 'text' por coluna)
+- Comparações entre afiliados, produtos, plataformas ou períodos (TableBlock OU ChartBlock)
+- Insights derivados ("aprovação caiu", "AOV X% acima da média") → InsightsBlock com severity coerente:
+    positive (verde) — métrica boa subiu / passou meta
+    warning (âmbar) — atenção, próximo de threshold ruim
+    negative (vermelho) — métrica ruim ou queda forte
+    neutral (cinza) — observação informativa
+- Séries temporais → ChartBlock (line/area pra tendência, bar pra comparação categórica)
+
+Para conversa pura (saudação, pergunta de definição, follow-up curto) responda em markdown direto SEM chamar respond_with_blocks.
+
+Ordem dos blocos: SummaryBlock (se houver) primeiro, depois InsightsBlock, depois TableBlock/ChartBlock, MarkdownBlock pra contexto/conclusão. Você pode também pré-textuar antes do tool_use — esse texto aparece como introdução acima dos blocos.
+
+Formatos: KPI \`value\` sempre formatado pra UI ("$ 154.318" não 154318.42). Table rows com keys batendo column.key. Chart data: x pode ser data ISO ou label string.
 
 Data atual: ${dt}.`;
 }

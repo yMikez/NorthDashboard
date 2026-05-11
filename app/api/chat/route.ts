@@ -19,7 +19,7 @@ import type Anthropic from '@anthropic-ai/sdk';
 import { db } from '@/lib/db';
 import { requireAdmin } from '@/lib/auth/guard';
 import { getAnthropicClient, ANTHROPIC_MODEL, systemPrompt } from '@/lib/services/ai';
-import { TOOLS, executeTool } from '@/lib/services/aiTools';
+import { TOOLS, executeTool, TERMINAL_TOOL } from '@/lib/services/aiTools';
 import { logger } from '@/lib/logger';
 
 export const runtime = 'nodejs';
@@ -132,11 +132,12 @@ export async function POST(req: Request) {
 
       const toolUses: Array<{ name: string; input: unknown; result?: unknown }> = [];
       let finalText = '';
+      let finalBlocks: unknown = null;
 
       try {
         send('conversation', { id: conversationId });
 
-        for (let loop = 0; loop < MAX_TOOL_LOOPS; loop++) {
+        outer: for (let loop = 0; loop < MAX_TOOL_LOOPS; loop++) {
           // messages.stream emite eventos enquanto o modelo gera. Forwardar
           // text_delta como SSE 'token' pra UX em tempo real.
           const ms = client.messages.stream({
@@ -176,9 +177,23 @@ export async function POST(req: Request) {
           }
 
           // Executa cada tool_use e empilha tool_result.
+          // `respond_with_blocks` é terminal: extrai os blocos do input,
+          // emite SSE pra UI e quebra fora do loop sem mais iterações.
           const toolResults: Anthropic.ToolResultBlockParam[] = [];
           for (const block of finalMessage.content) {
             if (block.type !== 'tool_use') continue;
+
+            if (block.name === TERMINAL_TOOL) {
+              const input = block.input as { blocks?: unknown };
+              finalBlocks = Array.isArray(input?.blocks) ? input.blocks : null;
+              toolUses.push({ name: block.name, input: block.input, result: { ok: true } });
+              send('tool_use_result', { name: block.name, id: block.id });
+              if (finalBlocks) {
+                send('blocks', { blocks: finalBlocks });
+              }
+              break outer;
+            }
+
             const result = await executeTool(block.name, block.input as Record<string, unknown>);
             toolUses.push({ name: block.name, input: block.input, result });
             send('tool_use_result', { name: block.name, id: block.id });
@@ -187,6 +202,10 @@ export async function POST(req: Request) {
               tool_use_id: block.id,
               content: JSON.stringify(result).slice(0, TOOL_RESULT_MAX_BYTES),
             });
+          }
+          if (toolResults.length === 0) {
+            // Só terminal tool foi chamada — sem tool_results pra empilhar.
+            break;
           }
           apiMessages.push({ role: 'user', content: toolResults });
         }
@@ -197,6 +216,7 @@ export async function POST(req: Request) {
             role: 'assistant',
             content: finalText,
             toolUses: toolUses.length > 0 ? (toolUses as never) : undefined,
+            blocks: finalBlocks ? (finalBlocks as never) : undefined,
           },
         });
 

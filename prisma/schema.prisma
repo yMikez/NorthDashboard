@@ -509,6 +509,10 @@ model Message {
   role           String // 'user' | 'assistant'
   content        String
   toolUses       Json?
+  // Structured response blocks emitted by the `respond_with_blocks` tool.
+  // Null pra mensagens em texto puro (markdown via `content`). Array de
+  // Block discriminated union em types/chat.ts.
+  blocks         Json?
   createdAt      DateTime     @default(now())
 
   @@index([conversationId, createdAt])

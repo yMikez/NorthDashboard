@@ -39,6 +39,7 @@ export async function GET(
       role: m.role,
       content: m.content,
       toolUses: m.toolUses,
+      blocks: m.blocks,
       createdAt: m.createdAt.toISOString(),
     })),
   });

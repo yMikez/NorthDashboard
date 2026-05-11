@@ -118,7 +118,113 @@ export const TOOLS: Anthropic.Tool[] = [
       properties: {},
     },
   },
+  {
+    name: 'respond_with_blocks',
+    description:
+      'Tool TERMINAL pra entregar a resposta final em blocos estruturados (cards de KPI, insights, tabelas, charts) em vez de markdown puro. Use SEMPRE que a resposta contém ≥3 números OU lista ≥4 itens OU comparações entre entidades — quando o leitor vai escanear visualmente em vez de ler. Para perguntas curtas/conversa, NÃO use — responda em markdown direto. Chame essa tool no FIM, depois de coletar dados via get_*. Blocos disponíveis: summary (KPIs hero), insights (cartões coloridos com severity), table (linhas/colunas tipadas), markdown (parágrafo de texto), chart (line/bar/area).',
+    input_schema: {
+      type: 'object',
+      properties: {
+        blocks: {
+          type: 'array',
+          description: 'Array ordenado de blocos a renderizar.',
+          items: {
+            type: 'object',
+            properties: {
+              type: {
+                type: 'string',
+                enum: ['summary', 'insights', 'table', 'markdown', 'chart'],
+              },
+              // summary
+              title: { type: 'string' },
+              kpis: {
+                type: 'array',
+                items: {
+                  type: 'object',
+                  properties: {
+                    label: { type: 'string' },
+                    value: { type: 'string', description: 'Valor formatado, ex "$ 154.318" ou "12,4%"' },
+                    delta: {
+                      type: 'object',
+                      properties: {
+                        value: { type: 'string', description: 'ex "+8,2%"' },
+                        trend: { type: 'string', enum: ['up', 'down', 'neutral'] },
+                      },
+                    },
+                    hint: { type: 'string' },
+                  },
+                  required: ['label', 'value'],
+                },
+              },
+              // insights
+              insights: {
+                type: 'array',
+                items: {
+                  type: 'object',
+                  properties: {
+                    title: { type: 'string' },
+                    value: { type: 'string' },
+                    description: { type: 'string' },
+                    severity: { type: 'string', enum: ['positive', 'warning', 'negative', 'neutral'] },
+                  },
+                  required: ['title', 'value', 'description', 'severity'],
+                },
+              },
+              // table
+              columns: {
+                type: 'array',
+                items: {
+                  type: 'object',
+                  properties: {
+                    key: { type: 'string' },
+                    label: { type: 'string' },
+                    align: { type: 'string', enum: ['left', 'right', 'center'] },
+                    format: { type: 'string', enum: ['currency', 'percent', 'number', 'text'] },
+                  },
+                  required: ['key', 'label'],
+                },
+              },
+              rows: {
+                type: 'array',
+                items: { type: 'object', additionalProperties: true },
+              },
+              exportable: { type: 'boolean' },
+              // markdown
+              content: { type: 'string', description: 'Markdown puro pra MarkdownBlock' },
+              // chart
+              variant: { type: 'string', enum: ['line', 'bar', 'area'] },
+              series: {
+                type: 'array',
+                items: {
+                  type: 'object',
+                  properties: {
+                    name: { type: 'string' },
+                    data: {
+                      type: 'array',
+                      items: {
+                        type: 'object',
+                        properties: {
+                          x: {},
+                          y: { type: 'number' },
+                        },
+                        required: ['x', 'y'],
+                      },
+                    },
+                  },
+                  required: ['name', 'data'],
+                },
+              },
+            },
+            required: ['type'],
+          },
+        },
+      },
+      required: ['blocks'],
+    },
+  },
 ];
+
+export const TERMINAL_TOOL = 'respond_with_blocks';
 
 interface ToolInput {
   start_date?: string;
@@ -185,6 +291,11 @@ export async function executeTool(name: string, input: ToolInput): Promise<unkno
       }
       case 'get_insights':
         return await getInsights();
+      case 'respond_with_blocks':
+        // Terminal: route.ts intercepta esta tool antes de chamar executeTool.
+        // Se cair aqui é porque alguém esqueceu de filtrar — devolve ack pra
+        // não travar o loop, mas log pra investigar.
+        return { ok: true };
       default:
         return { error: `tool desconhecida: ${name}` };
     }
