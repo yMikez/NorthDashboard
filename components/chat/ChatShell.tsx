@@ -55,7 +55,18 @@ export function ChatShell({ user }: { user: ChatUser }) {
   } | null>(null);
   const [filters, setFilters] = React.useState<FilterState>(INITIAL_FILTERS);
   const [syncStatus, setSyncStatus] = React.useState<SyncStatus>('live');
-  const [theme, setTheme] = React.useState<ThemeMode>('dark');
+  const [theme, setTheme] = React.useState<ThemeMode>(() => {
+    if (typeof document === 'undefined') return 'dark';
+    const stored = (() => {
+      try {
+        return localStorage.getItem('ns-theme');
+      } catch {
+        return null;
+      }
+    })();
+    const fromHtml = document.documentElement.getAttribute('data-theme');
+    return (stored ?? fromHtml) === 'light' ? 'light' : 'dark';
+  });
   const [model, setModel] = React.useState('claude-opus-4-5');
   const [drawerEntity, setDrawerEntity] = React.useState<EntityRef | null>(null);
   const abortRef = React.useRef<AbortController | null>(null);
@@ -76,11 +87,16 @@ export function ChatShell({ user }: { user: ChatUser }) {
   }
 
   // ---- Theme ----
+  // Sync com a SPA legada: data-theme no <html> alimenta tanto o chat
+  // (via globals.css) quanto a dashboard.css. localStorage 'ns-theme'
+  // mantém a escolha entre rotas/sessões.
   React.useEffect(() => {
-    const root = document.querySelector('[data-app-scope="chat"]');
-    if (!root) return;
-    if (theme === 'dark') root.classList.add('dark');
-    else root.classList.remove('dark');
+    document.documentElement.setAttribute('data-theme', theme);
+    try {
+      localStorage.setItem('ns-theme', theme);
+    } catch {
+      /* noop */
+    }
   }, [theme]);
 
   // ---- Conversation load ----

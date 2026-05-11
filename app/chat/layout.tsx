@@ -19,6 +19,7 @@ export const metadata = {
 export default function ChatLayout({ children }: { children: ReactNode }) {
   return (
     <>
+      <link rel="stylesheet" href="/styles/colors_and_type.css" />
       <link rel="stylesheet" href="/styles/dashboard.css" />
       <div data-app-scope="chat" className="min-h-screen antialiased">
         {children}

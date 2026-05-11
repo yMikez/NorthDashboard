@@ -59,8 +59,8 @@ const config: Config = {
         danger: 'hsl(var(--danger))',
       },
       fontFamily: {
-        sans: ['Inter', 'system-ui', 'sans-serif'],
-        mono: ['JetBrains Mono', 'ui-monospace', 'monospace'],
+        sans: ['Space Grotesk', 'system-ui', '-apple-system', 'sans-serif'],
+        mono: ['JetBrains Mono', 'SF Mono', 'Menlo', 'monospace'],
       },
       borderRadius: {
         lg: 'var(--radius)',
