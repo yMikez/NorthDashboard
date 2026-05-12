@@ -238,10 +238,30 @@ interface ToolInput {
   offset?: number;
 }
 
+// BRT é UTC-3 fixo (sem horário de verão desde 2019). Operação fica
+// no Brasil; tudo que o modelo diz como "hoje", "ontem", "esta semana"
+// é em BRT. Converter "YYYY-MM-DD" → instante BRT antes de filtrar
+// previne off-by-one: sem isso, end_date="2026-05-11" caía em
+// 00:00 UTC = 21:00 BRT do dia 10, e a query "vendas de hoje" perdia
+// toda a tarde/noite real.
+const BRT_OFFSET_MS = 3 * 60 * 60 * 1000;
+
+function parseBrtStart(dateStr: string): Date {
+  // "2026-05-11" → 2026-05-11T00:00:00 BRT == 2026-05-11T03:00:00Z
+  return new Date(new Date(dateStr + 'T00:00:00Z').getTime() + BRT_OFFSET_MS);
+}
+
+function parseBrtEnd(dateStr: string): Date {
+  // "2026-05-11" → 2026-05-11T23:59:59.999 BRT == 2026-05-12T02:59:59.999Z
+  return new Date(new Date(dateStr + 'T23:59:59.999Z').getTime() + BRT_OFFSET_MS);
+}
+
 function parseFilters(input: ToolInput): MetricsFilters {
   return {
-    startDate: input.start_date ? new Date(input.start_date) : new Date(Date.now() - 30 * 24 * 3600 * 1000),
-    endDate: input.end_date ? new Date(input.end_date) : new Date(),
+    startDate: input.start_date
+      ? parseBrtStart(input.start_date)
+      : new Date(Date.now() - 30 * 24 * 3600 * 1000),
+    endDate: input.end_date ? parseBrtEnd(input.end_date) : new Date(),
     platformSlugs: input.platforms,
     countries: input.countries,
     productFamilies: input.families,

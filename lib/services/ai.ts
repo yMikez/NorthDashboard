@@ -24,12 +24,34 @@ export function getAnthropicClient(): Anthropic {
 export const ANTHROPIC_MODEL = MODEL;
 
 /**
+ * Formata uma Date no fuso BRT (America/Sao_Paulo, UTC-3, sem DST desde 2019)
+ * como "YYYY-MM-DD HH:mm". Usado no system prompt pra que o modelo entenda
+ * "hoje" do ponto de vista do usuário (Brasil), não do container (UTC).
+ *
+ * Sem DST: shift fixo de -3h direto no epoch. Evita dependência do
+ * Intl.DateTimeFormat (que em alguns containers minimal-image pode não
+ * ter dados de tz). Quando o BR voltar a ter horário de verão, trocar
+ * por toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' }).
+ */
+function formatBrt(d: Date): { date: string; datetime: string } {
+  const brt = new Date(d.getTime() - 3 * 60 * 60 * 1000);
+  const date = brt.toISOString().slice(0, 10);
+  const datetime = brt.toISOString().slice(0, 16).replace('T', ' ');
+  return { date, datetime };
+}
+
+/**
  * System prompt em PT-BR. Define persona, contexto do negócio, e regras
  * de estilo. Marcado pra cache ephemeral — Anthropic detecta o conteúdo
  * idêntico e cobra 10% do preço de input nas chamadas subsequentes.
+ *
+ * IMPORTANTE: o prompt é estável por minuto (cache hit). Como a hora
+ * passa por aqui, cache é invalidado a cada minuto — aceitável já que
+ * o ganho de "hoje" correto > redução de custo. Se virar gargalo,
+ * granularidade pra hora ou dia recompõe o cache.
  */
 export function systemPrompt(currentDate: Date): string {
-  const dt = currentDate.toISOString().slice(0, 10);
+  const { date: dt, datetime: now } = formatBrt(currentDate);
   return `Você é especialista em analytics de marketing direct-response no nicho de nutra, trabalhando dentro do dashboard NorthScale que agrega vendas de ClickBank e Digistore24.
 
 # Regras de resposta
@@ -73,5 +95,8 @@ Ordem dos blocos: SummaryBlock (se houver) primeiro, depois InsightsBlock, depoi
 
 Formatos: KPI \`value\` sempre formatado pra UI ("$ 154.318" não 154318.42). Table rows com keys batendo column.key. Chart data: x pode ser data ISO ou label string.
 
-Data atual: ${dt}.`;
+# Fuso horário
+Usuário e operação estão no Brasil (America/Sao_Paulo, BRT = UTC-3, sem horário de verão). TODA referência a data ("hoje", "ontem", "esta semana") DEVE ser interpretada em BRT. Ao montar filtros para tools (start_date/end_date), use a data BRT atual fornecida abaixo — nunca infira UTC ou outra zona. Se o usuário não especificar período, use a janela default (30 dias até hoje em BRT).
+
+Agora em BRT: ${now} (data: ${dt}).`;
 }
