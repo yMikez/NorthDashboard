@@ -312,7 +312,8 @@ export function ChatShell({ user }: { user: ChatUser }) {
   const currentConv = conversations.find((c) => c.id === selectedId) ?? null;
 
   return (
-    <div className="grid grid-cols-[232px_auto_1fr] h-screen nx-chat-bg text-foreground">
+    <div className="grid grid-cols-[232px_auto_1fr] h-screen nx-chat-bg text-foreground relative">
+      <div className="nx-fx-blobs" aria-hidden />
       <DashboardNav user={user} activeId="chat" />
 
       <Sidebar
@@ -329,7 +330,7 @@ export function ChatShell({ user }: { user: ChatUser }) {
         onDelete={(id) => void handleDelete(id)}
       />
 
-      <main className="flex flex-col h-full overflow-hidden">
+      <main className="relative z-[1] flex flex-col h-full overflow-hidden">
         <TopBar
           title={currentConv?.title ?? null}
           onRenameTitle={handleRenameTitle}

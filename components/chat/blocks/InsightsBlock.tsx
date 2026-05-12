@@ -42,7 +42,7 @@ export function InsightsBlock({ block }: { block: InsightsBlockData }) {
           <div
             key={ins.id ?? i}
             className={cn(
-              'rounded-lg border p-3 flex items-start gap-3',
+              'nx-glass-card rounded-lg border p-3 flex items-start gap-3 backdrop-blur-md',
               cfg.border,
               cfg.bg,
             )}

@@ -24,9 +24,9 @@ export function ChartBlock({ block }: { block: ChartData }) {
   const seriesNames = block.series.map((s) => s.name);
 
   return (
-    <section className="rounded-xl border border-border bg-card overflow-hidden">
+    <section className="nx-glass-card rounded-xl">
       {block.title && (
-        <header className="px-4 py-2 border-b border-border bg-popover/40">
+        <header className="px-4 py-2 border-b border-[color:var(--glass-border)]">
           <h3 className="text-sm font-semibold">{block.title}</h3>
         </header>
       )}

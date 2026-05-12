@@ -78,31 +78,39 @@ export function MessageList({
 export function EmptyState({ onPickPrompt }: { onPickPrompt?: (q: string) => void } = {}) {
   return (
     <div className="flex-1 overflow-y-auto">
-      <div className="max-w-2xl mx-auto px-6 pt-16 pb-8 text-center">
-        <div className="w-14 h-14 mx-auto rounded-2xl bg-gradient-to-br from-primary to-primary/40 flex items-center justify-center mb-4 shadow-lg shadow-primary/20">
-          <Sparkles className="w-7 h-7 text-primary-foreground" />
+      <div className="max-w-2xl mx-auto px-6 pt-20 pb-8 text-center">
+        <div
+          className="w-16 h-16 mx-auto rounded-2xl flex items-center justify-center mb-5 relative"
+          style={{
+            background: 'linear-gradient(135deg, #5BC8FF 0%, #9B7BFF 100%)',
+            boxShadow:
+              '0 12px 36px -8px rgba(91,200,255,0.55), 0 0 60px -10px rgba(155,123,255,0.4), inset 0 1px 0 rgba(255,255,255,0.55), inset 0 -1px 0 rgba(0,0,0,0.12)',
+          }}
+        >
+          <Sparkles className="w-8 h-8 text-[#0A1638]" />
         </div>
-        <h1 className="text-2xl font-semibold mb-2">Análise com IA</h1>
-        <p className="text-sm text-muted-foreground mb-8 max-w-md mx-auto">
+        <h1 className="text-3xl font-semibold mb-2 tracking-tight">
+          Análise <em className="not-italic text-[color:var(--glow-cyan)] italic font-medium" style={{ textShadow: '0 0 40px rgba(91,200,255,0.45)' }}>com IA</em>
+        </h1>
+        <p className="text-sm text-muted-foreground mb-8 max-w-md mx-auto leading-relaxed">
           Pergunte qualquer coisa sobre seus dados de afiliados, vendas, funil e
           performance por plataforma. Respostas tipadas e sempre derivadas dos
           dados reais do dashboard.
         </p>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mt-6">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 mt-6">
           {SUGGESTED_PROMPTS.map((p) => (
-            <Button
+            <button
               key={p}
-              variant="outline"
-              className="h-auto py-3 px-4 text-left justify-start whitespace-normal text-xs leading-relaxed"
               onClick={() => onPickPrompt?.(p)}
+              className="nx-glass-card rounded-lg py-3 px-4 text-left text-xs leading-relaxed text-foreground hover:border-[color:rgba(91,200,255,0.40)] transition-all hover:-translate-y-0.5"
             >
               {p}
-            </Button>
+            </button>
           ))}
         </div>
 
-        <p className="text-[10px] font-mono text-muted-foreground/60 mt-8">
+        <p className="nx-eyebrow mt-10 opacity-70">
           Cmd+J nova conversa · Cmd+K buscar · Cmd+Enter enviar · Esc fechar
         </p>
       </div>

@@ -80,7 +80,7 @@ export function Sidebar({
 
   if (collapsed) {
     return (
-      <aside className="w-16 border-r border-border bg-popover/40 backdrop-blur-md flex flex-col items-center py-3 gap-2">
+      <aside className="w-16 nx-glass-panel relative z-[1] flex flex-col items-center py-3 gap-2">
         <TooltipProvider delayDuration={200}>
           <Tooltip>
             <TooltipTrigger asChild>
@@ -108,7 +108,7 @@ export function Sidebar({
   }
 
   return (
-    <aside className="w-[260px] border-r border-border bg-popover/40 backdrop-blur-md flex flex-col h-full">
+    <aside className="w-[260px] nx-glass-panel relative z-[1] flex flex-col h-full">
       {/* Header */}
       <div className="p-3 border-b border-border flex items-center gap-2">
         <div className="flex items-center gap-2 flex-1 min-w-0">

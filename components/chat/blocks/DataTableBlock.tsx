@@ -50,9 +50,9 @@ export function DataTableBlock({ block }: { block: TableData }) {
   }
 
   return (
-    <section className="rounded-xl border border-border bg-card overflow-hidden">
+    <section className="nx-glass-card rounded-xl">
       {(block.title || block.exportable) && (
-        <header className="px-4 py-2 border-b border-border bg-popover/40 flex items-center justify-between">
+        <header className="px-4 py-2 border-b border-[color:var(--glass-border)] flex items-center justify-between">
           {block.title && <h3 className="text-sm font-semibold">{block.title}</h3>}
           {block.exportable && (
             <Button variant="outline" size="sm" onClick={exportCsv} className="h-7 gap-1.5 text-xs">

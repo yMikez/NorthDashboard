@@ -15,7 +15,7 @@ interface DetailDrawerProps {
 export function DetailDrawer({ entity, open, onClose }: DetailDrawerProps) {
   return (
     <Sheet open={open && entity != null} onOpenChange={(o) => { if (!o) onClose(); }}>
-      <SheetContent side="right" className="flex flex-col gap-0 p-0">
+      <SheetContent side="right" className="lg-deep flex flex-col gap-0 p-0">
         {entity && (
           <>
             <SheetHeader className="p-5 border-b border-border">

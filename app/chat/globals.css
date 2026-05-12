@@ -127,73 +127,248 @@
      Gradiente navy 3-stops, bordas cyan-soft, bubbles tonais.
      ============================================================ */
 
-  /* Container — gradiente navy do topo claro pro fundo escuro. */
+  /* Container — gradiente navy do topo claro pro fundo escuro.
+     Mais escuro que o widget porque a tela inteira precisa de mais
+     profundidade pra os blobs animados (.ns-bg) brilharem por baixo. */
   .nx-chat-bg {
-    background: linear-gradient(180deg, #15275A 0%, #0F1F4D 50%, #0A1638 100%);
+    position: relative;
+    background:
+      radial-gradient(ellipse 80% 50% at 50% 0%, rgba(91, 200, 255, 0.06) 0%, transparent 60%),
+      linear-gradient(180deg, #0A1638 0%, #060D25 50%, #030617 100%);
+    overflow: hidden;
   }
   [data-theme='light'] .nx-chat-bg {
-    background: linear-gradient(180deg, #F4F7FC 0%, #E7EEF8 50%, #D9E3F3 100%);
+    background:
+      radial-gradient(ellipse 80% 50% at 50% 0%, rgba(91, 200, 255, 0.10) 0%, transparent 60%),
+      linear-gradient(180deg, #F4F7FC 0%, #E7EEF8 50%, #D9E3F3 100%);
   }
 
-  /* Strip cyan-tinted pra cabeçalhos do widget (TopBar, sidebar header). */
+  /* Blobs animados glow — mesmo efeito de .ns-bg do dashboard.css,
+     mas posicionados absoluto dentro do container do chat (não fixed)
+     pra não vazar pra outras rotas. Z-index 0 sob todo conteúdo. */
+  .nx-fx-blobs {
+    position: absolute;
+    inset: 0;
+    z-index: 0;
+    pointer-events: none;
+    overflow: hidden;
+  }
+  .nx-fx-blobs::before,
+  .nx-fx-blobs::after {
+    content: '';
+    position: absolute;
+    width: 800px;
+    height: 800px;
+    border-radius: 50%;
+    filter: blur(80px);
+    opacity: 0.22;
+    will-change: transform;
+  }
+  .nx-fx-blobs::before {
+    background: radial-gradient(circle, var(--glow-cyan), transparent 60%);
+    top: -240px;
+    left: -160px;
+    animation: nxDrift1 22s ease-in-out infinite;
+  }
+  .nx-fx-blobs::after {
+    background: radial-gradient(circle, var(--glow-violet), transparent 60%);
+    bottom: -280px;
+    right: -200px;
+    animation: nxDrift2 28s ease-in-out infinite;
+  }
+  @keyframes nxDrift1 {
+    0%, 100% { transform: translate(0, 0); }
+    50% { transform: translate(80px, 120px); }
+  }
+  @keyframes nxDrift2 {
+    0%, 100% { transform: translate(0, 0); }
+    50% { transform: translate(-100px, -80px); }
+  }
+  [data-theme='light'] .nx-fx-blobs::before,
+  [data-theme='light'] .nx-fx-blobs::after {
+    opacity: 0.18;
+  }
+
+  /* Strip cyan-tinted pra cabeçalhos do widget (TopBar, sidebar header).
+     Glass thin com tint cyan + bottom rim. */
   .nx-strip-eyebrow {
-    background: rgba(91, 200, 255, 0.04);
+    position: relative;
+    background:
+      linear-gradient(180deg, rgba(255, 255, 255, 0.04) 0%, transparent 100%),
+      rgba(91, 200, 255, 0.04);
+    backdrop-filter: blur(var(--glass-blur-sm)) saturate(140%);
+    -webkit-backdrop-filter: blur(var(--glass-blur-sm)) saturate(140%);
     border-bottom: 1px solid var(--border-soft);
+    box-shadow:
+      inset 0 1px 0 rgba(255, 255, 255, 0.06),
+      inset 0 -1px 0 rgba(0, 0, 0, 0.18);
   }
 
   /* Strip cyan-tinted pra rodapé do widget (input area). */
   .nx-strip-input {
-    background: rgba(91, 200, 255, 0.02);
+    position: relative;
+    background:
+      linear-gradient(0deg, rgba(255, 255, 255, 0.03) 0%, transparent 100%),
+      rgba(91, 200, 255, 0.02);
+    backdrop-filter: blur(var(--glass-blur-sm)) saturate(140%);
+    -webkit-backdrop-filter: blur(var(--glass-blur-sm)) saturate(140%);
     border-top: 1px solid var(--border-soft);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
   }
 
-  /* Bolha user (alinhada à direita) — cyan tint suave. */
+  /* Panel de conversas — liquid glass com mais corpo. */
+  .nx-glass-panel {
+    position: relative;
+    background:
+      linear-gradient(180deg, rgba(255, 255, 255, 0.06) 0%, rgba(255, 255, 255, 0.02) 60%, rgba(91, 200, 255, 0.02) 100%);
+    backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
+    -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
+    border-right: 1px solid var(--glass-border);
+    box-shadow:
+      inset 0 1px 0 var(--glass-inset-top),
+      inset -1px 0 0 rgba(91, 200, 255, 0.08),
+      0 14px 40px -10px rgba(0, 0, 0, 0.25);
+    isolation: isolate;
+  }
+  [data-theme='light'] .nx-glass-panel {
+    background:
+      linear-gradient(180deg, rgba(255, 255, 255, 0.85) 0%, rgba(255, 255, 255, 0.55) 60%, rgba(91, 200, 255, 0.10) 100%);
+  }
+
+  /* Card glass — pra blocos (Summary, Table, Chart, Insights). */
+  .nx-glass-card {
+    position: relative;
+    background: var(--glass-tint);
+    backdrop-filter: blur(var(--glass-blur-sm)) saturate(160%);
+    -webkit-backdrop-filter: blur(var(--glass-blur-sm)) saturate(160%);
+    border: 1px solid var(--glass-border);
+    border-top-color: var(--glass-border-top);
+    border-radius: var(--r-md);
+    box-shadow:
+      0 6px 18px -6px rgba(0, 0, 0, 0.30),
+      inset 0 1px 0 var(--glass-inset-top),
+      inset 0 -1px 0 var(--glass-inset-bot);
+    isolation: isolate;
+    overflow: hidden;
+  }
+  .nx-glass-card::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    border-radius: inherit;
+    background: radial-gradient(ellipse 140% 60% at 50% -20%,
+      var(--glass-sheen-top) 0%,
+      var(--glass-sheen-mid) 18%,
+      rgba(255, 255, 255, 0.04) 34%,
+      transparent 50%);
+    mix-blend-mode: screen;
+    z-index: 0;
+  }
+  [data-theme='light'] .nx-glass-card::before {
+    mix-blend-mode: normal;
+    opacity: 0.55;
+  }
+  .nx-glass-card > * {
+    position: relative;
+    z-index: 1;
+  }
+
+  /* Bolha user (alinhada à direita) — liquid cyan tint + sheen + glow. */
   .nx-bubble-user {
-    background: rgba(91, 200, 255, 0.10);
-    border: 1px solid rgba(91, 200, 255, 0.25);
+    position: relative;
+    background:
+      linear-gradient(180deg, rgba(91, 200, 255, 0.16) 0%, rgba(91, 200, 255, 0.08) 100%);
+    backdrop-filter: blur(8px) saturate(160%);
+    -webkit-backdrop-filter: blur(8px) saturate(160%);
+    border: 1px solid rgba(91, 200, 255, 0.28);
+    border-top-color: rgba(255, 255, 255, 0.30);
     color: var(--fg1);
+    box-shadow:
+      0 4px 14px -4px rgba(91, 200, 255, 0.25),
+      inset 0 1px 0 rgba(255, 255, 255, 0.20),
+      inset 0 -1px 0 rgba(0, 0, 0, 0.10);
   }
 
-  /* Bolha assistant — branco quase invisível, pra texto respirar. */
+  /* Bolha assistant — vidro fino quase invisível, pra texto respirar. */
   .nx-bubble-assistant {
-    background: rgba(255, 255, 255, 0.03);
-    border: 1px solid var(--border-soft);
+    position: relative;
+    background:
+      linear-gradient(180deg, rgba(255, 255, 255, 0.06) 0%, rgba(255, 255, 255, 0.02) 100%);
+    backdrop-filter: blur(8px) saturate(140%);
+    -webkit-backdrop-filter: blur(8px) saturate(140%);
+    border: 1px solid var(--glass-border);
+    border-top-color: var(--glass-border-top);
     color: var(--fg1);
+    box-shadow:
+      0 4px 12px -4px rgba(0, 0, 0, 0.20),
+      inset 0 1px 0 rgba(255, 255, 255, 0.10);
   }
   [data-theme='light'] .nx-bubble-assistant {
-    background: rgba(15, 31, 77, 0.03);
+    background:
+      linear-gradient(180deg, rgba(255, 255, 255, 0.80) 0%, rgba(255, 255, 255, 0.55) 100%);
   }
 
-  /* Textarea estilo widget: tint cyan no input. */
+  /* Textarea estilo widget: liquid glass com tint cyan + sheen. */
   .nx-input-field {
-    background: rgba(91, 200, 255, 0.05);
-    border: 1px solid rgba(91, 200, 255, 0.20);
+    position: relative;
+    background:
+      linear-gradient(180deg, rgba(255, 255, 255, 0.06) 0%, rgba(91, 200, 255, 0.04) 100%);
+    backdrop-filter: blur(10px) saturate(160%);
+    -webkit-backdrop-filter: blur(10px) saturate(160%);
+    border: 1px solid rgba(91, 200, 255, 0.22);
+    border-top-color: rgba(255, 255, 255, 0.25);
     color: var(--fg1);
     font-family: var(--f-body);
+    box-shadow:
+      inset 0 1px 0 rgba(255, 255, 255, 0.15),
+      inset 0 -1px 0 rgba(0, 0, 0, 0.10),
+      0 4px 14px -4px rgba(0, 0, 0, 0.20);
+    transition: all var(--dur-base) var(--ease-smooth);
   }
   .nx-input-field:focus,
   .nx-input-field:focus-within {
-    border-color: rgba(91, 200, 255, 0.45);
-    box-shadow: 0 0 0 3px rgba(91, 200, 255, 0.08);
+    border-color: rgba(91, 200, 255, 0.50);
+    border-top-color: rgba(255, 255, 255, 0.40);
+    box-shadow:
+      0 0 0 3px rgba(91, 200, 255, 0.12),
+      0 6px 20px -4px rgba(91, 200, 255, 0.20),
+      inset 0 1px 0 rgba(255, 255, 255, 0.22),
+      inset 0 -1px 0 rgba(0, 0, 0, 0.10);
   }
 
-  /* Tool chip — pulsing cyan enquanto roda, verde quando done. */
+  /* Tool chip — liquid pill: pulsing cyan enquanto roda, verde quando done. */
   .nx-tool-chip {
+    position: relative;
     font-family: var(--f-mono);
     font-size: 10px;
-    padding: 2px 8px;
-    border-radius: var(--r-sm);
-    background: rgba(91, 200, 255, 0.10);
+    padding: 2px 10px;
+    border-radius: var(--r-full);
+    background:
+      linear-gradient(180deg, rgba(91, 200, 255, 0.20) 0%, rgba(91, 200, 255, 0.08) 100%);
+    backdrop-filter: blur(8px) saturate(160%);
+    -webkit-backdrop-filter: blur(8px) saturate(160%);
     color: var(--glow-cyan);
-    border: 1px solid rgba(91, 200, 255, 0.30);
+    border: 1px solid rgba(91, 200, 255, 0.35);
+    border-top-color: rgba(255, 255, 255, 0.30);
     display: inline-flex;
     align-items: center;
     gap: 6px;
+    box-shadow:
+      inset 0 1px 0 rgba(255, 255, 255, 0.25),
+      inset 0 -2px 6px -2px rgba(91, 200, 255, 0.40),
+      0 3px 10px -3px rgba(91, 200, 255, 0.30);
   }
   .nx-tool-chip.is-done {
-    background: rgba(16, 185, 129, 0.10);
+    background:
+      linear-gradient(180deg, rgba(16, 185, 129, 0.20) 0%, rgba(16, 185, 129, 0.08) 100%);
     color: var(--success);
-    border-color: rgba(16, 185, 129, 0.30);
+    border-color: rgba(16, 185, 129, 0.35);
+    border-top-color: rgba(255, 255, 255, 0.25);
+    box-shadow:
+      inset 0 1px 0 rgba(255, 255, 255, 0.20),
+      inset 0 -2px 6px -2px rgba(16, 185, 129, 0.35),
+      0 3px 10px -3px rgba(16, 185, 129, 0.25);
   }
 
   /* Eyebrow mono uppercase com tracking — o "ANÁLISE COM IA" do widget. */
@@ -214,15 +389,42 @@
     color: var(--fg5);
   }
 
-  /* Send button estilo widget — gradiente cyan→violet. */
+  /* Send button estilo widget — liquid cyan glass com gradiente + glow. */
   .nx-send-btn {
+    position: relative;
     background: linear-gradient(135deg, #5BC8FF 0%, #9B7BFF 100%);
     color: #0A1638;
-    border: 0;
-    box-shadow: 0 4px 12px -2px rgba(91, 200, 255, 0.40);
+    border: 1px solid rgba(91, 200, 255, 0.50);
+    border-top-color: rgba(255, 255, 255, 0.55);
+    box-shadow:
+      0 4px 12px -2px rgba(91, 200, 255, 0.45),
+      0 0 30px -8px rgba(91, 200, 255, 0.40),
+      inset 0 1px 0 rgba(255, 255, 255, 0.50),
+      inset 0 -1px 0 rgba(0, 0, 0, 0.12),
+      inset 0 -8px 12px -8px rgba(74, 144, 255, 0.40);
+    transition: all var(--dur-fast) var(--ease-smooth);
+    isolation: isolate;
+    overflow: hidden;
+  }
+  .nx-send-btn::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    background: radial-gradient(ellipse 100% 80% at 50% -30%, rgba(255, 255, 255, 0.55) 0%, transparent 60%);
+    mix-blend-mode: screen;
   }
   .nx-send-btn:hover:not(:disabled) {
-    box-shadow: 0 6px 18px -2px rgba(91, 200, 255, 0.55);
+    transform: translateY(-1px);
+    box-shadow:
+      0 6px 18px -2px rgba(91, 200, 255, 0.60),
+      0 0 40px -8px rgba(91, 200, 255, 0.55),
+      inset 0 1px 0 rgba(255, 255, 255, 0.60),
+      inset 0 -1px 0 rgba(0, 0, 0, 0.12),
+      inset 0 -8px 12px -8px rgba(74, 144, 255, 0.45);
+  }
+  .nx-send-btn:active:not(:disabled) {
+    transform: translateY(0);
   }
   .nx-send-btn:disabled {
     opacity: 0.4;

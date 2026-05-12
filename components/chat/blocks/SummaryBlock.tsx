@@ -7,8 +7,8 @@ import type { SummaryBlock as SummaryBlockData } from '@/types/chat';
 
 export function SummaryBlock({ block }: { block: SummaryBlockData }) {
   return (
-    <section className="rounded-xl border border-border bg-card overflow-hidden">
-      <header className="px-4 py-2 border-b border-border bg-popover/40">
+    <section className="nx-glass-card rounded-xl">
+      <header className="px-4 py-2 border-b border-[color:var(--glass-border)]">
         <h3 className="text-sm font-semibold">{block.title}</h3>
       </header>
       <div className="grid grid-cols-2 md:grid-cols-4 divide-x divide-y md:divide-y-0 divide-border">
