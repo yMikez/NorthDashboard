@@ -95,7 +95,7 @@ export function ChatInput({
   const activeModel = modelOptions.find((m) => m.value === model) ?? modelOptions[0];
 
   return (
-    <div className="border-t border-border bg-popover/40 backdrop-blur-md p-3 relative">
+    <div className="nx-strip-input backdrop-blur-md p-3 relative">
       {slashOpen && (
         <SlashMenu
           query={value}
@@ -109,9 +109,8 @@ export function ChatInput({
       <div className="max-w-3xl mx-auto">
         <div
           className={cn(
-            'flex items-end gap-2 rounded-2xl border bg-card px-3 py-2 transition-colors',
-            'focus-within:border-primary/50 focus-within:ring-2 focus-within:ring-primary/10',
-            disabled ? 'border-border opacity-60' : 'border-border',
+            'nx-input-field flex items-end gap-2 rounded-2xl px-3 py-2 transition-colors',
+            disabled && 'opacity-60',
           )}
         >
           <Button variant="ghost" size="icon-sm" aria-label="Anexar arquivo" disabled>
@@ -126,7 +125,7 @@ export function ChatInput({
             placeholder={placeholder}
             disabled={disabled}
             rows={1}
-            className="flex-1 bg-transparent resize-none outline-none text-sm leading-relaxed py-1.5 max-h-[240px] disabled:cursor-not-allowed"
+            className="flex-1 bg-transparent resize-none outline-none text-sm leading-relaxed py-1.5 max-h-[240px] disabled:cursor-not-allowed text-foreground placeholder:text-muted-foreground"
           />
 
           {streaming ? (
@@ -140,14 +139,15 @@ export function ChatInput({
               <Square className="w-3.5 h-3.5 fill-current" />
             </Button>
           ) : (
-            <Button
-              size="icon-sm"
+            <button
+              type="button"
               onClick={maybeSubmit}
               disabled={!value.trim() || disabled}
               aria-label="Enviar (Enter)"
+              className="nx-send-btn h-7 w-7 rounded-md inline-flex items-center justify-center transition-shadow"
             >
               <Send className="w-3.5 h-3.5" />
-            </Button>
+            </button>
           )}
         </div>
 

@@ -312,7 +312,7 @@ export function ChatShell({ user }: { user: ChatUser }) {
   const currentConv = conversations.find((c) => c.id === selectedId) ?? null;
 
   return (
-    <div className="grid grid-cols-[232px_auto_1fr] h-screen bg-background text-foreground">
+    <div className="grid grid-cols-[232px_auto_1fr] h-screen nx-chat-bg text-foreground">
       <DashboardNav user={user} activeId="chat" />
 
       <Sidebar

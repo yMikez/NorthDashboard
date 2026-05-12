@@ -69,7 +69,7 @@ export function UserMessage({ content, onEdit }: UserMessageProps) {
             </div>
           </div>
         ) : (
-          <div className="bg-primary text-primary-foreground rounded-2xl rounded-tr-sm px-4 py-2.5 text-sm leading-relaxed whitespace-pre-wrap">
+          <div className="nx-bubble-user rounded-2xl rounded-tr-sm px-4 py-2.5 text-sm leading-relaxed whitespace-pre-wrap">
             {content}
           </div>
         )}

@@ -2,12 +2,12 @@
 
 import * as React from 'react';
 import {
-  Check,
   ChevronDown,
   Database,
   Pencil,
   RefreshCw,
   Share2,
+  Sparkles,
   Sun,
   Moon,
 } from 'lucide-react';
@@ -77,11 +77,13 @@ export function TopBar({
   }
 
   return (
-    <header className="border-b border-border px-4 py-2.5 glass flex flex-col gap-2">
+    <header className="nx-strip-eyebrow px-4 py-2.5 flex flex-col gap-2">
       <div className="flex items-center justify-between gap-3">
-        <div className="flex items-center gap-2 min-w-0 flex-1">
-          <Crumbs />
-          {renaming ? (
+        <div className="flex items-center gap-2.5 min-w-0 flex-1">
+          <Sparkles className="w-4 h-4 text-[color:var(--glow-cyan)] shrink-0" />
+          <div className="min-w-0 flex flex-col -my-0.5">
+            <span className="nx-eyebrow">ANÁLISE COM IA</span>
+            {renaming ? (
             <input
               ref={inputRef}
               value={draft}
@@ -103,13 +105,14 @@ export function TopBar({
             <button
               type="button"
               onClick={() => setRenaming(true)}
-              className="group flex items-center gap-1.5 text-sm font-medium text-foreground hover:text-primary min-w-0 truncate transition-colors"
+              className="group flex items-center gap-1.5 text-sm font-medium text-foreground hover:text-[color:var(--glow-cyan)] min-w-0 truncate transition-colors text-left"
               title="Clique pra renomear"
             >
               <span className="truncate">{title || 'Nova conversa'}</span>
               <Pencil className="w-3 h-3 opacity-0 group-hover:opacity-60 shrink-0" />
             </button>
           )}
+          </div>
         </div>
 
         <div className="flex items-center gap-1.5 shrink-0">
@@ -147,17 +150,6 @@ export function TopBar({
 
       <FilterChips filters={filters} onChange={onChangeFilters} />
     </header>
-  );
-}
-
-function Crumbs() {
-  return (
-    <div className="text-[11px] text-muted-foreground font-mono uppercase tracking-wider shrink-0 hidden md:flex items-center gap-1">
-      <span>Admin</span>
-      <span className="opacity-50">/</span>
-      <span>Chat</span>
-      <span className="opacity-50">/</span>
-    </div>
   );
 }
 
@@ -200,4 +192,3 @@ function SyncIndicator({
   );
 }
 
-void Check;

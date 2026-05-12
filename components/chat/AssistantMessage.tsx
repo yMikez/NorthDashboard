@@ -66,10 +66,12 @@ export function AssistantMessage({
         )}
 
         {content && (
-          <MarkdownBlock
-            block={{ content }}
-            streaming={streaming && !hasBlocks}
-          />
+          <div className="nx-bubble-assistant rounded-2xl rounded-tl-sm px-4 py-2.5">
+            <MarkdownBlock
+              block={{ content }}
+              streaming={streaming && !hasBlocks}
+            />
+          </div>
         )}
         {hasBlocks && <BlockRenderer blocks={blocks!} />}
         {!content && !hasBlocks && streaming && (
@@ -116,19 +118,19 @@ export function AssistantMessage({
 function ToolUsesStrip({ uses, streaming }: { uses: ToolUseRecord[]; streaming?: boolean }) {
   return (
     <div className="flex flex-wrap gap-1.5">
-      {uses.map((u, i) => (
-        <span
-          key={i}
-          className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md bg-card border border-border text-[10px] font-mono text-muted-foreground"
-        >
-          {streaming && i === uses.length - 1 ? (
-            <Loader2 className="w-3 h-3 animate-spin text-primary" />
-          ) : (
-            <Wrench className="w-3 h-3 text-primary" />
-          )}
-          {u.name}
-        </span>
-      ))}
+      {uses.map((u, i) => {
+        const running = streaming && i === uses.length - 1;
+        return (
+          <span key={i} className={cn('nx-tool-chip', !running && 'is-done')}>
+            {running ? (
+              <Loader2 className="w-3 h-3 animate-spin" />
+            ) : (
+              <Wrench className="w-3 h-3" />
+            )}
+            {u.name}
+          </span>
+        );
+      })}
     </div>
   );
 }

@@ -122,6 +122,114 @@
     border: 1px solid var(--border);
   }
 
+  /* ============================================================
+     Identidade visual igual ao ChatWidget flutuante (canto da SPA).
+     Gradiente navy 3-stops, bordas cyan-soft, bubbles tonais.
+     ============================================================ */
+
+  /* Container — gradiente navy do topo claro pro fundo escuro. */
+  .nx-chat-bg {
+    background: linear-gradient(180deg, #15275A 0%, #0F1F4D 50%, #0A1638 100%);
+  }
+  [data-theme='light'] .nx-chat-bg {
+    background: linear-gradient(180deg, #F4F7FC 0%, #E7EEF8 50%, #D9E3F3 100%);
+  }
+
+  /* Strip cyan-tinted pra cabeçalhos do widget (TopBar, sidebar header). */
+  .nx-strip-eyebrow {
+    background: rgba(91, 200, 255, 0.04);
+    border-bottom: 1px solid var(--border-soft);
+  }
+
+  /* Strip cyan-tinted pra rodapé do widget (input area). */
+  .nx-strip-input {
+    background: rgba(91, 200, 255, 0.02);
+    border-top: 1px solid var(--border-soft);
+  }
+
+  /* Bolha user (alinhada à direita) — cyan tint suave. */
+  .nx-bubble-user {
+    background: rgba(91, 200, 255, 0.10);
+    border: 1px solid rgba(91, 200, 255, 0.25);
+    color: var(--fg1);
+  }
+
+  /* Bolha assistant — branco quase invisível, pra texto respirar. */
+  .nx-bubble-assistant {
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid var(--border-soft);
+    color: var(--fg1);
+  }
+  [data-theme='light'] .nx-bubble-assistant {
+    background: rgba(15, 31, 77, 0.03);
+  }
+
+  /* Textarea estilo widget: tint cyan no input. */
+  .nx-input-field {
+    background: rgba(91, 200, 255, 0.05);
+    border: 1px solid rgba(91, 200, 255, 0.20);
+    color: var(--fg1);
+    font-family: var(--f-body);
+  }
+  .nx-input-field:focus,
+  .nx-input-field:focus-within {
+    border-color: rgba(91, 200, 255, 0.45);
+    box-shadow: 0 0 0 3px rgba(91, 200, 255, 0.08);
+  }
+
+  /* Tool chip — pulsing cyan enquanto roda, verde quando done. */
+  .nx-tool-chip {
+    font-family: var(--f-mono);
+    font-size: 10px;
+    padding: 2px 8px;
+    border-radius: var(--r-sm);
+    background: rgba(91, 200, 255, 0.10);
+    color: var(--glow-cyan);
+    border: 1px solid rgba(91, 200, 255, 0.30);
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .nx-tool-chip.is-done {
+    background: rgba(16, 185, 129, 0.10);
+    color: var(--success);
+    border-color: rgba(16, 185, 129, 0.30);
+  }
+
+  /* Eyebrow mono uppercase com tracking — o "ANÁLISE COM IA" do widget. */
+  .nx-eyebrow {
+    font-family: var(--f-mono);
+    font-size: 10px;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--fg4);
+  }
+  .nx-eyebrow-cyan {
+    color: var(--glow-cyan);
+  }
+
+  /* Subtitle abaixo do eyebrow — "Especialista em analytics nutra DR". */
+  .nx-subtitle {
+    font-size: 11px;
+    color: var(--fg5);
+  }
+
+  /* Send button estilo widget — gradiente cyan→violet. */
+  .nx-send-btn {
+    background: linear-gradient(135deg, #5BC8FF 0%, #9B7BFF 100%);
+    color: #0A1638;
+    border: 0;
+    box-shadow: 0 4px 12px -2px rgba(91, 200, 255, 0.40);
+  }
+  .nx-send-btn:hover:not(:disabled) {
+    box-shadow: 0 6px 18px -2px rgba(91, 200, 255, 0.55);
+  }
+  .nx-send-btn:disabled {
+    opacity: 0.4;
+    box-shadow: none;
+    cursor: not-allowed;
+  }
+
   /* Token de entidade inline (Phase 3). */
   .entity-token {
     display: inline-flex;
