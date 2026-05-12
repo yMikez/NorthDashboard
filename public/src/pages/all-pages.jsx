@@ -785,20 +785,21 @@ function AllAffiliatesPage({ filters, onOpenAffiliate }) {
   const totalOrders = all.reduce((s, r) => s + (r.orders || 0), 0);
   const affsWithOrders = all.filter((r) => (r.orders || 0) > 0);
 
-  // CPA médio dos afiliados = média dos CPAs NEGOCIADOS de cada um.
+  // CPA médio = CPA efetivo por conversão FE com CPA pago.
   //
-  // Backend expõe `cpaPerFe` por afiliado: MODE (valor mais frequente)
-  // de cpaPaidUsd em FE+APPROVED+cpa>0. Em direct response cada
-  // afiliado tem 1 CPA fixo por produto enrolled — esse pico no
-  // histograma é o CPA real. Mean ponderada deflacionava com sales
-  // sem CPA contratado (cpa=0 do platform last-click attribution).
+  // Numerador: totalCpa = sum(cpaPaidUsd) de TODAS as orders do afiliado
+  // no período (mesmo valor que aparece somado na coluna CPA pago da
+  // tela de Transações — sum de cpaPaidUsd das linhas filtradas).
+  // Denominador: sum(feCpaPaidCount) — número de FE+APPROVED com CPA>0
+  // pagas no período.
   //
-  // Macro = média de cpaPerFe entre afiliados que tiveram pelo menos
-  // 1 venda FE+APPROVED com CPA pago no período.
-  const affsWithFeCpa = all.filter((r) => (r.cpaPerFe || 0) > 0);
-  const cpaAvgPerAff = affsWithFeCpa.length > 0
-    ? affsWithFeCpa.reduce((s, r) => s + r.cpaPerFe, 0) / affsWithFeCpa.length
-    : 0;
+  // É a métrica DR clássica "quanto custou em média cada conversão FE
+  // que pagou comissão". Dollar-weighted (afiliados com mais volume
+  // pesam proporcionalmente). Imune a sales cpa=0 (last-click sem
+  // contrato).
+  const totalFeCpaCount = all.reduce((s, r) => s + (r.feCpaPaidCount || 0), 0);
+  const affsWithCpaPaid = all.filter((r) => (r.cpa || 0) > 0);
+  const cpaAvgPerAff = totalFeCpaCount > 0 ? totalCpa / totalFeCpaCount : 0;
 
   // AOV = faturamento próprio do afiliado / pedidos FE dele.
   //
@@ -866,9 +867,9 @@ function AllAffiliatesPage({ filters, onOpenAffiliate }) {
           <div className="s">total pra {affsWithOrders.length} {affsWithOrders.length === 1 ? 'afiliado ativo' : 'afiliados ativos'}</div>
         </div>
         <div className="mini-kpi">
-          <div className="l">CPA médio dos afiliados</div>
+          <div className="l">CPA médio por conversão</div>
           <div className="v">{fmtCurrency(cpaAvgPerAff, cur, 0)}</div>
-          <div className="s">média do CPA negociado · {affsWithFeCpa.length} {affsWithFeCpa.length === 1 ? 'afiliado' : 'afiliados'} com FE no período</div>
+          <div className="s">{fmtInt(totalFeCpaCount)} {totalFeCpaCount === 1 ? 'venda FE' : 'vendas FE'} com CPA pago · {affsWithCpaPaid.length} {affsWithCpaPaid.length === 1 ? 'afiliado' : 'afiliados'}</div>
         </div>
       </div>
 
@@ -897,16 +898,16 @@ function AllAffiliatesPage({ filters, onOpenAffiliate }) {
                 <th className="num">Receita · período</th><th className="num">Pedidos · período</th>
                 <th className="num">AOV · período</th>
                 <th className="num">Aprovação</th><th className="num">Reembolso</th>
-                <th className="num">Receita LTV</th><th className="num">Pedidos LTV</th>
+                <th className="num" title="Soma de cpaPaidUsd (mesma coluna CPA na tela de Transações) das orders do afiliado no período">CPA pago</th>
                 <th>1ª venda</th><th>Última venda</th><th></th>
               </tr>
             </thead>
             <tbody>
               {state.status === 'loading' && (
-                <tr><td colSpan={12} style={{ textAlign: 'center', padding: 24, opacity: 0.6 }}>Carregando...</td></tr>
+                <tr><td colSpan={11} style={{ textAlign: 'center', padding: 24, opacity: 0.6 }}>Carregando...</td></tr>
               )}
               {state.status === 'ready' && rows.length === 0 && (
-                <tr><td colSpan={12} style={{ textAlign: 'center', padding: 24, opacity: 0.6 }}>
+                <tr><td colSpan={11} style={{ textAlign: 'center', padding: 24, opacity: 0.6 }}>
                   {query ? 'Nenhum afiliado encontrado' : 'Nenhum afiliado ainda'}
                 </td></tr>
               )}
@@ -940,8 +941,7 @@ function AllAffiliatesPage({ filters, onOpenAffiliate }) {
                       {r.allOrders ? (r.approvalRate * 100).toFixed(1) + '%' : '—'}
                     </td>
                     <td className="num cell-mono">{r.allOrders ? (r.refundRate * 100).toFixed(1) + '%' : '—'}</td>
-                    <td className="num cell-mono">{fmtCurrency(r.ltvRevenue, cur, 0)}</td>
-                    <td className="num cell-mono">{fmtInt(r.ltvOrders)}</td>
+                    <td className="num cell-mono">{(r.cpa || 0) > 0 ? fmtCurrency(r.cpa, cur, 0) : '—'}</td>
                     <td className="cell-mono">{r.firstSeenAt ? fmtDateShort(r.firstSeenAt) : '—'}</td>
                     <td className="cell-mono">{r.lastOrderAt ? fmtDateShort(r.lastOrderAt) : '—'}</td>
                     <td><Icon name="chevron-right" size={13}/></td>
