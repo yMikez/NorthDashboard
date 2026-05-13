@@ -894,19 +894,19 @@ function AllAffiliatesPage({ filters, onOpenAffiliate }) {
             <thead>
               <tr>
                 <th>Afiliado</th><th>Plataforma</th>
+                <th className="num" title="CPA fixo negociado — valor que o afiliado recebe em cada venda FE aprovada (MODE de cpaPaidUsd das vendas FE+APPROVED+CPA>0 no período)">CPA por venda</th>
                 <th className="num">Receita · período</th><th className="num">Pedidos · período</th>
                 <th className="num">AOV · período</th>
-                <th className="num">Aprovação</th><th className="num">Reembolso</th>
-                <th className="num" title="CPA fixo negociado — valor que o afiliado recebe em cada venda FE aprovada (MODE de cpaPaidUsd das vendas FE+APPROVED+CPA>0 no período)">CPA por venda</th>
+                <th className="num">Reembolso</th>
                 <th>1ª venda</th><th>Última venda</th><th></th>
               </tr>
             </thead>
             <tbody>
               {state.status === 'loading' && (
-                <tr><td colSpan={11} style={{ textAlign: 'center', padding: 24, opacity: 0.6 }}>Carregando...</td></tr>
+                <tr><td colSpan={10} style={{ textAlign: 'center', padding: 24, opacity: 0.6 }}>Carregando...</td></tr>
               )}
               {state.status === 'ready' && rows.length === 0 && (
-                <tr><td colSpan={11} style={{ textAlign: 'center', padding: 24, opacity: 0.6 }}>
+                <tr><td colSpan={10} style={{ textAlign: 'center', padding: 24, opacity: 0.6 }}>
                   {query ? 'Nenhum afiliado encontrado' : 'Nenhum afiliado ainda'}
                 </td></tr>
               )}
@@ -925,6 +925,9 @@ function AllAffiliatesPage({ filters, onOpenAffiliate }) {
                       </span>
                     </td>
                     <td><span className={`plat ${platClass}`}>{platShort}</span></td>
+                    <td className="num cell-mono" title={r.feCpaPaidCount > 0 ? `Detectado em ${r.feCpaPaidCount} venda${r.feCpaPaidCount === 1 ? '' : 's'} FE` : 'Sem vendas FE com CPA no período'}>
+                      {(r.cpaPerFe || 0) > 0 ? fmtCurrency(r.cpaPerFe, cur, 0) : '—'}
+                    </td>
                     <td className="num cell-mono">{fmtCurrency(r.revenue, cur, 0)}</td>
                     <td className="num cell-mono">{fmtInt(r.orders)}</td>
                     <td className="num">
@@ -936,13 +939,7 @@ function AllAffiliatesPage({ filters, onOpenAffiliate }) {
                         <span style={{ color: 'var(--fg5)', fontFamily: 'var(--f-mono)', fontSize: 11 }}>—</span>
                       )}
                     </td>
-                    <td className="num cell-mono" style={{ color: r.approvalRate > 0.7 ? 'var(--success)' : r.approvalRate > 0.5 ? 'var(--warning)' : 'var(--danger)' }}>
-                      {r.allOrders ? (r.approvalRate * 100).toFixed(1) + '%' : '—'}
-                    </td>
                     <td className="num cell-mono">{r.allOrders ? (r.refundRate * 100).toFixed(1) + '%' : '—'}</td>
-                    <td className="num cell-mono" title={r.feCpaPaidCount > 0 ? `Detectado em ${r.feCpaPaidCount} venda${r.feCpaPaidCount === 1 ? '' : 's'} FE` : 'Sem vendas FE com CPA no período'}>
-                      {(r.cpaPerFe || 0) > 0 ? fmtCurrency(r.cpaPerFe, cur, 0) : '—'}
-                    </td>
                     <td className="cell-mono">{r.firstSeenAt ? fmtDateShort(r.firstSeenAt) : '—'}</td>
                     <td className="cell-mono">{r.lastOrderAt ? fmtDateShort(r.lastOrderAt) : '—'}</td>
                     <td><Icon name="chevron-right" size={13}/></td>
