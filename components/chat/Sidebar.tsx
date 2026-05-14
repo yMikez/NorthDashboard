@@ -120,8 +120,8 @@ export function Sidebar({
       {/* Header */}
       <div className="p-3 border-b border-border flex items-center gap-2">
         <div className="flex items-center gap-2 flex-1 min-w-0">
-          <div className="w-8 h-8 rounded-md bg-gradient-to-br from-primary to-primary/60 flex items-center justify-center shrink-0">
-            <Sparkles className="w-4 h-4 text-primary-foreground" />
+          <div className="w-8 h-8 rounded-md bg-muted/60 border border-border flex items-center justify-center shrink-0">
+            <Sparkles className="w-4 h-4 text-primary/80" />
           </div>
           <span className="font-semibold text-sm truncate">Análise IA</span>
         </div>
@@ -138,10 +138,10 @@ export function Sidebar({
       </div>
 
       <div className="p-3 space-y-2">
-        <Button onClick={onNew} className="w-full justify-start">
+        <Button variant="outline" onClick={onNew} className="w-full justify-start">
           <Plus className="w-4 h-4" /> Nova conversa
         </Button>
-        <Button variant="ghost" onClick={onOpenKnowledge} className="w-full justify-start text-xs">
+        <Button variant="ghost" onClick={onOpenKnowledge} className="w-full justify-start text-xs text-muted-foreground hover:text-foreground">
           <BookOpen className="w-3.5 h-3.5" /> Base de conhecimento
         </Button>
         <div className="relative">
@@ -238,7 +238,7 @@ function ConversationItem({
           : 'hover:bg-accent/30',
       )}
     >
-      <div className="flex-1 min-w-0">
+      <div className="flex-1 min-w-0 overflow-hidden">
         {renaming ? (
           <input
             autoFocus
@@ -255,15 +255,20 @@ function ConversationItem({
                 onCancelRename();
               }
             }}
-            className="w-full bg-transparent border-b border-primary text-xs py-0.5 outline-none"
+            className="w-full bg-transparent border-b border-muted-foreground text-xs py-0.5 outline-none"
           />
         ) : (
-          <div className="text-xs truncate flex items-center gap-1">
+          // Flex com min-w-0 + filho truncate flex-1 min-w-0 — necessário pra
+          // truncar em flex containers (truncate puro no flex parent não corta
+          // o filho span, ele cresce além do container e some na borda).
+          <div className="text-xs flex items-center gap-1 min-w-0">
             {conv.pinned && <Pin className="w-3 h-3 shrink-0 text-primary" />}
-            <span className="truncate">{conv.title || '(sem título)'}</span>
+            <span className="truncate flex-1 min-w-0 block">
+              {conv.title || '(sem título)'}
+            </span>
           </div>
         )}
-        <div className="text-[10px] text-muted-foreground font-mono mt-0.5">
+        <div className="text-[10px] text-muted-foreground font-mono mt-0.5 truncate">
           {conv.messageCount} msg · {relativeTime(conv.updatedAt)}
         </div>
       </div>
