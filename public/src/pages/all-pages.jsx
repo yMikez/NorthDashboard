@@ -783,20 +783,18 @@ function AllAffiliatesPage({ filters, onOpenAffiliate }) {
   const totalOrders = all.reduce((s, r) => s + (r.orders || 0), 0);
   const affsWithOrders = all.filter((r) => (r.orders || 0) > 0);
 
-  // CPA médio dos afiliados = soma do "CPA por venda" (cpaPerFe) de cada
-  // afiliado que fez vendas no período, dividido pelo nº de afiliados que
-  // fizeram vendas no período.
+  // CPA médio POR VENDA = total real de CPA pago ÷ total de vendas no período.
   //
-  // Backend expõe `cpaPerFe` por afiliado: MODE (valor mais frequente)
-  // de cpaPaidUsd em FE+APPROVED+cpa>0 — o CPA fixo negociado.
+  // Métrica de unit economics: "de cada venda aprovada, quanto vai pro
+  // afiliado em comissão?". Ponderada por volume — afiliados com mais
+  // pedidos influenciam mais o número, refletindo o gasto real.
   //
-  // Afiliados com vendas mas SEM CPA pago (cpaPerFe=0, ex: last-click sem
-  // contrato CPA) entram com N=0 e diluem a média. Reflete o custo real
-  // por afiliado ativo, não só por afiliado com contrato CPA.
-  const cpaAvgPerAff = affsWithOrders.length > 0
-    ? affsWithOrders.reduce((s, r) => s + (r.cpaPerFe || 0), 0) / affsWithOrders.length
-    : 0;
-  // Mantido pro subtítulo: quantos dos afiliados ativos têm CPA fixo cadastrado.
+  // Numerador `totalCpa` já agrega cpaPaidUsd real (com refund clawback
+  // descontado), não a aproximação cpaPerFe×orders. Denominador é o total
+  // de pedidos APPROVED no período (todos afiliados).
+  const cpaPerSale = totalOrders > 0 ? totalCpa / totalOrders : 0;
+  // Subtítulo informa quantos afiliados sem CPA fixo cadastrado contribuem
+  // pra média ficar menor que o CPA dos com contrato.
   const affsWithFeCpa = affsWithOrders.filter((r) => (r.cpaPerFe || 0) > 0);
 
   // AOV = faturamento próprio do afiliado / pedidos FE dele.
@@ -865,12 +863,12 @@ function AllAffiliatesPage({ filters, onOpenAffiliate }) {
           <div className="s">total pra {affsWithOrders.length} {affsWithOrders.length === 1 ? 'afiliado ativo' : 'afiliados ativos'}</div>
         </div>
         <div className="mini-kpi">
-          <div className="l">CPA médio dos afiliados</div>
-          <div className="v">{fmtCurrency(cpaAvgPerAff, cur, 0)}</div>
+          <div className="l">CPA médio por venda</div>
+          <div className="v">{fmtCurrency(cpaPerSale, cur, 0)}</div>
           <div className="s">
-            soma do CPA por venda ÷ {affsWithOrders.length} {affsWithOrders.length === 1 ? 'afiliado ativo' : 'afiliados ativos'}
+            CPA pago real ÷ {fmtInt(totalOrders)} {totalOrders === 1 ? 'venda aprovada' : 'vendas aprovadas'}
             {affsWithFeCpa.length !== affsWithOrders.length && (
-              <> · {affsWithOrders.length - affsWithFeCpa.length} sem CPA fixo entram como 0</>
+              <> · inclui vendas sem CPA contratado</>
             )}
           </div>
         </div>
