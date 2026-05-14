@@ -15,6 +15,19 @@ model Platform {
   lastSyncAt  DateTime?
   createdAt   DateTime  @default(now())
 
+  // Taxa média de transação cobrada pela plataforma sobre cada venda
+  // (ex: Digistore24 ~8.37%). Usuário atualiza manualmente — não é
+  // derivada do payload do IPN (que muda por país/método). Multiplica
+  // pelo faturado no período pra mostrar "Taxas pagas" no card.
+  feeRatePct      Decimal? @db.Decimal(5, 2)
+  // Percentual do faturamento que a plataforma retém como allowance
+  // (rolling reserve contra refund/chargeback — Digistore ~2.37%).
+  // Mesma lógica: usuário atualiza, multiplica pelo período.
+  allowancePct    Decimal? @db.Decimal(5, 2)
+  // Timestamp da última atualização dos % acima. Driva o popup de 7d
+  // que solicita re-confirmação periódica dos valores.
+  feesUpdatedAt   DateTime?
+
   orders     Order[]
   products   Product[]
   affiliates Affiliate[]

@@ -569,12 +569,26 @@ async function aiSendMessage({ conversationId, message }, callbacks) {
   }
 }
 
+async function adminPatchPlatformFees(slug, { feeRatePct, allowancePct }) {
+  const res = await fetch(`/api/admin/platforms/${encodeURIComponent(slug)}/fees`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ feeRatePct, allowancePct }),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.error || `HTTP ${res.status}`);
+  }
+  return res.json();
+}
+
 window.NSApi = {
   fetchOverview,
   fetchOrders,
   fetchAffiliates,
   fetchAffiliateDetail,
   fetchPlatforms,
+  adminPatchPlatformFees,
   fetchProducts,
   fetchFunnel,
   fetchFilterOptions,

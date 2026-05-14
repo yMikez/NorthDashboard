@@ -267,6 +267,94 @@ function App({ user }) {
 
       {drawerAff && <AffiliateDrawer affiliateId={drawerAff} filters={filters} onClose={() => setDrawerAff(null)}/>}
       <ChatWidget user={user}/>
+      <FeesReviewPrompt user={user} setHashState={setHashState}/>
+    </div>
+  );
+}
+
+// Pop-up 7d: a cada 7 dias após a última atualização das taxas+allowance
+// da Digistore (ou de qualquer plataforma com fees cadastradas), prompta
+// o admin a reconfirmar os valores. Skip dura 24h via localStorage pra
+// não martirizar quem dispensa.
+function FeesReviewPrompt({ user, setHashState }) {
+  const [stale, setStale] = useStateApp([]);
+  const [dismissed, setDismissed] = useStateApp(false);
+
+  useEffectApp(() => {
+    if (!user || user.role !== 'ADMIN') return;
+    // Snooze 24h após dismiss/save
+    try {
+      const until = parseInt(localStorage.getItem('ns-fees-prompt-dismissed-until') || '0', 10);
+      if (Date.now() < until) { setDismissed(true); return; }
+    } catch {}
+
+    let cancelled = false;
+    // Pega plataformas (sem filtro — só pra ver feesUpdatedAt).
+    const now = new Date();
+    const start = new Date(now.getTime() - 30 * 24 * 3600 * 1000);
+    window.NSApi.fetchPlatforms({
+      dateRange: { start, end: now },
+      platforms: new Set(), countries: new Set(), funnels: new Set(), families: new Set(),
+    }).then((data) => {
+      if (cancelled) return;
+      const SEVEN_DAYS = 7 * 24 * 3600 * 1000;
+      const staleOnes = (data.platforms || []).filter((p) => {
+        if (p.feeRatePct == null && p.allowancePct == null) return false; // não cadastrado
+        if (!p.feesUpdatedAt) return true;
+        return Date.now() - new Date(p.feesUpdatedAt).getTime() > SEVEN_DAYS;
+      });
+      setStale(staleOnes);
+    }).catch(() => { /* silencioso */ });
+    return () => { cancelled = true; };
+  }, [user?.id]);
+
+  function snooze() {
+    try { localStorage.setItem('ns-fees-prompt-dismissed-until', String(Date.now() + 24 * 3600 * 1000)); } catch {}
+    setDismissed(true);
+  }
+  function goReview() {
+    setHashState({ route: 'platforms', params: new URLSearchParams() });
+    writeRoute('platforms', new URLSearchParams());
+    snooze();
+  }
+
+  if (dismissed || stale.length === 0) return null;
+
+  return (
+    <div style={{
+      position: 'fixed', inset: 0, zIndex: 90, background: 'rgba(3,6,23,0.6)',
+      backdropFilter: 'blur(6px)', display: 'grid', placeItems: 'center',
+    }}>
+      <div className="panel" style={{ width: 420, padding: 22 }}>
+        <div className="eyebrow" style={{ fontSize: 10, color: 'var(--warning)', marginBottom: 4 }}>
+          REVISÃO PERIÓDICA · 7 DIAS
+        </div>
+        <h3 style={{ margin: '0 0 4px', fontSize: 18 }}>
+          Atualizar taxas <em style={{ color: 'var(--glow-cyan)' }}>e allowance</em>
+        </h3>
+        <p style={{ fontSize: 12, color: 'var(--fg3)', lineHeight: 1.55, marginBottom: 16 }}>
+          As taxas e allowance percentuais não são atualizadas há mais de 7 dias em{' '}
+          {stale.length === 1
+            ? <strong>{stale[0].displayName}</strong>
+            : <><strong>{stale.length} plataformas</strong></>}.
+          Reconfirme pra manter os valores absolutos do card precisos.
+        </p>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 4, marginBottom: 16 }}>
+          {stale.map((p) => (
+            <div key={p.slug} style={{
+              fontSize: 11, fontFamily: 'var(--f-mono)', color: 'var(--fg4)',
+              display: 'flex', justifyContent: 'space-between',
+            }}>
+              <span>{p.displayName}</span>
+              <span>{p.feesUpdatedAt ? fmtSyncAgo(p.feesUpdatedAt) : 'nunca'}</span>
+            </div>
+          ))}
+        </div>
+        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
+          <button className="btn btn-ghost" onClick={snooze}>Depois (24h)</button>
+          <button className="btn btn-primary" onClick={goReview}>Atualizar agora</button>
+        </div>
+      </div>
     </div>
   );
 }

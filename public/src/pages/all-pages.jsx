@@ -2106,6 +2106,8 @@ function txTypeColor(productType) {
 // ---------- SETTINGS (integrations, FX, users) ----------
 function IntegrationsPage({ filters }) {
   const [state, setPlatState] = useState({ status: 'loading', data: null, error: null });
+  const [editing, setEditing] = useState(null); // { slug, displayName, feeRatePct, allowancePct }
+  const [refreshKey, setRefreshKey] = useState(0);
 
   useEffect(() => {
     let cancelled = false;
@@ -2121,7 +2123,8 @@ function IntegrationsPage({ filters }) {
   }, [filters.dateRange.start.getTime(), filters.dateRange.end.getTime(),
       Array.from(filters.platforms).join(','), Array.from(filters.countries).join(','),
       Array.from(filters.funnels).join(','),
-      Array.from(filters.families).join(',')]);
+      Array.from(filters.families).join(','),
+      refreshKey]);
 
   const cur = filters.currency || 'USD';
   const platforms = state.data?.platforms || [];
@@ -2204,6 +2207,71 @@ function IntegrationsPage({ filters }) {
                 </div>
               </div>
 
+              {/* Bloco fees + allowance — só se cadastrado (admin). */}
+              {(p.feeRatePct != null || p.allowancePct != null) && (
+                <div style={{ marginTop: 12, paddingTop: 10, borderTop: '1px solid rgba(91,200,255,0.15)' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
+                    <div style={{ fontSize: 10, letterSpacing: '0.1em', color: 'var(--fg4)' }}>
+                      TAXAS · PERÍODO
+                    </div>
+                    <button
+                      className="btn btn-ghost"
+                      style={{ fontSize: 10, padding: '2px 6px' }}
+                      onClick={() => setEditing({
+                        slug: p.slug,
+                        displayName: p.displayName,
+                        feeRatePct: p.feeRatePct ?? '',
+                        allowancePct: p.allowancePct ?? '',
+                      })}
+                      title="Atualizar taxas + allowance"
+                    >
+                      <Icon name="pencil" size={10}/> Editar
+                    </button>
+                  </div>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+                    <div>
+                      <div style={{ fontSize: 10, color: 'var(--fg5)' }}>
+                        Taxa de transação {p.feeRatePct != null ? `(${p.feeRatePct}%)` : ''}
+                      </div>
+                      <div className="cell-mono" style={{ fontSize: 14, color: 'var(--danger)' }}>
+                        {p.taxesPaid != null ? `− ${fmtCurrency(p.taxesPaid, cur, 0)}` : '—'}
+                      </div>
+                    </div>
+                    <div>
+                      <div style={{ fontSize: 10, color: 'var(--fg5)' }}>
+                        Allowance reservado {p.allowancePct != null ? `(${p.allowancePct}%)` : ''}
+                      </div>
+                      <div className="cell-mono" style={{ fontSize: 14, color: 'var(--warning)' }}>
+                        {p.allowanceReserved != null ? fmtCurrency(p.allowanceReserved, cur, 0) : '—'}
+                      </div>
+                    </div>
+                  </div>
+                  {p.feesUpdatedAt && (
+                    <div style={{ fontSize: 9, color: 'var(--fg5)', marginTop: 6, fontFamily: 'var(--f-mono)' }}>
+                      Atualizado {fmtSyncAgo(p.feesUpdatedAt)}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Botão cadastrar quando vazio. */}
+              {p.feeRatePct == null && p.allowancePct == null && (
+                <div style={{ marginTop: 12, paddingTop: 10, borderTop: '1px solid rgba(91,200,255,0.15)' }}>
+                  <button
+                    className="btn btn-ghost"
+                    style={{ fontSize: 11, width: '100%', justifyContent: 'center' }}
+                    onClick={() => setEditing({
+                      slug: p.slug,
+                      displayName: p.displayName,
+                      feeRatePct: '',
+                      allowancePct: '',
+                    })}
+                  >
+                    <Icon name="plus" size={11}/> Cadastrar taxas e allowance
+                  </button>
+                </div>
+              )}
+
               {p.topProduct && (
                 <div style={{ marginTop: 12, paddingTop: 10, borderTop: '1px solid rgba(91,200,255,0.15)' }}>
                   <div style={{ fontSize: 10, letterSpacing: '0.1em', color: 'var(--fg4)', marginBottom: 4 }}>
@@ -2222,6 +2290,14 @@ function IntegrationsPage({ filters }) {
             </div>
           );
         })}
+
+        {editing && (
+          <PlatformFeesModal
+            platform={editing}
+            onCancel={() => setEditing(null)}
+            onSaved={() => { setEditing(null); setRefreshKey((n) => n + 1); }}
+          />
+        )}
 
         {comingSoon.map((p) => (
           <div key={p.slug} className="ph-card" style={{ borderStyle: 'dashed', opacity: 0.7 }}>
@@ -2244,6 +2320,107 @@ function IntegrationsPage({ filters }) {
     </div>
   );
 }
+
+function PlatformFeesModal({ platform, onCancel, onSaved }) {
+  const [feeRate, setFeeRate] = useState(String(platform.feeRatePct ?? ''));
+  const [allowance, setAllowance] = useState(String(platform.allowancePct ?? ''));
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState(null);
+
+  async function save() {
+    setError(null);
+    const fee = feeRate.trim() === '' ? null : Number(feeRate.replace(',', '.'));
+    const alw = allowance.trim() === '' ? null : Number(allowance.replace(',', '.'));
+    if (fee != null && (!Number.isFinite(fee) || fee < 0 || fee > 100)) {
+      setError('Taxa deve estar entre 0 e 100'); return;
+    }
+    if (alw != null && (!Number.isFinite(alw) || alw < 0 || alw > 100)) {
+      setError('Allowance deve estar entre 0 e 100'); return;
+    }
+    setSaving(true);
+    try {
+      await window.NSApi.adminPatchPlatformFees(platform.slug, {
+        feeRatePct: fee,
+        allowancePct: alw,
+      });
+      // Limpa flag de "stale" pra evitar popup imediato após salvar.
+      try { localStorage.removeItem('ns-fees-prompt-dismissed-until'); } catch {}
+      onSaved();
+    } catch (err) {
+      setError(err.message);
+      setSaving(false);
+    }
+  }
+
+  return (
+    <div
+      onClick={onCancel}
+      style={{
+        position: 'fixed', inset: 0, zIndex: 100, background: 'rgba(3,6,23,0.7)',
+        backdropFilter: 'blur(8px)', display: 'grid', placeItems: 'center',
+      }}
+    >
+      <div
+        onClick={(e) => e.stopPropagation()}
+        className="panel"
+        style={{ width: 380, padding: 22 }}
+      >
+        <div className="eyebrow" style={{ fontSize: 10, color: 'var(--glow-cyan)', marginBottom: 4 }}>
+          PLATAFORMA · {platform.slug.toUpperCase()}
+        </div>
+        <h3 style={{ margin: '0 0 4px', fontSize: 18 }}>{platform.displayName}</h3>
+        <p style={{ fontSize: 11, color: 'var(--fg4)', marginBottom: 18 }}>
+          Taxa média de transação e allowance reservado, em %. Aplicado sobre
+          a receita do período pra calcular valores absolutos no card.
+        </p>
+
+        <label style={{ display: 'block', marginBottom: 14 }}>
+          <span style={{ fontSize: 11, color: 'var(--fg3)', display: 'block', marginBottom: 4 }}>
+            Taxa de transação média (%)
+          </span>
+          <input
+            type="text" inputMode="decimal" value={feeRate}
+            onChange={(e) => setFeeRate(e.target.value)}
+            placeholder="ex: 8.37"
+            style={feesInputStyle}
+            autoFocus
+          />
+        </label>
+        <label style={{ display: 'block', marginBottom: 18 }}>
+          <span style={{ fontSize: 11, color: 'var(--fg3)', display: 'block', marginBottom: 4 }}>
+            Allowance médio (%)
+          </span>
+          <input
+            type="text" inputMode="decimal" value={allowance}
+            onChange={(e) => setAllowance(e.target.value)}
+            placeholder="ex: 2.37"
+            style={feesInputStyle}
+          />
+        </label>
+
+        {error && (
+          <div style={{ color: 'var(--danger)', fontSize: 11, marginBottom: 10 }}>{error}</div>
+        )}
+
+        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
+          <button className="btn btn-ghost" onClick={onCancel} disabled={saving}>
+            Cancelar
+          </button>
+          <button className="btn btn-primary" onClick={save} disabled={saving}>
+            {saving ? 'Salvando...' : 'Salvar'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+const feesInputStyle = {
+  width: '100%', padding: '8px 10px',
+  background: 'rgba(91,200,255,0.05)', border: '1px solid rgba(91,200,255,0.20)',
+  borderRadius: 6, color: 'var(--fg1)', fontFamily: 'var(--f-mono)', fontSize: 13,
+  outline: 'none',
+};
 
 // Helper: format relative "synced X ago" from ISO timestamp
 function fmtSyncAgo(iso) {

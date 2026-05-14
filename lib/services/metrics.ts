@@ -172,6 +172,11 @@ export interface PlatformsResponse {
     affiliatesTotal: number;
     affiliatesActive: number;
     topProduct: { externalId: string; name: string; revenue: number; orders: number } | null;
+    feeRatePct: number | null;
+    allowancePct: number | null;
+    feesUpdatedAt: string | null;
+    taxesPaid: number | null;
+    allowanceReserved: number | null;
   }>;
 }
 
@@ -1530,7 +1535,16 @@ export async function getPlatforms(
     where: filters.platformSlugs?.length
       ? { slug: { in: filters.platformSlugs } }
       : undefined,
-    select: { id: true, slug: true, displayName: true, isActive: true, lastSyncAt: true },
+    select: {
+      id: true,
+      slug: true,
+      displayName: true,
+      isActive: true,
+      lastSyncAt: true,
+      feeRatePct: true,
+      allowancePct: true,
+      feesUpdatedAt: true,
+    },
   });
 
   const where: Prisma.OrderWhereInput = {
@@ -1575,6 +1589,9 @@ export async function getPlatforms(
     displayName: string;
     isActive: boolean;
     lastSyncAt: string | null;
+    feeRatePct: number | null;
+    allowancePct: number | null;
+    feesUpdatedAt: string | null;
     revenue: number;
     orders: number;
     allOrders: number;
@@ -1592,6 +1609,9 @@ export async function getPlatforms(
       displayName: p.displayName,
       isActive: p.isActive,
       lastSyncAt: p.lastSyncAt?.toISOString() ?? null,
+      feeRatePct: p.feeRatePct ? toNumber(p.feeRatePct) : null,
+      allowancePct: p.allowancePct ? toNumber(p.allowancePct) : null,
+      feesUpdatedAt: p.feesUpdatedAt?.toISOString() ?? null,
       revenue: 0,
       orders: 0,
       allOrders: 0,
@@ -1645,6 +1665,15 @@ export async function getPlatforms(
             };
           }
         }
+        // Taxas e allowance vivem como % flat por plataforma (cadastrado
+        // pelo admin). Multiplica pelo faturamento no período pra
+        // derivar valores absolutos no card. Null quando não cadastrado.
+        const taxesPaid = p.feeRatePct != null
+          ? round2((p.revenue * p.feeRatePct) / 100)
+          : null;
+        const allowanceReserved = p.allowancePct != null
+          ? round2((p.revenue * p.allowancePct) / 100)
+          : null;
         return {
           slug: p.slug,
           displayName: p.displayName,
@@ -1659,6 +1688,11 @@ export async function getPlatforms(
           affiliatesTotal: affTotalMap.get(p.id) ?? 0,
           affiliatesActive: p.activeAffIds.size,
           topProduct,
+          feeRatePct: p.feeRatePct,
+          allowancePct: p.allowancePct,
+          feesUpdatedAt: p.feesUpdatedAt,
+          taxesPaid,
+          allowanceReserved,
         };
       })
       .sort((a, b) => b.totalRevenue - a.totalRevenue),
