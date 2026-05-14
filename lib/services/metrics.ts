@@ -177,6 +177,10 @@ export interface PlatformsResponse {
     feesUpdatedAt: string | null;
     taxesPaid: number | null;
     allowanceReserved: number | null;
+    grossBruto: number;
+    grossRefunded: number;
+    cpaPaidTotal: number;
+    vendorEarnings: number | null;
   }>;
 }
 
@@ -1568,6 +1572,7 @@ export async function getPlatforms(
     select: {
       status: true,
       grossAmountUsd: true,
+      cpaPaidUsd: true,
       affiliateId: true,
       platform: { select: { id: true, slug: true } },
       product: { select: { externalId: true, name: true } },
@@ -1597,6 +1602,14 @@ export async function getPlatforms(
     allOrders: number;
     refunds: number;
     chargebacks: number;
+    // Gross das orders REFUNDED+CHARGEBACK (sinal positivo do valor original).
+    // Digistore desconta o allowance de cima do gross bruto (que inclui o
+    // que depois virou refund). Diferença sobre gross líquido = pequena, mas
+    // contribui pra precisão do número final.
+    grossRefunded: number;
+    // Sum de cpaPaidUsd de todas as orders. Comissões pagas a afiliados
+    // saem do bolso do vendor — entra no waterfall "Your earnings".
+    cpaPaidTotal: number;
     activeAffIds: Set<string>;
     byProduct: Map<string, { externalId: string; name: string; revenue: number; orders: number }>;
   }
@@ -1617,6 +1630,8 @@ export async function getPlatforms(
       allOrders: 0,
       refunds: 0,
       chargebacks: 0,
+      grossRefunded: 0,
+      cpaPaidTotal: 0,
       activeAffIds: new Set(),
       byProduct: new Map(),
     });
@@ -1627,6 +1642,11 @@ export async function getPlatforms(
     if (!p) continue;
     p.allOrders++;
     if (o.affiliateId) p.activeAffIds.add(o.affiliateId);
+    // CPA é pago independentemente do status final (refund às vezes clawback,
+    // às vezes não — depende da plataforma). Pra fim de waterfall do vendor,
+    // somar o que realmente saiu via IPN. Quando o refund clawback acontece,
+    // o IPN seguinte zera o cpaPaidUsd da row REFUNDED, então sum funciona.
+    p.cpaPaidTotal += toNumber(o.cpaPaidUsd);
     if (o.status === 'APPROVED') {
       const gross = toNumber(o.grossAmountUsd);
       p.orders++;
@@ -1643,8 +1663,13 @@ export async function getPlatforms(
       p.byProduct.set(key, prod);
     } else if (o.status === 'REFUNDED') {
       p.refunds++;
+      // grossAmountUsd em refund row é o valor original (positivo) na
+      // nossa convenção de ingest. Se vier negativo (algumas IPNs),
+      // usar abs pra normalizar.
+      p.grossRefunded += Math.abs(toNumber(o.grossAmountUsd));
     } else if (o.status === 'CHARGEBACK') {
       p.chargebacks++;
+      p.grossRefunded += Math.abs(toNumber(o.grossAmountUsd));
     }
   }
 
@@ -1666,13 +1691,21 @@ export async function getPlatforms(
           }
         }
         // Taxas e allowance vivem como % flat por plataforma (cadastrado
-        // pelo admin). Multiplica pelo faturamento no período pra
-        // derivar valores absolutos no card. Null quando não cadastrado.
+        // pelo admin). Aplicados sobre gross BRUTO (incluindo refunds/CBs
+        // — Digistore desconta da venda original) pra casar com o CSV oficial
+        // que o vendor exporta na plataforma. Null quando não cadastrado.
+        const grossBruto = p.revenue + p.grossRefunded;
         const taxesPaid = p.feeRatePct != null
-          ? round2((p.revenue * p.feeRatePct) / 100)
+          ? round2((grossBruto * p.feeRatePct) / 100)
           : null;
         const allowanceReserved = p.allowancePct != null
-          ? round2((p.revenue * p.allowancePct) / 100)
+          ? round2((grossBruto * p.allowancePct) / 100)
+          : null;
+        // Your earnings estimado = gross líquido − taxa − comissões.
+        // Aproxima o "Your earnings líquido após refunds" do relatório
+        // Digistore. Não inclui custos operacionais (COGS, fulfillment).
+        const vendorEarnings = taxesPaid != null
+          ? round2(p.revenue - taxesPaid - p.cpaPaidTotal)
           : null;
         return {
           slug: p.slug,
@@ -1693,6 +1726,12 @@ export async function getPlatforms(
           feesUpdatedAt: p.feesUpdatedAt,
           taxesPaid,
           allowanceReserved,
+          // Detalhamento financeiro pro waterfall do card de plataforma.
+          // Permite o usuário reconciliar com o CSV de relatório Digistore.
+          grossBruto: round2(grossBruto),
+          grossRefunded: round2(p.grossRefunded),
+          cpaPaidTotal: round2(p.cpaPaidTotal),
+          vendorEarnings,
         };
       })
       .sort((a, b) => b.totalRevenue - a.totalRevenue),

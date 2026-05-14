@@ -2207,12 +2207,15 @@ function IntegrationsPage({ filters }) {
                 </div>
               </div>
 
-              {/* Bloco fees + allowance — só se cadastrado (admin). */}
+              {/* Waterfall financeiro — só se fees cadastradas (admin).
+                 Reproduz a estrutura do relatório de allowance do Digistore:
+                 Gross bruto → − taxa → − comissões → = Your earnings.
+                 Allowance reservado entra como linha separada (sobre gross). */}
               {(p.feeRatePct != null || p.allowancePct != null) && (
                 <div style={{ marginTop: 12, paddingTop: 10, borderTop: '1px solid rgba(91,200,255,0.15)' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
                     <div style={{ fontSize: 10, letterSpacing: '0.1em', color: 'var(--fg4)' }}>
-                      TAXAS · PERÍODO
+                      WATERFALL · PERÍODO
                     </div>
                     <button
                       className="btn btn-ghost"
@@ -2228,27 +2231,42 @@ function IntegrationsPage({ filters }) {
                       <Icon name="pencil" size={10}/> Editar
                     </button>
                   </div>
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
-                    <div>
-                      <div style={{ fontSize: 10, color: 'var(--fg5)' }}>
-                        Taxa de transação {p.feeRatePct != null ? `(${p.feeRatePct}%)` : ''}
-                      </div>
-                      <div className="cell-mono" style={{ fontSize: 14, color: 'var(--danger)' }}>
-                        {p.taxesPaid != null ? `− ${fmtCurrency(p.taxesPaid, cur, 0)}` : '—'}
-                      </div>
-                    </div>
-                    <div>
-                      <div style={{ fontSize: 10, color: 'var(--fg5)' }}>
-                        Allowance reservado {p.allowancePct != null ? `(${p.allowancePct}%)` : ''}
-                      </div>
-                      <div className="cell-mono" style={{ fontSize: 14, color: 'var(--warning)' }}>
-                        {p.allowanceReserved != null ? fmtCurrency(p.allowanceReserved, cur, 0) : '—'}
-                      </div>
-                    </div>
+                  <div style={{ display: 'grid', gap: 4, fontFamily: 'var(--f-mono)', fontSize: 12 }}>
+                    <FeesRow
+                      label="Gross bruto"
+                      title={`Receita aprovada ${fmtCurrency(p.totalRevenue, cur, 0)} + refunds/CBs ${fmtCurrency(p.grossRefunded, cur, 0)}`}
+                      value={p.grossBruto} cur={cur} color="var(--fg1)"
+                    />
+                    {p.taxesPaid != null && (
+                      <FeesRow
+                        label={`− Taxa de transação (${p.feeRatePct}%)`}
+                        value={p.taxesPaid} cur={cur} color="var(--danger)" prefix="−"
+                      />
+                    )}
+                    {p.cpaPaidTotal > 0 && (
+                      <FeesRow
+                        label="− Comissões a afiliados"
+                        title="Sum de cpaPaidUsd das orders do período"
+                        value={p.cpaPaidTotal} cur={cur} color="var(--danger)" prefix="−"
+                      />
+                    )}
+                    {p.vendorEarnings != null && (
+                      <FeesRow
+                        label="= Your earnings (estimado)"
+                        value={p.vendorEarnings} cur={cur} color="var(--success)" bold
+                      />
+                    )}
+                    {p.allowanceReserved != null && (
+                      <FeesRow
+                        label={`Allowance reservado (${p.allowancePct}% gross)`}
+                        title="Reserva temporária retida pela plataforma contra refund/chargeback"
+                        value={p.allowanceReserved} cur={cur} color="var(--warning)"
+                      />
+                    )}
                   </div>
                   {p.feesUpdatedAt && (
-                    <div style={{ fontSize: 9, color: 'var(--fg5)', marginTop: 6, fontFamily: 'var(--f-mono)' }}>
-                      Atualizado {fmtSyncAgo(p.feesUpdatedAt)}
+                    <div style={{ fontSize: 9, color: 'var(--fg5)', marginTop: 8, fontFamily: 'var(--f-mono)' }}>
+                      % atualizados {fmtSyncAgo(p.feesUpdatedAt)}
                     </div>
                   )}
                 </div>
@@ -2317,6 +2335,21 @@ function IntegrationsPage({ filters }) {
           </div>
         ))}
       </div>
+    </div>
+  );
+}
+
+function FeesRow({ label, value, cur, color, prefix, bold, title }) {
+  return (
+    <div title={title} style={{
+      display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 12,
+      padding: '2px 0',
+    }}>
+      <span style={{ color: 'var(--fg3)', fontSize: 11 }}>{label}</span>
+      <span style={{ color, fontWeight: bold ? 600 : 400 }}>
+        {prefix && <span style={{ opacity: 0.7, marginRight: 2 }}>{prefix}</span>}
+        {fmtCurrency(value, cur, 0)}
+      </span>
     </div>
   );
 }
