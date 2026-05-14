@@ -19,6 +19,7 @@ import type Anthropic from '@anthropic-ai/sdk';
 import { db } from '@/lib/db';
 import { requireAdmin } from '@/lib/auth/guard';
 import { getAnthropicClient, ANTHROPIC_MODEL, systemPrompt } from '@/lib/services/ai';
+import { getKnowledgePromptBlock } from '@/lib/services/knowledge';
 import { TOOLS, executeTool, TERMINAL_TOOL } from '@/lib/services/aiTools';
 import { logger } from '@/lib/logger';
 
@@ -134,6 +135,11 @@ export async function POST(req: Request) {
       let finalText = '';
       let finalBlocks: unknown = null;
 
+      // Carrega a base de conhecimento UMA vez por request — cache 60s no
+      // service. Vai injetada no system prompt em todas as iterações do
+      // tool-use loop (cache_control ephemeral garante reuso).
+      const knowledgeBlock = await getKnowledgePromptBlock();
+
       try {
         send('conversation', { id: conversationId });
 
@@ -146,7 +152,7 @@ export async function POST(req: Request) {
             system: [
               {
                 type: 'text',
-                text: systemPrompt(new Date()),
+                text: systemPrompt(new Date(), knowledgeBlock),
                 cache_control: { type: 'ephemeral' },
               },
             ],

@@ -11,6 +11,7 @@ import { TopBar, type SyncStatus, type ThemeMode } from './TopBar';
 import { MessageList, EmptyState } from './MessageList';
 import { ChatInput } from './ChatInput';
 import { DetailDrawer } from './DetailDrawer';
+import { KnowledgeSheet } from './KnowledgeSheet';
 import {
   deleteConversation,
   getConversation,
@@ -69,6 +70,7 @@ export function ChatShell({ user }: { user: ChatUser }) {
   });
   const [model, setModel] = React.useState('claude-opus-4-5');
   const [drawerEntity, setDrawerEntity] = React.useState<EntityRef | null>(null);
+  const [knowledgeOpen, setKnowledgeOpen] = React.useState(false);
   const abortRef = React.useRef<AbortController | null>(null);
 
   // ---- Initial load ----
@@ -263,6 +265,11 @@ export function ChatShell({ user }: { user: ChatUser }) {
   }
 
   async function handleDelete(id: string) {
+    const conv = conversations.find((c) => c.id === id);
+    const title = conv?.title || '(sem título)';
+    if (!window.confirm(`Deletar a conversa "${title}"?\n\nAs mensagens não podem ser recuperadas.`)) {
+      return;
+    }
     try {
       await deleteConversation(id);
       if (selectedId === id) startNew();
@@ -317,7 +324,6 @@ export function ChatShell({ user }: { user: ChatUser }) {
       <DashboardNav user={user} activeId="chat" />
 
       <Sidebar
-        user={user}
         collapsed={collapsed}
         onToggleCollapsed={() => setCollapsed((v) => !v)}
         conversations={conversations}
@@ -328,7 +334,10 @@ export function ChatShell({ user }: { user: ChatUser }) {
         onTogglePin={handleTogglePin}
         onExport={handleExport}
         onDelete={(id) => void handleDelete(id)}
+        onOpenKnowledge={() => setKnowledgeOpen(true)}
       />
+
+      <KnowledgeSheet open={knowledgeOpen} onOpenChange={setKnowledgeOpen} />
 
       <main className="relative z-[1] flex flex-col h-full overflow-hidden">
         <TopBar

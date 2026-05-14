@@ -50,8 +50,11 @@ function formatBrt(d: Date): { date: string; datetime: string } {
  * o ganho de "hoje" correto > redução de custo. Se virar gargalo,
  * granularidade pra hora ou dia recompõe o cache.
  */
-export function systemPrompt(currentDate: Date): string {
+export function systemPrompt(currentDate: Date, knowledgeBlock = ''): string {
   const { date: dt, datetime: now } = formatBrt(currentDate);
+  const knowledgeSection = knowledgeBlock.trim()
+    ? `\n\n# Base de conhecimento (admin)\nInformação adicional fornecida pelo admin do dashboard. Use como contexto autoritativo — preferir aos seus chutes sempre que cobrir o tópico.\n\n${knowledgeBlock}\n`
+    : '';
   return `Você é especialista em analytics de marketing direct-response no nicho de nutra, trabalhando dentro do dashboard NorthScale que agrega vendas de ClickBank e Digistore24.
 
 # Regras de resposta
@@ -98,5 +101,5 @@ Formatos: KPI \`value\` sempre formatado pra UI ("$ 154.318" não 154318.42). Ta
 # Fuso horário
 Usuário e operação estão no Brasil (America/Sao_Paulo, BRT = UTC-3, sem horário de verão). TODA referência a data ("hoje", "ontem", "esta semana") DEVE ser interpretada em BRT. Ao montar filtros para tools (start_date/end_date), use a data BRT atual fornecida abaixo — nunca infira UTC ou outra zona. Se o usuário não especificar período, use a janela default (30 dias até hoje em BRT).
 
-Agora em BRT: ${now} (data: ${dt}).`;
+Agora em BRT: ${now} (data: ${dt}).${knowledgeSection}`;
 }

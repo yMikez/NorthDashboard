@@ -13,7 +13,7 @@ import {
   Sparkles,
   PanelLeftClose,
   PanelLeft,
-  Settings,
+  BookOpen,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -28,10 +28,9 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { cn } from '@/lib/ui-utils';
 import { groupByDate, relativeTime } from '@/lib/chat/client';
-import type { ChatUser, Conversation } from '@/types/chat';
+import type { Conversation } from '@/types/chat';
 
 interface SidebarProps {
-  user: ChatUser;
   collapsed: boolean;
   onToggleCollapsed: () => void;
   conversations: Conversation[];
@@ -42,10 +41,10 @@ interface SidebarProps {
   onTogglePin: (id: string) => void;
   onExport: (id: string) => void;
   onDelete: (id: string) => void;
+  onOpenKnowledge: () => void;
 }
 
 export function Sidebar({
-  user,
   collapsed,
   onToggleCollapsed,
   conversations,
@@ -56,6 +55,7 @@ export function Sidebar({
   onTogglePin,
   onExport,
   onDelete,
+  onOpenKnowledge,
 }: SidebarProps) {
   const [search, setSearch] = React.useState('');
   const [renamingId, setRenamingId] = React.useState<string | null>(null);
@@ -99,10 +99,18 @@ export function Sidebar({
             </TooltipTrigger>
             <TooltipContent side="right">Nova conversa <kbd className="ml-2 text-[10px] opacity-70">⌘J</kbd></TooltipContent>
           </Tooltip>
+
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button variant="ghost" size="icon" onClick={onOpenKnowledge} aria-label="Base de conhecimento">
+                <BookOpen className="w-4 h-4" />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent side="right">Base de conhecimento</TooltipContent>
+          </Tooltip>
         </TooltipProvider>
 
         <div className="flex-1" />
-        <Avatar email={user.email} name={user.name} />
       </aside>
     );
   }
@@ -132,6 +140,9 @@ export function Sidebar({
       <div className="p-3 space-y-2">
         <Button onClick={onNew} className="w-full justify-start">
           <Plus className="w-4 h-4" /> Nova conversa
+        </Button>
+        <Button variant="ghost" onClick={onOpenKnowledge} className="w-full justify-start text-xs">
+          <BookOpen className="w-3.5 h-3.5" /> Base de conhecimento
         </Button>
         <div className="relative">
           <Search className="w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none" />
@@ -184,34 +195,7 @@ export function Sidebar({
           </div>
         ))}
       </ScrollArea>
-
-      {/* Footer */}
-      <div className="border-t border-border p-2 flex items-center gap-2">
-        <Avatar email={user.email} name={user.name} />
-        <div className="flex-1 min-w-0">
-          <div className="text-xs truncate text-foreground">{user.name || user.email}</div>
-          <div className="text-[10px] text-muted-foreground font-mono">ADMIN</div>
-        </div>
-        <Button variant="ghost" size="icon-sm" aria-label="Configurações">
-          <Settings className="w-4 h-4" />
-        </Button>
-      </div>
     </aside>
-  );
-}
-
-function Avatar({ email, name }: { email: string; name: string | null }) {
-  const initials = (name || email).slice(0, 2).toUpperCase();
-  const hash = Array.from(email).reduce((a, c) => a + c.charCodeAt(0), 0);
-  const hue = hash % 360;
-  return (
-    <div
-      className="w-7 h-7 rounded-md flex items-center justify-center text-[10px] font-semibold font-mono"
-      style={{ background: `hsl(${hue}, 60%, 35%)`, color: 'white' }}
-      aria-hidden
-    >
-      {initials}
-    </div>
   );
 }
 
@@ -249,7 +233,9 @@ function ConversationItem({
       onClick={renaming ? undefined : onSelect}
       className={cn(
         'group flex items-start gap-2 px-3 py-2 rounded-md cursor-pointer transition-colors',
-        selected ? 'bg-accent text-accent-foreground' : 'hover:bg-accent/50',
+        selected
+          ? 'bg-accent/60 text-accent-foreground border-l-2 border-primary/70 pl-[10px]'
+          : 'hover:bg-accent/30',
       )}
     >
       <div className="flex-1 min-w-0">
@@ -287,8 +273,8 @@ function ConversationItem({
             variant="ghost"
             size="icon-sm"
             onClick={(e) => e.stopPropagation()}
-            className="opacity-0 group-hover:opacity-100 data-[state=open]:opacity-100"
-            aria-label="Opções"
+            className="opacity-50 hover:opacity-100 data-[state=open]:opacity-100 transition-opacity"
+            aria-label="Opções (renomear, fixar, exportar, deletar)"
           >
             <MoreHorizontal className="w-3.5 h-3.5" />
           </Button>

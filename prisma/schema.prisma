@@ -531,6 +531,23 @@ model Message {
   @@index([conversationId, createdAt])
 }
 
+// Base de conhecimento injetada no system prompt do chat AI. Cada entry
+// vira um bloco markdown adicionado ao prompt quando `enabled=true`.
+// Mantemos a tabela pequena (~10-30 entries esperados) pra não estourar
+// o token budget — não tem retrieval, é tudo embedded.
+model KnowledgeEntry {
+  id        String   @id @default(cuid())
+  title     String // "Regras de payout Digistore", "Glossário CB", etc.
+  content   String // markdown — vai literal pro system prompt
+  enabled   Boolean  @default(true)
+  // Ordem de exibição/injeção no prompt. Menor = primeiro.
+  sortOrder Int      @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([enabled, sortOrder])
+}
+
 // Audit trail genérico pra mudanças sensíveis em entidades de Network.
 // Action é texto livre ("create", "update", "mark_paid",
 // "attach_affiliate", "detach_affiliate", "regenerate_contract", ...).

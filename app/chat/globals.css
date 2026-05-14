@@ -37,14 +37,18 @@
     /* muted = navy-800 com menos lightness */
     --muted: 224 50% 14%;
     --muted-foreground: 222 33% 67%;
-    /* accent hover — tint cyan */
-    --accent: 199 50% 16%;
+    /* accent hover — tint navy sutil (era cyan 199 50% 16%, muito forte
+       como background de item selecionado). Agora puxa pra navy escuro
+       com leve hint cyan — destaque sem competir com o conteúdo. */
+    --accent: 222 35% 14%;
     --accent-foreground: 0 0% 100%;
     /* danger (#EF4444) */
     --destructive: 0 84% 60%;
     --destructive-foreground: 0 0% 100%;
-    /* border = rgba(91,200,255,0.15) → HSL com alpha-friendly */
-    --border: 199 100% 68%;
+    /* border — antes 199 100% 68% (cyan vibrante saturação 100% em todo
+       contorno, gerava sensação "HUD piscando"). Trocado por navy
+       acinzentado com leve frieza, fica como linha de divisão discreta. */
+    --border: 222 30% 22%;
     --input: 224 50% 18%;
     --ring: 199 100% 68%;
     /* semânticas — espelham --success/warning/danger do brand */
@@ -68,11 +72,11 @@
     --secondary-foreground: 226 60% 9%;
     --muted: 220 30% 95%;
     --muted-foreground: 224 25% 40%;
-    --accent: 199 50% 92%;
+    --accent: 220 20% 92%;
     --accent-foreground: 226 60% 9%;
     --destructive: 0 84% 50%;
     --destructive-foreground: 0 0% 100%;
-    --border: 224 50% 30%;
+    --border: 224 20% 86%;
     --input: 220 20% 92%;
     --ring: 199 100% 50%;
     --success: 158 80% 35%;
