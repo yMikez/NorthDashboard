@@ -783,16 +783,19 @@ function AllAffiliatesPage({ filters, onOpenAffiliate }) {
   const totalOrders = all.reduce((s, r) => s + (r.orders || 0), 0);
   const affsWithOrders = all.filter((r) => (r.orders || 0) > 0);
 
-  // CPA médio POR VENDA = total real de CPA pago ÷ total de vendas no período.
+  // CPA médio por venda = total real de CPA pago ÷ vendas FE aprovadas.
   //
-  // Métrica de unit economics: "de cada venda aprovada, quanto vai pro
-  // afiliado em comissão?". Ponderada por volume — afiliados com mais
-  // pedidos influenciam mais o número, refletindo o gasto real.
+  // Em direct response, CPA é pago no FE (aquisição de buyer). Upsells/
+  // downsells/bumps em geral não pagam comissão. Dividir por TODAS as
+  // orders aprovadas (FE + UP + DW + bumps) infla o denominador artif.
+  // e baixa o número. Dividir só por FE aprovado = "CPA por buyer real",
+  // que é o que importa pra entender custo de aquisição.
   //
-  // Numerador `totalCpa` já agrega cpaPaidUsd real (com refund clawback
-  // descontado), não a aproximação cpaPerFe×orders. Denominador é o total
-  // de pedidos APPROVED no período (todos afiliados).
-  const cpaPerSale = totalOrders > 0 ? totalCpa / totalOrders : 0;
+  // Numerador `totalCpa` é cpaPaidUsd somado em TODOS os status (refund
+  // tem CPA negativo via clawback do IPN) — reflete cash real pago a
+  // afiliados no período.
+  const totalFeApproved = all.reduce((s, r) => s + (r.feApprovedCount || 0), 0);
+  const cpaPerSale = totalFeApproved > 0 ? totalCpa / totalFeApproved : 0;
   // Subtítulo informa quantos afiliados sem CPA fixo cadastrado contribuem
   // pra média ficar menor que o CPA dos com contrato.
   const affsWithFeCpa = affsWithOrders.filter((r) => (r.cpaPerFe || 0) > 0);
@@ -866,7 +869,7 @@ function AllAffiliatesPage({ filters, onOpenAffiliate }) {
           <div className="l">CPA médio por venda</div>
           <div className="v">{fmtCurrency(cpaPerSale, cur, 0)}</div>
           <div className="s">
-            CPA pago real ÷ {fmtInt(totalOrders)} {totalOrders === 1 ? 'venda aprovada' : 'vendas aprovadas'}
+            CPA pago real ÷ {fmtInt(totalFeApproved)} {totalFeApproved === 1 ? 'venda FE' : 'vendas FE aprovadas'} · upsells não pagam CPA
             {affsWithFeCpa.length !== affsWithOrders.length && (
               <> · inclui vendas sem CPA contratado</>
             )}
