@@ -216,6 +216,24 @@ async function fetchCosts() {
 }
 
 /**
+ * Fetch /api/metrics/costs-overview — dashboard agregado de custos & margem.
+ *
+ * Retorna kpis (gross, profit, margem, fulfillment/cogs/fees/cpa), série diária,
+ * breakdown por plataforma e família, e snapshot de allowance (rolling 60d).
+ */
+async function fetchCostsOverview(filters) {
+  const params = {
+    start_date: toISODate(filters.dateRange.start),
+    end_date: toISODate(filters.dateRange.end),
+    platforms: setToCSV(filters.platforms),
+    countries: setToCSV(filters.countries),
+    products: setToCSV(filters.funnels),
+    families: setToCSV(filters.families),
+  };
+  return fetchJSON('/api/metrics/costs-overview', params);
+}
+
+/**
  * Fetch /api/metrics/insights — daily snapshot of curated narrative cards.
  * Cached server-side per day; pass refresh=1 to force recompute.
  */
@@ -596,6 +614,7 @@ window.NSApi = {
   fetchHealth,
   fetchOrderDetail,
   fetchCosts,
+  fetchCostsOverview,
   adminSaveCosts,
   adminBackfillCogs,
   fetchInsights,

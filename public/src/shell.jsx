@@ -11,6 +11,7 @@ function Sidebar({ active, onNav, user }) {
         { id: 'overview', label: 'Visão geral', icon: 'layout-dashboard' },
         { id: 'funnel',   label: 'Funil', icon: 'bar-chart-3' },
         { id: 'insights', label: 'Insights', icon: 'zap' },
+        { id: 'custos',   label: 'Custos', icon: 'trending-down' },
       ]
     },
     {

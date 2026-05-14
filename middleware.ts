@@ -51,6 +51,7 @@ const SPA_ROUTES = new Set([
   '/health',
   '/costs',
   '/insights',
+  '/custos',
   '/users',
   // /chat foi MIGRADO pra Next.js native route (app/chat/page.tsx)
   // com TS + Tailwind + shadcn. Não rewriter — deixa o Next.js servir.

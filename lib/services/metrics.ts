@@ -184,6 +184,63 @@ export interface PlatformsResponse {
   }>;
 }
 
+export interface CostsOverviewResponse {
+  range: { start: string; end: string };
+  kpis: {
+    grossUsd: number;            // APPROVED gross (active revenue)
+    refundsUsd: number;          // |gross| of REFUNDED + CHARGEBACK (positive)
+    refundsCount: number;
+    fulfillmentUsd: number;      // sum across APPROVED orders (positive)
+    cogsUsd: number;             // sum across APPROVED orders
+    platformFeesUsd: number;     // real (fees+tax) if available else feeRatePct estimate
+    cpaUsd: number;              // sum across APPROVED orders
+    allowanceReservedUsd: number; // rolling 60d snapshot — separate from period
+    profitUsd: number;           // gross - fees - cpa - cogs - fulfillment (all APPROVED-scoped)
+    marginPct: number;           // profit / gross × 100
+  };
+  daily: Array<{
+    date: string;                // YYYY-MM-DD (UTC)
+    grossUsd: number;
+    fulfillmentUsd: number;
+    cogsUsd: number;
+    platformFeesUsd: number;
+    cpaUsd: number;
+    profitUsd: number;
+  }>;
+  byPlatform: Array<{
+    slug: string;
+    displayName: string;
+    grossUsd: number;
+    platformFeesUsd: number;
+    feeRatePctEffective: number; // platformFeesUsd / grossUsd × 100 (or 0)
+    cogsUsd: number;
+    fulfillmentUsd: number;
+    cpaUsd: number;
+    profitUsd: number;
+    marginPct: number;
+  }>;
+  byFamily: Array<{
+    family: string;              // 'NeuroMindPro' etc; '_unknown' if null
+    grossUsd: number;
+    cogsUsd: number;
+    fulfillmentUsd: number;
+    profitUsd: number;           // gross - cogs - fulfillment (sem fees/cpa pra simplificar)
+    marginPct: number;
+    isCataloged: boolean;        // true se há entry em ProductFamilyCost
+  }>;
+  allowance: {
+    reservedTodayUsd: number;            // rolling 60d × allowancePct
+    releasingNext7DaysUsd: number;       // janela 53-60d atrás (libera nesta semana)
+    releasingNext30DaysUsd: number;      // janela 30-60d atrás
+    byPlatform: Array<{
+      slug: string;
+      displayName: string;
+      allowancePct: number;
+      reservedUsd: number;
+    }>;
+  };
+}
+
 export interface AffiliateDetailResponse {
   affiliate: {
     externalId: string;
@@ -1735,6 +1792,342 @@ export async function getPlatforms(
         };
       })
       .sort((a, b) => b.totalRevenue - a.totalRevenue),
+  };
+}
+
+/**
+ * Costs overview: vendor margin lens. Aggregates APPROVED orders in the period
+ * into the 4 cost buckets (fulfillment, COGS, platform fees, CPA) plus a
+ * snapshot of allowance reserved (rolling 60d — independent of period filter).
+ *
+ * Platform fees: prefer real Order.fees + Order.taxAmount when present (Digistore
+ * sends breakdown in IPN). Fall back to Platform.feeRatePct × gross for
+ * platforms that don't (ClickBank).
+ */
+export async function getCostsOverview(
+  filters: MetricsFilters,
+): Promise<CostsOverviewResponse> {
+  const where: Prisma.OrderWhereInput = {
+    orderedAt: { gte: filters.startDate, lte: filters.endDate },
+  };
+  if (filters.platformSlugs?.length) {
+    where.platform = { slug: { in: filters.platformSlugs } };
+  }
+  if (filters.countries?.length) {
+    where.country = { in: filters.countries };
+  }
+  if (filters.productExternalIds?.length || filters.productFamilies?.length) {
+    where.product = {
+      ...(filters.productExternalIds?.length ? { externalId: { in: filters.productExternalIds } } : {}),
+      ...(filters.productFamilies?.length ? { family: { in: filters.productFamilies } } : {}),
+    };
+  }
+
+  const orders = await db.order.findMany({
+    where,
+    select: {
+      status: true,
+      orderedAt: true,
+      grossAmountUsd: true,
+      netAmountUsd: true,
+      fees: true,
+      taxAmount: true,
+      cpaPaidUsd: true,
+      cogsUsd: true,
+      fulfillmentUsd: true,
+      platform: {
+        select: { slug: true, displayName: true, feeRatePct: true, allowancePct: true },
+      },
+      product: { select: { family: true } },
+    },
+  });
+
+  // Catalogued families: used to flag rows in byFamily when ProductFamilyCost
+  // doesn't have an entry yet ("PLACEHOLDER" badge in UI).
+  const catalogedRows = await db.productFamilyCost.findMany({ select: { family: true } });
+  const catalogedFamilies = new Set(catalogedRows.map((r) => r.family));
+
+  interface DailyAgg {
+    grossUsd: number;
+    fulfillmentUsd: number;
+    cogsUsd: number;
+    platformFeesUsd: number;
+    cpaUsd: number;
+  }
+  interface PlatformAgg {
+    slug: string;
+    displayName: string;
+    grossUsd: number;
+    platformFeesUsd: number;
+    cogsUsd: number;
+    fulfillmentUsd: number;
+    cpaUsd: number;
+  }
+  interface FamilyAgg {
+    family: string;
+    grossUsd: number;
+    cogsUsd: number;
+    fulfillmentUsd: number;
+  }
+
+  const dailyMap = new Map<string, DailyAgg>();
+  const platformMap = new Map<string, PlatformAgg>();
+  const familyMap = new Map<string, FamilyAgg>();
+
+  let grossApproved = 0;
+  let fulfillApproved = 0;
+  let cogsApproved = 0;
+  let cpaApproved = 0;
+  let feesApproved = 0;
+  let refundsGross = 0;
+  let refundsCount = 0;
+
+  for (const o of orders) {
+    const gross = toNumber(o.grossAmountUsd);
+    const fees = toNumber(o.fees);
+    const tax = toNumber(o.taxAmount);
+    const cpa = toNumber(o.cpaPaidUsd);
+    const cogs = toNumber(o.cogsUsd);
+    const fulfill = toNumber(o.fulfillmentUsd);
+    const feeRatePct = o.platform.feeRatePct ? toNumber(o.platform.feeRatePct) : 0;
+
+    if (o.status === 'REFUNDED' || o.status === 'CHARGEBACK') {
+      refundsGross += Math.abs(gross);
+      refundsCount++;
+      continue; // KPIs/daily/byPlatform/byFamily são APPROVED-scoped
+    }
+    if (o.status !== 'APPROVED') continue;
+
+    // Platform fee per order: real breakdown if present, else feeRatePct estimate.
+    const realFee = fees + tax;
+    const feeForOrder = realFee > 0
+      ? realFee
+      : feeRatePct > 0 ? (gross * feeRatePct) / 100 : 0;
+
+    grossApproved += gross;
+    feesApproved += feeForOrder;
+    cpaApproved += cpa;
+    cogsApproved += cogs;
+    fulfillApproved += fulfill;
+
+    // Daily bucket (UTC day key).
+    const dayKey = isoDate(o.orderedAt);
+    const d = dailyMap.get(dayKey) ?? {
+      grossUsd: 0, fulfillmentUsd: 0, cogsUsd: 0, platformFeesUsd: 0, cpaUsd: 0,
+    };
+    d.grossUsd += gross;
+    d.fulfillmentUsd += fulfill;
+    d.cogsUsd += cogs;
+    d.platformFeesUsd += feeForOrder;
+    d.cpaUsd += cpa;
+    dailyMap.set(dayKey, d);
+
+    // Platform bucket.
+    const slug = o.platform.slug;
+    const p = platformMap.get(slug) ?? {
+      slug,
+      displayName: o.platform.displayName,
+      grossUsd: 0, platformFeesUsd: 0, cogsUsd: 0, fulfillmentUsd: 0, cpaUsd: 0,
+    };
+    p.grossUsd += gross;
+    p.platformFeesUsd += feeForOrder;
+    p.cogsUsd += cogs;
+    p.fulfillmentUsd += fulfill;
+    p.cpaUsd += cpa;
+    platformMap.set(slug, p);
+
+    // Family bucket. '_unknown' for orders whose product isn't classified.
+    const fam = o.product.family || '_unknown';
+    const f = familyMap.get(fam) ?? {
+      family: fam, grossUsd: 0, cogsUsd: 0, fulfillmentUsd: 0,
+    };
+    f.grossUsd += gross;
+    f.cogsUsd += cogs;
+    f.fulfillmentUsd += fulfill;
+    familyMap.set(fam, f);
+  }
+
+  // Fill missing days in range so the chart line is continuous.
+  const daily: CostsOverviewResponse['daily'] = [];
+  for (
+    let d = startOfDay(filters.startDate);
+    d <= filters.endDate;
+    d = addDays(d, 1)
+  ) {
+    const key = isoDate(d);
+    const agg = dailyMap.get(key);
+    if (agg) {
+      const profit = agg.grossUsd - agg.platformFeesUsd - agg.cpaUsd - agg.cogsUsd - agg.fulfillmentUsd;
+      daily.push({
+        date: key,
+        grossUsd: round2(agg.grossUsd),
+        fulfillmentUsd: round2(agg.fulfillmentUsd),
+        cogsUsd: round2(agg.cogsUsd),
+        platformFeesUsd: round2(agg.platformFeesUsd),
+        cpaUsd: round2(agg.cpaUsd),
+        profitUsd: round2(profit),
+      });
+    } else {
+      daily.push({
+        date: key,
+        grossUsd: 0, fulfillmentUsd: 0, cogsUsd: 0,
+        platformFeesUsd: 0, cpaUsd: 0, profitUsd: 0,
+      });
+    }
+  }
+
+  const byPlatform: CostsOverviewResponse['byPlatform'] = Array.from(platformMap.values())
+    .map((p) => {
+      const profit = p.grossUsd - p.platformFeesUsd - p.cpaUsd - p.cogsUsd - p.fulfillmentUsd;
+      return {
+        slug: p.slug,
+        displayName: p.displayName,
+        grossUsd: round2(p.grossUsd),
+        platformFeesUsd: round2(p.platformFeesUsd),
+        feeRatePctEffective: p.grossUsd > 0 ? round4((p.platformFeesUsd / p.grossUsd) * 100) : 0,
+        cogsUsd: round2(p.cogsUsd),
+        fulfillmentUsd: round2(p.fulfillmentUsd),
+        cpaUsd: round2(p.cpaUsd),
+        profitUsd: round2(profit),
+        marginPct: p.grossUsd > 0 ? round4((profit / p.grossUsd) * 100) : 0,
+      };
+    })
+    .sort((a, b) => b.grossUsd - a.grossUsd);
+
+  const byFamily: CostsOverviewResponse['byFamily'] = Array.from(familyMap.values())
+    .map((f) => {
+      const profit = f.grossUsd - f.cogsUsd - f.fulfillmentUsd;
+      return {
+        family: f.family,
+        grossUsd: round2(f.grossUsd),
+        cogsUsd: round2(f.cogsUsd),
+        fulfillmentUsd: round2(f.fulfillmentUsd),
+        profitUsd: round2(profit),
+        marginPct: f.grossUsd > 0 ? round4((profit / f.grossUsd) * 100) : 0,
+        isCataloged: catalogedFamilies.has(f.family),
+      };
+    })
+    .sort((a, b) => b.grossUsd - a.grossUsd);
+
+  const allowance = await computeAllowanceRolling60d();
+
+  const profitUsd = grossApproved - feesApproved - cpaApproved - cogsApproved - fulfillApproved;
+
+  return {
+    range: {
+      start: filters.startDate.toISOString(),
+      end: filters.endDate.toISOString(),
+    },
+    kpis: {
+      grossUsd: round2(grossApproved),
+      refundsUsd: round2(refundsGross),
+      refundsCount,
+      fulfillmentUsd: round2(fulfillApproved),
+      cogsUsd: round2(cogsApproved),
+      platformFeesUsd: round2(feesApproved),
+      cpaUsd: round2(cpaApproved),
+      allowanceReservedUsd: allowance.reservedTodayUsd,
+      profitUsd: round2(profitUsd),
+      marginPct: grossApproved > 0 ? round4((profitUsd / grossApproved) * 100) : 0,
+    },
+    daily,
+    byPlatform,
+    byFamily,
+    allowance,
+  };
+}
+
+/**
+ * Snapshot do allowance reservado pelas plataformas (rolling 60d). Para cada
+ * plataforma com allowancePct configurado, soma o gross bruto (APPROVED +
+ * |refunds|) das últimas 60 dias e multiplica pelo %. As janelas releasingNext*
+ * usam orderedAt > 60d atrás − Nd, ou seja, vendas que completam 60 dias nas
+ * próximas N. Independente do date range do request — sempre "now-relative".
+ */
+async function computeAllowanceRolling60d(): Promise<CostsOverviewResponse['allowance']> {
+  const platforms = await db.platform.findMany({
+    where: { allowancePct: { not: null, gt: 0 } },
+    select: { slug: true, displayName: true, allowancePct: true },
+  });
+  if (platforms.length === 0) {
+    return {
+      reservedTodayUsd: 0,
+      releasingNext7DaysUsd: 0,
+      releasingNext30DaysUsd: 0,
+      byPlatform: [],
+    };
+  }
+
+  const now = new Date();
+  const sixtyDaysAgo = new Date(now.getTime() - 60 * 24 * 60 * 60 * 1000);
+  const thirtyThreeDaysAgo = new Date(now.getTime() - 53 * 24 * 60 * 60 * 1000);
+  const thirtyDaysAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+
+  let reservedTotal = 0;
+  let next7Total = 0;
+  let next30Total = 0;
+  const byPlatform: CostsOverviewResponse['allowance']['byPlatform'] = [];
+
+  for (const p of platforms) {
+    const rate = toNumber(p.allowancePct) / 100;
+
+    // Reservado hoje: vendas (gross bruto signed: APPROVED+|refunds|) nos
+    // últimos 60d. Usar abs(grossAmountUsd) capta tanto APPROVED quanto refund
+    // como contribuição positiva ao gross original.
+    const aggReserved = await db.order.aggregate({
+      where: {
+        platform: { slug: p.slug },
+        orderedAt: { gte: sixtyDaysAgo, lte: now },
+        status: { in: ['APPROVED', 'REFUNDED', 'CHARGEBACK'] },
+      },
+      _sum: { grossAmountUsd: true },
+    });
+    // Soma simples: refunds têm gross negativo, então isso já é o "net 60d"
+    // que aproxima o que a Digistore reserva (Reserve % flutua diariamente
+    // com o saldo). Não usar abs pq não queremos duplicar refunds.
+    const gross60d = Math.max(0, toNumber(aggReserved._sum.grossAmountUsd));
+    const reserved = gross60d * rate;
+
+    // Libera próximos 7 dias: vendas com orderedAt entre [now-60d, now-53d].
+    const agg7 = await db.order.aggregate({
+      where: {
+        platform: { slug: p.slug },
+        orderedAt: { gte: sixtyDaysAgo, lte: thirtyThreeDaysAgo },
+        status: { in: ['APPROVED', 'REFUNDED', 'CHARGEBACK'] },
+      },
+      _sum: { grossAmountUsd: true },
+    });
+    const gross7 = Math.max(0, toNumber(agg7._sum.grossAmountUsd));
+    const releasing7 = gross7 * rate;
+
+    // Libera próximos 30 dias: [now-60d, now-30d].
+    const agg30 = await db.order.aggregate({
+      where: {
+        platform: { slug: p.slug },
+        orderedAt: { gte: sixtyDaysAgo, lte: thirtyDaysAgo },
+        status: { in: ['APPROVED', 'REFUNDED', 'CHARGEBACK'] },
+      },
+      _sum: { grossAmountUsd: true },
+    });
+    const gross30 = Math.max(0, toNumber(agg30._sum.grossAmountUsd));
+    const releasing30 = gross30 * rate;
+
+    reservedTotal += reserved;
+    next7Total += releasing7;
+    next30Total += releasing30;
+    byPlatform.push({
+      slug: p.slug,
+      displayName: p.displayName,
+      allowancePct: round4(toNumber(p.allowancePct)),
+      reservedUsd: round2(reserved),
+    });
+  }
+
+  return {
+    reservedTodayUsd: round2(reservedTotal),
+    releasingNext7DaysUsd: round2(next7Total),
+    releasingNext30DaysUsd: round2(next30Total),
+    byPlatform: byPlatform.sort((a, b) => b.reservedUsd - a.reservedUsd),
   };
 }
 

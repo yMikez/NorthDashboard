@@ -12,6 +12,7 @@ import {
   LayoutDashboard,
   BarChart3,
   Zap,
+  TrendingDown,
   Trophy,
   Users,
   Layers,
@@ -45,6 +46,7 @@ const GROUPS: NavGroup[] = [
       { id: 'overview', label: 'Visão geral', href: '/overview', icon: LayoutDashboard },
       { id: 'funnel', label: 'Funil', href: '/funnel', icon: BarChart3 },
       { id: 'insights', label: 'Insights', href: '/insights', icon: Zap },
+      { id: 'custos', label: 'Custos', href: '/custos', icon: TrendingDown },
     ],
   },
   {

@@ -42,6 +42,7 @@
 <script type="text/babel" src="/src/charts.jsx"></script>
 <script type="text/babel" src="/src/shell.jsx"></script>
 <script type="text/babel" src="/src/pages/overview.jsx"></script>
+<script type="text/babel" src="/src/pages/custos.jsx"></script>
 <script type="text/babel" src="/src/pages/all-pages.jsx"></script>
 
 <script type="text/babel" data-presets="react">
@@ -51,6 +52,7 @@ const { useState: useStateApp, useEffect: useEffectApp } = React;
 const ROUTES = {
   'overview':       { title: 'Visão',       em: 'geral',       crumbs: ['Análise', 'Visão geral'] },
   'funnel':         { title: 'Funil',       em: 'completo',    crumbs: ['Análise', 'Funil'] },
+  'custos':         { title: 'Custos',      em: 'e lucro',     crumbs: ['Análise', 'Custos'] },
   'leaderboard':    { title: 'Ranking',     em: 'de afiliados', crumbs: ['Afiliados', 'Ranking'] },
   'all-affiliates': { title: 'Diretório',   em: 'de afiliados', crumbs: ['Afiliados', 'Todos'] },
   'products':       { title: 'Produtos',     em: '',            crumbs: ['Catálogo', 'Produtos'] },
@@ -258,6 +260,7 @@ function App({ user }) {
           {hashState.route === 'platforms'      && <IntegrationsPage filters={filters}/>}
           {hashState.route === 'health'         && <HealthPage/>}
           {hashState.route === 'costs'          && <CostsPage filters={filters}/>}
+          {hashState.route === 'custos'         && <CustosPage filters={filters}/>}
           {/* 'chat' agora vive em /chat (Next.js native). Nav redireciona via window.location. */}
           {hashState.route === 'insights'       && <InsightsPage/>}
           {hashState.route === 'users'          && <UsersPage currentUser={user}/>}

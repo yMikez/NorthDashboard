@@ -9,6 +9,7 @@ export type TabId =
   | 'overview'
   | 'funnel'
   | 'insights'
+  | 'custos'
   | 'leaderboard'
   | 'all-affiliates'
   | 'products'
@@ -28,6 +29,7 @@ export const AVAILABLE_TABS: TabSpec[] = [
   { id: 'overview',       label: 'Visão geral',         group: 'Análise' },
   { id: 'funnel',         label: 'Funil',               group: 'Análise' },
   { id: 'insights',       label: 'Insights',            group: 'Análise' },
+  { id: 'custos',         label: 'Custos',              group: 'Análise' },
   { id: 'leaderboard',    label: 'Ranking',             group: 'Afiliados' },
   { id: 'all-affiliates', label: 'Todos os afiliados',  group: 'Afiliados' },
   { id: 'networks',       label: 'Networks',            group: 'Afiliados' },

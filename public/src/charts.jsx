@@ -20,6 +20,11 @@ function LineChart({ buckets, compareBuckets, metric, height = 280, currency = '
     orders: b.approvedOrders,
     aov: b.approvedOrders ? b.gross / b.approvedOrders : 0,
     approvalRate: b.allOrders ? b.approvedOrders / b.allOrders : 0,
+    // Cost lens — passthrough fields. Quando ausentes (Overview), default 0.
+    fulfillment: b.fulfillment ?? 0,
+    cogs: b.cogs ?? 0,
+    platformFees: b.platformFees ?? 0,
+    cpa: b.cpa ?? 0,
   }));
   const compareSeries = compareBuckets ? compareBuckets.map(b => ({
     date: b.date, gross: b.gross, net: b.net,
@@ -27,6 +32,10 @@ function LineChart({ buckets, compareBuckets, metric, height = 280, currency = '
     orders: b.approvedOrders,
     aov: b.approvedOrders ? b.gross / b.approvedOrders : 0,
     approvalRate: b.allOrders ? b.approvedOrders / b.allOrders : 0,
+    fulfillment: b.fulfillment ?? 0,
+    cogs: b.cogs ?? 0,
+    platformFees: b.platformFees ?? 0,
+    cpa: b.cpa ?? 0,
   })) : null;
 
   const vals = series.map(s => s[metric]);
