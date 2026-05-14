@@ -154,20 +154,20 @@ function CustosPage({ filters }) {
             : 'sem vendas'}
         />
         <CostKpi
-          label="COGS · POTES"
+          label="PRODUÇÃO · POTES"
           icon="package"
           value={fmtCurrency(kpis.cogsUsd, cur, 0)}
           hint={kpis.grossUsd > 0
-            ? `${((kpis.cogsUsd / kpis.grossUsd) * 100).toFixed(1)}% do gross`
-            : 'custo de produção'}
+            ? `${((kpis.cogsUsd / kpis.grossUsd) * 100).toFixed(1)}% · custo pago ao fornecedor (incl. refund)`
+            : 'custo pago ao fornecedor por pote'}
         />
         <CostKpi
-          label="FRETE · FULFILLMENT"
+          label="FRETE · ENVIO"
           icon="map"
           value={fmtCurrency(kpis.fulfillmentUsd, cur, 0)}
           hint={kpis.grossUsd > 0
-            ? `${((kpis.fulfillmentUsd / kpis.grossUsd) * 100).toFixed(1)}% do gross`
-            : 'envio dos pedidos'}
+            ? `${((kpis.fulfillmentUsd / kpis.grossUsd) * 100).toFixed(1)}% · transportadora (incl. refund)`
+            : 'envio do pacote ao cliente'}
         />
         <CostKpi
           label="ALLOWANCE RESERVADO"
@@ -205,7 +205,7 @@ function CustosPage({ filters }) {
                 ['gross', 'Bruto'],
                 ['platformFees', 'Plataforma'],
                 ['cpa', 'CPA'],
-                ['cogs', 'COGS'],
+                ['cogs', 'Produção'],
                 ['fulfillment', 'Frete'],
               ].map(([k, l]) => (
                 <button

@@ -3,12 +3,14 @@
    Single source of truth. Import this FIRST.
    ============================================================ */
 
-/* v3.2 Direction A — Clinical Grotesk
-   Display + Body = Space Grotesk (grotesk geométrico, peso 700 nos headlines)
-   Mono           = JetBrains Mono (HUD pesado, eyebrows/CTAs/labels)
-   Italic accent  = Space Grotesk italic, cor cyan, sotaque pontual.
-   Fraunces / Geist removidos — Direction A consolida em uma só família grotesk. */
-@import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap');
+/* v3.3 Direction B — Financial-grade neutral
+   Display + Body = Inter (padrão de fato em dashboards financeiros: Stripe,
+                   Robinhood, Coinbase, Mercury — neutralidade + alta legibilidade
+                   em corpos pequenos + suporte completo a tabular-nums OpenType).
+   Mono           = JetBrains Mono (eyebrows/cells/IDs — alinhamento tabular).
+   Italic accent  = Inter italic em cor cyan, sem text-shadow (clean, sem HUD).
+   Space Grotesk removido — era mais "tech/produto", menos "instituição financeira". */
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap');
 
 /* ============================================================
    ROOT — DARK (default) tokens
@@ -104,13 +106,13 @@
   --r-sm: 4px;  --r-md: 8px;  --r-lg: 12px;
   --r-xl: 20px; --r-full: 999px;
 
-  /* ---------- FONTS (v3.2 Clinical Grotesk) ---------- */
-  --f-display: 'Space Grotesk', system-ui, sans-serif;
-  --f-body:    'Space Grotesk', system-ui, -apple-system, sans-serif;
+  /* ---------- FONTS (v3.3 Financial-grade) ---------- */
+  --f-display: 'Inter', system-ui, -apple-system, sans-serif;
+  --f-body:    'Inter', system-ui, -apple-system, sans-serif;
   --f-mono:    'JetBrains Mono', 'SF Mono', Menlo, monospace;
 
-  /* Variation settings — Space Grotesk só tem wght (mantemos
-     a API --fvs-* pra retrocompat com componentes antigos). */
+  /* Variation settings — Inter expõe wght 100-900. Mantemos a API --fvs-*
+     pra retrocompat com componentes antigos que usam font-variation-settings. */
   --fvs-hero:    'wght' 700;
   --fvs-hero-em: 'wght' 500;
   --fvs-display: 'wght' 700;
@@ -199,6 +201,12 @@ body {
   background: var(--bg);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  /* Tabular numbers alinhados em colunas — crítico em telas financeiras
+     onde dígitos precisam ficar em grid (KPIs, tabelas, deltas %). Inter
+     entrega isso via OpenType `tnum`. Cells .cell-mono já usam JetBrains
+     Mono (todas tabulares por design). */
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: 'tnum' 1, 'cv11' 1;
 }
 
 h1, h2, h3, h4, h5, h6 {
@@ -221,7 +229,6 @@ h1 em, h2 em, h3 em {
   color: var(--glow-cyan);
   font-weight: 500;
   font-variation-settings: var(--fvs-hero-em);
-  text-shadow: 0 0 40px rgba(91, 200, 255, 0.25);
 }
 
 h2 {

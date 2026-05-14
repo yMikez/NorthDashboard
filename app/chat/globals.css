@@ -11,9 +11,8 @@
    light/dark via [data-theme] no <html> — mesmo gatilho usado pela
    SPA legada, então toggle aqui propaga pro resto do app.
 
-   Fontes (Space Grotesk + JetBrains Mono) já vêm pelo
-   colors_and_type.css. NÃO importo Inter aqui — chat usa as fontes
-   do design system.
+   Fontes (Inter + JetBrains Mono) já vêm pelo colors_and_type.css.
+   Não importa font aqui — chat herda as fontes do design system.
    ============================================================ */
 
 @layer base {

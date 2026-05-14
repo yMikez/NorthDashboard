@@ -1890,36 +1890,56 @@ export async function getCostsOverview(
     const cogs = toNumber(o.cogsUsd);
     const fulfill = toNumber(o.fulfillmentUsd);
     const feeRatePct = o.platform.feeRatePct ? toNumber(o.platform.feeRatePct) : 0;
+    const isRefundLike = o.status === 'REFUNDED' || o.status === 'CHARGEBACK';
+    const isApproved = o.status === 'APPROVED';
 
-    if (o.status === 'REFUNDED' || o.status === 'CHARGEBACK') {
+    // COGS + frete: somamos em TODOS os pedidos onde o supplier já produziu
+    // e enviou (APPROVED + REFUNDED + CHARGEBACK). O refund/CB devolve a
+    // venda mas o produto já saiu — o custo continua nosso.
+    // Convenção alinhada com a /overview ("incl. refunds — we ate the cost").
+    const includeCostsForThisOrder = isApproved || isRefundLike;
+
+    if (isRefundLike) {
       refundsGross += Math.abs(gross);
       refundsCount++;
-      continue; // KPIs/daily/byPlatform/byFamily são APPROVED-scoped
     }
-    if (o.status !== 'APPROVED') continue;
+
+    if (!isApproved && !isRefundLike) continue; // PENDING, CANCELED — sem custo nosso
 
     // Platform fee per order: real breakdown if present, else feeRatePct estimate.
+    // Aplicado SÓ em APPROVED — em refund o IPN devolve a fee, então não
+    // adicionamos retroativamente (e gross dele é negativo, viraria desconto).
     const realFee = fees + tax;
-    const feeForOrder = realFee > 0
-      ? realFee
-      : feeRatePct > 0 ? (gross * feeRatePct) / 100 : 0;
+    const feeForOrder = isApproved
+      ? (realFee > 0 ? realFee : feeRatePct > 0 ? (gross * feeRatePct) / 100 : 0)
+      : 0;
 
-    grossApproved += gross;
-    feesApproved += feeForOrder;
-    cpaApproved += cpa;
-    cogsApproved += cogs;
-    fulfillApproved += fulfill;
+    if (isApproved) {
+      grossApproved += gross;
+      feesApproved += feeForOrder;
+      cpaApproved += cpa;
+    }
+    if (includeCostsForThisOrder) {
+      cogsApproved += cogs;
+      fulfillApproved += fulfill;
+    }
 
-    // Daily bucket (UTC day key).
+    // Daily bucket (UTC day key). Inclui APPROVED gross/fees/cpa do dia +
+    // COGS/frete dos refunds do dia. Se quisermos isolar puro-aprovado no
+    // gráfico, basta usar a métrica gross/fees/cpa que ignoram refunds.
     const dayKey = isoDate(o.orderedAt);
     const d = dailyMap.get(dayKey) ?? {
       grossUsd: 0, fulfillmentUsd: 0, cogsUsd: 0, platformFeesUsd: 0, cpaUsd: 0,
     };
-    d.grossUsd += gross;
-    d.fulfillmentUsd += fulfill;
-    d.cogsUsd += cogs;
-    d.platformFeesUsd += feeForOrder;
-    d.cpaUsd += cpa;
+    if (isApproved) {
+      d.grossUsd += gross;
+      d.platformFeesUsd += feeForOrder;
+      d.cpaUsd += cpa;
+    }
+    if (includeCostsForThisOrder) {
+      d.fulfillmentUsd += fulfill;
+      d.cogsUsd += cogs;
+    }
     dailyMap.set(dayKey, d);
 
     // Platform bucket.
@@ -1929,11 +1949,15 @@ export async function getCostsOverview(
       displayName: o.platform.displayName,
       grossUsd: 0, platformFeesUsd: 0, cogsUsd: 0, fulfillmentUsd: 0, cpaUsd: 0,
     };
-    p.grossUsd += gross;
-    p.platformFeesUsd += feeForOrder;
-    p.cogsUsd += cogs;
-    p.fulfillmentUsd += fulfill;
-    p.cpaUsd += cpa;
+    if (isApproved) {
+      p.grossUsd += gross;
+      p.platformFeesUsd += feeForOrder;
+      p.cpaUsd += cpa;
+    }
+    if (includeCostsForThisOrder) {
+      p.cogsUsd += cogs;
+      p.fulfillmentUsd += fulfill;
+    }
     platformMap.set(slug, p);
 
     // Family bucket. '_unknown' for orders whose product isn't classified.
@@ -1941,9 +1965,11 @@ export async function getCostsOverview(
     const f = familyMap.get(fam) ?? {
       family: fam, grossUsd: 0, cogsUsd: 0, fulfillmentUsd: 0,
     };
-    f.grossUsd += gross;
-    f.cogsUsd += cogs;
-    f.fulfillmentUsd += fulfill;
+    if (isApproved) f.grossUsd += gross;
+    if (includeCostsForThisOrder) {
+      f.cogsUsd += cogs;
+      f.fulfillmentUsd += fulfill;
+    }
     familyMap.set(fam, f);
   }
 

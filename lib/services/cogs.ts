@@ -18,6 +18,11 @@ import { db } from '../db';
 // admin endpoint mutates the rows (or process restart).
 interface CostsCache {
   unitCostByFamily: Map<string, number>;
+  // Custo médio entre famílias catalogadas — usado como fallback quando o
+  // produto chega de uma família sem entrada em ProductFamilyCost (ex: SKU
+  // novo num funil ainda não cadastrado). Garante que cogsUsd não vire 0
+  // só porque o admin ainda não preencheu o custo unitário.
+  averageUnitCost: number | null;
   fulfillmentBrackets: Array<{ bottlesMax: number; priceUsd: number }>;
   loadedAt: number;
 }
@@ -30,10 +35,16 @@ async function getCache(): Promise<CostsCache> {
     db.productFamilyCost.findMany(),
     db.fulfillmentRate.findMany({ orderBy: { bottlesMax: 'asc' } }),
   ]);
+  const unitCostByFamily = new Map(
+    families.map((f) => [f.family, Number(f.unitCostUsd)]),
+  );
+  const values = Array.from(unitCostByFamily.values()).filter((v) => v > 0);
+  const averageUnitCost = values.length > 0
+    ? values.reduce((s, v) => s + v, 0) / values.length
+    : null;
   cache = {
-    unitCostByFamily: new Map(
-      families.map((f) => [f.family, Number(f.unitCostUsd)]),
-    ),
+    unitCostByFamily,
+    averageUnitCost,
     fulfillmentBrackets: rates.map((r) => ({
       bottlesMax: r.bottlesMax,
       priceUsd: Number(r.priceUsd),
@@ -63,10 +74,13 @@ export async function calcCogs(
     return { cogsUsd: 0, fulfillmentUsd: 0, totalBottles };
   }
   const c = await getCache();
-  const unitCost = c.unitCostByFamily.get(family);
+  // Fallback pra custo médio quando a família não está catalogada — evita
+  // que o KPI de custo fique subestimado por SKUs novos. Quando o admin
+  // cadastrar o valor real em /costs e rodar "Recalcular orders existentes",
+  // os snapshots são reescritos com o número correto. Se nem média existir
+  // (catálogo totalmente vazio), preserva o comportamento antigo (zero).
+  const unitCost = c.unitCostByFamily.get(family) ?? c.averageUnitCost;
   if (unitCost == null) {
-    // Family not in cost table — log warning at caller. Treat as zero so
-    // we don't block ingestion; admin can fix and rerun backfill.
     return { cogsUsd: 0, fulfillmentUsd: 0, totalBottles };
   }
   const cogsUsd = round2(totalBottles * unitCost);

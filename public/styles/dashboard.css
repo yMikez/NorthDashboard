@@ -78,18 +78,12 @@ body { overflow-x: hidden; }
   font-size: 15px; color: var(--white);
   letter-spacing: -0.025em;
   font-weight: 700;
-  transition: text-shadow 400ms var(--ease-smooth);
 }
 .side-logo .wm em {
   font-style: italic;
   color: var(--glow-cyan);
   font-weight: 500;
-  text-shadow: 0 0 16px rgba(91, 200, 255, 0.30);
 }
-.side-logo:hover .wm em {
-  text-shadow: 0 0 24px rgba(91, 200, 255, 0.55);
-}
-
 .side-group-label {
   font-family: var(--f-mono); font-size: 9px; letter-spacing: 0.22em;
   text-transform: uppercase; color: var(--navy-400);
@@ -332,7 +326,6 @@ body { overflow-x: hidden; }
   font-style: italic;
   color: var(--glow-cyan);
   font-weight: 500;
-  text-shadow: 0 0 30px rgba(91, 200, 255, 0.20);
 }
 
 .page-head-actions { display: flex; gap: 8px; align-items: center; }
@@ -1411,7 +1404,7 @@ body { overflow-x: hidden; }
   filter: drop-shadow(0 6px 18px rgba(91, 200, 255, 0.40));
 }
 
-/* ---------- Polish v3.2: weight bumps p/ Space Grotesk ---------- */
+/* ---------- Polish v3.3: weight calibration for Inter ---------- */
 .top-h1 { font-weight: 600; letter-spacing: -0.025em; }
 .page-head h2 { font-weight: 600; }
 .kpi-value { font-weight: 600; }
