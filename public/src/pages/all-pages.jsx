@@ -454,8 +454,7 @@ function LeaderboardPage({ filters, onOpenAffiliate }) {
                 const apClass = r.approvalRate > 0.7 ? 'val-ok' : r.approvalRate > 0.5 ? 'val-warn' : 'val-bad';
                 const rfClass = r.refundRate < 0.06 ? 'val-ok' : r.refundRate < 0.12 ? 'val-warn' : 'val-bad';
                 const cbClass = r.cbRate < 0.005 ? 'val-ok' : r.cbRate < 0.01 ? 'val-warn' : 'val-bad';
-                const platClass = r.platformSlug === 'digistore24' ? 'plat-d24' : 'plat-cb';
-                const platShort = r.platformSlug === 'digistore24' ? 'D24' : 'CB';
+                const { cls: platClass, short: platShort } = platBadge(r.platformSlug);
                 const displayName = r.nickname || r.externalId;
                 return (
                   <tr key={`${r.platformSlug}:${r.externalId}`} onClick={() => onOpenAffiliate(r.externalId)}>
@@ -565,8 +564,7 @@ function AffiliateDrawer({ affiliateId, filters, onClose }) {
   const aff = data.affiliate;
   const k = data.kpis;
   const displayName = aff.nickname || aff.externalId;
-  const platShort = aff.platformSlug === 'digistore24' ? 'D24' : 'CB';
-  const platClass = aff.platformSlug === 'digistore24' ? 'plat-d24' : 'plat-cb';
+  const { cls: platClass, short: platShort } = platBadge(aff.platformSlug);
   const joinedDaysAgo = Math.floor((Date.now() - new Date(aff.firstSeenAt).getTime()) / 86400000);
 
   // Convert daily series to LineChart buckets shape
@@ -912,8 +910,7 @@ function AllAffiliatesPage({ filters, onOpenAffiliate }) {
               )}
               {rows.map((r) => {
                 const displayName = r.nickname || r.externalId;
-                const platClass = r.platformSlug === 'digistore24' ? 'plat-d24' : 'plat-cb';
-                const platShort = r.platformSlug === 'digistore24' ? 'D24' : 'CB';
+                const { cls: platClass, short: platShort } = platBadge(r.platformSlug);
                 const aov = aovOf(r);
                 const tier = aovTier(aov);
                 return (
@@ -1206,8 +1203,7 @@ function FamilyDrillDown({ family, familyAgg, productsState, cur, onBack, onPick
 }
 
 function VariantRow({ variant: v, cur, accent, onClick }) {
-  const platShort = v.platformSlug === 'digistore24' ? 'D24' : 'CB';
-  const platClass = v.platformSlug === 'digistore24' ? 'plat-d24' : 'plat-cb';
+  const { cls: platClass, short: platShort } = platBadge(v.platformSlug);
   // FE absorbs the CPA for the whole session; standalone profit understates
   // its real economics. When we have enough sessions to be statistically
   // honest (≥3), show the attributed view (full funnel credited to FE SKU).
@@ -1285,7 +1281,7 @@ function VariantDetailDrawer({ variant: v, cur, onClose }) {
       <div className="drawer" style={{ width: 480 }}>
         <div className="drawer-head">
           <div>
-            <span className="eyebrow">VARIANTE · {v.platformSlug === 'digistore24' ? 'DIGISTORE24' : 'CLICKBANK'}</span>
+            <span className="eyebrow">VARIANTE · {platBadge(v.platformSlug).upper}</span>
             <h3 style={{ margin: '4px 0', fontSize: 18, color: 'var(--fg1)' }}>{v.name}</h3>
             <div style={{ fontFamily: 'var(--f-mono)', fontSize: 11, color: 'var(--fg4)' }}>
               {v.externalId} {v.vendorAccount && `· ${v.vendorAccount}`}
@@ -1484,8 +1480,7 @@ function _LegacyProductsPage({ filters }) {
             const margin = p.net - p.cpa;
             const marginPct = p.revenue ? margin / p.revenue : 0;
             const aov = p.orders ? p.revenue / p.orders : 0;
-            const platClass = p.platformSlug === 'digistore24' ? 'plat-d24' : 'plat-cb';
-            const platShort = p.platformSlug === 'digistore24' ? 'D24' : 'CB';
+            const { cls: platClass, short: platShort } = platBadge(p.platformSlug);
             const apColor = p.approvalRate > 0.7 ? 'var(--success)' : p.approvalRate > 0.5 ? 'var(--warning)' : 'var(--danger)';
             return (
               <div key={`${p.platformSlug}:${p.externalId}`} className="prod-card">
@@ -1553,8 +1548,7 @@ function _LegacyProductsPage({ filters }) {
               <tbody>
                 {products.map((p) => {
                   const meta = TYPE_META[p.productType] || { label: p.productType, accent: '#5BC8FF' };
-                  const platClass = p.platformSlug === 'digistore24' ? 'plat-d24' : 'plat-cb';
-                  const platShort = p.platformSlug === 'digistore24' ? 'D24' : 'CB';
+                  const { cls: platClass, short: platShort } = platBadge(p.platformSlug);
                   const apColor = p.approvalRate > 0.7 ? 'var(--success)' : p.approvalRate > 0.5 ? 'var(--warning)' : 'var(--danger)';
                   const margin = p.net - p.cpa;
                   return (
@@ -1722,8 +1716,7 @@ function TransactionsPage({ filters }) {
                 <tr><td colSpan={12} style={{ textAlign: 'center', padding: 24, opacity: 0.6 }}>Nenhuma transação no período</td></tr>
               )}
               {orders.map((o) => {
-                const platClass = o.platformSlug === 'digistore24' ? 'plat-d24' : 'plat-cb';
-                const platShort = o.platformSlug === 'digistore24' ? 'D24' : 'CB';
+                const { cls: platClass, short: platShort } = platBadge(o.platformSlug);
                 const statusLc = o.status.toLowerCase();
                 return (
                   <tr key={`${o.platformSlug}:${o.externalId}`}
@@ -1807,8 +1800,7 @@ function TransactionDrawer({ externalId, platformSlug, cur, onClose, onPickOrder
   }
 
   const { order: o, product, affiliate, customer, session, isCrossSell } = state.data;
-  const platShort = o.platformSlug === 'digistore24' ? 'D24' : 'CB';
-  const platClass = o.platformSlug === 'digistore24' ? 'plat-d24' : 'plat-cb';
+  const { short: platShort, cls: platClass } = platBadge(o.platformSlug);
   const typeLabel = txTypeLabel(o.productType, o.funnelStep);
   const typeColor = txTypeColor(o.productType);
   const statusLc = o.status.toLowerCase();
@@ -2129,9 +2121,8 @@ function IntegrationsPage({ filters }) {
   const cur = filters.currency || 'USD';
   const platforms = state.data?.platforms || [];
 
-  const PLATFORM_SHORT = { digistore24: 'D24', clickbank: 'CB' };
+  const PLATFORM_SHORT = { digistore24: 'D24', clickbank: 'CB', buygoods: 'BG' };
   const comingSoon = [
-    { slug: 'buygoods', displayName: 'BuyGoods', short: 'BG', desc: 'Connector pendente · credenciais não configuradas' },
     { slug: 'maxweb', displayName: 'MaxWeb', short: 'MW', desc: 'Connector pendente · credenciais não configuradas' },
     { slug: 'stickyio', displayName: 'Sticky.io', short: 'SK', desc: 'Connector em desenvolvimento' },
   ].filter((p) => !platforms.some((x) => x.slug === p.slug));
@@ -4604,7 +4595,7 @@ function NetAffiliates({ affiliates, onDetach, onAttach }) {
                     <div style={{ color: 'var(--fg1)', fontSize: 13 }}>{a.nickname || a.externalId}</div>
                     <div style={{ fontFamily: 'var(--f-mono)', fontSize: 10, color: 'var(--fg5)' }}>{a.externalId}</div>
                   </td>
-                  <td><span className={`plat plat-${a.platformSlug === 'digistore24' ? 'd24' : 'cb'}`}>{a.platformSlug === 'digistore24' ? 'D24' : 'CB'}</span></td>
+                  <td><span className={`plat ${platBadge(a.platformSlug).cls}`}>{platBadge(a.platformSlug).short}</span></td>
                   <td className="num cell-mono">{fmtInt(a.ordersCount)}</td>
                   <td style={{ fontFamily: 'var(--f-mono)', fontSize: 11, color: 'var(--fg4)' }}>{fmtRelativeShort(a.lastOrderAt)}</td>
                   <td style={{ fontFamily: 'var(--f-mono)', fontSize: 11, color: 'var(--fg4)' }}>{fmtDateShort(a.attachedAt)}</td>
@@ -5004,7 +4995,7 @@ function AttachAffiliateModal({ networkId, onClose, onSaved }) {
                       <div style={{ flex: 1 }}>
                         <div style={{ color: 'var(--fg1)', fontSize: 13 }}>{a.nickname || a.externalId}</div>
                         <div style={{ fontFamily: 'var(--f-mono)', fontSize: 10, color: 'var(--fg5)' }}>
-                          {a.platformSlug === 'digistore24' ? 'D24' : 'CB'} · {a.externalId} · {fmtInt(a.ordersCount)} pedidos
+                          {platBadge(a.platformSlug).short} · {a.externalId} · {fmtInt(a.ordersCount)} pedidos
                         </div>
                       </div>
                     </label>
@@ -5276,7 +5267,7 @@ function PartnerOverview({ data }) {
                       <div style={{ color: 'var(--fg1)', fontSize: 13 }}>{a.nickname || a.externalId}</div>
                       <div style={{ fontFamily: 'var(--f-mono)', fontSize: 10, color: 'var(--fg5)' }}>{a.externalId}</div>
                     </td>
-                    <td><span className={`plat plat-${a.platformSlug === 'digistore24' ? 'd24' : 'cb'}`}>{a.platformSlug === 'digistore24' ? 'D24' : 'CB'}</span></td>
+                    <td><span className={`plat ${platBadge(a.platformSlug).cls}`}>{platBadge(a.platformSlug).short}</span></td>
                     <td style={{ fontFamily: 'var(--f-mono)', fontSize: 11, color: 'var(--fg4)' }}>{fmtRelativeShort(a.lastOrderAt)}</td>
                     <td style={{ fontFamily: 'var(--f-mono)', fontSize: 11, color: 'var(--fg4)' }}>{fmtDateShort(a.attachedAt)}</td>
                   </tr>

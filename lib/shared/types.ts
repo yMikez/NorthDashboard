@@ -1,4 +1,4 @@
-export type PlatformSlug = 'clickbank' | 'digistore24';
+export type PlatformSlug = 'clickbank' | 'digistore24' | 'buygoods';
 
 export type NormalizedProductType = 'FRONTEND' | 'UPSELL' | 'DOWNSELL' | 'BUMP';
 
@@ -72,8 +72,10 @@ export interface NormalizedOrder {
 export type IngestSource =
   | 'n8n-clickbank'
   | 'n8n-digistore24'
+  | 'n8n-buygoods'
   | 'polling-clickbank'
-  | 'polling-digistore24';
+  | 'polling-digistore24'
+  | 'polling-buygoods';
 
 export interface IngestResult {
   externalId: string;

@@ -39,6 +39,18 @@ function fmtDateTime(d) {
 function initials(name) {
   return name.split(/\s+/).map(w => w[0]).slice(0, 2).join('').toUpperCase();
 }
+
+// Visual badge por plataforma — usado em tabelas (transações, afiliados,
+// produtos, drawers). Mantém short labels + CSS classes centralizados pra
+// quando uma nova plataforma chegar bastar editar aqui.
+const PLATFORM_BADGE = {
+  clickbank:    { short: 'CB',  cls: 'plat-cb',  upper: 'CLICKBANK' },
+  digistore24:  { short: 'D24', cls: 'plat-d24', upper: 'DIGISTORE24' },
+  buygoods:     { short: 'BG',  cls: 'plat-bg',  upper: 'BUYGOODS' },
+};
+function platBadge(slug) {
+  return PLATFORM_BADGE[slug] || { short: (slug || '??').slice(0,3).toUpperCase(), cls: 'plat-cb', upper: (slug || '').toUpperCase() };
+}
 function avatarColor(id) {
   // deterministic hue from id
   let h = 0;

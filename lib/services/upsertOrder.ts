@@ -13,12 +13,21 @@ export interface UpsertOrderResult {
   orderId: string;
 }
 
+// Display names oficiais por slug. Quando uma plataforma nova é cadastrada
+// automaticamente pelo primeiro ingest, usa esse map. Caso o slug não esteja
+// aqui, cai pro próprio slug — admin pode renomear depois no painel.
+const PLATFORM_DISPLAY_NAMES: Record<string, string> = {
+  clickbank: 'ClickBank',
+  digistore24: 'Digistore24',
+  buygoods: 'BuyGoods',
+};
+
 export async function upsertOrder(normalized: NormalizedOrder): Promise<UpsertOrderResult> {
   const platform = await db.platform.upsert({
     where: { slug: normalized.platformSlug },
     create: {
       slug: normalized.platformSlug,
-      displayName: normalized.platformSlug === 'clickbank' ? 'ClickBank' : 'Digistore24',
+      displayName: PLATFORM_DISPLAY_NAMES[normalized.platformSlug] ?? normalized.platformSlug,
     },
     update: {},
     select: { id: true },
