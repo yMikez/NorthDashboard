@@ -783,22 +783,21 @@ function AllAffiliatesPage({ filters, onOpenAffiliate }) {
   const totalOrders = all.reduce((s, r) => s + (r.orders || 0), 0);
   const affsWithOrders = all.filter((r) => (r.orders || 0) > 0);
 
-  // CPA médio por venda = total real de CPA pago ÷ vendas FE aprovadas.
+  // CPA médio = média simples do CPA fixo dos afiliados com CPA válido.
+  // Válido = entre $200 e $290 (faixa de contrato real, filtra outliers
+  // tipo cpa=0 organic e valores estranhos).
   //
-  // Em direct response, CPA é pago no FE (aquisição de buyer). Upsells/
-  // downsells/bumps em geral não pagam comissão. Dividir por TODAS as
-  // orders aprovadas (FE + UP + DW + bumps) infla o denominador artif.
-  // e baixa o número. Dividir só por FE aprovado = "CPA por buyer real",
-  // que é o que importa pra entender custo de aquisição.
-  //
-  // Numerador `totalCpa` é cpaPaidUsd somado em TODOS os status (refund
-  // tem CPA negativo via clawback do IPN) — reflete cash real pago a
-  // afiliados no período.
-  const totalFeApproved = all.reduce((s, r) => s + (r.feApprovedCount || 0), 0);
-  const cpaPerSale = totalFeApproved > 0 ? totalCpa / totalFeApproved : 0;
-  // Subtítulo informa quantos afiliados sem CPA fixo cadastrado contribuem
-  // pra média ficar menor que o CPA dos com contrato.
-  const affsWithFeCpa = affsWithOrders.filter((r) => (r.cpaPerFe || 0) > 0);
+  // Fórmula: sum(cpaPerFe) / count, onde cada afiliado entra uma vez,
+  // independente de quantas vendas teve.
+  const VALID_CPA_MIN = 200;
+  const VALID_CPA_MAX = 290;
+  const affsWithValidCpa = all.filter((r) => {
+    const c = r.cpaPerFe || 0;
+    return c >= VALID_CPA_MIN && c <= VALID_CPA_MAX;
+  });
+  const cpaAvg = affsWithValidCpa.length > 0
+    ? affsWithValidCpa.reduce((s, r) => s + r.cpaPerFe, 0) / affsWithValidCpa.length
+    : 0;
 
   // AOV = faturamento próprio do afiliado / pedidos FE dele.
   //
@@ -866,13 +865,10 @@ function AllAffiliatesPage({ filters, onOpenAffiliate }) {
           <div className="s">total pra {affsWithOrders.length} {affsWithOrders.length === 1 ? 'afiliado ativo' : 'afiliados ativos'}</div>
         </div>
         <div className="mini-kpi">
-          <div className="l">CPA médio por venda</div>
-          <div className="v">{fmtCurrency(cpaPerSale, cur, 0)}</div>
+          <div className="l">CPA médio dos afiliados</div>
+          <div className="v">{fmtCurrency(cpaAvg, cur, 0)}</div>
           <div className="s">
-            CPA pago real ÷ {fmtInt(totalFeApproved)} {totalFeApproved === 1 ? 'venda FE' : 'vendas FE aprovadas'} · upsells não pagam CPA
-            {affsWithFeCpa.length !== affsWithOrders.length && (
-              <> · inclui vendas sem CPA contratado</>
-            )}
+            média de {affsWithValidCpa.length} {affsWithValidCpa.length === 1 ? 'afiliado' : 'afiliados'} com CPA entre ${VALID_CPA_MIN}–${VALID_CPA_MAX}
           </div>
         </div>
       </div>
