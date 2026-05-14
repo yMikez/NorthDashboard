@@ -10,7 +10,15 @@ import { logger } from '../logger';
 
 export interface UpsertOrderResult {
   created: boolean;
+  // Prisma cuid interno (Order.id). Útil pra debug em logs/admin endpoints.
   orderId: string;
+  // ID da transação original da plataforma (Order.externalId). É o que
+  // o vendor reconhece — order_id da BG, transaction_id da Digistore,
+  // receipt da CB. Devolvido na response do webhook pra confirmação
+  // round-trip.
+  externalId: string;
+  // Slug da plataforma — pra quem consome a response saber a origem.
+  platformSlug: string;
 }
 
 // Display names oficiais por slug. Quando uma plataforma nova é cadastrada
@@ -216,7 +224,12 @@ export async function upsertOrder(normalized: NormalizedOrder): Promise<UpsertOr
     // (refund/chargeback negativo); originalGrossUsd permanece o valor da
     // venda inicial pra reconciliação CB-style "Date of Event".
     await db.order.update({ where: { id: existing.id }, data: orderData });
-    result = { created: false, orderId: existing.id };
+    result = {
+      created: false,
+      orderId: existing.id,
+      externalId: normalized.externalId,
+      platformSlug: normalized.platformSlug,
+    };
   } else {
     // CREATE: snapshot do grossAmountUsd como originalGrossUsd. Pra orders
     // que nascem APPROVED os dois ficam iguais (positivo). Pra orders que
@@ -229,7 +242,12 @@ export async function upsertOrder(normalized: NormalizedOrder): Promise<UpsertOr
       },
       select: { id: true },
     });
-    result = { created: true, orderId: created.id };
+    result = {
+      created: true,
+      orderId: created.id,
+      externalId: normalized.externalId,
+      platformSlug: normalized.platformSlug,
+    };
   }
 
   // Session shipping is paid once per package, not per item. After saving
