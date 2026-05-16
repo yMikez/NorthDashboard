@@ -100,6 +100,17 @@
 }
 
 @layer components {
+  /* Radix ScrollArea fix: o Viewport interno embrulha os filhos num
+     <div style="display:table; min-width:100%">. `display:table`
+     dimensiona pelo conteúdo, então `truncate`/`flex min-w-0` dentro
+     NÃO funcionam — títulos longos de conversa cresciam além da sidebar
+     e empurravam os botões (lixeira/⋯) pra fora da tela. Forçar block
+     faz o filho herdar a largura do viewport e o truncate volta a cortar.
+     Não quebra o scroll (fix recomendado oficialmente pelo shadcn). */
+  [data-app-scope='chat'] [data-radix-scroll-area-viewport] > div {
+    display: block !important;
+  }
+
   /* Scrollbar discreto pro modo dark. */
   [data-app-scope='chat'] *::-webkit-scrollbar {
     width: 8px;
