@@ -272,45 +272,64 @@ function ConversationItem({
           {conv.messageCount} msg · {relativeTime(conv.updatedAt)}
         </div>
       </div>
-      <DropdownMenu>
-        <DropdownMenuTrigger asChild>
-          <Button
-            variant="ghost"
-            size="icon-sm"
-            onClick={(e) => e.stopPropagation()}
-            className="shrink-0 text-muted-foreground hover:text-foreground hover:bg-accent"
-            aria-label="Opções (renomear, fixar, exportar, deletar)"
-          >
-            <MoreHorizontal className="w-4 h-4" />
-          </Button>
-        </DropdownMenuTrigger>
-        <DropdownMenuContent align="end" onClick={(e) => e.stopPropagation()}>
-          <DropdownMenuItem onSelect={() => onStartRename()}>
-            <Pencil className="w-3.5 h-3.5" /> Renomear
-          </DropdownMenuItem>
-          <DropdownMenuItem onSelect={() => onTogglePin()}>
-            {conv.pinned ? (
-              <>
-                <PinOff className="w-3.5 h-3.5" /> Desafixar
-              </>
-            ) : (
-              <>
-                <Pin className="w-3.5 h-3.5" /> Fixar
-              </>
-            )}
-          </DropdownMenuItem>
-          <DropdownMenuItem onSelect={() => onExport()}>
-            <Download className="w-3.5 h-3.5" /> Exportar
-          </DropdownMenuItem>
-          <DropdownMenuSeparator />
-          <DropdownMenuItem
-            onSelect={() => onDelete()}
-            className="text-destructive focus:text-destructive"
-          >
-            <Trash2 className="w-3.5 h-3.5" /> Deletar
-          </DropdownMenuItem>
-        </DropdownMenuContent>
-      </DropdownMenu>
+      <div className="flex items-center gap-0.5 shrink-0">
+        {/* Lixeira SEMPRE visível — delete é a ação mais pedida e estava
+            escondida dentro do dropdown. Click direto + confirm no handler. */}
+        <Button
+          variant="ghost"
+          size="icon-sm"
+          onClick={(e) => {
+            e.stopPropagation();
+            onDelete();
+          }}
+          className="shrink-0 text-muted-foreground hover:text-destructive hover:bg-destructive/10"
+          aria-label={`Deletar conversa "${conv.title || 'sem título'}"`}
+          title="Deletar conversa"
+        >
+          <Trash2 className="w-4 h-4" />
+        </Button>
+        {/* Demais ações (renomear, fixar, exportar) no menu. */}
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button
+              variant="ghost"
+              size="icon-sm"
+              onClick={(e) => e.stopPropagation()}
+              className="shrink-0 text-muted-foreground hover:text-foreground hover:bg-accent"
+              aria-label="Mais opções (renomear, fixar, exportar)"
+              title="Mais opções"
+            >
+              <MoreHorizontal className="w-4 h-4" />
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end" onClick={(e) => e.stopPropagation()}>
+            <DropdownMenuItem onSelect={() => onStartRename()}>
+              <Pencil className="w-3.5 h-3.5" /> Renomear
+            </DropdownMenuItem>
+            <DropdownMenuItem onSelect={() => onTogglePin()}>
+              {conv.pinned ? (
+                <>
+                  <PinOff className="w-3.5 h-3.5" /> Desafixar
+                </>
+              ) : (
+                <>
+                  <Pin className="w-3.5 h-3.5" /> Fixar
+                </>
+              )}
+            </DropdownMenuItem>
+            <DropdownMenuItem onSelect={() => onExport()}>
+              <Download className="w-3.5 h-3.5" /> Exportar
+            </DropdownMenuItem>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem
+              onSelect={() => onDelete()}
+              className="text-destructive focus:text-destructive"
+            >
+              <Trash2 className="w-3.5 h-3.5" /> Deletar
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
+      </div>
     </div>
   );
 }
