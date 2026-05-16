@@ -3259,42 +3259,43 @@ function CostsPage({ filters }) {
   const [state, setCostState] = useState({ status: 'loading', data: null, error: null });
   const [draftFamilies, setDraftFamilies] = useState({}); // { [family]: number }
   const [draftRates, setDraftRates] = useState({});       // { [bottlesMax]: number }
-  const [fulfillmentKpi, setFulfillmentKpi] = useState({ status: 'loading', value: 0, orders: 0, daily: [] });
+  const [fulfillmentKpi, setFulfillmentKpi] = useState({ status: 'loading', value: 0, gross: 0, daily: [] });
   const cur = filters?.currency || 'USD';
 
-  // Fulfillment total + série diária (do overview). `daily[].fulfillment`
-  // já vem snapshotado por pedido (frete real no momento da ingestão),
-  // então o gráfico mostra o gasto exato com envios dia a dia.
+  // Fulfillment total + série diária via /api/metrics/costs-overview —
+  // query DIRETA no Order (soma Order.fulfillmentUsd snapshotado por
+  // pedido). Mesma fonte do dashboard /custos, então os números batem.
+  // Antes usava /overview (materialized view) que podia estar defasada
+  // → mostrava $0 enquanto o dado real existia.
   useEffect(() => {
     if (!filters) return;
     let cancelled = false;
     setFulfillmentKpi((s) => ({ ...s, status: 'loading' }));
-    window.NSApi.fetchOverview(filters)
+    window.NSApi.fetchCostsOverview(filters)
       .then((data) => {
         if (cancelled) return;
         setFulfillmentKpi({
           status: 'ready',
-          value: data.kpis?.fulfillment ?? 0,
-          orders: data.kpis?.approvedOrders ?? data.kpis?.orders ?? 0,
+          value: data.kpis?.fulfillmentUsd ?? 0,
+          gross: data.kpis?.grossUsd ?? 0,
           daily: Array.isArray(data.daily) ? data.daily : [],
         });
       })
-      .catch(() => { if (!cancelled) setFulfillmentKpi({ status: 'error', value: 0, orders: 0, daily: [] }); });
+      .catch(() => { if (!cancelled) setFulfillmentKpi({ status: 'error', value: 0, gross: 0, daily: [] }); });
     return () => { cancelled = true; };
   }, [filters?.dateRange.start.getTime(), filters?.dateRange.end.getTime(),
       filters && Array.from(filters.platforms).join(','),
       filters && Array.from(filters.countries).join(','),
       filters && Array.from(filters.families).join(',')]);
 
-  // Buckets pro LineChart: usa o campo `fulfillment` (passthrough já
-  // suportado em charts.jsx). net/approvedOrders default seguros.
+  // Buckets pro LineChart: costs-overview retorna daily[].fulfillmentUsd.
   const fulfillmentBuckets = (fulfillmentKpi.daily || []).map((b) => ({
     date: new Date(b.date),
-    fulfillment: b.fulfillment ?? 0,
-    gross: b.gross ?? 0,
-    net: b.net ?? 0,
-    approvedOrders: b.approvedOrders ?? 0,
-    allOrders: b.allOrders ?? 0,
+    fulfillment: b.fulfillmentUsd ?? 0,
+    gross: b.grossUsd ?? 0,
+    net: b.grossUsd ?? 0,
+    approvedOrders: 0,
+    allOrders: 0,
   }));
   const fulfillmentDays = fulfillmentBuckets.length;
   const fulfillmentAvgDay = fulfillmentDays > 0
@@ -3504,9 +3505,9 @@ function CostsPage({ filters }) {
               {fulfillmentKpi.status === 'loading' ? '…' : fmtCurrency(fulfillmentKpi.value, cur, 0)}
             </div>
             <div className="s">
-              {fulfillmentKpi.orders > 0
-                ? `~${fmtCurrency(fulfillmentKpi.value / fulfillmentKpi.orders, cur, 2)}/pedido`
-                : 'sem pedidos'}
+              {fulfillmentKpi.gross > 0
+                ? `${((fulfillmentKpi.value / fulfillmentKpi.gross) * 100).toFixed(1)}% do gross`
+                : (fulfillmentKpi.status === 'ready' ? 'sem vendas no período' : '—')}
             </div>
           </div>
           <div className="mini-kpi">

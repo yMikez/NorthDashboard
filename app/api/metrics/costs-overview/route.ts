@@ -1,13 +1,15 @@
 import { NextResponse } from 'next/server';
 import { getCostsOverview } from '@/lib/services/metrics';
-import { requireTab } from '@/lib/auth/guard';
+import { requireAnyTab } from '@/lib/auth/guard';
 import { logger } from '@/lib/logger';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
 export async function GET(req: Request) {
-  const auth = await requireTab('custos');
+  // 'custos' (dashboard agregado) ou 'costs' (aba Fulfillment) — ambas
+  // consomem esse endpoint pra ter número de frete consistente.
+  const auth = await requireAnyTab(['custos', 'costs']);
   if (!auth.ok) return auth.response;
   const { searchParams } = new URL(req.url);
 
