@@ -3259,10 +3259,12 @@ function CostsPage({ filters }) {
   const [state, setCostState] = useState({ status: 'loading', data: null, error: null });
   const [draftFamilies, setDraftFamilies] = useState({}); // { [family]: number }
   const [draftRates, setDraftRates] = useState({});       // { [bottlesMax]: number }
-  const [fulfillmentKpi, setFulfillmentKpi] = useState({ status: 'loading', value: 0, orders: 0 });
+  const [fulfillmentKpi, setFulfillmentKpi] = useState({ status: 'loading', value: 0, orders: 0, daily: [] });
   const cur = filters?.currency || 'USD';
 
-  // Fulfillment total no período (do overview KPIs).
+  // Fulfillment total + série diária (do overview). `daily[].fulfillment`
+  // já vem snapshotado por pedido (frete real no momento da ingestão),
+  // então o gráfico mostra o gasto exato com envios dia a dia.
   useEffect(() => {
     if (!filters) return;
     let cancelled = false;
@@ -3274,14 +3276,34 @@ function CostsPage({ filters }) {
           status: 'ready',
           value: data.kpis?.fulfillment ?? 0,
           orders: data.kpis?.approvedOrders ?? data.kpis?.orders ?? 0,
+          daily: Array.isArray(data.daily) ? data.daily : [],
         });
       })
-      .catch(() => { if (!cancelled) setFulfillmentKpi({ status: 'error', value: 0, orders: 0 }); });
+      .catch(() => { if (!cancelled) setFulfillmentKpi({ status: 'error', value: 0, orders: 0, daily: [] }); });
     return () => { cancelled = true; };
   }, [filters?.dateRange.start.getTime(), filters?.dateRange.end.getTime(),
       filters && Array.from(filters.platforms).join(','),
       filters && Array.from(filters.countries).join(','),
       filters && Array.from(filters.families).join(',')]);
+
+  // Buckets pro LineChart: usa o campo `fulfillment` (passthrough já
+  // suportado em charts.jsx). net/approvedOrders default seguros.
+  const fulfillmentBuckets = (fulfillmentKpi.daily || []).map((b) => ({
+    date: new Date(b.date),
+    fulfillment: b.fulfillment ?? 0,
+    gross: b.gross ?? 0,
+    net: b.net ?? 0,
+    approvedOrders: b.approvedOrders ?? 0,
+    allOrders: b.allOrders ?? 0,
+  }));
+  const fulfillmentDays = fulfillmentBuckets.length;
+  const fulfillmentAvgDay = fulfillmentDays > 0
+    ? fulfillmentKpi.value / fulfillmentDays
+    : 0;
+  const fulfillmentPeakDay = fulfillmentBuckets.reduce(
+    (mx, b) => (b.fulfillment > mx.fulfillment ? b : mx),
+    { fulfillment: 0, date: null },
+  );
 
   // Estimativa pro próximo invoice da transportadora (toda terça-feira).
   // Calcula quantos dias até a próxima terça e usa a média diária do
@@ -3404,6 +3426,39 @@ function CostsPage({ filters }) {
     }
   }
 
+  // Classifica produtos não-reconhecidos via IA. 2 passos: dry-run mostra
+  // as propostas; confirmar aplica + recalcula COGS de todas as orders.
+  async function classifyAi() {
+    if (!token) { setSaveState({ status: 'error', message: 'Token necessário pra usar a IA' }); return; }
+    setSaveState({ status: 'saving', message: 'IA lendo os nomes dos produtos…' });
+    try {
+      const dry = await window.NSApi.adminClassifyAi(token, { dryRun: true });
+      if (!dry.classified) {
+        setSaveState({ status: 'saved', message: dry.message || 'Nenhum produto pendente.' });
+        return;
+      }
+      const sample = dry.proposals.slice(0, 8)
+        .map((p) => `• ${p.name} → ${p.family || '?'} / ${p.bottles ?? '?'} potes (${p.confidence})`)
+        .join('\n');
+      const ok = confirm(
+        `A IA classificou ${dry.classified} de ${dry.pending} produtos pendentes.\n\n`
+        + `${sample}${dry.proposals.length > 8 ? `\n… +${dry.proposals.length - 8}` : ''}\n\n`
+        + 'Aplicar e recalcular COGS+frete em todas as orders afetadas?',
+      );
+      if (!ok) { setSaveState({ status: 'idle', message: 'Cancelado — nada gravado.' }); return; }
+      setSaveState({ status: 'saving', message: 'Aplicando + recalculando snapshots…' });
+      const res = await window.NSApi.adminClassifyAi(token, { dryRun: false });
+      setSaveState({
+        status: 'saved',
+        message: `${res.applied} produtos classificados via IA`
+          + (res.cogsStats ? ` · ${res.cogsStats.cogsUpdated} COGS atualizados, ${res.cogsStats.sessionsRebalanced} sessões rebalanceadas` : ''),
+      });
+      reload();
+    } catch (err) {
+      setSaveState({ status: 'error', message: err.message });
+    }
+  }
+
   if (state.status === 'loading' && !state.data) {
     return <div className="page-in"><div className="panel">Carregando custos...</div></div>;
   }
@@ -3454,6 +3509,26 @@ function CostsPage({ filters }) {
                 : 'sem pedidos'}
             </div>
           </div>
+          <div className="mini-kpi">
+            <div className="l">Média por dia</div>
+            <div className="v">
+              {fulfillmentKpi.status === 'loading' ? '…' : fmtCurrency(fulfillmentAvgDay, cur, 0)}
+            </div>
+            <div className="s">
+              {fulfillmentDays > 0 ? `${fulfillmentDays} ${fulfillmentDays === 1 ? 'dia' : 'dias'} no intervalo` : '—'}
+            </div>
+          </div>
+          <div className="mini-kpi">
+            <div className="l">Pico diário</div>
+            <div className="v">
+              {fulfillmentKpi.status === 'loading' ? '…' : fmtCurrency(fulfillmentPeakDay.fulfillment, cur, 0)}
+            </div>
+            <div className="s">
+              {fulfillmentPeakDay.date
+                ? fmtDateShort(fulfillmentPeakDay.date)
+                : 'sem dados'}
+            </div>
+          </div>
           {tueEst && (
             <div className="mini-kpi" style={{ borderColor: 'rgba(255,180,0,0.3)' }}>
               <div className="l">Estimativa pra próxima fatura</div>
@@ -3463,6 +3538,28 @@ function CostsPage({ filters }) {
               </div>
             </div>
           )}
+        </div>
+      )}
+
+      {/* Série diária de frete — gasto exato por dia (snapshot por pedido) */}
+      {filters && fulfillmentBuckets.length > 0 && (
+        <div className="panel" style={{ marginBottom: 14 }}>
+          <div className="panel-head">
+            <div className="panel-title">
+              <span className="panel-eyebrow">FRETE · GASTO DIÁRIO</span>
+              <div className="panel-metric">
+                {fmtCurrency(fulfillmentKpi.value, cur, 0)}
+                <span className="panel-sub" style={{ marginLeft: 8 }}>
+                  total no intervalo · {fmtDateShort(filters.dateRange.start)} → {fmtDateShort(filters.dateRange.end)}
+                </span>
+              </div>
+            </div>
+            <div className="panel-legend">
+              <span className="legend-dot cyan"><span/>USD / dia</span>
+            </div>
+          </div>
+          <LineChart buckets={fulfillmentBuckets} compareBuckets={null}
+            metric="fulfillment" currency={cur} height={220}/>
         </div>
       )}
 
@@ -3612,6 +3709,67 @@ function CostsPage({ filters }) {
             </table>
           </div>
         </div>
+      </div>
+
+      {/* Cobertura de classificação — produtos sem família/potes geram
+          COGS+frete = 0. Mostra o gap e oferece o fallback de IA. */}
+      <div className="panel" style={{ marginTop: 14 }}>
+        <div className="panel-head">
+          <div className="panel-title">
+            <span className="panel-eyebrow">COBERTURA DE CLASSIFICAÇÃO</span>
+            <div className="panel-sub">
+              Todo pedido registra nº de potes na ingestão (regex no nome do produto).
+              Produtos abaixo NÃO foram reconhecidos → COGS + frete = $0 neles.
+              A IA lê o nome e preenche família/potes.
+            </div>
+          </div>
+          <div className="page-head-actions">
+            <button
+              className="btn btn-primary"
+              disabled={!token || saveState.status === 'saving' || (state.data?.unclassified?.length ?? 0) === 0}
+              onClick={classifyAi}
+              title={!token ? 'Token de admin necessário' : 'Claude lê os nomes e classifica'}
+            >
+              <Icon name="zap" size={12}/> Identificar com IA
+            </button>
+          </div>
+        </div>
+        {(state.data?.unclassified?.length ?? 0) === 0 ? (
+          <div style={{ fontSize: 12, color: 'var(--success)', padding: '6px 2px' }}>
+            ✓ Todos os produtos com pedidos estão classificados (potes + família).
+          </div>
+        ) : (
+          <div className="tbl-wrap" style={{ maxHeight: 280, overflowY: 'auto' }}>
+            <table className="tbl">
+              <thead>
+                <tr>
+                  <th>Produto (nome)</th>
+                  <th>SKU</th>
+                  <th className="num">Família</th>
+                  <th className="num">Potes</th>
+                  <th className="num">Pedidos afetados</th>
+                </tr>
+              </thead>
+              <tbody>
+                {state.data.unclassified.map((p) => (
+                  <tr key={p.externalId}>
+                    <td style={{ maxWidth: 360, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      {p.name}
+                    </td>
+                    <td className="cell-mono" style={{ color: 'var(--fg4)', fontSize: 11 }}>{p.externalId}</td>
+                    <td className="num cell-mono" style={{ color: p.family ? 'var(--fg2)' : 'var(--danger)' }}>
+                      {p.family || '— null —'}
+                    </td>
+                    <td className="num cell-mono" style={{ color: p.bottles != null ? 'var(--fg2)' : 'var(--danger)' }}>
+                      {p.bottles != null ? p.bottles : '— null —'}
+                    </td>
+                    <td className="num cell-mono">{fmtInt(p.orders)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
       </div>
 
       {/* Recompute */}

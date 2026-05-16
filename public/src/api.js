@@ -326,6 +326,25 @@ async function adminBackfillCogs(token) {
   return res.json();
 }
 
+// Classifica produtos não-reconhecidos pelo regex via IA (Claude).
+// dryRun=true retorna propostas sem gravar; false aplica + recalcula COGS.
+async function adminClassifyAi(token, { dryRun = false } = {}) {
+  const res = await fetch('/api/admin/classify-ai', {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${token}`,
+      'Content-Type': 'application/json',
+      Accept: 'application/json',
+    },
+    body: JSON.stringify({ dryRun }),
+  });
+  if (!res.ok) {
+    const txt = await res.text().catch(() => '');
+    throw new Error(`${res.status} ${txt}`);
+  }
+  return res.json();
+}
+
 /* -------- Admin: Networks -------- */
 
 function pageQS({ page, pageSize, q, status }) {
@@ -617,6 +636,7 @@ window.NSApi = {
   fetchCostsOverview,
   adminSaveCosts,
   adminBackfillCogs,
+  adminClassifyAi,
   fetchInsights,
   adminListUsers,
   adminCreateUser,

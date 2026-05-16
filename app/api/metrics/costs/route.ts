@@ -20,7 +20,7 @@ export async function GET() {
   const auth = await requireTab('costs');
   if (!auth.ok) return auth.response;
   try {
-    const [families, rates, productFamilies] = await Promise.all([
+    const [families, rates, productFamilies, unclassified] = await Promise.all([
       db.productFamilyCost.findMany({ orderBy: { family: 'asc' } }),
       db.fulfillmentRate.findMany({ orderBy: { bottlesMax: 'asc' } }),
       db.product.findMany({
@@ -28,6 +28,20 @@ export async function GET() {
         distinct: ['family'],
         select: { family: true },
         orderBy: { family: 'asc' },
+      }),
+      // Produtos "gap": sem família OU sem nº de potes → COGS/frete = 0
+      // nesses. São os candidatos pra classificação por IA.
+      db.product.findMany({
+        where: { OR: [{ family: null }, { bottles: null }] },
+        select: {
+          externalId: true,
+          name: true,
+          family: true,
+          bottles: true,
+          _count: { select: { orders: true } },
+        },
+        orderBy: { name: 'asc' },
+        take: 100,
       }),
     ]);
 
@@ -65,6 +79,15 @@ export async function GET() {
         priceUsd: Number(r.priceUsd),
         label: r.label,
         updatedAt: r.updatedAt.toISOString(),
+      })),
+      // Cobertura de classificação: produtos sem família/potes geram
+      // COGS+frete = 0. UI mostra a contagem + lista pra o botão de IA.
+      unclassified: unclassified.map((p) => ({
+        externalId: p.externalId,
+        name: p.name,
+        family: p.family,
+        bottles: p.bottles,
+        orders: p._count.orders,
       })),
     });
   } catch (err) {
