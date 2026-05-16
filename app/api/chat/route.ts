@@ -20,6 +20,7 @@ import { db } from '@/lib/db';
 import { requireAdmin } from '@/lib/auth/guard';
 import { getAnthropicClient, ANTHROPIC_MODEL, systemPrompt } from '@/lib/services/ai';
 import { getKnowledgePromptBlock } from '@/lib/services/knowledge';
+import { extractAndSaveMemory } from '@/lib/services/chatMemory';
 import { TOOLS, executeTool, TERMINAL_TOOL } from '@/lib/services/aiTools';
 import { logger } from '@/lib/logger';
 
@@ -232,6 +233,12 @@ export async function POST(req: Request) {
         });
 
         send('done', { conversationId });
+
+        // Memória automática: fire-and-forget (não bloqueia o close do
+        // stream). Extrai fatos duráveis do turno e salva como
+        // KnowledgeEntry source='auto' pra conversas futuras. Erros
+        // são engolidos dentro de extractAndSaveMemory.
+        void extractAndSaveMemory(userMsg, finalText);
       } catch (err) {
         logger.error({ err, conversationId }, '[chat] stream failed');
         send('error', { message: err instanceof Error ? err.message : 'erro desconhecido' });

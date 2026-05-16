@@ -276,6 +276,9 @@ export function ChatShell({ user }: { user: ChatUser }) {
       void refreshConversations();
     } catch (err) {
       console.error('deleteConversation', err);
+      window.alert(
+        `Não foi possível deletar a conversa.\n${err instanceof Error ? err.message : ''}`,
+      );
     }
   }
 

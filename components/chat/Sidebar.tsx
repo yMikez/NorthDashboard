@@ -278,10 +278,10 @@ function ConversationItem({
             variant="ghost"
             size="icon-sm"
             onClick={(e) => e.stopPropagation()}
-            className="opacity-50 hover:opacity-100 data-[state=open]:opacity-100 transition-opacity"
+            className="shrink-0 text-muted-foreground hover:text-foreground hover:bg-accent"
             aria-label="Opções (renomear, fixar, exportar, deletar)"
           >
-            <MoreHorizontal className="w-3.5 h-3.5" />
+            <MoreHorizontal className="w-4 h-4" />
           </Button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end" onClick={(e) => e.stopPropagation()}>

@@ -17,6 +17,7 @@ import {
   getOrders,
   type MetricsFilters,
 } from './metrics';
+import { refreshDailyMetricsNow } from './dailyMetrics';
 import { getInsights } from './insights';
 
 export const TOOLS: Anthropic.Tool[] = [
@@ -276,8 +277,15 @@ function parseFilters(input: ToolInput): MetricsFilters {
 export async function executeTool(name: string, input: ToolInput): Promise<unknown> {
   try {
     switch (name) {
-      case 'get_overview':
+      case 'get_overview': {
+        // getOverview lê da materialized view daily_metrics. O refresh
+        // normal é throttled (60s) — pra IA isso causava respostas
+        // inconsistentes (MV defasada vs dado real). Aqui forçamos um
+        // refresh antes de consultar: chamadas de IA não são frequentes,
+        // correção > latência. Alinha com get_products (query direta).
+        await refreshDailyMetricsNow();
         return await getOverview(parseFilters(input));
+      }
       case 'get_affiliates': {
         const data = await getAffiliates(parseFilters(input));
         // Cortar pra evitar payload gigante voltando pro modelo.

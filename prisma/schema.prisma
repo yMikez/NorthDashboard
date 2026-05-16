@@ -540,12 +540,16 @@ model KnowledgeEntry {
   title     String // "Regras de payout Digistore", "Glossário CB", etc.
   content   String // markdown — vai literal pro system prompt
   enabled   Boolean  @default(true)
+  // 'manual' = criada pelo admin no painel. 'auto' = extraída pela IA
+  // de conversas do chat (memória persistente cross-chat).
+  source    String   @default("manual")
   // Ordem de exibição/injeção no prompt. Menor = primeiro.
   sortOrder Int      @default(0)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   @@index([enabled, sortOrder])
+  @@index([source, createdAt])
 }
 
 // Audit trail genérico pra mudanças sensíveis em entidades de Network.

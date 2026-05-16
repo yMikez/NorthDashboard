@@ -55,13 +55,15 @@ export async function DELETE(
 
   const conv = await db.conversation.findUnique({
     where: { id },
-    select: { userId: true },
+    select: { id: true },
   });
   if (!conv) return NextResponse.json({ error: 'not found' }, { status: 404 });
-  if (conv.userId !== auth.user.id) {
-    return NextResponse.json({ error: 'forbidden' }, { status: 403 });
-  }
 
+  // requireAdmin já garante role=ADMIN. Antes havia um check
+  // conv.userId === auth.user.id que bloqueava (403 silencioso) deletar
+  // conversas criadas sob outro id de usuário (ex: admin re-seedado,
+  // sessão antiga) — usuário "não conseguia apagar". Admin é dono do
+  // dashboard inteiro; pode deletar qualquer conversa.
   await db.conversation.delete({ where: { id } });
   return NextResponse.json({ ok: true });
 }

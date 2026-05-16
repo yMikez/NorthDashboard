@@ -21,6 +21,7 @@ interface KnowledgeEntry {
   title: string;
   content: string;
   enabled: boolean;
+  source: 'manual' | 'auto';
   sortOrder: number;
   createdAt: string;
   updatedAt: string;
@@ -175,7 +176,9 @@ export function KnowledgeSheet({
           </SheetTitle>
           <SheetDescription className="text-xs leading-relaxed">
             Cada entrada ligada vira parte do system prompt do AI em todas as conversas.
-            Use pra ensinar regras de negócio, glossários, padrões específicos da operação.
+            Use pra ensinar regras de negócio, glossários, padrões da operação. Entradas
+            marcadas <span className="text-primary">memória IA</span> foram extraídas
+            automaticamente de conversas — desligue ou apague se ficarem ruins.
           </SheetDescription>
         </SheetHeader>
 
@@ -262,7 +265,17 @@ export function KnowledgeSheet({
                         title={entry.enabled ? 'Ativa — clique pra desligar' : 'Inativa — clique pra ligar'}
                       />
                       <div className="flex-1 min-w-0">
-                        <div className="text-sm font-medium truncate">{entry.title}</div>
+                        <div className="text-sm font-medium truncate flex items-center gap-2">
+                          <span className="truncate">{entry.title}</span>
+                          {entry.source === 'auto' && (
+                            <span
+                              className="shrink-0 text-[9px] uppercase tracking-wider px-1.5 py-0.5 rounded bg-primary/15 text-primary border border-primary/30"
+                              title="Memória extraída automaticamente de uma conversa"
+                            >
+                              memória IA
+                            </span>
+                          )}
+                        </div>
                         <div className="text-xs text-muted-foreground line-clamp-2 mt-0.5">
                           {entry.content}
                         </div>
