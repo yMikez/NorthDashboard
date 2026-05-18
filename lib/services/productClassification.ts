@@ -40,6 +40,18 @@ const CB_SKU_RE =
 const D24_NAME_RE =
   /^(?<typeFull>M\d+|UP\d+(?:-[A-Za-z0-9]+)?|DW\d+(?:-[A-Za-z0-9]+)?|DS\d*|RC)\s*-\s*(?<family>[A-Za-z][A-Za-z0-9 \-]+?)\s*\((?<bottles>\d+)(?:\s*\+\s*(?<bonus>\d+))?\s*Bottles?\)$/i;
 
+// BuyGoods manda o nome em linguagem natural, SEM código de tipo:
+//   "Neuro Mind Pro 6 Bottles"                  → FE
+//   "Neuro Mind Pro 6 Bottles (Upgrade)"        → UP1
+//   "Neuro Mind Pro 3 Bottles Last Chance"      → DW1
+//   "Night Calm 6 Bottles (Upgrade)"            → UP2
+//   "Flex + Imune guard 3 + 3 Bottles"          → UP3 (combo: 3 + bônus 3)
+// A posição no funil é derivada da FAMÍLIA + modificador (não há código no
+// nome) — regra do funil informada pelo vendor BuyGoods. "bottles" pode vir
+// colado ("3bottles") e o combo "a + b Bottles" preserva bonus.
+const BUYGOODS_NAME_RE =
+  /^(?<family>.+?)\s+(?<b1>\d+)(?:\s*\+\s*(?<b2>\d+))?\s*bottles?\b\s*(?<mod>\(?\s*upgrade\s*\)?|last\s*chance)?\s*$/i;
+
 const FAMILY_NORMALIZATIONS: Array<[RegExp, string]> = [
   [/^glycopulse$/i, 'GlycoPulse'],
   [/^glyco\s*pulse$/i, 'GlycoPulse'],
@@ -53,6 +65,10 @@ const FAMILY_NORMALIZATIONS: Array<[RegExp, string]> = [
   // Famílias novas (2026-04 em diante) — preservar a grafia oficial.
   [/^flex[\s\-]*immune[\s\-]*guard$/i, 'FlexImmuneGuard'],
   [/^night[\s]*calm$/i, 'NightCalm'],
+  // Variações BuyGoods (nome com espaços / "+" / grafia "imune"):
+  // "Neuro Mind Pro", "Flex Guard + Immune Guard", "Flex + Imune guard".
+  [/^neuro\s*mind\s*pro$/i, 'NeuroMindPro'],
+  [/^flex.*imm?une.*guard$/i, 'FlexImmuneGuard'],
 ];
 
 export function normalizeFamily(raw: string): string {
@@ -91,6 +107,28 @@ function classifyType(typeCode: string): { type: ProductType; step: number } {
     return { type: 'DOWNSELL', step: 2 };
   }
   throw new Error(`classifyProduct: unknown type code "${typeCode}"`);
+}
+
+// BuyGoods não traz código de tipo no nome — a posição no funil é ancorada
+// na família (regra do vendor):
+//   NeuroMindPro    → posição 1: plain=FE, Upgrade=UP1, Last Chance=DW1
+//   NightCalm       → posição 2: Last Chance=DW2, senão UP2
+//   FlexImmuneGuard → posição 3: Last Chance=DW3, senão UP3
+// Famílias desconhecidas via BG caem na regra genérica de posição 1.
+function buyGoodsType(
+  family: string,
+  isUpgrade: boolean,
+  isLastChance: boolean,
+): { type: ProductType; step: number } {
+  if (family === 'NightCalm') {
+    return classifyType(isLastChance ? 'DW2' : 'UP2');
+  }
+  if (family === 'FlexImmuneGuard') {
+    return classifyType(isLastChance ? 'DW3' : 'UP3');
+  }
+  if (isLastChance) return classifyType('DW1');
+  if (isUpgrade) return classifyType('UP1');
+  return classifyType('FE');
 }
 
 export function classifyProduct(
@@ -133,7 +171,32 @@ export function classifyProduct(
     }
   }
 
-  // 3) No match — cross-sell or non-canonical naming. Caller decides what to
+  // 3) BuyGoods: nome em linguagem natural ("Neuro Mind Pro 6 Bottles
+  // (Upgrade)", "Flex + Imune guard 3 + 3 Bottles"). Roda DEPOIS de CB/D24
+  // (que têm formatos próprios) — só pega o que sobrou. Sem código de tipo:
+  // posição no funil derivada da família + modificador (Upgrade/Last Chance).
+  if (name) {
+    const bg = BUYGOODS_NAME_RE.exec(name.trim());
+    if (bg?.groups) {
+      const family = normalizeFamily(
+        bg.groups.family.replace(/\s+/g, ' ').trim(),
+      );
+      const mod = (bg.groups.mod || '').toLowerCase();
+      const isLastChance = /last\s*chance/.test(mod);
+      const isUpgrade = /upgrade/.test(mod);
+      const t = buyGoodsType(family, isUpgrade, isLastChance);
+      return {
+        family,
+        type: t.type,
+        funnelStep: t.step,
+        variant: null,
+        bottles: parseInt(bg.groups.b1, 10),
+        bonusBottles: bg.groups.b2 ? parseInt(bg.groups.b2, 10) : null,
+      };
+    }
+  }
+
+  // 4) No match — cross-sell or non-canonical naming. Caller decides what to
   // do; we keep the existing productType assignment by returning UPSELL as a
   // safe default (anything that wasn't recognized is most likely a backend
   // SKU rather than a frontend entry point).

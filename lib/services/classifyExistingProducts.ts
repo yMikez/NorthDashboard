@@ -59,6 +59,9 @@ export async function classifyExistingProducts(): Promise<BackfillStats> {
         family: c.family,
         variant: c.variant,
         bottles: c.bottles,
+        // bonusBottles também — combos BuyGoods/RC ("3 + 3 Bottles")
+        // precisam disso pro total de potes (COGS+frete) no backfill.
+        bonusBottles: c.bonusBottles,
         productType: c.type,
       },
     });

@@ -198,3 +198,86 @@ describe('classifyProduct (cross-sell & unknown)', () => {
     expect(r.family).toBeNull();
   });
 });
+
+describe('classifyProduct (BuyGoods natural-language names)', () => {
+  it('Neuro Mind Pro 6 Bottles → FE', () => {
+    const r = classifyProduct('neuromindpro', 'Neuro Mind Pro 6 Bottles');
+    expect(r.family).toBe('NeuroMindPro');
+    expect(r.type).toBe('FRONTEND');
+    expect(r.funnelStep).toBe(1);
+    expect(r.bottles).toBe(6);
+    expect(r.bonusBottles).toBeNull();
+  });
+
+  it('Neuro Mind Pro 6 Bottles (Upgrade) → UP1', () => {
+    const r = classifyProduct('neuromindpro-up', 'Neuro Mind Pro 6 Bottles (Upgrade)');
+    expect(r.family).toBe('NeuroMindPro');
+    expect(r.type).toBe('UPSELL');
+    expect(r.funnelStep).toBe(2);
+    expect(r.bottles).toBe(6);
+  });
+
+  it('Neuro Mind Pro 3 Bottles Last Chance → DW1', () => {
+    const r = classifyProduct('neuromindpro-lc', 'Neuro Mind Pro 3 Bottles Last Chance');
+    expect(r.family).toBe('NeuroMindPro');
+    expect(r.type).toBe('DOWNSELL');
+    expect(r.funnelStep).toBe(2);
+    expect(r.bottles).toBe(3);
+  });
+
+  it('Night Calm 6 Bottles (Upgrade) → UP2', () => {
+    const r = classifyProduct('nightcalm-up', 'Night Calm 6 Bottles (Upgrade)');
+    expect(r.family).toBe('NightCalm');
+    expect(r.type).toBe('UPSELL');
+    expect(r.funnelStep).toBe(3);
+    expect(r.bottles).toBe(6);
+  });
+
+  it('Night Calm 3 Bottles Last Chance → DW2', () => {
+    const r = classifyProduct('nightcalm-lc', 'Night Calm 3 Bottles Last Chance');
+    expect(r.family).toBe('NightCalm');
+    expect(r.type).toBe('DOWNSELL');
+    expect(r.funnelStep).toBe(3);
+    expect(r.bottles).toBe(3);
+  });
+
+  it('Flex Guard + Immune Guard 6 Bottles (Upgrade) → UP3', () => {
+    const r = classifyProduct('flexguard-up', 'Flex Guard + Immune Guard 6 Bottles (Upgrade)');
+    expect(r.family).toBe('FlexImmuneGuard');
+    expect(r.type).toBe('UPSELL');
+    expect(r.funnelStep).toBe(4);
+    expect(r.bottles).toBe(6);
+  });
+
+  it('Flex + Imune guard 3 + 3 Bottles → UP3 combo (bonus)', () => {
+    const r = classifyProduct('flexguard-combo', 'Flex + Imune guard 3 + 3 Bottles');
+    expect(r.family).toBe('FlexImmuneGuard');
+    expect(r.type).toBe('UPSELL');
+    expect(r.funnelStep).toBe(4);
+    expect(r.bottles).toBe(3);
+    expect(r.bonusBottles).toBe(3);
+  });
+
+  it('Flex + Imune guard 1 + 1 Bottles Last Chance → DW3 combo', () => {
+    const r = classifyProduct('flexguard-lc', 'Flex + Imune guard 1 + 1 Bottles Last Chance');
+    expect(r.family).toBe('FlexImmuneGuard');
+    expect(r.type).toBe('DOWNSELL');
+    expect(r.funnelStep).toBe(4);
+    expect(r.bottles).toBe(1);
+    expect(r.bonusBottles).toBe(1);
+  });
+
+  it('Neuro Mind Pro 2 Bottles (qtd menor) → FE', () => {
+    const r = classifyProduct('neuromindpro-2', 'Neuro Mind Pro 2 Bottles');
+    expect(r.family).toBe('NeuroMindPro');
+    expect(r.type).toBe('FRONTEND');
+    expect(r.bottles).toBe(2);
+  });
+
+  it('não conflita com Digistore parenthesized name', () => {
+    const r = classifyProduct('667690', 'M3 - Glyco Pulse (6 Bottles)');
+    expect(r.family).toBe('GlycoPulse');
+    expect(r.type).toBe('FRONTEND');
+    expect(r.bottles).toBe(6);
+  });
+});
