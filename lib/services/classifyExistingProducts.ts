@@ -10,6 +10,7 @@
 // productType=FRONTEND because the first IPN happened to be misclassified.
 // We trust the SKU pattern over the IPN payload for catalog-level role.
 
+import type { ProductType } from '@prisma/client';
 import { db } from '../db';
 import { classifyProduct } from './productClassification';
 
@@ -36,9 +37,11 @@ export async function classifyExistingProducts(): Promise<BackfillStats> {
     unrecognized: [],
   };
 
-  // Track SKUs whose role the IPN clearly got wrong, so we can fix the
-  // historical Order.productType for them in a second pass below.
-  const productsToFixOrders: Array<{ id: string; toType: 'UPSELL' | 'DOWNSELL' | 'SMS_RECOVERY' }> = [];
+  // Track SKUs cuja role o IPN errou, pra reconciliar Order.productType
+  // num segundo passo. O classifier de catálogo (SKU/nome) é autoritativo
+  // — o productType de um único IPN é ruidoso (BuyGoods classifica
+  // "Last Chance" como UPSELL; Digistore manda upsell_no=0 em DW).
+  const productsToFixOrders: Array<{ id: string; toType: ProductType }> = [];
   // Track funnelStep of every classified product so we can reconcile
   // Order.funnelStep with the catalog (IPN's upsell_no can disagree —
   // notably Digistore DW orders arrive with upsell_no=0, but the SKU
@@ -68,14 +71,11 @@ export async function classifyExistingProducts(): Promise<BackfillStats> {
     stats.classified++;
     if (productTypeChanged) stats.productTypeFixed++;
 
-    // Mark for order-level fix when the catalog says this SKU is non-FE but
-    // the IPN historically marked some orders as FRONTEND. We're conservative:
-    // only fix the FE→non-FE direction, since the reverse (FE-marked SKU sold
-    // as upsell variant in some funnels) is a legitimate ambiguity we don't
-    // want to overwrite.
-    if (c.type === 'UPSELL' || c.type === 'DOWNSELL' || c.type === 'SMS_RECOVERY') {
-      productsToFixOrders.push({ id: p.id, toType: c.type });
-    }
+    // Catálogo é autoritativo pro Order.productType de TODA order desse
+    // produto (qualquer direção, não só FE→outro). Sem isso, um "Last
+    // Chance" BuyGoods que entrou como UPSELL nunca virava DOWNSELL e o
+    // funil mostrava Downsell=0. Idempotente (filtro `not` abaixo).
+    productsToFixOrders.push({ id: p.id, toType: c.type });
 
     if (c.funnelStep != null) {
       productsToFixFunnelStep.push({ id: p.id, funnelStep: c.funnelStep });
@@ -84,7 +84,7 @@ export async function classifyExistingProducts(): Promise<BackfillStats> {
 
   for (const { id, toType } of productsToFixOrders) {
     const result = await db.order.updateMany({
-      where: { productId: id, productType: 'FRONTEND' },
+      where: { productId: id, productType: { not: toType } },
       data: { productType: toType },
     });
     stats.ordersFixed += result.count;
