@@ -1623,29 +1623,21 @@ const STAGE_LABEL = {
   SMS_RECOVERY: 'Recovery',
 };
 
-// Cor por etapa do funil — mesma paleta do donut "por tipo" do Overview,
-// + Recovery. Pill tintado (bg suave + borda + texto na cor da etapa).
-const STAGE_COLOR = {
-  FRONTEND: '#5BC8FF',
-  UPSELL: '#4A90FF',
-  BUMP: '#8B7FFF',
-  DOWNSELL: '#FFB14E',
-  SMS_RECOVERY: '#28C878',
+// Classe liquid-glass por etapa (definidas em dashboard.css — mesmo
+// tratamento do .st de status: blur+saturate, sheen, bevel).
+const STAGE_CLASS = {
+  FRONTEND: 'sp-fe',
+  UPSELL: 'sp-up',
+  BUMP: 'sp-bump',
+  DOWNSELL: 'sp-dw',
+  SMS_RECOVERY: 'sp-rc',
 };
 
 function StagePill({ type }) {
   if (!type) return null;
-  const c = STAGE_COLOR[type] || '#8CA1C8';
+  const cls = STAGE_CLASS[type] || 'sp-fe';
   return (
-    <span
-      style={{
-        display: 'inline-flex', alignItems: 'center',
-        marginLeft: 8, padding: '1px 8px', borderRadius: 999,
-        fontFamily: 'var(--f-mono)', fontSize: 10, fontWeight: 500,
-        letterSpacing: '0.04em', whiteSpace: 'nowrap',
-        color: c, background: c + '1F', border: '1px solid ' + c + '55',
-      }}
-    >
+    <span className={`stage-pill ${cls}`} style={{ marginLeft: 8 }}>
       {STAGE_LABEL[type] || type.toLowerCase()}
     </span>
   );
