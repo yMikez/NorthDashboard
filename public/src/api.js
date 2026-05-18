@@ -66,6 +66,7 @@ async function fetchOrders(filters, options = {}) {
     products: setToCSV(filters.funnels),
     families: setToCSV(filters.families),
     status: options.status && options.status !== 'all' ? options.status : null,
+    product_type: options.productType && options.productType !== 'all' ? options.productType : null,
     search: options.search || null,
     limit: options.limit != null ? String(options.limit) : null,
     offset: options.offset != null ? String(options.offset) : null,

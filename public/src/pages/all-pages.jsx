@@ -1615,6 +1615,14 @@ function _LegacyProductsPage({ filters }) {
 }
 
 // ---------- TRANSACTIONS ----------
+const STAGE_LABEL = {
+  FRONTEND: 'FE',
+  UPSELL: 'Upsell',
+  DOWNSELL: 'Downsell',
+  BUMP: 'Bump',
+  SMS_RECOVERY: 'Recovery',
+};
+
 function TransactionsPage({ filters }) {
   const [query, setQuery] = useState('');
   // Initial status filter pode vir da URL (drill-down dos KPIs em /overview).
@@ -1623,6 +1631,14 @@ function TransactionsPage({ filters }) {
     try {
       const s = new URLSearchParams(location.search).get('status');
       return s && ['all', 'approved', 'pending', 'refunded', 'chargeback'].includes(s) ? s : 'all';
+    } catch (e) { return 'all'; }
+  });
+  // Filtro de etapa do funil (Order.productType). 'all' = sem filtro.
+  const [typeFilter, setTypeFilter] = useState(() => {
+    try {
+      const s = new URLSearchParams(location.search).get('stage');
+      const ok = ['all', 'FRONTEND', 'UPSELL', 'DOWNSELL', 'BUMP', 'SMS_RECOVERY'];
+      return s && ok.includes(s) ? s : 'all';
     } catch (e) { return 'all'; }
   });
   const [debouncedQuery, setDebouncedQuery] = useState('');
@@ -1638,7 +1654,7 @@ function TransactionsPage({ filters }) {
   useEffect(() => {
     let cancelled = false;
     setStateTx((s) => ({ ...s, status: 'loading' }));
-    window.NSApi.fetchOrders(filters, { status: statusFilter, search: debouncedQuery, limit: 500 })
+    window.NSApi.fetchOrders(filters, { status: statusFilter, productType: typeFilter, search: debouncedQuery, limit: 500 })
       .then((data) => {
         if (cancelled) return;
         setStateTx({ status: 'ready', data, error: null });
@@ -1653,11 +1669,12 @@ function TransactionsPage({ filters }) {
       Array.from(filters.platforms).join(','), Array.from(filters.countries).join(','),
       Array.from(filters.funnels).join(','),
       Array.from(filters.families).join(','),
-      statusFilter, debouncedQuery]);
+      statusFilter, typeFilter, debouncedQuery]);
 
   const cur = filters.currency || 'USD';
   const orders = state.data?.orders || [];
   const statusCounts = state.data?.statusCounts || {};
+  const typeCounts = state.data?.typeCounts || {};
   const total = state.data?.total ?? 0;
   const showing = orders.length;
 
@@ -1688,6 +1705,14 @@ function TransactionsPage({ filters }) {
           {[['all','Todos'],['approved','Aprovados'],['pending','Pendentes'],['refunded','Reembolsados'],['chargeback','Chargeback']].map(([k, l]) => (
             <button key={k} className={statusFilter === k ? 'is-active' : ''} onClick={() => setStatusFilter(k)}>
               {l}<span style={{ marginLeft: 6, opacity: 0.5 }}>{fmtInt(statusCounts[k] || 0)}</span>
+            </button>
+          ))}
+        </div>
+        <span className="f-label" style={{ marginLeft: 8 }}>ETAPA</span>
+        <div className="seg">
+          {[['all','Todas'],['FRONTEND','FE'],['UPSELL','Upsell'],['DOWNSELL','Downsell'],['BUMP','Bump'],['SMS_RECOVERY','Recovery']].map(([k, l]) => (
+            <button key={k} className={typeFilter === k ? 'is-active' : ''} onClick={() => setTypeFilter(k)}>
+              {l}<span style={{ marginLeft: 6, opacity: 0.5 }}>{fmtInt(typeCounts[k] || 0)}</span>
             </button>
           ))}
         </div>
@@ -1728,7 +1753,14 @@ function TransactionsPage({ filters }) {
                     <td className="cell-mono">{fmtDateTime(o.orderedAt)}</td>
                     <td className="cell-mono">{o.externalId}</td>
                     <td><span className={`plat ${platClass}`}>{platShort}</span></td>
-                    <td>{o.productName || o.productExternalId}</td>
+                    <td>
+                      {o.productName || o.productExternalId}
+                      {o.productType && (
+                        <span className="badge neutral" style={{ marginLeft: 6, fontSize: 9, opacity: 0.7 }}>
+                          {STAGE_LABEL[o.productType] || o.productType.toLowerCase()}
+                        </span>
+                      )}
+                    </td>
                     <td className="cell-mono">{o.affiliateNickname || o.affiliateExternalId || '—'}</td>
                     <td className="cell-mono">{o.country || '—'}</td>
                     <td className="cell-mono">{o.paymentMethod || '—'}</td>

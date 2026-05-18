@@ -358,6 +358,9 @@ export interface OrdersResponse {
     orderedAt: string;
   }>;
   statusCounts: Record<string, number>;
+  // Contagem por etapa do funil (productType), nas demais condições do
+  // filtro (ignora a própria seleção de etapa) — espelha statusCounts.
+  typeCounts: Record<string, number>;
   total: number;
   limit: number;
   offset: number;
@@ -365,6 +368,9 @@ export interface OrdersResponse {
 
 export interface OrdersOptions {
   status?: string;
+  // Filtro por etapa do funil (Order.productType): FRONTEND | UPSELL |
+  // DOWNSELL | BUMP | SMS_RECOVERY. 'all'/undefined = sem filtro.
+  productType?: string;
   search?: string;
   limit?: number;
   offset?: number;
@@ -3034,9 +3040,26 @@ export async function getOrders(
     statusCounts.all += row._count._all;
   }
 
+  const typeCountsRaw = await db.order.groupBy({
+    by: ['productType'],
+    where,
+    _count: { _all: true },
+  });
+  const typeCounts: Record<string, number> = {
+    all: 0, FRONTEND: 0, UPSELL: 0, DOWNSELL: 0, BUMP: 0, SMS_RECOVERY: 0,
+  };
+  for (const row of typeCountsRaw) {
+    typeCounts[row.productType] = row._count._all;
+    typeCounts.all += row._count._all;
+  }
+
   const filteredWhere: Prisma.OrderWhereInput = { ...where };
   if (options.status && options.status !== 'all') {
     filteredWhere.status = options.status.toUpperCase() as Prisma.OrderWhereInput['status'];
+  }
+  if (options.productType && options.productType !== 'all') {
+    filteredWhere.productType =
+      options.productType.toUpperCase() as Prisma.OrderWhereInput['productType'];
   }
 
   const total = await db.order.count({ where: filteredWhere });
@@ -3075,6 +3098,7 @@ export async function getOrders(
       orderedAt: o.orderedAt.toISOString(),
     })),
     statusCounts,
+    typeCounts,
     total,
     limit,
     offset,

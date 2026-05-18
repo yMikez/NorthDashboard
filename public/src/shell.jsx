@@ -223,6 +223,12 @@ function ThemeToggle() {
 }
 
 // ---------- Multi-select dropdown ----------
+// Sentinela pra "nenhum selecionado". O modelo usa Set vazio = TODOS
+// (sem filtro), então "nenhum" precisa de um marcador explícito. Esse
+// token vai pro filtro (setToCSV) e o backend filtra por ele → 0 linhas,
+// que é exatamente o esperado de "nenhuma opção marcada".
+const NONE_TOKEN = '__NONE__';
+
 function MultiSelect({ label, options, selected, onChange, icon }) {
   const [open, setOpen] = useStateS(false);
   const ref = useRefS(null);
@@ -231,8 +237,9 @@ function MultiSelect({ label, options, selected, onChange, icon }) {
     document.addEventListener('mousedown', onDoc);
     return () => document.removeEventListener('mousedown', onDoc);
   }, []);
-  const isAll = selected.size === 0 || selected.size === options.length;
-  const pill = isAll ? 'Todos' : String(selected.size);
+  const isNone = selected.has(NONE_TOKEN);
+  const isAll = !isNone && (selected.size === 0 || selected.size === options.length);
+  const pill = isAll ? 'Todos' : isNone ? 'Nenhum' : String(selected.size);
   return (
     <div ref={ref} style={{ position: 'relative' }}>
       <button className="select-btn" onClick={() => setOpen(v => !v)}>
@@ -252,19 +259,24 @@ function MultiSelect({ label, options, selected, onChange, icon }) {
             <button className="dh-link" style={{ background: 'none', border: 0, color: 'var(--glow-cyan)', fontFamily: 'var(--f-mono)', fontSize: 10, letterSpacing: '0.08em', cursor: 'pointer' }}
               onClick={() => onChange(new Set())}>TODOS</button>
             <button className="dh-link" style={{ background: 'none', border: 0, color: 'var(--fg4)', fontFamily: 'var(--f-mono)', fontSize: 10, letterSpacing: '0.08em', cursor: 'pointer' }}
-              onClick={() => onChange(new Set(options.map(o => o.id)))}>NENHUM</button>
+              onClick={() => onChange(new Set([NONE_TOKEN]))}>NENHUM</button>
           </div>
           <div style={{ maxHeight: 280, overflowY: 'auto' }}>
             {options.map(opt => {
-              const on = selected.size === 0 ? true : selected.has(opt.id);
-              // Toggle handler. Empty selection means "all" (visual) — first
-              // click with empty state seeds the set with everything, then
-              // toggles the clicked item. If the user re-selects every item
-              // we collapse back to the empty "all" state for cleaner URLs.
+              const on = isNone ? false : (selected.size === 0 ? true : selected.has(opt.id));
+              // Toggle. Estados: Set vazio = TODOS; {NONE_TOKEN} = NENHUM;
+              // senão = seleção explícita. Sair de qualquer um deles limpa
+              // o token; voltar a zero itens reais = NENHUM; marcar todos
+              // colapsa pra Set vazio (TODOS) e URL limpa.
               const toggle = () => {
-                const effective = selected.size === 0 ? new Set(options.map(o => o.id)) : new Set(selected);
+                let effective;
+                if (isNone) effective = new Set();
+                else if (selected.size === 0) effective = new Set(options.map(o => o.id));
+                else effective = new Set(selected);
+                effective.delete(NONE_TOKEN);
                 if (effective.has(opt.id)) effective.delete(opt.id);
                 else effective.add(opt.id);
+                if (effective.size === 0) { onChange(new Set([NONE_TOKEN])); return; }
                 onChange(effective.size === options.length ? new Set() : effective);
               };
               return (

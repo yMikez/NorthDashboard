@@ -30,6 +30,7 @@ export async function GET(req: Request) {
   const productExternalIds = csvParam(searchParams.get('products'));
   const productFamilies = csvParam(searchParams.get('families'));
   const status = searchParams.get('status') ?? undefined;
+  const productType = searchParams.get('product_type') ?? undefined;
   const search = searchParams.get('search') ?? undefined;
   const limit = intParam(searchParams.get('limit'));
   const offset = intParam(searchParams.get('offset'));
@@ -37,7 +38,7 @@ export async function GET(req: Request) {
   try {
     const data = await getOrders(
       { startDate, endDate, platformSlugs, countries, productExternalIds, productFamilies },
-      { status, search, limit, offset },
+      { status, productType, search, limit, offset },
     );
     return NextResponse.json(data);
   } catch (err) {
