@@ -29,7 +29,7 @@ export const TOOLS: Anthropic.Tool[] = [
       properties: {
         start_date: { type: 'string', description: 'Data início (YYYY-MM-DD)' },
         end_date: { type: 'string', description: 'Data fim (YYYY-MM-DD)' },
-        platforms: { type: 'array', items: { type: 'string' }, description: 'Filtrar plataformas: clickbank | digistore24' },
+        platforms: { type: 'array', items: { type: 'string' }, description: 'Filtrar plataformas: clickbank | digistore24 | buygoods' },
         countries: { type: 'array', items: { type: 'string' }, description: 'Filtrar países (ISO 2 letras)' },
         families: { type: 'array', items: { type: 'string' }, description: 'Filtrar famílias: NeuroMindPro, GlycoPulse, ThermoBurnPro, MaxVitalize, FlexImmuneGuard, NightCalm' },
       },
