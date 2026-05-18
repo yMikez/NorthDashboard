@@ -43,14 +43,17 @@ const D24_NAME_RE =
 // BuyGoods manda o nome em linguagem natural, SEM código de tipo:
 //   "Neuro Mind Pro 6 Bottles"                  → FE
 //   "Neuro Mind Pro 6 Bottles (Upgrade)"        → UP1
-//   "Neuro Mind Pro 3 Bottles Last Chance"      → DW1
+//   "Neuro Mind Pro 3 Bottles (Last Chance)"    → DW1
 //   "Night Calm 6 Bottles (Upgrade)"            → UP2
 //   "Flex + Imune guard 3 + 3 Bottles"          → UP3 (combo: 3 + bônus 3)
 // A posição no funil é derivada da FAMÍLIA + modificador (não há código no
 // nome) — regra do funil informada pelo vendor BuyGoods. "bottles" pode vir
-// colado ("3bottles") e o combo "a + b Bottles" preserva bonus.
+// colado ("3bottles") e o combo "a + b Bottles" preserva bonus. O
+// modificador pode vir COM ou SEM parênteses ("(Last Chance)" / "Last
+// Chance" / "(Upgrade)" / "Upgrade") — os parênteses são opcionais e
+// ficam FORA do grupo `mod` pra não quebrar o match.
 const BUYGOODS_NAME_RE =
-  /^(?<family>.+?)\s+(?<b1>\d+)(?:\s*\+\s*(?<b2>\d+))?\s*bottles?\b\s*(?<mod>\(?\s*upgrade\s*\)?|last\s*chance)?\s*$/i;
+  /^(?<family>.+?)\s+(?<b1>\d+)(?:\s*\+\s*(?<b2>\d+))?\s*bottles?\b\s*\(?\s*(?<mod>upgrade|last\s*chance)?\s*\)?\s*$/i;
 
 const FAMILY_NORMALIZATIONS: Array<[RegExp, string]> = [
   [/^glycopulse$/i, 'GlycoPulse'],

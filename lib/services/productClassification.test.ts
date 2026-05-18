@@ -217,7 +217,15 @@ describe('classifyProduct (BuyGoods natural-language names)', () => {
     expect(r.bottles).toBe(6);
   });
 
-  it('Neuro Mind Pro 3 Bottles Last Chance → DW1', () => {
+  it('Neuro Mind Pro 3 Bottles (Last Chance) → DW1 [parens, formato real]', () => {
+    const r = classifyProduct('neu3d', 'Neuro Mind Pro 3 Bottles (Last Chance)');
+    expect(r.family).toBe('NeuroMindPro');
+    expect(r.type).toBe('DOWNSELL');
+    expect(r.funnelStep).toBe(2);
+    expect(r.bottles).toBe(3);
+  });
+
+  it('Neuro Mind Pro 3 Bottles Last Chance → DW1 [sem parens]', () => {
     const r = classifyProduct('neuromindpro-lc', 'Neuro Mind Pro 3 Bottles Last Chance');
     expect(r.family).toBe('NeuroMindPro');
     expect(r.type).toBe('DOWNSELL');
@@ -233,8 +241,8 @@ describe('classifyProduct (BuyGoods natural-language names)', () => {
     expect(r.bottles).toBe(6);
   });
 
-  it('Night Calm 3 Bottles Last Chance → DW2', () => {
-    const r = classifyProduct('nightcalm-lc', 'Night Calm 3 Bottles Last Chance');
+  it('Night Calm 3 Bottles (Last Chance) → DW2 [formato real BuyGoods]', () => {
+    const r = classifyProduct('nig3d', 'Night Calm 3 Bottles (Last Chance)');
     expect(r.family).toBe('NightCalm');
     expect(r.type).toBe('DOWNSELL');
     expect(r.funnelStep).toBe(3);
@@ -258,13 +266,27 @@ describe('classifyProduct (BuyGoods natural-language names)', () => {
     expect(r.bonusBottles).toBe(3);
   });
 
-  it('Flex + Imune guard 1 + 1 Bottles Last Chance → DW3 combo', () => {
-    const r = classifyProduct('flexguard-lc', 'Flex + Imune guard 1 + 1 Bottles Last Chance');
+  it('Flex + Imune guard 1 + 1 Bottles (Last Chance) → DW3 combo', () => {
+    const r = classifyProduct('flexguard-lc', 'Flex + Imune guard 1 + 1 Bottles (Last Chance)');
     expect(r.family).toBe('FlexImmuneGuard');
     expect(r.type).toBe('DOWNSELL');
     expect(r.funnelStep).toBe(4);
     expect(r.bottles).toBe(1);
     expect(r.bonusBottles).toBe(1);
+  });
+
+  it('Digest Flow + Neuro Mind Pro 6 Bottles (Upgrade) → classifica (família própria)', () => {
+    const r = classifyProduct('digneu33u', 'Digest Flow + Neuro Mind Pro 6 Bottles (Upgrade)');
+    expect(r.family).not.toBeNull();
+    expect(r.bottles).toBe(6);
+    expect(r.type).toBe('UPSELL');
+  });
+
+  it('Digest Flow + Neuro Mind Pro 2 Bottles (Last Chance) → classifica DOWNSELL', () => {
+    const r = classifyProduct('digneu11d', 'Digest Flow + Neuro Mind Pro 2 Bottles (Last Chance)');
+    expect(r.family).not.toBeNull();
+    expect(r.bottles).toBe(2);
+    expect(r.type).toBe('DOWNSELL');
   });
 
   it('Neuro Mind Pro 2 Bottles (qtd menor) → FE', () => {
