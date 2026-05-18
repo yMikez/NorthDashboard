@@ -3440,13 +3440,13 @@ function CostsPage({ filters }) {
 
   async function recompute() {
     if (!token) { setSaveState({ status: 'error', message: 'Token necessário' }); return; }
-    if (!confirm('Recalcular COGS + frete em TODAS orders existentes com os preços atuais? Vai sobrescrever os snapshots históricos.')) return;
-    setSaveState({ status: 'saving', message: 'Recomputando...' });
+    if (!confirm('Reclassificar produtos (BuyGoods etc.) + recalcular COGS/frete em TODAS as orders com os preços atuais? Sobrescreve os snapshots históricos.')) return;
+    setSaveState({ status: 'saving', message: 'Reclassificando produtos + recomputando custos…' });
     try {
       const stats = await window.NSApi.adminBackfillCogs(token);
       setSaveState({
         status: 'saved',
-        message: `${stats.scanned} orders, ${stats.cogsUpdated} COGS atualizados, ${stats.sessionsRebalanced} sessões rebalanceadas.`,
+        message: `${stats.reclassified ?? 0} produtos reclassificados · ${stats.scanned} orders varridas · ${stats.cogsUpdated} COGS atualizados · ${stats.sessionsRebalanced} sessões de frete rebalanceadas.`,
       });
     } catch (err) {
       setSaveState({ status: 'error', message: err.message });
@@ -3837,10 +3837,12 @@ function CostsPage({ filters }) {
       <div className="panel" style={{ marginTop: 14 }}>
         <div className="panel-head">
           <div className="panel-title">
-            <span className="panel-eyebrow">RECALCULAR HISTÓRICO</span>
+            <span className="panel-eyebrow">RECLASSIFICAR + RECALCULAR HISTÓRICO</span>
             <div className="panel-sub">
-              Reescreve cogsUsd + fulfillmentUsd em TODAS orders existentes usando os preços atuais.
-              Use após mudar custos pra refletir nos KPIs/lucros do passado.
+              (1) Reclassifica todos os produtos com o classifier atual — preenche
+              família/potes dos BuyGoods e corrige tipo/funil. (2) Reescreve
+              cogsUsd + fulfillmentUsd em TODAS as orders com os preços por
+              fornecedor. Use após mudar custos OU pra trazer BuyGoods pro cálculo.
             </div>
           </div>
           <div className="page-head-actions">
@@ -3849,7 +3851,7 @@ function CostsPage({ filters }) {
               disabled={!token || saveState.status === 'saving'}
               onClick={recompute}
             >
-              <Icon name="refresh" size={12}/> Recalcular orders existentes
+              <Icon name="refresh" size={12}/> Reclassificar + recalcular orders
             </button>
           </div>
         </div>
