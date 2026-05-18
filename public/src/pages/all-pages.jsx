@@ -3257,8 +3257,9 @@ function fmtAgo(seconds) {
 // ---------- COSTS (editable cost tables) ----------
 function CostsPage({ filters }) {
   const [state, setCostState] = useState({ status: 'loading', data: null, error: null });
-  const [draftFamilies, setDraftFamilies] = useState({}); // { [family]: number }
-  const [draftRates, setDraftRates] = useState({});       // { [bottlesMax]: number }
+  const [draftFamilies, setDraftFamilies] = useState({});  // { [family]: unitCost string }
+  const [draftSuppliers, setDraftSuppliers] = useState({}); // { [family]: 'redrock'|'shipoffers' }
+  const [draftRates, setDraftRates] = useState({});         // { ['supplier|family|bottlesMax']: price string }
   const [fulfillmentKpi, setFulfillmentKpi] = useState({ status: 'loading', value: 0, gross: 0, daily: [] });
   const cur = filters?.currency || 'USD';
 
@@ -3349,36 +3350,47 @@ function CostsPage({ filters }) {
 
   useEffect(() => { reload(); }, []);
 
+  const rateKey = (r) => `${r.supplier}|${r.family}|${r.bottlesMax}`;
+
   function valueForFamily(family) {
     if (family in draftFamilies) return draftFamilies[family];
     const f = state.data?.families.find((x) => x.family === family);
     return f != null ? f.unitCostUsd : 0;
   }
-  function valueForRate(bottlesMax) {
-    if (bottlesMax in draftRates) return draftRates[bottlesMax];
-    const r = state.data?.fulfillment.find((x) => x.bottlesMax === bottlesMax);
-    return r != null ? r.priceUsd : 0;
+  function supplierForFamily(family) {
+    if (family in draftSuppliers) return draftSuppliers[family];
+    const f = state.data?.families.find((x) => x.family === family);
+    return f?.fulfillmentSupplier || 'shipoffers';
+  }
+  function valueForRate(key, orig) {
+    if (key in draftRates) return draftRates[key];
+    return orig;
   }
   function familyDirty(family) {
-    if (!(family in draftFamilies)) return false;
-    const orig = state.data?.families.find((x) => x.family === family)?.unitCostUsd ?? 0;
-    return parseFloat(draftFamilies[family]) !== orig;
+    const f = state.data?.families.find((x) => x.family === family);
+    const costDirty = family in draftFamilies
+      && parseFloat(draftFamilies[family]) !== (f?.unitCostUsd ?? 0);
+    const supDirty = family in draftSuppliers
+      && draftSuppliers[family] !== (f?.fulfillmentSupplier || 'shipoffers');
+    return costDirty || supDirty;
   }
-  function rateDirty(bottlesMax) {
-    if (!(bottlesMax in draftRates)) return false;
-    const orig = state.data?.fulfillment.find((x) => x.bottlesMax === bottlesMax)?.priceUsd ?? 0;
-    return parseFloat(draftRates[bottlesMax]) !== orig;
+  function rateDirty(key, orig) {
+    if (!(key in draftRates)) return false;
+    return parseFloat(draftRates[key]) !== orig;
   }
   function dirtyCount() {
     let n = 0;
     if (state.data) {
       for (const f of state.data.families) if (familyDirty(f.family)) n++;
-      for (const r of state.data.fulfillment) if (rateDirty(r.bottlesMax)) n++;
+      for (const r of state.data.fulfillment) {
+        if (rateDirty(rateKey(r), r.priceUsd)) n++;
+      }
     }
     return n;
   }
   function discardChanges() {
     setDraftFamilies({});
+    setDraftSuppliers({});
     setDraftRates({});
   }
 
@@ -3387,11 +3399,24 @@ function CostsPage({ filters }) {
       setSaveState({ status: 'error', message: 'Token necessário pra salvar.' });
       return;
     }
-    const familyChanges = Object.entries(draftFamilies)
-      .map(([family, v]) => ({ family, unitCostUsd: parseFloat(v) }))
+    // União das famílias tocadas (custo OU fornecedor). Cada uma manda
+    // o valor efetivo dos dois campos (o backend faz upsert).
+    const touchedFamilies = new Set([
+      ...Object.keys(draftFamilies),
+      ...Object.keys(draftSuppliers),
+    ]);
+    const familyChanges = Array.from(touchedFamilies)
+      .map((family) => ({
+        family,
+        unitCostUsd: parseFloat(valueForFamily(family)),
+        fulfillmentSupplier: supplierForFamily(family),
+      }))
       .filter((x) => Number.isFinite(x.unitCostUsd) && x.unitCostUsd >= 0);
     const rateChanges = Object.entries(draftRates)
-      .map(([bm, v]) => ({ bottlesMax: parseInt(bm, 10), priceUsd: parseFloat(v) }))
+      .map(([key, v]) => {
+        const [supplier, family, bm] = key.split('|');
+        return { supplier, family, bottlesMax: parseInt(bm, 10), priceUsd: parseFloat(v) };
+      })
       .filter((x) => Number.isFinite(x.priceUsd) && x.priceUsd >= 0);
     if (!familyChanges.length && !rateChanges.length) {
       setSaveState({ status: 'idle', message: 'Sem mudanças' });
@@ -3403,8 +3428,9 @@ function CostsPage({ filters }) {
         families: familyChanges,
         fulfillment: rateChanges,
       });
-      setSaveState({ status: 'saved', message: `${result.updated.families} famílias + ${result.updated.fulfillment} brackets salvos.` });
+      setSaveState({ status: 'saved', message: `${result.updated.families} famílias + ${result.updated.fulfillment} tarifas salvas.` });
       setDraftFamilies({});
+      setDraftSuppliers({});
       setDraftRates({});
       reload();
     } catch (err) {
@@ -3608,107 +3634,141 @@ function CostsPage({ filters }) {
         </div>
       )}
 
-      <div className="grid-2">
-        {/* Per-family unit cost */}
-        <div className="panel">
-          <div className="panel-head">
-            <div className="panel-title">
-              <span className="panel-eyebrow">CUSTO POR POTE · POR FAMÍLIA</span>
-              <div className="panel-sub">Custo de produção que pagamos pro fornecedor por bottle</div>
+      {/* Custo por pote + fornecedor por família */}
+      <div className="panel" style={{ marginBottom: 14 }}>
+        <div className="panel-head">
+          <div className="panel-title">
+            <span className="panel-eyebrow">CUSTO DO POTE + FORNECEDOR · POR FAMÍLIA</span>
+            <div className="panel-sub">
+              Custo de produção por pote (no fornecedor da família) + quem entrega.
+              Funil NeuroMind → RedRock · resto → ShipOffers.
             </div>
-          </div>
-          <div className="tbl-wrap">
-            <table className="tbl">
-              <thead>
-                <tr>
-                  <th>Família</th>
-                  <th className="num">Custo / pote (USD)</th>
-                  <th>Atualizado</th>
-                </tr>
-              </thead>
-              <tbody>
-                {state.data.families.map((f) => {
-                  const dirty = familyDirty(f.family);
-                  return (
-                    <tr key={f.family}>
-                      <td>
-                        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
-                          <span style={{ width: 6, height: 6, borderRadius: '50%', background: familyAccent(f.family) }}/>
-                          {f.family}
-                          {f.isCataloged === false && (
-                            <span title="Família ainda não catalogada — usando custo médio como placeholder. Atualize o valor real e salve."
-                              style={{
-                                fontFamily: 'var(--f-mono)', fontSize: 9, letterSpacing: '0.06em',
-                                color: 'var(--warning)', background: 'rgba(255,180,0,0.12)',
-                                border: '1px solid rgba(255,180,0,0.35)', borderRadius: 4,
-                                padding: '1px 6px',
-                              }}>
-                              PLACEHOLDER
-                            </span>
-                          )}
-                        </span>
-                      </td>
-                      <td className="num">
-                        <input
-                          type="number"
-                          step="0.01"
-                          min="0"
-                          disabled={!token}
-                          value={valueForFamily(f.family)}
-                          onChange={(e) => setDraftFamilies((d) => ({ ...d, [f.family]: e.target.value }))}
-                          style={costInputStyle(dirty, !token)}
-                        />
-                      </td>
-                      <td className="cell-mono" style={{ color: 'var(--fg4)' }}>{fmtDateShort(f.updatedAt)}</td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
           </div>
         </div>
+        <div className="tbl-wrap">
+          <table className="tbl">
+            <thead>
+              <tr>
+                <th>Família</th>
+                <th className="num">Custo / pote (USD)</th>
+                <th>Fornecedor</th>
+                <th>Atualizado</th>
+              </tr>
+            </thead>
+            <tbody>
+              {state.data.families.map((f) => {
+                const dirty = familyDirty(f.family);
+                return (
+                  <tr key={f.family}>
+                    <td>
+                      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                        <span style={{ width: 6, height: 6, borderRadius: '50%', background: familyAccent(f.family) }}/>
+                        {f.family}
+                        {f.isCataloged === false && (
+                          <span title="Família ainda não catalogada — usando custo médio como placeholder. Atualize o valor real e salve."
+                            style={{
+                              fontFamily: 'var(--f-mono)', fontSize: 9, letterSpacing: '0.06em',
+                              color: 'var(--warning)', background: 'rgba(255,180,0,0.12)',
+                              border: '1px solid rgba(255,180,0,0.35)', borderRadius: 4,
+                              padding: '1px 6px',
+                            }}>
+                            PLACEHOLDER
+                          </span>
+                        )}
+                      </span>
+                    </td>
+                    <td className="num">
+                      <input
+                        type="number"
+                        step="0.01"
+                        min="0"
+                        disabled={!token}
+                        value={valueForFamily(f.family)}
+                        onChange={(e) => setDraftFamilies((d) => ({ ...d, [f.family]: e.target.value }))}
+                        style={costInputStyle(dirty, !token)}
+                      />
+                    </td>
+                    <td>
+                      <select
+                        disabled={!token}
+                        value={supplierForFamily(f.family)}
+                        onChange={(e) => setDraftSuppliers((d) => ({ ...d, [f.family]: e.target.value }))}
+                        style={{
+                          ...costInputStyle(
+                            f.family in draftSuppliers
+                              && draftSuppliers[f.family] !== (f.fulfillmentSupplier || 'shipoffers'),
+                            !token,
+                          ),
+                          minWidth: 120,
+                        }}
+                      >
+                        <option value="shipoffers">ShipOffers</option>
+                        <option value="redrock">RedRock</option>
+                      </select>
+                    </td>
+                    <td className="cell-mono" style={{ color: 'var(--fg4)' }}>{fmtDateShort(f.updatedAt)}</td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      </div>
 
-        {/* Fulfillment brackets */}
-        <div className="panel">
-          <div className="panel-head">
-            <div className="panel-title">
-              <span className="panel-eyebrow">FRETE · POR BRACKET DE BOTTLES</span>
-              <div className="panel-sub">Custo de envio que pagamos pelo total de bottles na sessão</div>
+      {/* Frete por fornecedor → família → qtd de potes */}
+      <div className="panel" style={{ marginBottom: 14 }}>
+        <div className="panel-head">
+          <div className="panel-title">
+            <span className="panel-eyebrow">FRETE · POR FORNECEDOR · FAMÍLIA · QTD DE POTES</span>
+            <div className="panel-sub">
+              Custo de envio (ship + fee + pick + packaging + paper/fuel), sem o pote.
+              Linha "_default" = fallback do fornecedor pra famílias sem tarifa própria.
             </div>
           </div>
-          <div className="tbl-wrap" style={{ maxHeight: 420, overflowY: 'auto' }}>
-            <table className="tbl">
-              <thead>
-                <tr>
-                  <th>Bracket</th>
-                  <th className="num">Bottles ≤</th>
-                  <th className="num">Preço (USD)</th>
-                </tr>
-              </thead>
-              <tbody>
-                {state.data.fulfillment.map((r) => {
-                  const dirty = rateDirty(r.bottlesMax);
-                  return (
-                    <tr key={r.bottlesMax}>
-                      <td className="cell-mono" style={{ color: 'var(--fg4)', fontSize: 11 }}>{r.label}</td>
-                      <td className="num cell-mono">{r.bottlesMax}</td>
-                      <td className="num">
-                        <input
-                          type="number"
-                          step="0.01"
-                          min="0"
-                          disabled={!token}
-                          value={valueForRate(r.bottlesMax)}
-                          onChange={(e) => setDraftRates((d) => ({ ...d, [r.bottlesMax]: e.target.value }))}
-                          style={costInputStyle(dirty, !token)}
-                        />
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
+        </div>
+        <div className="tbl-wrap" style={{ maxHeight: 520, overflowY: 'auto' }}>
+          <table className="tbl">
+            <thead>
+              <tr>
+                <th>Fornecedor</th>
+                <th>Família</th>
+                <th className="num">Potes ≤</th>
+                <th className="num">Preço (USD)</th>
+              </tr>
+            </thead>
+            <tbody>
+              {state.data.fulfillment.map((r) => {
+                const key = rateKey(r);
+                const dirty = rateDirty(key, r.priceUsd);
+                const supLabel = r.supplier === 'redrock' ? 'RedRock' : 'ShipOffers';
+                return (
+                  <tr key={key}>
+                    <td className="cell-mono" style={{
+                      fontSize: 11,
+                      color: r.supplier === 'redrock' ? 'var(--glow-violet)' : 'var(--glow-cyan)',
+                    }}>
+                      {supLabel}
+                    </td>
+                    <td style={{ fontSize: 12, color: r.family === '_default' ? 'var(--fg5)' : 'var(--fg2)' }}>
+                      {r.family === '_default' ? '(padrão)' : r.family}
+                    </td>
+                    <td className="num cell-mono">{r.bottlesMax === 999 ? '7+' : r.bottlesMax}</td>
+                    <td className="num">
+                      <input
+                        type="number"
+                        step="0.01"
+                        min="0"
+                        disabled={!token}
+                        value={valueForRate(key, r.priceUsd)}
+                        onChange={(e) => setDraftRates((d) => ({ ...d, [key]: e.target.value }))}
+                        style={costInputStyle(dirty, !token)}
+                      />
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
         </div>
       </div>
 

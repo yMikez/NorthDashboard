@@ -22,7 +22,9 @@ export async function GET() {
   try {
     const [families, rates, productFamilies, unclassified] = await Promise.all([
       db.productFamilyCost.findMany({ orderBy: { family: 'asc' } }),
-      db.fulfillmentRate.findMany({ orderBy: { bottlesMax: 'asc' } }),
+      db.fulfillmentRate.findMany({
+        orderBy: [{ supplier: 'asc' }, { family: 'asc' }, { bottlesMax: 'asc' }],
+      }),
       db.product.findMany({
         where: { family: { not: null } },
         distinct: ['family'],
@@ -53,11 +55,13 @@ export async function GET() {
     const allFamilies: Array<{
       family: string;
       unitCostUsd: number;
+      fulfillmentSupplier: string;
       updatedAt: string;
       isCataloged: boolean;
     }> = families.map((f) => ({
       family: f.family,
       unitCostUsd: Number(f.unitCostUsd),
+      fulfillmentSupplier: f.fulfillmentSupplier,
       updatedAt: f.updatedAt.toISOString(),
       isCataloged: true,
     }));
@@ -66,6 +70,7 @@ export async function GET() {
       allFamilies.push({
         family: p.family,
         unitCostUsd: Number(avgUnitCost.toFixed(2)),
+        fulfillmentSupplier: 'shipoffers',
         updatedAt: new Date(0).toISOString(),
         isCataloged: false,
       });
@@ -75,6 +80,8 @@ export async function GET() {
     return NextResponse.json({
       families: allFamilies,
       fulfillment: rates.map((r) => ({
+        supplier: r.supplier,
+        family: r.family,
         bottlesMax: r.bottlesMax,
         priceUsd: Number(r.priceUsd),
         label: r.label,

@@ -258,19 +258,29 @@ model IngestLog {
 // values here only affects future orders — historical numbers are preserved.
 model ProductFamilyCost {
   family      String   @id // 'NeuroMindPro', 'GlycoPulse', etc.
-  unitCostUsd Decimal  @db.Decimal(10, 4)
+  unitCostUsd Decimal  @db.Decimal(10, 4) // custo do pote NO FORNECEDOR desta família
+  // Quem entrega esta família: 'redrock' | 'shipoffers'. Define qual
+  // tabela de FulfillmentRate consultar e qual custo unitário aplicar.
+  // NeuroMind + funil (NightCalm, FlexImmuneGuard) = redrock; resto = shipoffers.
+  fulfillmentSupplier String @default("shipoffers")
   updatedAt   DateTime @updatedAt
 }
 
-// Fulfillment (shipping) brackets. Lookup is "first row whose maxBottles
-// >= order.totalBottles, ordered by maxBottles ASC". Weight isn't tracked
-// — the supplier prices already account for our specific bottle weights,
-// so we map bottle count directly to bracket.
+// Fulfillment (shipping) por (fornecedor, família, bottlesMax). Lookup:
+// "primeiro row do supplier+family cujo bottlesMax >= total, ordenado ASC".
+// Se não houver row family-specific, cai pro family='_default' do supplier.
+// priceUsd = custo de envio COMPLETO (ship+fee+pick+packaging+paper/fuel),
+// SEM o custo do pote (esse vive em ProductFamilyCost.unitCostUsd).
 model FulfillmentRate {
-  bottlesMax Int      @id // largest bottle count covered (e.g. 2, 3, 4, ...)
+  supplier   String // 'redrock' | 'shipoffers'
+  family     String // família ou '_default' (fallback do supplier)
+  bottlesMax Int // maior contagem de potes coberta (1..6, 999 = 7+)
   priceUsd   Decimal  @db.Decimal(10, 2)
-  label      String // human display ("0 to 2.99 oz", etc.)
+  label      String
   updatedAt  DateTime @updatedAt
+
+  @@id([supplier, family, bottlesMax])
+  @@index([supplier, family, bottlesMax])
 }
 
 enum UserRole {

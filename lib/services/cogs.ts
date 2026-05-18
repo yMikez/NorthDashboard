@@ -1,29 +1,41 @@
 // Cost-of-goods + fulfillment calculation. Reads ProductFamilyCost +
-// FulfillmentRate tables (editable via admin endpoint or seeded by
-// migration) and produces the per-order cost a sale incurs.
+// FulfillmentRate e produz o custo que cada venda incorre.
 //
-// COGS         = (bottles + bonusBottles) × family unitCostUsd
-// Fulfillment  = first FulfillmentRate row whose bottlesMax >= total
+// COGS        = (bottles + bonusBottles) × unitCostUsd da família
+// Fulfillment = tarifa do (fornecedor da família, família, bracket de potes)
 //
-// Both numbers are snapshotted into Order.cogsUsd / Order.fulfillmentUsd
-// at ingest time so historical accuracy is preserved when prices change.
+// Roteamento de fornecedor: cada família tem ProductFamilyCost.fulfillmentSupplier
+// ('redrock' p/ funil NeuroMind: NeuroMindPro/NightCalm/FlexImmuneGuard,
+// 'shipoffers' p/ o resto). A tarifa de frete é específica por fornecedor
+// (RedRock e ShipOffers têm preços diferentes pro mesmo nº de potes).
 //
-// Refunds: company eats the cost (product was already shipped). Caller
-// computes profit accordingly — this module just produces the cost.
+// Ambos snapshotados em Order.cogsUsd / Order.fulfillmentUsd na ingestão.
+// Refund: empresa come o custo (produto já enviado).
 
 import { db } from '../db';
 
-// In-memory cache, refreshed on demand. Cost tables change rarely, so
-// reading them on every order upsert is wasteful. Refresh whenever the
-// admin endpoint mutates the rows (or process restart).
+const DEFAULT_SUPPLIER = 'shipoffers';
+
+interface FamilyCost {
+  unitCostUsd: number;
+  supplier: string;
+}
+interface RateRow {
+  supplier: string;
+  family: string;
+  bottlesMax: number;
+  priceUsd: number;
+}
+
 interface CostsCache {
-  unitCostByFamily: Map<string, number>;
-  // Custo médio entre famílias catalogadas — usado como fallback quando o
-  // produto chega de uma família sem entrada em ProductFamilyCost (ex: SKU
-  // novo num funil ainda não cadastrado). Garante que cogsUsd não vire 0
-  // só porque o admin ainda não preencheu o custo unitário.
+  // family → { unitCostUsd, supplier }
+  byFamily: Map<string, FamilyCost>;
+  // Custo médio entre famílias catalogadas — fallback pra SKU de família
+  // ainda não cadastrada (não zera o COGS).
   averageUnitCost: number | null;
-  fulfillmentBrackets: Array<{ bottlesMax: number; priceUsd: number }>;
+  // Todas as tarifas, ordenadas por bottlesMax ASC. Lookup filtra por
+  // supplier + family (com fallback family='_default').
+  rates: RateRow[];
   loadedAt: number;
 }
 let cache: CostsCache | null = null;
@@ -35,17 +47,24 @@ async function getCache(): Promise<CostsCache> {
     db.productFamilyCost.findMany(),
     db.fulfillmentRate.findMany({ orderBy: { bottlesMax: 'asc' } }),
   ]);
-  const unitCostByFamily = new Map(
-    families.map((f) => [f.family, Number(f.unitCostUsd)]),
+  const byFamily = new Map<string, FamilyCost>(
+    families.map((f) => [
+      f.family,
+      { unitCostUsd: Number(f.unitCostUsd), supplier: f.fulfillmentSupplier },
+    ]),
   );
-  const values = Array.from(unitCostByFamily.values()).filter((v) => v > 0);
+  const values = Array.from(byFamily.values())
+    .map((v) => v.unitCostUsd)
+    .filter((v) => v > 0);
   const averageUnitCost = values.length > 0
     ? values.reduce((s, v) => s + v, 0) / values.length
     : null;
   cache = {
-    unitCostByFamily,
+    byFamily,
     averageUnitCost,
-    fulfillmentBrackets: rates.map((r) => ({
+    rates: rates.map((r) => ({
+      supplier: r.supplier,
+      family: r.family,
       bottlesMax: r.bottlesMax,
       priceUsd: Number(r.priceUsd),
     })),
@@ -59,9 +78,33 @@ export function invalidateCogsCache(): void {
 }
 
 export interface CogsResult {
-  cogsUsd: number;        // total unit cost (bottles + bonus) × per-bottle price
-  fulfillmentUsd: number; // shipping bracket lookup
-  totalBottles: number;   // computed bottles + bonusBottles, returned for transparency
+  cogsUsd: number;
+  fulfillmentUsd: number;
+  totalBottles: number;
+  supplier: string; // fornecedor resolvido (transparência / debug)
+}
+
+/**
+ * Resolve a tarifa de frete pro fornecedor + família + total de potes.
+ * Tenta rows family-specific; cai pro family='_default' do supplier.
+ * "Primeiro bottlesMax >= total" (rows já ASC). Acima do maior bracket
+ * (combos enormes) usa o maior disponível como fallback conservador.
+ */
+function lookupFulfillment(
+  rates: RateRow[],
+  supplier: string,
+  family: string,
+  totalBottles: number,
+): number {
+  const pick = (fam: string) =>
+    rates
+      .filter((r) => r.supplier === supplier && r.family === fam)
+      .sort((a, b) => a.bottlesMax - b.bottlesMax);
+  let scoped = pick(family);
+  if (scoped.length === 0) scoped = pick('_default');
+  if (scoped.length === 0) return 0;
+  const bracket = scoped.find((b) => b.bottlesMax >= totalBottles);
+  return bracket ? bracket.priceUsd : scoped[scoped.length - 1].priceUsd;
 }
 
 export async function calcCogs(
@@ -71,29 +114,21 @@ export async function calcCogs(
 ): Promise<CogsResult> {
   const totalBottles = (bottles ?? 0) + (bonusBottles ?? 0);
   if (!family || totalBottles <= 0) {
-    return { cogsUsd: 0, fulfillmentUsd: 0, totalBottles };
+    return { cogsUsd: 0, fulfillmentUsd: 0, totalBottles, supplier: DEFAULT_SUPPLIER };
   }
   const c = await getCache();
-  // Fallback pra custo médio quando a família não está catalogada — evita
-  // que o KPI de custo fique subestimado por SKUs novos. Quando o admin
-  // cadastrar o valor real em /costs e rodar "Recalcular orders existentes",
-  // os snapshots são reescritos com o número correto. Se nem média existir
-  // (catálogo totalmente vazio), preserva o comportamento antigo (zero).
-  const unitCost = c.unitCostByFamily.get(family) ?? c.averageUnitCost;
+  const fc = c.byFamily.get(family);
+  // Custo unitário: cadastrado, ou média (fallback p/ família nova).
+  const unitCost = fc?.unitCostUsd ?? c.averageUnitCost;
+  const supplier = fc?.supplier ?? DEFAULT_SUPPLIER;
   if (unitCost == null) {
-    return { cogsUsd: 0, fulfillmentUsd: 0, totalBottles };
+    return { cogsUsd: 0, fulfillmentUsd: 0, totalBottles, supplier };
   }
   const cogsUsd = round2(totalBottles * unitCost);
-
-  // First bracket whose maxBottles >= total. Sorted ASC during cache load.
-  const bracket = c.fulfillmentBrackets.find((b) => b.bottlesMax >= totalBottles);
-  // Out-of-range (orders > 12 bottles, currently no SKU): use largest bracket
-  // as conservative fallback. Surface for review.
-  const fulfillmentRate = bracket
-    ? bracket.priceUsd
-    : (c.fulfillmentBrackets[c.fulfillmentBrackets.length - 1]?.priceUsd ?? 0);
-
-  return { cogsUsd, fulfillmentUsd: round2(fulfillmentRate), totalBottles };
+  const fulfillmentUsd = round2(
+    lookupFulfillment(c.rates, supplier, family, totalBottles),
+  );
+  return { cogsUsd, fulfillmentUsd, totalBottles, supplier };
 }
 
 function round2(n: number): number {
