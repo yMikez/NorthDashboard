@@ -1,15 +1,16 @@
-// Admin endpoint: pipeline COMPLETO de recálculo de custos por pedido.
+// Admin endpoint: pipeline COMPLETO de recálculo de custos por pedido,
+// rodado EM BACKGROUND (não-bloqueante).
 //
 //   1) classifyExistingProducts() — reclassifica TODOS os produtos com o
-//      classifier atual (família/potes/bonus/tipo/funnelStep). Necessário
-//      pra BuyGoods e qualquer SKU que entrou antes do padrão existir —
-//      sem isso, Product.family fica null e o passo 2 não tem o que somar.
+//      classifier atual (família/potes/bonus/tipo/funnelStep).
 //   2) backfillCogs() — reescreve Order.cogsUsd + fulfillmentUsd a partir
-//      do Product (agora classificado) + ProductFamilyCost/FulfillmentRate
-//      por fornecedor.
+//      do Product (já classificado) + tarifa por fornecedor.
 //
-// Rodar os dois em ordem aqui elimina o footgun de "recalcular sem
-// reclassificar" (que deixava BuyGoods em $0). Idempotente.
+// Por que background: o pipeline varre milhares de orders com updates
+// sequenciais — passava do timeout HTTP do proxy (a request travava e
+// "nada acontecia" na UI). Agora o POST dispara o job e volta na hora;
+// a UI faz polling do GET pra ver progresso/resultado. Processo Node
+// é long-running na VPS, então o job continua após a resposta.
 //
 // Gated by INGEST_SECRET like other admin endpoints.
 
@@ -23,34 +24,80 @@ import { logger } from '@/lib/logger';
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
-export async function POST(req: Request) {
-  const auth = req.headers.get('authorization');
-  const token = auth?.replace(/^Bearer\s+/i, '') ?? null;
-  if (!checkIngestSecret(token)) {
-    return NextResponse.json({ error: 'unauthorized' }, { status: 401 });
-  }
+interface BackfillJob {
+  running: boolean;
+  startedAt: string | null;
+  finishedAt: string | null;
+  result: Record<string, unknown> | null;
+  error: string | null;
+}
+
+// Estado em memória do último/atual job. Single-flight: só 1 por vez.
+const job: BackfillJob = {
+  running: false,
+  startedAt: null,
+  finishedAt: null,
+  result: null,
+  error: null,
+};
+
+async function runBackfill(): Promise<void> {
   try {
-    // 1) Reclassifica produtos (preenche family/bottles/bonus pros BuyGoods
-    //    e corrige tipo/funnelStep onde o IPN errou).
+    // 1) Reclassifica produtos (preenche family/bottles/bonus dos BuyGoods
+    //    e corrige productType/funnelStep onde o IPN errou).
     const classification = await classifyExistingProducts();
     // 2) Reescreve os snapshots de custo a partir do catálogo atualizado.
     const cogs = await backfillCogs();
     await refreshDailyMetricsNow();
-    // Campos de cogs no topo (retrocompat com a UI) + bloco de
-    // classificação pra mostrar quantos produtos foram (re)classificados.
-    return NextResponse.json({
+    job.result = {
       ...cogs,
       reclassified: classification.classified,
       ordersFixed: classification.ordersFixed,
       funnelStepFixed: classification.funnelStepFixed,
       unrecognizedCount: classification.unrecognized.length,
       classification,
-    });
+    };
+    job.error = null;
   } catch (err) {
-    logger.error({ err }, 'admin/backfill-cogs failed');
+    logger.error({ err }, 'admin/backfill-cogs job failed');
+    job.error = err instanceof Error ? err.message : String(err);
+  } finally {
+    job.running = false;
+    job.finishedAt = new Date().toISOString();
+  }
+}
+
+export async function POST(req: Request) {
+  const auth = req.headers.get('authorization');
+  const token = auth?.replace(/^Bearer\s+/i, '') ?? null;
+  if (!checkIngestSecret(token)) {
+    return NextResponse.json({ error: 'unauthorized' }, { status: 401 });
+  }
+  if (job.running) {
     return NextResponse.json(
-      { error: 'failed', message: err instanceof Error ? err.message : String(err) },
-      { status: 500 },
+      { started: false, running: true, startedAt: job.startedAt, message: 'Já tem um backfill rodando.' },
+      { status: 202 },
     );
   }
+  job.running = true;
+  job.startedAt = new Date().toISOString();
+  job.finishedAt = null;
+  job.result = null;
+  job.error = null;
+  // Fire-and-forget: NÃO await. Node long-running continua o job após
+  // a resposta. UI acompanha via GET.
+  void runBackfill();
+  return NextResponse.json(
+    { started: true, running: true, startedAt: job.startedAt },
+    { status: 202 },
+  );
+}
+
+export async function GET(req: Request) {
+  const auth = req.headers.get('authorization');
+  const token = auth?.replace(/^Bearer\s+/i, '') ?? null;
+  if (!checkIngestSecret(token)) {
+    return NextResponse.json({ error: 'unauthorized' }, { status: 401 });
+  }
+  return NextResponse.json(job);
 }

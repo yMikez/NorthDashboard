@@ -3439,15 +3439,41 @@ function CostsPage({ filters }) {
   }
 
   async function recompute() {
-    if (!token) { setSaveState({ status: 'error', message: 'Token necessário' }); return; }
+    if (!token) { setSaveState({ status: 'error', message: 'Token necessário — autentique primeiro (campo bearer secret acima).' }); return; }
     if (!confirm('Reclassificar produtos (BuyGoods etc.) + recalcular COGS/frete em TODAS as orders com os preços atuais? Sobrescreve os snapshots históricos.')) return;
-    setSaveState({ status: 'saving', message: 'Reclassificando produtos + recomputando custos…' });
+    setSaveState({ status: 'saving', message: 'Iniciando job em background…' });
     try {
-      const stats = await window.NSApi.adminBackfillCogs(token);
-      setSaveState({
-        status: 'saved',
-        message: `${stats.reclassified ?? 0} produtos reclassificados · ${stats.scanned} orders varridas · ${stats.cogsUpdated} COGS atualizados · ${stats.sessionsRebalanced} sessões de frete rebalanceadas.`,
-      });
+      const kick = await window.NSApi.adminBackfillCogs(token);
+      if (kick.running && kick.started === false) {
+        setSaveState({ status: 'saving', message: 'Já tinha um backfill rodando — acompanhando o progresso…' });
+      } else {
+        setSaveState({ status: 'saving', message: 'Job rodando em background (reclassificar + recalcular)… pode levar alguns minutos.' });
+      }
+      // Polling do status. O job roda no servidor mesmo se você sair da
+      // página; aqui só acompanhamos pra mostrar o resultado.
+      const poll = async () => {
+        try {
+          const st = await window.NSApi.adminBackfillStatus(token);
+          if (st.running) {
+            setSaveState({ status: 'saving', message: `Job rodando desde ${st.startedAt ? new Date(st.startedAt).toLocaleTimeString() : '—'}… aguarde.` });
+            setTimeout(poll, 4000);
+            return;
+          }
+          if (st.error) {
+            setSaveState({ status: 'error', message: `Backfill falhou: ${st.error}` });
+            return;
+          }
+          const r = st.result || {};
+          setSaveState({
+            status: 'saved',
+            message: `Pronto · ${r.reclassified ?? 0} produtos reclassificados · ${r.scanned ?? 0} orders varridas · ${r.cogsUpdated ?? 0} COGS atualizados · ${r.sessionsRebalanced ?? 0} sessões de frete rebalanceadas · ${r.funnelStepFixed ?? 0} funnelSteps corrigidos.`,
+          });
+          reload();
+        } catch (err) {
+          setSaveState({ status: 'error', message: `Erro consultando status: ${err.message}` });
+        }
+      };
+      setTimeout(poll, 3000);
     } catch (err) {
       setSaveState({ status: 'error', message: err.message });
     }
@@ -3787,9 +3813,9 @@ function CostsPage({ filters }) {
           <div className="page-head-actions">
             <button
               className="btn btn-primary"
-              disabled={!token || saveState.status === 'saving' || (state.data?.unclassified?.length ?? 0) === 0}
+              disabled={saveState.status === 'saving' || (state.data?.unclassified?.length ?? 0) === 0}
               onClick={classifyAi}
-              title={!token ? 'Token de admin necessário' : 'Claude lê os nomes e classifica'}
+              title={!token ? 'Cole o token admin acima e clique Autenticar primeiro' : 'Claude lê os nomes e classifica'}
             >
               <Icon name="zap" size={12}/> Identificar com IA
             </button>
@@ -3848,8 +3874,9 @@ function CostsPage({ filters }) {
           <div className="page-head-actions">
             <button
               className="btn btn-ghost"
-              disabled={!token || saveState.status === 'saving'}
+              disabled={saveState.status === 'saving'}
               onClick={recompute}
+              title={!token ? 'Cole o token admin no campo acima e clique Autenticar primeiro' : 'Reclassifica produtos + recalcula COGS/frete'}
             >
               <Icon name="refresh" size={12}/> Reclassificar + recalcular orders
             </button>

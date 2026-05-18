@@ -314,9 +314,25 @@ async function adminSaveCosts(token, body) {
   return res.json();
 }
 
+// Dispara o backfill em BACKGROUND. Retorna { started, running, startedAt }
+// imediatamente (202) — não espera o job terminar (evita timeout HTTP).
 async function adminBackfillCogs(token) {
   const res = await fetch('/api/admin/backfill-cogs', {
     method: 'POST',
+    headers: { Authorization: `Bearer ${token}`, Accept: 'application/json' },
+  });
+  if (!res.ok) {
+    const txt = await res.text().catch(() => '');
+    throw new Error(`${res.status} ${txt}`);
+  }
+  return res.json();
+}
+
+// Status do job de backfill (polling). { running, startedAt, finishedAt,
+// result, error }.
+async function adminBackfillStatus(token) {
+  const res = await fetch('/api/admin/backfill-cogs', {
+    method: 'GET',
     headers: { Authorization: `Bearer ${token}`, Accept: 'application/json' },
   });
   if (!res.ok) {
@@ -636,6 +652,7 @@ window.NSApi = {
   fetchCostsOverview,
   adminSaveCosts,
   adminBackfillCogs,
+  adminBackfillStatus,
   adminClassifyAi,
   fetchInsights,
   adminListUsers,
