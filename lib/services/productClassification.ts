@@ -83,10 +83,15 @@ const FAMILY_NORMALIZATIONS: Array<[RegExp, string]> = [
   // "Neuro Mind Pro", "Flex Guard + Immune Guard", "Flex + Imune guard".
   [/^neuro\s*mind\s*pro$/i, 'NeuroMindPro'],
   [/^flex.*imm?une.*guard$/i, 'FlexImmuneGuard'],
-  // NeuroPulse — produto distinto de NeuroMindPro. Codenames BuyGoods colidem
-  // entre os dois, então a disambiguação obrigatoriamente vem pelo NOME.
-  [/^neuro\s*pulse$/i, 'NeuroPulse'],
-  [/^neuropulse$/i, 'NeuroPulse'],
+  // NeuroPulsePro — produto distinto de NeuroMindPro (compartilha codenames
+  // BuyGoods, então a disambiguação vem pelo NOME). O vendor escreve
+  // "Neuro Pulse Pro" com espaços; canônico aqui é "NeuroPulsePro" pra
+  // bater com a convenção do NeuroMindPro. "NeuroPulse" sem "Pro" também
+  // canonicaliza pra NeuroPulsePro (vendor usa os dois informalmente).
+  [/^neuro\s*pulse\s*pro$/i, 'NeuroPulsePro'],
+  [/^neuropulsepro$/i, 'NeuroPulsePro'],
+  [/^neuro\s*pulse$/i, 'NeuroPulsePro'],
+  [/^neuropulse$/i, 'NeuroPulsePro'],
 ];
 
 export function normalizeFamily(raw: string): string {

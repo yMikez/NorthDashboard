@@ -406,31 +406,36 @@ describe('classifyProduct (BuyGoods nova convenção: Upgrade N / Downsell N / F
   });
 });
 
-// NeuroPulse vs NeuroMindPro — produtos distintos com codenames idênticos
+// NeuroPulsePro vs NeuroMindPro — produtos distintos com codenames idênticos
 // no BG. Disambiguação obrigatoriamente vem pelo NOME do IPN (codename é
-// ambíguo). Testa que a normalização de família reconhece "NeuroPulse" e
-// que dois nomes diferentes com o mesmo codename produzem famílias
+// ambíguo). Testa que a normalização de família reconhece "Neuro Pulse Pro"
+// e que dois nomes diferentes com o mesmo codename produzem famílias
 // diferentes.
-describe('classifyProduct (BuyGoods collision: NeuroMindPro ↔ NeuroPulse)', () => {
-  it('"Neuro Pulse 6 Bottles" → NeuroPulse FE', () => {
-    const r = classifyProduct('neu6', 'Neuro Pulse 6 Bottles');
-    expect(r.family).toBe('NeuroPulse');
+describe('classifyProduct (BuyGoods collision: NeuroMindPro ↔ NeuroPulsePro)', () => {
+  it('"Neuro Pulse Pro 6 Bottles" → NeuroPulsePro FE', () => {
+    const r = classifyProduct('neu6', 'Neuro Pulse Pro 6 Bottles');
+    expect(r.family).toBe('NeuroPulsePro');
     expect(r.type).toBe('FRONTEND');
     expect(r.bottles).toBe(6);
   });
 
-  it('"NeuroPulse 3 Bottles (Upgrade 1)" → NeuroPulse UP1', () => {
-    const r = classifyProduct('neu3u', 'NeuroPulse 3 Bottles (Upgrade 1)');
-    expect(r.family).toBe('NeuroPulse');
+  it('"Neuro Pulse Pro 3 Bottles (Upgrade 1)" → NeuroPulsePro UP1', () => {
+    const r = classifyProduct('neu3u', 'Neuro Pulse Pro 3 Bottles (Upgrade 1)');
+    expect(r.family).toBe('NeuroPulsePro');
     expect(r.type).toBe('UPSELL');
     expect(r.funnelStep).toBe(2);
   });
 
+  it('"Neuro Pulse 6 Bottles" (sem "Pro") também canonicaliza pra NeuroPulsePro', () => {
+    const r = classifyProduct('neu6', 'Neuro Pulse 6 Bottles');
+    expect(r.family).toBe('NeuroPulsePro');
+  });
+
   it('mesmo codename, nomes diferentes → famílias diferentes', () => {
     const mindpro = classifyProduct('neu6', 'Neuro Mind Pro 6 Bottles');
-    const pulse = classifyProduct('neu6', 'Neuro Pulse 6 Bottles');
+    const pulse = classifyProduct('neu6', 'Neuro Pulse Pro 6 Bottles');
     expect(mindpro.family).toBe('NeuroMindPro');
-    expect(pulse.family).toBe('NeuroPulse');
+    expect(pulse.family).toBe('NeuroPulsePro');
     expect(mindpro.type).toBe('FRONTEND');
     expect(pulse.type).toBe('FRONTEND');
   });
