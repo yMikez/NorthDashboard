@@ -3306,10 +3306,13 @@ function fmtAgo(seconds) {
 
 // ---------- COSTS (editable cost tables) ----------
 // Inline daily chart pro comparativo RedRock × ShipOffers (2 séries de
-// contagem de pedidos). SVG simples, sem tooltip — só path/area. Compartilha
-// estilo com o LineChart geral mas é específico pro shape do data.
-function SupplierDailyChart({ daily, height = 220 }) {
-  const W = 1000, H = height, PAD_L = 44, PAD_R = 18, PAD_T = 14, PAD_B = 28;
+// contagem de pedidos). Espelha o estilo do LineChart geral (glow, área
+// preenchida, grid dasheado, hover tooltip), mas com 2 séries paralelas
+// em cores distintas (vermelho RedRock × ciano ShipOffers).
+function SupplierDailyChart({ daily, height = 240 }) {
+  const [hover, setHover] = useState(null);
+  const ref = React.useRef(null);
+  const W = 1000, H = height, PAD_L = 52, PAD_R = 20, PAD_T = 18, PAD_B = 32;
   const innerW = W - PAD_L - PAD_R;
   const innerH = H - PAD_T - PAD_B;
 
@@ -3325,13 +3328,19 @@ function SupplierDailyChart({ daily, height = 220 }) {
   const max = Math.max(1, ...series.flatMap((s) => [s.red, s.ship]));
   const xFor = (i) => PAD_L + (series.length <= 1 ? 0 : (i / (series.length - 1)) * innerW);
   const yFor = (v) => PAD_T + innerH - (v / max) * innerH;
-  const pathRed = 'M' + series.map((s, i) => `${xFor(i)} ${yFor(s.red)}`).join(' L ');
-  const pathShip = 'M' + series.map((s, i) => `${xFor(i)} ${yFor(s.ship)}`).join(' L ');
+  const buildPath = (key) => 'M' + series.map((s, i) => `${xFor(i)} ${yFor(s[key])}`).join(' L ');
+  const buildArea = (key) => buildPath(key)
+    + ` L ${xFor(series.length - 1)} ${PAD_T + innerH}`
+    + ` L ${PAD_L} ${PAD_T + innerH} Z`;
+  const pathRed = buildPath('red');
+  const pathShip = buildPath('ship');
+  const areaRed = buildArea('red');
+  const areaShip = buildArea('ship');
 
-  // y-axis ticks (5 níveis igualmente espaçados, 0 → max).
+  // y-axis ticks (5 níveis com números arredondados pra parecer eixo limpo).
   const ticks = 4;
   const yTicks = Array.from({ length: ticks + 1 }).map((_, i) => Math.round((i / ticks) * max));
-  // x labels: até 7 dias destacados.
+  // x labels: até 7 datas destacadas.
   const nLabels = Math.min(7, series.length);
   const xLabelIdx = nLabels <= 1
     ? [0]
@@ -3339,32 +3348,166 @@ function SupplierDailyChart({ daily, height = 220 }) {
         Math.round((i / (nLabels - 1)) * (series.length - 1)),
       );
 
+  function onMove(e) {
+    if (!ref.current) return;
+    const rect = ref.current.getBoundingClientRect();
+    const scale = W / rect.width;
+    const x = (e.clientX - rect.left) * scale;
+    if (x < PAD_L || x > W - PAD_R) { setHover(null); return; }
+    const t = (x - PAD_L) / innerW;
+    const idx = Math.round(t * (series.length - 1));
+    setHover(Math.max(0, Math.min(series.length - 1, idx)));
+  }
+  function onLeave() { setHover(null); }
+
   return (
-    <svg viewBox={`0 0 ${W} ${H}`} style={{ width: '100%', height, display: 'block' }} preserveAspectRatio="none">
-      {/* y grid lines + labels */}
-      {yTicks.map((v, i) => (
-        <g key={i}>
-          <line x1={PAD_L} x2={W - PAD_R} y1={yFor(v)} y2={yFor(v)}
-            stroke="rgba(255,255,255,0.06)" strokeWidth="1"/>
-          <text x={PAD_L - 8} y={yFor(v) + 4} fill="var(--fg5)" fontSize="10" textAnchor="end">
-            {v}
-          </text>
+    <div style={{ position: 'relative' }}>
+      <svg
+        ref={ref}
+        viewBox={`0 0 ${W} ${H}`}
+        style={{ width: '100%', height, display: 'block' }}
+        preserveAspectRatio="none"
+        onMouseMove={onMove}
+        onMouseLeave={onLeave}
+      >
+        <defs>
+          <linearGradient id="gradSupplierRed" x1="0" x2="0" y1="0" y2="1">
+            <stop offset="0%" stopColor="#ff5a5a" stopOpacity="0.30"/>
+            <stop offset="100%" stopColor="#ff5a5a" stopOpacity="0"/>
+          </linearGradient>
+          <linearGradient id="gradSupplierShip" x1="0" x2="0" y1="0" y2="1">
+            <stop offset="0%" stopColor="#5BC8FF" stopOpacity="0.30"/>
+            <stop offset="100%" stopColor="#5BC8FF" stopOpacity="0"/>
+          </linearGradient>
+          <filter id="glowRed" x="-20%" y="-20%" width="140%" height="140%">
+            <feGaussianBlur stdDeviation="2.2" result="blur"/>
+            <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+          </filter>
+          <filter id="glowShip" x="-20%" y="-20%" width="140%" height="140%">
+            <feGaussianBlur stdDeviation="2.2" result="blur"/>
+            <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+          </filter>
+        </defs>
+
+        {/* Grid dasheado (mesmo estilo do LineChart geral) */}
+        <g className="chart-grid">
+          {yTicks.map((v, i) => (
+            <line key={i} x1={PAD_L} x2={W - PAD_R} y1={yFor(v)} y2={yFor(v)}/>
+          ))}
         </g>
-      ))}
-      {/* x labels */}
-      {xLabelIdx.map((idx) => (
-        <text key={idx} x={xFor(idx)} y={H - 8}
-          fill="var(--fg5)" fontSize="10" textAnchor="middle">
-          {series[idx].date.slice(5)}
-        </text>
-      ))}
-      {/* RedRock line */}
-      <path d={pathRed} fill="none" stroke="#ff8a8a" strokeWidth="2.2"
-        strokeLinejoin="round" strokeLinecap="round"/>
-      {/* ShipOffers line */}
-      <path d={pathShip} fill="none" stroke="#7cd0ff" strokeWidth="2.2"
-        strokeLinejoin="round" strokeLinecap="round"/>
-    </svg>
+
+        {/* Y axis labels */}
+        <g className="chart-axis">
+          {yTicks.map((v, i) => (
+            <text key={i} x={PAD_L - 10} y={yFor(v) + 3} textAnchor="end">{fmtInt(v)}</text>
+          ))}
+        </g>
+
+        {/* X axis labels */}
+        <g className="chart-axis">
+          {xLabelIdx.map((i) => (
+            <text key={i} x={xFor(i)} y={H - 10} textAnchor="middle">
+              {series[i].date.slice(5)}
+            </text>
+          ))}
+        </g>
+
+        {/* Áreas (ShipOffers atrás — geralmente menor; RedRock por cima) */}
+        <path d={areaShip} fill="url(#gradSupplierShip)" opacity="0.85"/>
+        <path d={areaRed} fill="url(#gradSupplierRed)" opacity="0.85"/>
+
+        {/* Linhas com glow */}
+        <path d={pathShip} fill="none" stroke="#5BC8FF" strokeWidth="2.4"
+          strokeLinejoin="round" strokeLinecap="round" filter="url(#glowShip)"
+          style={{ filter: 'drop-shadow(0 0 5px rgba(91,200,255,0.55))' }}/>
+        <path d={pathRed} fill="none" stroke="#ff5a5a" strokeWidth="2.4"
+          strokeLinejoin="round" strokeLinecap="round" filter="url(#glowRed)"
+          style={{ filter: 'drop-shadow(0 0 5px rgba(255,90,90,0.55))' }}/>
+
+        {/* Hover state — vertical guide + 2 dots */}
+        {hover != null && (
+          <g>
+            <line
+              x1={xFor(hover)} x2={xFor(hover)}
+              y1={PAD_T} y2={PAD_T + innerH}
+              stroke="rgba(255,255,255,0.18)"
+              strokeWidth="1"
+              strokeDasharray="2 3"
+            />
+            <circle cx={xFor(hover)} cy={yFor(series[hover].ship)} r="4.5"
+              fill="#0c1620" stroke="#5BC8FF" strokeWidth="2"/>
+            <circle cx={xFor(hover)} cy={yFor(series[hover].red)} r="4.5"
+              fill="#0c1620" stroke="#ff5a5a" strokeWidth="2"/>
+          </g>
+        )}
+      </svg>
+
+      {/* Tooltip */}
+      {hover != null && (() => {
+        const leftPct = Math.min(85, Math.max(2, (xFor(hover) / W) * 100));
+        const s = series[hover];
+        const total = s.red + s.ship;
+        return (
+          <div style={{
+            position: 'absolute',
+            left: `${leftPct}%`,
+            top: 8,
+            transform: 'translateX(-50%)',
+            background: 'rgba(10,18,28,0.85)',
+            border: '1px solid rgba(255,255,255,0.12)',
+            backdropFilter: 'blur(18px) saturate(180%)',
+            WebkitBackdropFilter: 'blur(18px) saturate(180%)',
+            borderRadius: 8,
+            padding: '10px 12px',
+            minWidth: 160,
+            pointerEvents: 'none',
+            fontFamily: 'var(--f-mono)',
+            fontSize: 11,
+            color: 'var(--fg2)',
+            letterSpacing: '0.02em',
+            boxShadow: '0 12px 32px -10px rgba(0,0,0,0.6), 0 0 0 1px rgba(255,255,255,0.04) inset',
+            zIndex: 2,
+          }}>
+            <div style={{
+              fontSize: 10, color: 'var(--fg5)',
+              letterSpacing: '0.1em', textTransform: 'uppercase',
+              marginBottom: 6,
+            }}>
+              {s.date}
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+              <span style={{
+                display: 'inline-block', width: 8, height: 8, borderRadius: '50%',
+                background: '#ff5a5a',
+                boxShadow: '0 0 6px rgba(255,90,90,0.7)',
+              }}/>
+              <span style={{ flex: 1, color: 'var(--fg3)' }}>RedRock</span>
+              <span style={{ color: 'var(--fg1)', fontWeight: 600 }}>{fmtInt(s.red)}</span>
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <span style={{
+                display: 'inline-block', width: 8, height: 8, borderRadius: '50%',
+                background: '#5BC8FF',
+                boxShadow: '0 0 6px rgba(91,200,255,0.7)',
+              }}/>
+              <span style={{ flex: 1, color: 'var(--fg3)' }}>ShipOffers</span>
+              <span style={{ color: 'var(--fg1)', fontWeight: 600 }}>{fmtInt(s.ship)}</span>
+            </div>
+            {total > 0 && (
+              <div style={{
+                marginTop: 6, paddingTop: 6,
+                borderTop: '1px solid rgba(255,255,255,0.06)',
+                display: 'flex', justifyContent: 'space-between',
+                color: 'var(--fg4)',
+              }}>
+                <span>Total</span>
+                <span style={{ color: 'var(--fg2)' }}>{fmtInt(total)}</span>
+              </div>
+            )}
+          </div>
+        );
+      })()}
+    </div>
   );
 }
 
@@ -3775,8 +3918,19 @@ function CostsPage({ filters }) {
               </div>
               <div className="s">APPROVED · pacotes enviados</div>
             </div>
-            <div className="mini-kpi" style={{ borderColor: 'rgba(255,98,98,0.35)' }}>
-              <div className="l" style={{ color: '#ff8a8a' }}>RedRock</div>
+            <div className="mini-kpi" style={{
+              borderColor: 'rgba(255,90,90,0.4)',
+              background: 'linear-gradient(180deg, rgba(255,90,90,0.07), rgba(255,90,90,0.02))',
+              boxShadow: '0 0 24px -8px rgba(255,90,90,0.35), inset 0 1px 0 rgba(255,255,255,0.04)',
+            }}>
+              <div className="l" style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                <span style={{
+                  display: 'inline-block', width: 8, height: 8, borderRadius: '50%',
+                  background: '#ff5a5a',
+                  boxShadow: '0 0 8px rgba(255,90,90,0.7)',
+                }}/>
+                <span style={{ color: '#ff8a8a' }}>RedRock</span>
+              </div>
               <div className="v">
                 {fulfDist.status === 'loading' ? '…' : fmtInt(fulfDist.kpis?.redRockOrders ?? 0)}
               </div>
@@ -3786,8 +3940,19 @@ function CostsPage({ filters }) {
                   : '—'}
               </div>
             </div>
-            <div className="mini-kpi" style={{ borderColor: 'rgba(91,200,255,0.35)' }}>
-              <div className="l" style={{ color: '#7cd0ff' }}>ShipOffers</div>
+            <div className="mini-kpi" style={{
+              borderColor: 'rgba(91,200,255,0.4)',
+              background: 'linear-gradient(180deg, rgba(91,200,255,0.07), rgba(91,200,255,0.02))',
+              boxShadow: '0 0 24px -8px rgba(91,200,255,0.35), inset 0 1px 0 rgba(255,255,255,0.04)',
+            }}>
+              <div className="l" style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                <span style={{
+                  display: 'inline-block', width: 8, height: 8, borderRadius: '50%',
+                  background: '#5BC8FF',
+                  boxShadow: '0 0 8px rgba(91,200,255,0.7)',
+                }}/>
+                <span style={{ color: '#7cd0ff' }}>ShipOffers</span>
+              </div>
               <div className="v">
                 {fulfDist.status === 'loading' ? '…' : fmtInt(fulfDist.kpis?.shipOffersOrders ?? 0)}
               </div>
@@ -3805,35 +3970,78 @@ function CostsPage({ filters }) {
               <div className="panel-head">
                 <div className="panel-title">
                   <span className="panel-eyebrow">DISTRIBUIÇÃO POR FORNECEDOR</span>
-                  <div className="panel-metric">
-                    {fulfDist.kpis.redRockPct.toFixed(1)}% RedRock <span style={{ color: 'var(--fg4)' }}>·</span> {fulfDist.kpis.shipOffersPct.toFixed(1)}% ShipOffers
+                  <div className="panel-metric" style={{ display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap' }}>
+                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
+                      <span style={{
+                        display: 'inline-block', width: 10, height: 10, borderRadius: '50%',
+                        background: '#ff5a5a',
+                        boxShadow: '0 0 10px rgba(255,90,90,0.7), 0 0 0 2px rgba(255,90,90,0.15)',
+                      }}/>
+                      <span style={{ color: '#ff8a8a' }}>{fulfDist.kpis.redRockPct.toFixed(1)}%</span>
+                      <span style={{ color: 'var(--fg3)', fontFamily: 'var(--f-mono)', fontSize: 13, fontWeight: 500, letterSpacing: '0.04em' }}>RedRock</span>
+                    </span>
+                    <span style={{ color: 'var(--fg5)', fontSize: 14 }}>·</span>
+                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
+                      <span style={{
+                        display: 'inline-block', width: 10, height: 10, borderRadius: '50%',
+                        background: '#5BC8FF',
+                        boxShadow: '0 0 10px rgba(91,200,255,0.7), 0 0 0 2px rgba(91,200,255,0.15)',
+                      }}/>
+                      <span style={{ color: '#7cd0ff' }}>{fulfDist.kpis.shipOffersPct.toFixed(1)}%</span>
+                      <span style={{ color: 'var(--fg3)', fontFamily: 'var(--f-mono)', fontSize: 13, fontWeight: 500, letterSpacing: '0.04em' }}>ShipOffers</span>
+                    </span>
                   </div>
                 </div>
               </div>
               <div style={{
+                position: 'relative',
                 display: 'flex',
-                height: 24,
-                borderRadius: 12,
+                height: 30,
+                borderRadius: 15,
                 overflow: 'hidden',
-                background: 'rgba(255,255,255,0.04)',
-                marginTop: 8,
+                background: 'rgba(255,255,255,0.03)',
+                marginTop: 10,
+                // Bevel: inset shadow embaixo + highlight em cima
+                boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.06), inset 0 -1px 2px rgba(0,0,0,0.4)',
+                border: '1px solid rgba(255,255,255,0.05)',
               }}>
                 <div style={{
                   width: `${fulfDist.kpis.redRockPct}%`,
-                  background: 'linear-gradient(90deg, #ff5a5a, #ff8a8a)',
+                  background: 'linear-gradient(180deg, #ff7373 0%, #ff5a5a 50%, #e83838 100%)',
                   display: 'flex', alignItems: 'center', justifyContent: 'center',
                   fontSize: 11, fontWeight: 600, color: '#fff',
+                  letterSpacing: '0.04em',
                   textShadow: '0 1px 2px rgba(0,0,0,0.4)',
+                  position: 'relative',
+                  boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.25), 0 0 14px rgba(255,90,90,0.45)',
                 }}>
-                  {fulfDist.kpis.redRockPct >= 6 ? `RedRock · ${fmtInt(fulfDist.kpis.redRockOrders)}` : ''}
+                  {/* Sheen overlay no topo */}
+                  <span style={{
+                    position: 'absolute', inset: 0,
+                    background: 'linear-gradient(180deg, rgba(255,255,255,0.18), transparent 45%)',
+                    pointerEvents: 'none',
+                  }}/>
+                  <span style={{ position: 'relative', zIndex: 1 }}>
+                    {fulfDist.kpis.redRockPct >= 6 ? `RedRock · ${fmtInt(fulfDist.kpis.redRockOrders)}` : ''}
+                  </span>
                 </div>
                 <div style={{
                   width: `${fulfDist.kpis.shipOffersPct}%`,
-                  background: 'linear-gradient(90deg, #4cb8ff, #7cd0ff)',
+                  background: 'linear-gradient(180deg, #7cd0ff 0%, #5BC8FF 50%, #2a9cd6 100%)',
                   display: 'flex', alignItems: 'center', justifyContent: 'center',
                   fontSize: 11, fontWeight: 600, color: '#0a1820',
+                  letterSpacing: '0.04em',
+                  position: 'relative',
+                  boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.35), 0 0 14px rgba(91,200,255,0.45)',
                 }}>
-                  {fulfDist.kpis.shipOffersPct >= 6 ? `ShipOffers · ${fmtInt(fulfDist.kpis.shipOffersOrders)}` : ''}
+                  <span style={{
+                    position: 'absolute', inset: 0,
+                    background: 'linear-gradient(180deg, rgba(255,255,255,0.22), transparent 45%)',
+                    pointerEvents: 'none',
+                  }}/>
+                  <span style={{ position: 'relative', zIndex: 1 }}>
+                    {fulfDist.kpis.shipOffersPct >= 6 ? `ShipOffers · ${fmtInt(fulfDist.kpis.shipOffersOrders)}` : ''}
+                  </span>
                 </div>
               </div>
             </div>
@@ -3845,20 +4053,40 @@ function CostsPage({ filters }) {
               <div className="panel-head">
                 <div className="panel-title">
                   <span className="panel-eyebrow">PEDIDOS POR DIA · POR FORNECEDOR</span>
-                  <div className="panel-metric">
+                  <div className="panel-metric" style={{ fontSize: 14, color: 'var(--fg3)', fontWeight: 500 }}>
                     {fulfDist.daily.length} {fulfDist.daily.length === 1 ? 'dia' : 'dias'} no intervalo
                   </div>
                 </div>
-                <div className="panel-legend">
-                  <span className="legend-dot" style={{ color: '#ff8a8a' }}>
-                    <span style={{ background: '#ff8a8a' }}/>RedRock
+                <div className="panel-legend" style={{ display: 'flex', gap: 14 }}>
+                  <span style={{
+                    display: 'inline-flex', alignItems: 'center', gap: 6,
+                    fontFamily: 'var(--f-mono)', fontSize: 11,
+                    letterSpacing: '0.05em',
+                    color: 'var(--fg3)',
+                  }}>
+                    <span style={{
+                      display: 'inline-block', width: 9, height: 9, borderRadius: '50%',
+                      background: '#ff5a5a',
+                      boxShadow: '0 0 8px rgba(255,90,90,0.8), 0 0 0 2px rgba(255,90,90,0.15)',
+                    }}/>
+                    RedRock
                   </span>
-                  <span className="legend-dot" style={{ color: '#7cd0ff' }}>
-                    <span style={{ background: '#7cd0ff' }}/>ShipOffers
+                  <span style={{
+                    display: 'inline-flex', alignItems: 'center', gap: 6,
+                    fontFamily: 'var(--f-mono)', fontSize: 11,
+                    letterSpacing: '0.05em',
+                    color: 'var(--fg3)',
+                  }}>
+                    <span style={{
+                      display: 'inline-block', width: 9, height: 9, borderRadius: '50%',
+                      background: '#5BC8FF',
+                      boxShadow: '0 0 8px rgba(91,200,255,0.8), 0 0 0 2px rgba(91,200,255,0.15)',
+                    }}/>
+                    ShipOffers
                   </span>
                 </div>
               </div>
-              <SupplierDailyChart daily={fulfDist.daily} height={220} />
+              <SupplierDailyChart daily={fulfDist.daily} height={240} />
             </div>
           )}
         </>
