@@ -79,6 +79,13 @@ const FAMILY_NORMALIZATIONS: Array<[RegExp, string]> = [
   // Famílias novas (2026-04 em diante) — preservar a grafia oficial.
   [/^flex[\s\-]*immune[\s\-]*guard$/i, 'FlexImmuneGuard'],
   [/^night[\s]*calm$/i, 'NightCalm'],
+  // FlexGuard e ImmuneGuard como famílias INDIVIDUAIS (BG vende isolado
+  // também — "Flex Guard 1 Bottle" / "Immune Guard 3 Bottles"). Entram
+  // ANTES da regex de combo abaixo pra não cair lá. O combo
+  // ("Flex Guard + Immune Guard" / "Flex + Imune guard") tem ambos no
+  // nome → matcha a regex de combo (FlexImmuneGuard) na sequência.
+  [/^flex\s*guard$/i, 'FlexGuard'],
+  [/^immune\s*guard$/i, 'ImmuneGuard'],
   // Variações BuyGoods (nome com espaços / "+" / grafia "imune"):
   // "Neuro Mind Pro", "Flex Guard + Immune Guard", "Flex + Imune guard".
   [/^neuro\s*mind\s*pro$/i, 'NeuroMindPro'],

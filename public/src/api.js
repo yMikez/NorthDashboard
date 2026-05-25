@@ -235,6 +235,66 @@ async function fetchCostsOverview(filters) {
 }
 
 /**
+ * Fetch /api/metrics/fulfillment-overview — distribuição APPROVED orders
+ * entre RedRock e ShipOffers. Resolve supplier on-the-fly (Product override
+ * → família default → 'shipoffers'). Respeita filtros globais.
+ */
+async function fetchFulfillmentOverview(filters) {
+  const params = {
+    start_date: toISODate(filters.dateRange.start),
+    end_date: toISODate(filters.dateRange.end),
+    platforms: setToCSV(filters.platforms),
+    countries: setToCSV(filters.countries),
+    products: setToCSV(filters.funnels),
+    families: setToCSV(filters.families),
+  };
+  return fetchJSON('/api/metrics/fulfillment-overview', params);
+}
+
+/**
+ * Admin: GET /api/admin/product-suppliers. Lista Products com supplier
+ * resolvido (override → família default → fallback). Token bearer.
+ * Opcional: { platform, family, search } pra filtrar.
+ */
+async function adminListProductSuppliers(token, opts = {}) {
+  const qs = new URLSearchParams();
+  if (opts.platform) qs.set('platform', opts.platform);
+  if (opts.family) qs.set('family', opts.family);
+  if (opts.search) qs.set('search', opts.search);
+  const url = `/api/admin/product-suppliers${qs.toString() ? `?${qs}` : ''}`;
+  const res = await fetch(url, {
+    headers: { Authorization: `Bearer ${token}`, Accept: 'application/json' },
+  });
+  if (!res.ok) {
+    const txt = await res.text().catch(() => '');
+    throw new Error(`${res.status} ${txt}`);
+  }
+  return res.json();
+}
+
+/**
+ * Admin: PATCH /api/admin/product-suppliers. Bulk update do supplier
+ * por Product. updates: [{ productId, supplier: 'redrock'|'shipoffers'|null }].
+ * null = remove override e herda do default da família.
+ */
+async function adminUpdateProductSuppliers(token, updates) {
+  const res = await fetch('/api/admin/product-suppliers', {
+    method: 'PATCH',
+    headers: {
+      Authorization: `Bearer ${token}`,
+      'Content-Type': 'application/json',
+      Accept: 'application/json',
+    },
+    body: JSON.stringify({ updates }),
+  });
+  if (!res.ok) {
+    const txt = await res.text().catch(() => '');
+    throw new Error(`${res.status} ${txt}`);
+  }
+  return res.json();
+}
+
+/**
  * Fetch /api/metrics/insights — daily snapshot of curated narrative cards.
  * Cached server-side per day; pass refresh=1 to force recompute.
  */
@@ -651,6 +711,9 @@ window.NSApi = {
   fetchOrderDetail,
   fetchCosts,
   fetchCostsOverview,
+  fetchFulfillmentOverview,
+  adminListProductSuppliers,
+  adminUpdateProductSuppliers,
   adminSaveCosts,
   adminBackfillCogs,
   adminBackfillStatus,

@@ -113,15 +113,21 @@ export async function upsertOrder(normalized: NormalizedOrder): Promise<UpsertOr
       bottles: classified.bottles ?? undefined,
       bonusBottles: classified.bonusBottles ?? undefined,
     },
-    select: { id: true },
+    // fulfillmentSupplier (override por SKU) — preservado entre ingests.
+    // Não mexemos aqui, só leitura pra alimentar o calcCogs abaixo.
+    select: { id: true, fulfillmentSupplier: true },
   });
 
   // Snapshot COGS at ingest. Reads cached cost tables; refreshing the cache
   // happens after admin edits via invalidateCogsCache().
+  // O 4º arg é o override por SKU; quando null, calcCogs cai pro default
+  // da família. Permite que SKUs marcados manualmente no painel
+  // (ex: NeuroMindPro-2 → RedRock individualmente) sobrescrevam o default.
   const cogs = await calcCogs(
     classified.family,
     classified.bottles,
     classified.bonusBottles,
+    product.fulfillmentSupplier,
   );
 
   let affiliateId: string | null = null;

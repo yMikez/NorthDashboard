@@ -241,6 +241,36 @@ export interface CostsOverviewResponse {
   };
 }
 
+// Fulfillment overview: distribuição de pedidos entre RedRock e ShipOffers.
+// Computa o supplier on-the-fly (resolve por SKU → família → default), pra
+// refletir reconfigurações no painel sem precisar re-snapshotar orders.
+// "orderCount" = APPROVED only (refunds não contam como pedido entregue;
+// o frete já foi pago, mas a métrica é "quantos pacotes estão saindo").
+export interface FulfillmentOverviewResponse {
+  range: { start: string; end: string };
+  kpis: {
+    totalOrders: number;
+    redRockOrders: number;
+    shipOffersOrders: number;
+    redRockPct: number;
+    shipOffersPct: number;
+    // Soma de Order.fulfillmentUsd por supplier — útil pra ver onde o $ vai.
+    redRockFulfillmentUsd: number;
+    shipOffersFulfillmentUsd: number;
+  };
+  bySupplier: Array<{
+    supplier: 'redrock' | 'shipoffers';
+    orderCount: number;
+    fulfillmentUsd: number;
+    pct: number;
+  }>;
+  daily: Array<{
+    date: string;             // YYYY-MM-DD (UTC)
+    redRockOrders: number;
+    shipOffersOrders: number;
+  }>;
+}
+
 export interface AffiliateDetailResponse {
   affiliate: {
     externalId: string;
@@ -1798,6 +1828,132 @@ export async function getPlatforms(
         };
       })
       .sort((a, b) => b.totalRevenue - a.totalRevenue),
+  };
+}
+
+/**
+ * Fulfillment overview: distribuição APPROVED orders entre RedRock e
+ * ShipOffers. Resolve o supplier on-the-fly seguindo a cadeia:
+ *   Product.fulfillmentSupplier (override por SKU)
+ *   → ProductFamilyCost.fulfillmentSupplier (default da família)
+ *   → 'shipoffers' (default do sistema)
+ *
+ * Não usa snapshot — reconfigurações no painel refletem imediatamente nas
+ * métricas (sem precisar rodar backfill). Snapshot só existe pro valor $$
+ * de Order.fulfillmentUsd, que é o que foi efetivamente pago.
+ */
+export async function getFulfillmentOverview(
+  filters: MetricsFilters,
+): Promise<FulfillmentOverviewResponse> {
+  const where: Prisma.OrderWhereInput = {
+    orderedAt: { gte: filters.startDate, lte: filters.endDate },
+    status: 'APPROVED',  // refunds/CBs não contam como pacote saindo
+  };
+  if (filters.platformSlugs?.length) {
+    where.platform = { slug: { in: filters.platformSlugs } };
+  }
+  if (filters.countries?.length) {
+    where.country = { in: filters.countries };
+  }
+  if (filters.productExternalIds?.length || filters.productFamilies?.length) {
+    where.product = {
+      ...(filters.productExternalIds?.length ? { externalId: { in: filters.productExternalIds } } : {}),
+      ...(filters.productFamilies?.length ? { family: { in: filters.productFamilies } } : {}),
+    };
+  }
+
+  const [orders, familyCosts] = await Promise.all([
+    db.order.findMany({
+      where,
+      select: {
+        orderedAt: true,
+        fulfillmentUsd: true,
+        product: { select: { family: true, fulfillmentSupplier: true } },
+      },
+    }),
+    db.productFamilyCost.findMany({
+      select: { family: true, fulfillmentSupplier: true },
+    }),
+  ]);
+
+  const familyDefault = new Map<string, string>();
+  for (const f of familyCosts) familyDefault.set(f.family, f.fulfillmentSupplier);
+
+  const resolveSupplierLocal = (
+    family: string | null,
+    productOverride: string | null,
+  ): 'redrock' | 'shipoffers' => {
+    const raw = productOverride
+      ?? (family ? familyDefault.get(family) : null)
+      ?? 'shipoffers';
+    return raw === 'redrock' ? 'redrock' : 'shipoffers';
+  };
+
+  let redRockOrders = 0;
+  let shipOffersOrders = 0;
+  let redRockUsd = 0;
+  let shipOffersUsd = 0;
+  // Bucket por dia (UTC date key, idem ao costs-overview).
+  const dailyMap = new Map<string, { redRockOrders: number; shipOffersOrders: number }>();
+
+  for (const o of orders) {
+    const supplier = resolveSupplierLocal(
+      o.product.family,
+      o.product.fulfillmentSupplier,
+    );
+    const usd = Number(o.fulfillmentUsd);
+    const dayKey = o.orderedAt.toISOString().slice(0, 10);
+    let day = dailyMap.get(dayKey);
+    if (!day) {
+      day = { redRockOrders: 0, shipOffersOrders: 0 };
+      dailyMap.set(dayKey, day);
+    }
+    if (supplier === 'redrock') {
+      redRockOrders++;
+      redRockUsd += usd;
+      day.redRockOrders++;
+    } else {
+      shipOffersOrders++;
+      shipOffersUsd += usd;
+      day.shipOffersOrders++;
+    }
+  }
+
+  const total = redRockOrders + shipOffersOrders;
+  const pct = (n: number) => (total > 0 ? (n / total) * 100 : 0);
+  const daily = Array.from(dailyMap.entries())
+    .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))
+    .map(([date, d]) => ({ date, ...d }));
+
+  return {
+    range: {
+      start: filters.startDate.toISOString(),
+      end: filters.endDate.toISOString(),
+    },
+    kpis: {
+      totalOrders: total,
+      redRockOrders,
+      shipOffersOrders,
+      redRockPct: pct(redRockOrders),
+      shipOffersPct: pct(shipOffersOrders),
+      redRockFulfillmentUsd: redRockUsd,
+      shipOffersFulfillmentUsd: shipOffersUsd,
+    },
+    bySupplier: [
+      {
+        supplier: 'redrock',
+        orderCount: redRockOrders,
+        fulfillmentUsd: redRockUsd,
+        pct: pct(redRockOrders),
+      },
+      {
+        supplier: 'shipoffers',
+        orderCount: shipOffersOrders,
+        fulfillmentUsd: shipOffersUsd,
+        pct: pct(shipOffersOrders),
+      },
+    ],
+    daily,
   };
 }
 

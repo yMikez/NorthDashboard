@@ -3305,12 +3305,83 @@ function fmtAgo(seconds) {
 }
 
 // ---------- COSTS (editable cost tables) ----------
+// Inline daily chart pro comparativo RedRock × ShipOffers (2 séries de
+// contagem de pedidos). SVG simples, sem tooltip — só path/area. Compartilha
+// estilo com o LineChart geral mas é específico pro shape do data.
+function SupplierDailyChart({ daily, height = 220 }) {
+  const W = 1000, H = height, PAD_L = 44, PAD_R = 18, PAD_T = 14, PAD_B = 28;
+  const innerW = W - PAD_L - PAD_R;
+  const innerH = H - PAD_T - PAD_B;
+
+  if (!daily || daily.length === 0) {
+    return <div style={{ padding: 24, color: 'var(--fg5)', fontSize: 12 }}>Sem dados no período.</div>;
+  }
+
+  const series = daily.map((d) => ({
+    date: d.date,
+    red: d.redRockOrders ?? 0,
+    ship: d.shipOffersOrders ?? 0,
+  }));
+  const max = Math.max(1, ...series.flatMap((s) => [s.red, s.ship]));
+  const xFor = (i) => PAD_L + (series.length <= 1 ? 0 : (i / (series.length - 1)) * innerW);
+  const yFor = (v) => PAD_T + innerH - (v / max) * innerH;
+  const pathRed = 'M' + series.map((s, i) => `${xFor(i)} ${yFor(s.red)}`).join(' L ');
+  const pathShip = 'M' + series.map((s, i) => `${xFor(i)} ${yFor(s.ship)}`).join(' L ');
+
+  // y-axis ticks (5 níveis igualmente espaçados, 0 → max).
+  const ticks = 4;
+  const yTicks = Array.from({ length: ticks + 1 }).map((_, i) => Math.round((i / ticks) * max));
+  // x labels: até 7 dias destacados.
+  const nLabels = Math.min(7, series.length);
+  const xLabelIdx = nLabels <= 1
+    ? [0]
+    : Array.from({ length: nLabels }).map((_, i) =>
+        Math.round((i / (nLabels - 1)) * (series.length - 1)),
+      );
+
+  return (
+    <svg viewBox={`0 0 ${W} ${H}`} style={{ width: '100%', height, display: 'block' }} preserveAspectRatio="none">
+      {/* y grid lines + labels */}
+      {yTicks.map((v, i) => (
+        <g key={i}>
+          <line x1={PAD_L} x2={W - PAD_R} y1={yFor(v)} y2={yFor(v)}
+            stroke="rgba(255,255,255,0.06)" strokeWidth="1"/>
+          <text x={PAD_L - 8} y={yFor(v) + 4} fill="var(--fg5)" fontSize="10" textAnchor="end">
+            {v}
+          </text>
+        </g>
+      ))}
+      {/* x labels */}
+      {xLabelIdx.map((idx) => (
+        <text key={idx} x={xFor(idx)} y={H - 8}
+          fill="var(--fg5)" fontSize="10" textAnchor="middle">
+          {series[idx].date.slice(5)}
+        </text>
+      ))}
+      {/* RedRock line */}
+      <path d={pathRed} fill="none" stroke="#ff8a8a" strokeWidth="2.2"
+        strokeLinejoin="round" strokeLinecap="round"/>
+      {/* ShipOffers line */}
+      <path d={pathShip} fill="none" stroke="#7cd0ff" strokeWidth="2.2"
+        strokeLinejoin="round" strokeLinecap="round"/>
+    </svg>
+  );
+}
+
 function CostsPage({ filters }) {
   const [state, setCostState] = useState({ status: 'loading', data: null, error: null });
   const [draftFamilies, setDraftFamilies] = useState({});  // { [family]: unitCost string }
   const [draftSuppliers, setDraftSuppliers] = useState({}); // { [family]: 'redrock'|'shipoffers' }
   const [draftRates, setDraftRates] = useState({});         // { ['supplier|family|bottlesMax']: price string }
   const [fulfillmentKpi, setFulfillmentKpi] = useState({ status: 'loading', value: 0, gross: 0, daily: [] });
+  // Distribuição RedRock vs ShipOffers (kpis + série diária). Respeita filtros.
+  const [fulfDist, setFulfDist] = useState({ status: 'loading', kpis: null, daily: [] });
+  // Cadastro de SKUs: lista de Products com supplier resolvido + drafts de
+  // override (chave = productId, valor = 'redrock'|'shipoffers'|null|undefined).
+  // undefined = sem mudança nesse SKU.
+  const [supplierList, setSupplierList] = useState({ status: 'idle', products: [], error: null });
+  const [supplierDrafts, setSupplierDrafts] = useState({});
+  const [supplierFilters, setSupplierFilters] = useState({ platform: '', family: '', search: '' });
   const cur = filters?.currency || 'USD';
 
   // Fulfillment total + série diária via /api/metrics/costs-overview —
@@ -3333,6 +3404,28 @@ function CostsPage({ filters }) {
         });
       })
       .catch(() => { if (!cancelled) setFulfillmentKpi({ status: 'error', value: 0, gross: 0, daily: [] }); });
+    return () => { cancelled = true; };
+  }, [filters?.dateRange.start.getTime(), filters?.dateRange.end.getTime(),
+      filters && Array.from(filters.platforms).join(','),
+      filters && Array.from(filters.countries).join(','),
+      filters && Array.from(filters.families).join(',')]);
+
+  // Distribuição RedRock vs ShipOffers — usa filtros globais. Pegamos
+  // kpis (contagens + %) e a série diária pro line chart de comparação.
+  useEffect(() => {
+    if (!filters) return;
+    let cancelled = false;
+    setFulfDist((s) => ({ ...s, status: 'loading' }));
+    window.NSApi.fetchFulfillmentOverview(filters)
+      .then((data) => {
+        if (cancelled) return;
+        setFulfDist({
+          status: 'ready',
+          kpis: data.kpis,
+          daily: Array.isArray(data.daily) ? data.daily : [],
+        });
+      })
+      .catch(() => { if (!cancelled) setFulfDist({ status: 'error', kpis: null, daily: [] }); });
     return () => { cancelled = true; };
   }, [filters?.dateRange.start.getTime(), filters?.dateRange.end.getTime(),
       filters && Array.from(filters.platforms).join(','),
@@ -3562,6 +3655,78 @@ function CostsPage({ filters }) {
     }
   }
 
+  // Carrega lista de Products pro cadastro (precisa de token). Refaz quando
+  // o token muda OU quando o usuário muda os filtros do cadastro.
+  async function reloadSupplierList() {
+    if (!token) {
+      setSupplierList({ status: 'idle', products: [], error: null });
+      return;
+    }
+    setSupplierList((s) => ({ ...s, status: 'loading' }));
+    try {
+      const res = await window.NSApi.adminListProductSuppliers(token, supplierFilters);
+      setSupplierList({ status: 'ready', products: res.products || [], error: null });
+    } catch (err) {
+      setSupplierList({ status: 'error', products: [], error: err.message });
+    }
+  }
+  useEffect(() => { reloadSupplierList(); }, [
+    token, supplierFilters.platform, supplierFilters.family, supplierFilters.search,
+  ]);
+
+  // Para um product: valor de override "efetivo" (draft se tocado, senão
+  // o atual). null = explicit override removido (herda da família).
+  // undefined no draft = sem mudança.
+  function supplierFor(p) {
+    if (p.id in supplierDrafts) {
+      const d = supplierDrafts[p.id];
+      // 'inherit' é placeholder de UI pra "herdar família" — vira null no save.
+      return d === 'inherit' ? null : d;
+    }
+    return p.override;
+  }
+  function supplierEffective(p) {
+    const ovr = supplierFor(p);
+    if (ovr) return ovr;
+    return p.familyDefault ?? 'shipoffers';
+  }
+  function supplierDirty(p) {
+    if (!(p.id in supplierDrafts)) return false;
+    const d = supplierDrafts[p.id];
+    const cur = p.override;
+    const nrm = d === 'inherit' ? null : d;
+    return nrm !== cur;
+  }
+  function supplierDirtyCount() {
+    return supplierList.products.filter(supplierDirty).length;
+  }
+  function setSupplierDraft(productId, value) {
+    setSupplierDrafts((d) => ({ ...d, [productId]: value }));
+  }
+  function discardSupplierDrafts() { setSupplierDrafts({}); }
+  async function saveSupplierDrafts() {
+    if (!token) {
+      setSaveState({ status: 'error', message: 'Token necessário pra salvar SKUs.' });
+      return;
+    }
+    const updates = supplierList.products
+      .filter(supplierDirty)
+      .map((p) => ({ productId: p.id, supplier: supplierFor(p) }));
+    if (updates.length === 0) {
+      setSaveState({ status: 'idle', message: 'Sem mudanças no cadastro de SKUs.' });
+      return;
+    }
+    setSaveState({ status: 'saving', message: `Salvando ${updates.length} SKU(s)…` });
+    try {
+      const res = await window.NSApi.adminUpdateProductSuppliers(token, updates);
+      setSaveState({ status: 'saved', message: `${res.updated} SKU(s) salvos.` });
+      setSupplierDrafts({});
+      reloadSupplierList();
+    } catch (err) {
+      setSaveState({ status: 'error', message: err.message });
+    }
+  }
+
   if (state.status === 'loading' && !state.data) {
     return <div className="page-in"><div className="panel">Carregando custos...</div></div>;
   }
@@ -3570,6 +3735,7 @@ function CostsPage({ filters }) {
   }
 
   const dCount = dirtyCount();
+  const skuDCount = supplierDirtyCount();
 
   return (
     <div className="page-in">
@@ -3597,6 +3763,106 @@ function CostsPage({ filters }) {
           </button>
         </div>
       </div>
+
+      {/* Distribuição RedRock vs ShipOffers — cards + stacked bar + daily chart */}
+      {filters && (
+        <>
+          <div className="mini-kpis" style={{ marginBottom: 14 }}>
+            <div className="mini-kpi">
+              <div className="l">Pedidos no período</div>
+              <div className="v">
+                {fulfDist.status === 'loading' ? '…' : fmtInt(fulfDist.kpis?.totalOrders ?? 0)}
+              </div>
+              <div className="s">APPROVED · pacotes enviados</div>
+            </div>
+            <div className="mini-kpi" style={{ borderColor: 'rgba(255,98,98,0.35)' }}>
+              <div className="l" style={{ color: '#ff8a8a' }}>RedRock</div>
+              <div className="v">
+                {fulfDist.status === 'loading' ? '…' : fmtInt(fulfDist.kpis?.redRockOrders ?? 0)}
+              </div>
+              <div className="s">
+                {fulfDist.status === 'ready' && fulfDist.kpis?.totalOrders > 0
+                  ? `${fulfDist.kpis.redRockPct.toFixed(1)}% do total · ${fmtCurrency(fulfDist.kpis.redRockFulfillmentUsd, cur, 0)} em frete`
+                  : '—'}
+              </div>
+            </div>
+            <div className="mini-kpi" style={{ borderColor: 'rgba(91,200,255,0.35)' }}>
+              <div className="l" style={{ color: '#7cd0ff' }}>ShipOffers</div>
+              <div className="v">
+                {fulfDist.status === 'loading' ? '…' : fmtInt(fulfDist.kpis?.shipOffersOrders ?? 0)}
+              </div>
+              <div className="s">
+                {fulfDist.status === 'ready' && fulfDist.kpis?.totalOrders > 0
+                  ? `${fulfDist.kpis.shipOffersPct.toFixed(1)}% do total · ${fmtCurrency(fulfDist.kpis.shipOffersFulfillmentUsd, cur, 0)} em frete`
+                  : '—'}
+              </div>
+            </div>
+          </div>
+
+          {/* Barra horizontal segmentada — split visual RedRock vs ShipOffers */}
+          {fulfDist.status === 'ready' && fulfDist.kpis?.totalOrders > 0 && (
+            <div className="panel" style={{ marginBottom: 14 }}>
+              <div className="panel-head">
+                <div className="panel-title">
+                  <span className="panel-eyebrow">DISTRIBUIÇÃO POR FORNECEDOR</span>
+                  <div className="panel-metric">
+                    {fulfDist.kpis.redRockPct.toFixed(1)}% RedRock <span style={{ color: 'var(--fg4)' }}>·</span> {fulfDist.kpis.shipOffersPct.toFixed(1)}% ShipOffers
+                  </div>
+                </div>
+              </div>
+              <div style={{
+                display: 'flex',
+                height: 24,
+                borderRadius: 12,
+                overflow: 'hidden',
+                background: 'rgba(255,255,255,0.04)',
+                marginTop: 8,
+              }}>
+                <div style={{
+                  width: `${fulfDist.kpis.redRockPct}%`,
+                  background: 'linear-gradient(90deg, #ff5a5a, #ff8a8a)',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  fontSize: 11, fontWeight: 600, color: '#fff',
+                  textShadow: '0 1px 2px rgba(0,0,0,0.4)',
+                }}>
+                  {fulfDist.kpis.redRockPct >= 6 ? `RedRock · ${fmtInt(fulfDist.kpis.redRockOrders)}` : ''}
+                </div>
+                <div style={{
+                  width: `${fulfDist.kpis.shipOffersPct}%`,
+                  background: 'linear-gradient(90deg, #4cb8ff, #7cd0ff)',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  fontSize: 11, fontWeight: 600, color: '#0a1820',
+                }}>
+                  {fulfDist.kpis.shipOffersPct >= 6 ? `ShipOffers · ${fmtInt(fulfDist.kpis.shipOffersOrders)}` : ''}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Daily comparative chart — 2 séries de contagem de pedidos */}
+          {fulfDist.status === 'ready' && fulfDist.daily.length > 0 && (
+            <div className="panel" style={{ marginBottom: 14 }}>
+              <div className="panel-head">
+                <div className="panel-title">
+                  <span className="panel-eyebrow">PEDIDOS POR DIA · POR FORNECEDOR</span>
+                  <div className="panel-metric">
+                    {fulfDist.daily.length} {fulfDist.daily.length === 1 ? 'dia' : 'dias'} no intervalo
+                  </div>
+                </div>
+                <div className="panel-legend">
+                  <span className="legend-dot" style={{ color: '#ff8a8a' }}>
+                    <span style={{ background: '#ff8a8a' }}/>RedRock
+                  </span>
+                  <span className="legend-dot" style={{ color: '#7cd0ff' }}>
+                    <span style={{ background: '#7cd0ff' }}/>ShipOffers
+                  </span>
+                </div>
+              </div>
+              <SupplierDailyChart daily={fulfDist.daily} height={220} />
+            </div>
+          )}
+        </>
+      )}
 
       {/* KPIs de fulfillment no período */}
       {filters && (
@@ -3908,6 +4174,163 @@ function CostsPage({ filters }) {
           </div>
         )}
       </div>
+
+      {/* Cadastro de SKUs por fornecedor — override do supplier por Product.
+          Hierarquia: override por SKU > default da família > 'shipoffers'. */}
+      {token && (
+        <div className="panel" style={{ marginTop: 14 }}>
+          <div className="panel-head">
+            <div className="panel-title">
+              <span className="panel-eyebrow">CADASTRO DE SKUs POR FORNECEDOR</span>
+              <div className="panel-sub">
+                Override por SKU vence o default da família. "Herda da família"
+                volta o SKU pro comportamento padrão (NeuroMindPro/NightCalm/
+                FlexImmuneGuard = RedRock; resto = ShipOffers).
+              </div>
+            </div>
+            <div className="page-head-actions">
+              {skuDCount > 0 && (
+                <button className="btn btn-ghost" onClick={discardSupplierDrafts}>
+                  Descartar {skuDCount}
+                </button>
+              )}
+              <button
+                className="btn btn-primary"
+                disabled={skuDCount === 0 || saveState.status === 'saving'}
+                onClick={saveSupplierDrafts}
+                style={{ opacity: skuDCount === 0 ? 0.5 : 1 }}
+              >
+                <Icon name="check" size={12}/> Salvar SKUs {skuDCount > 0 ? `(${skuDCount})` : ''}
+              </button>
+            </div>
+          </div>
+
+          {/* Filtros */}
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 10 }}>
+            <select
+              value={supplierFilters.platform}
+              onChange={(e) => setSupplierFilters((f) => ({ ...f, platform: e.target.value }))}
+              style={{
+                background: 'rgba(255,255,255,0.04)',
+                border: '1px solid rgba(255,255,255,0.1)',
+                color: 'var(--fg2)', padding: '6px 10px', borderRadius: 6, fontSize: 12,
+              }}
+            >
+              <option value="">Todas plataformas</option>
+              <option value="buygoods">BuyGoods</option>
+              <option value="clickbank">ClickBank</option>
+              <option value="digistore24">Digistore24</option>
+            </select>
+            <input
+              type="text"
+              placeholder="Buscar nome ou SKU…"
+              value={supplierFilters.search}
+              onChange={(e) => setSupplierFilters((f) => ({ ...f, search: e.target.value }))}
+              style={{
+                background: 'rgba(255,255,255,0.04)',
+                border: '1px solid rgba(255,255,255,0.1)',
+                color: 'var(--fg2)', padding: '6px 10px', borderRadius: 6, fontSize: 12,
+                flex: 1, minWidth: 200,
+              }}
+            />
+            <input
+              type="text"
+              placeholder="Família (NeuroMindPro, etc)…"
+              value={supplierFilters.family}
+              onChange={(e) => setSupplierFilters((f) => ({ ...f, family: e.target.value }))}
+              style={{
+                background: 'rgba(255,255,255,0.04)',
+                border: '1px solid rgba(255,255,255,0.1)',
+                color: 'var(--fg2)', padding: '6px 10px', borderRadius: 6, fontSize: 12,
+                width: 200,
+              }}
+            />
+          </div>
+
+          {/* Tabela */}
+          {supplierList.status === 'loading' && (
+            <div style={{ padding: 18, color: 'var(--fg5)', fontSize: 12 }}>Carregando…</div>
+          )}
+          {supplierList.status === 'error' && (
+            <div style={{ padding: 18, color: 'var(--danger)', fontSize: 12 }}>
+              Erro: {supplierList.error}
+            </div>
+          )}
+          {supplierList.status === 'ready' && supplierList.products.length === 0 && (
+            <div style={{ padding: 18, color: 'var(--fg5)', fontSize: 12 }}>
+              Nenhum produto bate com os filtros.
+            </div>
+          )}
+          {supplierList.status === 'ready' && supplierList.products.length > 0 && (
+            <div style={{ maxHeight: 480, overflow: 'auto', borderRadius: 6 }}>
+              <table className="data-table" style={{ width: '100%', fontSize: 12 }}>
+                <thead style={{ position: 'sticky', top: 0, background: 'rgba(15,20,28,0.95)', zIndex: 1 }}>
+                  <tr>
+                    <th style={{ textAlign: 'left' }}>SKU / Produto</th>
+                    <th style={{ textAlign: 'left', width: 100 }}>Plataforma</th>
+                    <th style={{ textAlign: 'left', width: 130 }}>Família</th>
+                    <th style={{ textAlign: 'left', width: 60 }}>Potes</th>
+                    <th style={{ textAlign: 'right', width: 70 }}>Pedidos</th>
+                    <th style={{ textAlign: 'left', width: 280 }}>Fornecedor</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {supplierList.products.map((p) => {
+                    const dirty = supplierDirty(p);
+                    const ovr = supplierFor(p);
+                    const eff = supplierEffective(p);
+                    const choiceVal = ovr === null ? 'inherit' : (ovr || 'inherit');
+                    return (
+                      <tr key={p.id} style={{ background: dirty ? 'rgba(91,200,255,0.06)' : undefined }}>
+                        <td>
+                          <div style={{ fontWeight: 500 }}>{p.name}</div>
+                          <div style={{ color: 'var(--fg5)', fontSize: 10 }}>{p.externalId}</div>
+                        </td>
+                        <td style={{ color: 'var(--fg3)' }}>{p.platformName}</td>
+                        <td style={{ color: p.family ? 'var(--fg2)' : 'var(--fg5)' }}>
+                          {p.family || '—'}
+                        </td>
+                        <td style={{ color: 'var(--fg3)' }}>{p.bottles ?? '—'}</td>
+                        <td style={{ textAlign: 'right', color: 'var(--fg3)' }}>{fmtInt(p.orderCount)}</td>
+                        <td>
+                          <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
+                            <select
+                              value={choiceVal}
+                              onChange={(e) => setSupplierDraft(p.id, e.target.value)}
+                              style={{
+                                background: dirty ? 'rgba(91,200,255,0.12)' : 'rgba(255,255,255,0.04)',
+                                border: `1px solid ${dirty ? 'rgba(91,200,255,0.4)' : 'rgba(255,255,255,0.1)'}`,
+                                color: 'var(--fg2)', padding: '4px 8px', borderRadius: 4, fontSize: 11,
+                                minWidth: 120,
+                              }}
+                            >
+                              <option value="inherit">Herda família ({p.familyDefault || 'shipoffers'})</option>
+                              <option value="redrock">RedRock</option>
+                              <option value="shipoffers">ShipOffers</option>
+                            </select>
+                            <span style={{
+                              fontSize: 10,
+                              padding: '2px 6px',
+                              borderRadius: 4,
+                              background: eff === 'redrock' ? 'rgba(255,138,138,0.18)' : 'rgba(124,208,255,0.18)',
+                              color: eff === 'redrock' ? '#ff8a8a' : '#7cd0ff',
+                              fontWeight: 600,
+                              minWidth: 70,
+                              textAlign: 'center',
+                            }}>
+                              {eff === 'redrock' ? 'RedRock' : 'ShipOffers'}
+                            </span>
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Recompute */}
       <div className="panel" style={{ marginTop: 14 }}>

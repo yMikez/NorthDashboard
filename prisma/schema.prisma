@@ -75,6 +75,12 @@ model Product {
   isActive        Boolean  @default(true)
   createdAt       DateTime @default(now())
 
+  // Override de fornecedor de fulfillment por SKU. Quando NULL, herda do
+  // ProductFamilyCost.fulfillmentSupplier da família. Permite ex.: marcar
+  // SKUs individuais de FlexGuard como RedRock sem mexer no default da
+  // família. Valores: 'redrock' | 'shipoffers'.
+  fulfillmentSupplier String?
+
   platform Platform  @relation(fields: [platformId], references: [id])
   parent   Product?  @relation("FunnelTree", fields: [parentProductId], references: [id])
   children Product[] @relation("FunnelTree")

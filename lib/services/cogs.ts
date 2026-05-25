@@ -107,10 +107,31 @@ function lookupFulfillment(
   return bracket ? bracket.priceUsd : scoped[scoped.length - 1].priceUsd;
 }
 
+/**
+ * Resolve supplier seguindo a cadeia de fallback:
+ *   1) override do SKU (Product.fulfillmentSupplier)
+ *   2) default da família (ProductFamilyCost.fulfillmentSupplier)
+ *   3) DEFAULT_SUPPLIER ('shipoffers')
+ *
+ * Exportado pra reuso em endpoints de métrica que computam a distribuição
+ * de supplier on-the-fly (não usam snapshot — refletem reconfigurações
+ * imediatas no painel de fulfillment).
+ */
+export async function resolveSupplier(
+  family: string | null,
+  productOverride: string | null | undefined,
+): Promise<string> {
+  if (productOverride) return productOverride;
+  if (!family) return DEFAULT_SUPPLIER;
+  const c = await getCache();
+  return c.byFamily.get(family)?.supplier ?? DEFAULT_SUPPLIER;
+}
+
 export async function calcCogs(
   family: string | null,
   bottles: number | null,
   bonusBottles: number | null,
+  productSupplierOverride?: string | null,
 ): Promise<CogsResult> {
   const totalBottles = (bottles ?? 0) + (bonusBottles ?? 0);
   if (!family || totalBottles <= 0) {
@@ -120,7 +141,11 @@ export async function calcCogs(
   const fc = c.byFamily.get(family);
   // Custo unitário: cadastrado, ou média (fallback p/ família nova).
   const unitCost = fc?.unitCostUsd ?? c.averageUnitCost;
-  const supplier = fc?.supplier ?? DEFAULT_SUPPLIER;
+  // Supplier: override por SKU vence default da família. Sem override e sem
+  // família cadastrada cai pro DEFAULT_SUPPLIER ('shipoffers').
+  const supplier = productSupplierOverride
+    ?? fc?.supplier
+    ?? DEFAULT_SUPPLIER;
   if (unitCost == null) {
     return { cogsUsd: 0, fulfillmentUsd: 0, totalBottles, supplier };
   }

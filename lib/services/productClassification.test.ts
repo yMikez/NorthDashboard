@@ -29,6 +29,18 @@ describe('normalizeFamily', () => {
     expect(normalizeFamily('NightCalm')).toBe('NightCalm');
     expect(normalizeFamily('Night Calm')).toBe('NightCalm');
   });
+
+  it('FlexGuard e ImmuneGuard isolados são famílias próprias', () => {
+    expect(normalizeFamily('Flex Guard')).toBe('FlexGuard');
+    expect(normalizeFamily('FlexGuard')).toBe('FlexGuard');
+    expect(normalizeFamily('Immune Guard')).toBe('ImmuneGuard');
+    expect(normalizeFamily('ImmuneGuard')).toBe('ImmuneGuard');
+  });
+
+  it('combo "Flex + Imune guard" continua FlexImmuneGuard (não cai em FlexGuard)', () => {
+    expect(normalizeFamily('Flex + Imune guard')).toBe('FlexImmuneGuard');
+    expect(normalizeFamily('Flex Guard + Immune Guard')).toBe('FlexImmuneGuard');
+  });
 });
 
 describe('classifyProduct (ClickBank SKU patterns)', () => {
