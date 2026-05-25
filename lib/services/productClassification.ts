@@ -40,20 +40,31 @@ const CB_SKU_RE =
 const D24_NAME_RE =
   /^(?<typeFull>M\d+|UP\d+(?:-[A-Za-z0-9]+)?|DW\d+(?:-[A-Za-z0-9]+)?|DS\d*|RC)\s*-\s*(?<family>[A-Za-z][A-Za-z0-9 \-]+?)\s*\((?<bottles>\d+)(?:\s*\+\s*(?<bonus>\d+))?\s*Bottles?\)$/i;
 
-// BuyGoods manda o nome em linguagem natural, SEM código de tipo:
-//   "Neuro Mind Pro 6 Bottles"                  → FE
-//   "Neuro Mind Pro 6 Bottles (Upgrade)"        → UP1
-//   "Neuro Mind Pro 3 Bottles (Last Chance)"    → DW1
-//   "Night Calm 6 Bottles (Upgrade)"            → UP2
-//   "Flex + Imune guard 3 + 3 Bottles"          → UP3 (combo: 3 + bônus 3)
-// A posição no funil é derivada da FAMÍLIA + modificador (não há código no
-// nome) — regra do funil informada pelo vendor BuyGoods. "bottles" pode vir
-// colado ("3bottles") e o combo "a + b Bottles" preserva bonus. O
-// modificador pode vir COM ou SEM parênteses ("(Last Chance)" / "Last
-// Chance" / "(Upgrade)" / "Upgrade") — os parênteses são opcionais e
-// ficam FORA do grupo `mod` pra não quebrar o match.
+// BuyGoods classifier — convenção do vendor:
+//
+//   "Neuro Mind Pro 6 Bottles"                         → FE
+//   "Neuro Mind Pro 6 Bottles (Upgrade 1)"             → UP1   (explícito, novo)
+//   "Neuro Mind Pro 6 Bottles (Upgrade)"               → UP1   (retrocompat, ancorado na família)
+//   "Night Calm 6 Bottles (Upgrade 2)"                 → UP2   (explícito)
+//   "Night Calm 6 Bottles (Upgrade)"                   → UP2   (retrocompat)
+//   "Neuro Mind Pro 3 Bottles (Downsell 1)"            → DW1   (explícito)
+//   "Neuro Mind Pro 3 Bottles (Last Chance)"           → DW1   (retrocompat)
+//   "Flex + Imune Guard 3 + 3 Bottles (Upgrade 3)"     → UP3 combo
+//   "Glyco Pulse 1 FREE Bottle"                        → SMS_RECOVERY (FREE em qualquer lugar)
+//   "Neuro Mind Pro 2 Bottles FREE Shipping"           → SMS_RECOVERY
+//
+// REGRA:
+//   1) Se o nome contém "FREE" (case-insensitive, word boundary) → SMS_RECOVERY.
+//   2) "(Upgrade N)" → UP<N>; "(Downsell N)" → DW<N> (com N=1,2,3,...).
+//   3) "(Upgrade)" sem N → ancorado na família (NightCalm=UP2, FlexImmuneGuard=UP3, resto=UP1).
+//   4) "(Last Chance)" sem N → idem mas DW.
+//   5) Sem modificador → FRONTEND.
+//
+// O regex captura family + b1 (+b2 combo) + rest. O `rest` é analisado
+// separadamente pra extrair Upgrade N / Downsell N / Upgrade / Last Chance.
+// Parênteses são opcionais (tolerância pra variações de nome).
 const BUYGOODS_NAME_RE =
-  /^(?<family>.+?)\s+(?<b1>\d+)(?:\s*\+\s*(?<b2>\d+))?\s*bottles?\b\s*\(?\s*(?<mod>upgrade|last\s*chance)?\s*\)?\s*$/i;
+  /^(?<family>.+?)\s+(?<b1>\d+)(?:\s*\+\s*(?<b2>\d+))?\s*bottles?\b\s*(?<rest>.*)$/i;
 
 const FAMILY_NORMALIZATIONS: Array<[RegExp, string]> = [
   [/^glycopulse$/i, 'GlycoPulse'],
@@ -112,25 +123,34 @@ function classifyType(typeCode: string): { type: ProductType; step: number } {
   throw new Error(`classifyProduct: unknown type code "${typeCode}"`);
 }
 
-// BuyGoods não traz código de tipo no nome — a posição no funil é ancorada
-// na família (regra do vendor):
-//   NeuroMindPro    → posição 1: plain=FE, Upgrade=UP1, Last Chance=DW1
-//   NightCalm       → posição 2: Last Chance=DW2, senão UP2
-//   FlexImmuneGuard → posição 3: Last Chance=DW3, senão UP3
-// Famílias desconhecidas via BG caem na regra genérica de posição 1.
+// Resolve type/step do BuyGoods a partir do `rest` (parte do nome após
+// "Bottles") e da família. Prioridade:
+//   1) "Upgrade N" / "Downsell N" explícito → UP<N> / DW<N>
+//   2) "Upgrade" / "Last Chance" sem N (formato antigo) → ancorado na família
+//   3) Sem modificador → FE
+// O caller já tratou FREE antes (não chega aqui).
 function buyGoodsType(
   family: string,
-  isUpgrade: boolean,
-  isLastChance: boolean,
+  rest: string,
 ): { type: ProductType; step: number } {
-  if (family === 'NightCalm') {
-    return classifyType(isLastChance ? 'DW2' : 'UP2');
+  const r = rest.toLowerCase();
+  // Formato novo explícito: "Upgrade N" / "Downsell N" (N=1..9).
+  const upN = r.match(/upgrade\s*(\d+)/);
+  if (upN) return classifyType(`UP${parseInt(upN[1], 10)}`);
+  const dwN = r.match(/(?:downsell|down\s*sell|last\s*chance\s*(\d+))\s*(\d+)/);
+  // Captura "Downsell N" ou "Last Chance N" (ambos formatos suportados).
+  if (dwN) {
+    const num = dwN[1] || dwN[2];
+    if (num) return classifyType(`DW${parseInt(num, 10)}`);
   }
-  if (family === 'FlexImmuneGuard') {
-    return classifyType(isLastChance ? 'DW3' : 'UP3');
+  // Formato antigo: "Upgrade" / "Last Chance" sem N → ancorado na família.
+  const isLastChance = /last\s*chance/.test(r);
+  const isUpgrade = /upgrade/.test(r);
+  if (isLastChance || isUpgrade) {
+    if (family === 'NightCalm') return classifyType(isLastChance ? 'DW2' : 'UP2');
+    if (family === 'FlexImmuneGuard') return classifyType(isLastChance ? 'DW3' : 'UP3');
+    return classifyType(isLastChance ? 'DW1' : 'UP1');
   }
-  if (isLastChance) return classifyType('DW1');
-  if (isUpgrade) return classifyType('UP1');
   return classifyType('FE');
 }
 
@@ -174,27 +194,45 @@ export function classifyProduct(
     }
   }
 
-  // 3) BuyGoods: nome em linguagem natural ("Neuro Mind Pro 6 Bottles
-  // (Upgrade)", "Flex + Imune guard 3 + 3 Bottles"). Roda DEPOIS de CB/D24
-  // (que têm formatos próprios) — só pega o que sobrou. Sem código de tipo:
-  // posição no funil derivada da família + modificador (Upgrade/Last Chance).
+  // 3) BuyGoods: nome em linguagem natural. Roda DEPOIS de CB/D24 (que têm
+  // formatos próprios) — só pega o que sobrou.
+  //
+  // FONTE DE VERDADE = NOME (não codename). Codenames BuyGoods colidem
+  // entre produtos (NeuroMindPro/NeuroPulse compartilham slugs), então a
+  // classificação tem que vir do nome humano.
+  //
+  // CONVENÇÃO NOVA (vendor): "(Upgrade N)" / "(Downsell N)" com N explícito.
+  // FREE em qualquer lugar do nome → SMS_RECOVERY (recuperação por email/SMS).
+  // Sem marcador → FRONTEND. Família vem da parte antes da contagem de potes.
   if (name) {
-    const bg = BUYGOODS_NAME_RE.exec(name.trim());
+    const trimmed = name.trim();
+    // FREE detection: word boundary, case-insensitive — pega "FREE", "free",
+    // "Free Bottle", "FREE Shipping" etc. mas não palavras como "freeze".
+    const isFree = /\bfree\b/i.test(trimmed);
+    // Pra extrair família/potes, remove FREE temporariamente (pra não poluir
+    // o grupo `family` da regex).
+    const cleanedForParse = isFree
+      ? trimmed.replace(/\bfree\b/gi, ' ').replace(/\s+/g, ' ').trim()
+      : trimmed;
+    const bg = BUYGOODS_NAME_RE.exec(cleanedForParse);
     if (bg?.groups) {
       const family = normalizeFamily(
         bg.groups.family.replace(/\s+/g, ' ').trim(),
       );
-      const mod = (bg.groups.mod || '').toLowerCase();
-      const isLastChance = /last\s*chance/.test(mod);
-      const isUpgrade = /upgrade/.test(mod);
-      const t = buyGoodsType(family, isUpgrade, isLastChance);
+      const bottles = parseInt(bg.groups.b1, 10);
+      const bonusBottles = bg.groups.b2 ? parseInt(bg.groups.b2, 10) : null;
+      const rest = bg.groups.rest || '';
+      // FREE no nome → recuperação (email/SMS). Override de qualquer marcador.
+      const t = isFree
+        ? classifyType('RC')
+        : buyGoodsType(family, rest);
       return {
-        family,
+        family: family || null,
         type: t.type,
         funnelStep: t.step,
         variant: null,
-        bottles: parseInt(bg.groups.b1, 10),
-        bonusBottles: bg.groups.b2 ? parseInt(bg.groups.b2, 10) : null,
+        bottles,
+        bonusBottles,
       };
     }
   }

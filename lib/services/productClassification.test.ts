@@ -257,11 +257,12 @@ describe('classifyProduct (BuyGoods natural-language names)', () => {
     expect(r.bottles).toBe(6);
   });
 
-  it('Flex + Imune guard 3 + 3 Bottles → UP3 combo (bonus)', () => {
+  it('Flex + Imune guard 3 + 3 Bottles (sem marcador) → FE combo (nova regra)', () => {
+    // Convenção 2026-05: sem (Upgrade)/(Downsell)/FREE = FRONTEND.
+    // Pra ser UP3 a vendor precisa colocar "(Upgrade 3)" explícito no nome.
     const r = classifyProduct('flexguard-combo', 'Flex + Imune guard 3 + 3 Bottles');
     expect(r.family).toBe('FlexImmuneGuard');
-    expect(r.type).toBe('UPSELL');
-    expect(r.funnelStep).toBe(4);
+    expect(r.type).toBe('FRONTEND');
     expect(r.bottles).toBe(3);
     expect(r.bonusBottles).toBe(3);
   });
@@ -301,5 +302,106 @@ describe('classifyProduct (BuyGoods natural-language names)', () => {
     expect(r.family).toBe('GlycoPulse');
     expect(r.type).toBe('FRONTEND');
     expect(r.bottles).toBe(6);
+  });
+});
+
+// Convenção nova (vendor BuyGoods 2026-05): (Upgrade N) / (Downsell N)
+// explícito no nome — derruba a regra ancorada-na-família. Sem marcador
+// = FRONTEND. FREE em qualquer lugar = SMS_RECOVERY.
+describe('classifyProduct (BuyGoods nova convenção: Upgrade N / Downsell N / FREE)', () => {
+  it('"Upgrade 1" explícito → UP1 independente da família', () => {
+    const r = classifyProduct('any', 'Neuro Mind Pro 6 Bottles (Upgrade 1)');
+    expect(r.family).toBe('NeuroMindPro');
+    expect(r.type).toBe('UPSELL');
+    expect(r.funnelStep).toBe(2);
+    expect(r.bottles).toBe(6);
+  });
+
+  it('"Upgrade 2" explícito → UP2 (mesmo em família não-NightCalm)', () => {
+    const r = classifyProduct('any', 'Glyco Pulse 6 Bottles (Upgrade 2)');
+    expect(r.family).toBe('GlycoPulse');
+    expect(r.type).toBe('UPSELL');
+    expect(r.funnelStep).toBe(3);
+  });
+
+  it('"Upgrade 3" explícito → UP3', () => {
+    const r = classifyProduct('any', 'Neuro Mind Pro 6 Bottles (Upgrade 3)');
+    expect(r.type).toBe('UPSELL');
+    expect(r.funnelStep).toBe(4);
+  });
+
+  it('"Downsell 1" explícito → DW1', () => {
+    const r = classifyProduct('any', 'Neuro Mind Pro 3 Bottles (Downsell 1)');
+    expect(r.family).toBe('NeuroMindPro');
+    expect(r.type).toBe('DOWNSELL');
+    expect(r.funnelStep).toBe(2);
+    expect(r.bottles).toBe(3);
+  });
+
+  it('"Downsell 2" explícito → DW2', () => {
+    const r = classifyProduct('any', 'Night Calm 3 Bottles (Downsell 2)');
+    expect(r.family).toBe('NightCalm');
+    expect(r.type).toBe('DOWNSELL');
+    expect(r.funnelStep).toBe(3);
+  });
+
+  it('"Downsell 3" explícito → DW3 (mesmo em família NeuroMindPro)', () => {
+    const r = classifyProduct('any', 'Neuro Mind Pro 1 Bottle (Downsell 3)');
+    expect(r.type).toBe('DOWNSELL');
+    expect(r.funnelStep).toBe(4);
+    expect(r.bottles).toBe(1);
+  });
+
+  it('sem marcador no nome → FRONTEND (qualquer família)', () => {
+    const r = classifyProduct('any', 'Glyco Pulse 3 Bottles');
+    expect(r.family).toBe('GlycoPulse');
+    expect(r.type).toBe('FRONTEND');
+    expect(r.funnelStep).toBe(1);
+  });
+
+  it('"FREE" no nome → SMS_RECOVERY (recuperação)', () => {
+    const r = classifyProduct('any', 'Glyco Pulse 1 FREE Bottle');
+    expect(r.type).toBe('SMS_RECOVERY');
+    expect(r.funnelStep).toBe(1);
+    expect(r.bottles).toBe(1);
+  });
+
+  it('"FREE" mesmo com (Upgrade) → SMS_RECOVERY override', () => {
+    const r = classifyProduct('any', 'Neuro Mind Pro 2 Bottles FREE Shipping (Upgrade)');
+    expect(r.type).toBe('SMS_RECOVERY');
+    expect(r.bottles).toBe(2);
+  });
+
+  it('"free" em minúscula também detecta', () => {
+    const r = classifyProduct('any', 'Night Calm 1 free Bottle');
+    expect(r.type).toBe('SMS_RECOVERY');
+  });
+
+  it('"freeze" / "freedom" NÃO é detectado como FREE (word boundary)', () => {
+    // \bfree\b NÃO casa com "freeze" (next char é "z") — fica como FE.
+    const r = classifyProduct('any', 'Freeze Power 6 Bottles');
+    expect(r.type).toBe('FRONTEND');
+  });
+
+  it('retrocompat: "(Upgrade)" sem N + família NightCalm → UP2', () => {
+    const r = classifyProduct('nig6u', 'Night Calm 6 Bottles (Upgrade)');
+    expect(r.type).toBe('UPSELL');
+    expect(r.funnelStep).toBe(3);
+  });
+
+  it('retrocompat: "(Last Chance)" sem N + família FlexImmuneGuard → DW3', () => {
+    const r = classifyProduct('fleimu', 'Flex Guard + Immune Guard 1 Bottle (Last Chance)');
+    expect(r.family).toBe('FlexImmuneGuard');
+    expect(r.type).toBe('DOWNSELL');
+    expect(r.funnelStep).toBe(4);
+  });
+
+  it('combo "3 + 3 Bottles (Upgrade 3)" preserva bonus', () => {
+    const r = classifyProduct('any', 'Flex + Imune Guard 3 + 3 Bottles (Upgrade 3)');
+    expect(r.family).toBe('FlexImmuneGuard');
+    expect(r.type).toBe('UPSELL');
+    expect(r.funnelStep).toBe(4);
+    expect(r.bottles).toBe(3);
+    expect(r.bonusBottles).toBe(3);
   });
 });
