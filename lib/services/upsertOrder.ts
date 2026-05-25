@@ -54,16 +54,47 @@ export async function upsertOrder(normalized: NormalizedOrder): Promise<UpsertOr
   const catalogType: ProductType =
     classified.family !== null ? classified.type : (normalized.productType as ProductType);
 
+  // BG codename collision handling: BuyGoods compartilha o mesmo
+  // product_codename entre produtos distintos (NeuroMindPro ↔ NeuroPulse).
+  // Quando o nome do IPN classifica pra uma família DIFERENTE da que está
+  // gravada no Product existente, usa um externalId sintético
+  // {codename}__{family} pra rotear o pedido pro Product certo. Só aplica
+  // pra BG e só quando o classifier tem família confiante.
+  let resolvedExternalId = normalized.productExternalId;
+  if (
+    normalized.platformSlug === 'buygoods'
+    && classified.family
+    && !resolvedExternalId.includes('__')  // já é sintético, deixa
+  ) {
+    const existing = await db.product.findUnique({
+      where: {
+        platformId_externalId: {
+          platformId: platform.id,
+          externalId: resolvedExternalId,
+        },
+      },
+      select: { family: true },
+    });
+    if (
+      existing
+      && existing.family
+      && existing.family !== classified.family
+    ) {
+      // Colisão detectada → roteia pro Product sintético.
+      resolvedExternalId = `${normalized.productExternalId}__${classified.family}`;
+    }
+  }
+
   const product = await db.product.upsert({
     where: {
       platformId_externalId: {
         platformId: platform.id,
-        externalId: normalized.productExternalId,
+        externalId: resolvedExternalId,
       },
     },
     create: {
       platformId: platform.id,
-      externalId: normalized.productExternalId,
+      externalId: resolvedExternalId,
       name: normalized.productName || normalized.productExternalId,
       productType: catalogType,
       family: classified.family,
