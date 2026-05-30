@@ -588,3 +588,96 @@ model NetworkAuditLog {
   @@index([entityType, entityId])
   @@index([createdAt])
 }
+
+// ═══════════════════════════════════════════════════════════════════
+// Copy Optimizer — exposição da copy "Black 2" no Upsell01 (BuyGoods)
+// ═══════════════════════════════════════════════════════════════════
+
+// Regra de exposição: quanto % dos leads de um afiliado vê a copy Black 2.
+// Lida pelo /api/copy-decision a cada decisão pedida pelo funnel-renderer.
+// Editada pelo painel /copy-optimizer (manual) ou pelo cron auto-tune.
+model AffiliateCopyRule {
+  id        String   @id @default(cuid())
+
+  // aff_id (ex: "46") OU aff_name (ex: "Matheus Petersen"). Case-sensitive —
+  // bate verbatim contra o que vem do INS BuyGoods (Affiliate.externalId/nickname).
+  key       String   @unique
+  // 'id' | 'name' — pra UI saber como exibir/filtrar.
+  keyType   String
+
+  // 0..100. % de leads desse afiliado que vê Black 2 (bucket sticky por venda).
+  black2Pct Int      @default(0)
+
+  // Se false, regra é ignorada (vira 0%).
+  enabled   Boolean  @default(true)
+  // Se true, o cron auto-tune ajusta o black2Pct (dentro de min/max/step).
+  autotune  Boolean  @default(false)
+
+  // Rails de segurança do auto-tune.
+  minPct    Int      @default(0)
+  maxPct    Int      @default(80)
+  stepPct   Int      @default(5)
+
+  // Target AOV específico do afiliado (opcional; senão usa o global da config).
+  targetAov Decimal? @db.Decimal(10, 2)
+
+  // Quem mudou por último: 'manual' | 'autotune' | 'seed'.
+  updatedBy String   @default("manual")
+
+  updatedAt DateTime @updatedAt
+  createdAt DateTime @default(now())
+
+  logs AutotuneLog[]
+
+  @@index([enabled, autotune])
+}
+
+// Cada visualização de copy registrada pelo funnel-renderer via /api/copy-view.
+// Source-of-truth de "quem viu o quê e quando". Append-only.
+model CopyView {
+  id BigInt @id @default(autoincrement())
+
+  // Bate com Order.parentExternalId (BuyGoods order_id_global).
+  orderIdGlobal String
+
+  // 'white' | 'black1' | 'black2' | 'loading'.
+  layer String
+
+  affId   String?
+  affName String?
+
+  // 0..99 — auditoria do bucket djb2 que decidiu.
+  bucket Int?
+
+  pageUrl  String?
+  referrer String?
+  sessid2  String?
+
+  shownAt DateTime @default(now())
+
+  @@index([orderIdGlobal])
+  @@index([affName, shownAt])
+  @@index([affId, shownAt])
+  @@index([layer, shownAt])
+}
+
+// Log de cada decisão do auto-tune. Auditável e imutável.
+model AutotuneLog {
+  id BigInt @id @default(autoincrement())
+
+  ruleId String
+  rule   AffiliateCopyRule @relation(fields: [ruleId], references: [id], onDelete: Cascade)
+
+  pctBefore Int
+  pctAfter  Int
+
+  // 'aov_gap_up' | 'adverse_lift_down' | 'cap_hit' | 'cooldown' | 'no_sample' | 'hold'
+  reason String
+
+  // Snapshot das métricas no momento: { lift, n_b1, n_b2, aov_obs, aov_target, conv_b1, conv_b2 }
+  metrics Json
+
+  decidedAt DateTime @default(now())
+
+  @@index([ruleId, decidedAt])
+}
