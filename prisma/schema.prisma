@@ -649,6 +649,13 @@ model CopyView {
   // 0..99 — auditoria do bucket djb2 que decidiu.
   bucket Int?
 
+  // Etapa do funil onde a copy foi exibida (ex: 'upsell01') e família do
+  // produto (ex: 'NeuroMindPro'). Preenchidos pelo funnel-renderer; permitem
+  // filtrar métricas por stage/family sem join. Nullable: views antes do
+  // renderer mandar esses campos ficam null.
+  stage  String?
+  family String?
+
   pageUrl  String?
   referrer String?
   sessid2  String?
@@ -659,6 +666,8 @@ model CopyView {
   @@index([affName, shownAt])
   @@index([affId, shownAt])
   @@index([layer, shownAt])
+  @@index([stage, shownAt])
+  @@index([family, shownAt])
 }
 
 // Log de cada decisão do auto-tune. Auditável e imutável.

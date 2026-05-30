@@ -114,6 +114,8 @@ export interface RecordCopyViewInput {
   affId?: string | null;
   affName?: string | null;
   bucket?: number | null;
+  stage?: string | null;
+  family?: string | null;
   pageUrl?: string | null;
   referrer?: string | null;
   sessid2?: string | null;
@@ -128,6 +130,8 @@ export async function recordCopyView(input: RecordCopyViewInput): Promise<void> 
       affId: input.affId ?? null,
       affName: input.affName ?? null,
       bucket: input.bucket ?? null,
+      stage: input.stage ?? null,
+      family: input.family ?? null,
       pageUrl: input.pageUrl ?? null,
       referrer: input.referrer ?? null,
       sessid2: input.sessid2 ?? null,
