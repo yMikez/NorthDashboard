@@ -746,11 +746,47 @@ async function deleteCopyRule(id) {
   return res.json();
 }
 
+async function coGet(path) {
+  const res = await fetch(path, { headers: { Accept: 'application/json' } });
+  if (!res.ok) { const e = await res.json().catch(() => ({})); throw new Error(e.error || `HTTP ${res.status}`); }
+  return res.json();
+}
+async function coSend(path, method, body) {
+  const res = await fetch(path, {
+    method,
+    headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) { const e = await res.json().catch(() => ({})); throw new Error(e.error || `HTTP ${res.status}`); }
+  return res.json();
+}
+
+function fetchCopyFunnel(params = {}) {
+  const qs = new URLSearchParams();
+  for (const [k, v] of Object.entries(params)) { if (v !== null && v !== undefined && v !== '') qs.set(k, v); }
+  return coGet(`/api/metrics/copy-funnel${qs.toString() ? `?${qs}` : ''}`);
+}
+function calcCopyAov(body) { return coSend('/api/metrics/copy-aov-calculator', 'POST', body); }
+function batchApplyCopyRules(body) { return coSend('/api/admin/copy-rules/batch-apply', 'POST', body); }
+function fetchCopyAutotuneConfig() { return coGet('/api/admin/copy-autotune/config'); }
+function patchCopyAutotuneConfig(body) { return coSend('/api/admin/copy-autotune/config', 'PATCH', body); }
+function fetchCopyAutotuneLogs(params = {}) {
+  const qs = new URLSearchParams();
+  for (const [k, v] of Object.entries(params)) { if (v !== null && v !== undefined && v !== '') qs.set(k, v); }
+  return coGet(`/api/admin/copy-autotune/logs${qs.toString() ? `?${qs}` : ''}`);
+}
+
 window.NSApi = {
   fetchCopyRules,
   createCopyRule,
   patchCopyRule,
   deleteCopyRule,
+  fetchCopyFunnel,
+  calcCopyAov,
+  batchApplyCopyRules,
+  fetchCopyAutotuneConfig,
+  patchCopyAutotuneConfig,
+  fetchCopyAutotuneLogs,
   fetchOverview,
   fetchOrders,
   fetchAffiliates,

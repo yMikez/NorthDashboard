@@ -670,6 +670,18 @@ model CopyView {
   @@index([family, shownAt])
 }
 
+// Config global do auto-tune (singleton, id='global'). Editável no Painel D.
+model CopyAutotuneConfig {
+  id                 String   @id @default("global")
+  cooldownH          Int      @default(12)
+  windowH            Int      @default(48)
+  minSample          Int      @default(30)
+  liftThresholdPp    Int      @default(5)
+  adverseThresholdPp Int      @default(-5)
+  globalTargetAov    Decimal  @default(220) @db.Decimal(10, 2)
+  updatedAt          DateTime @updatedAt
+}
+
 // Log de cada decisão do auto-tune. Auditável e imutável.
 model AutotuneLog {
   id BigInt @id @default(autoincrement())
