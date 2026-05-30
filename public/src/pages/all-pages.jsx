@@ -6903,7 +6903,39 @@ function CopyRuleCreateForm({ onClose, onSaved }) {
   );
 }
 
-function CopyOptimizerPage() {
+function CopyKpi({ label, value, sub, tone }) {
+  const color = tone === 'danger' ? 'var(--danger)' : tone === 'ok' ? 'var(--success)' : 'var(--fg1)';
+  return (
+    <div className="panel" style={{ padding: '12px 14px' }}>
+      <div className="eyebrow" style={{ fontSize: 9 }}>{label}</div>
+      <div style={{ fontFamily: 'var(--f-display)', fontSize: 24, fontWeight: 600, color, marginTop: 4 }}>{value}</div>
+      {sub && <div style={{ fontSize: 10, color: 'var(--fg5)', marginTop: 2 }}>{sub}</div>}
+    </div>
+  );
+}
+
+// Mini-line SVG do AOV diário com linha de target.
+function CopyAovLine({ daily, target }) {
+  if (!daily || daily.length === 0) return <div style={{ padding: 20, color: 'var(--fg5)', fontSize: 12 }}>Sem série diária ainda.</div>;
+  const W = 600, H = 120, P = 8;
+  const vals = daily.map((d) => d.aov).concat([target]);
+  const max = Math.max(1, ...vals) * 1.1, min = 0;
+  const x = (i) => P + (daily.length <= 1 ? 0 : (i / (daily.length - 1)) * (W - 2 * P));
+  const y = (v) => H - P - ((v - min) / (max - min)) * (H - 2 * P);
+  const path = 'M' + daily.map((d, i) => `${x(i).toFixed(1)} ${y(d.aov).toFixed(1)}`).join(' L ');
+  const ty = y(target);
+  return (
+    <svg viewBox={`0 0 ${W} ${H}`} style={{ width: '100%', height: 120 }}>
+      <line x1={P} y1={ty} x2={W - P} y2={ty} stroke="var(--warning)" strokeWidth="1" strokeDasharray="4 4" opacity="0.7"/>
+      <text x={W - P} y={ty - 4} textAnchor="end" fill="var(--warning)" style={{ fontFamily: 'var(--f-mono)', fontSize: 9 }}>target {fmtCurrency(target, 'USD', 0)}</text>
+      <path d={path} fill="none" stroke="var(--glow-cyan)" strokeWidth="2"/>
+      {daily.map((d, i) => <circle key={i} cx={x(i)} cy={y(d.aov)} r="2.5" fill="var(--glow-cyan)"/>)}
+    </svg>
+  );
+}
+
+// ---------- Painel A — Regras ----------
+function CopyRulesPanel() {
   const [state, setState] = useState({ status: 'loading', rules: [], error: null });
   const [refresh, setRefresh] = useState(0);
   const [creating, setCreating] = useState(false);
@@ -6916,66 +6948,340 @@ function CopyOptimizerPage() {
       .catch((err) => { if (!cancelled) setState({ status: 'error', rules: [], error: err.message || 'erro' }); });
     return () => { cancelled = true; };
   }, [refresh]);
-
   function reload() { setRefresh((n) => n + 1); }
 
   const rules = state.rules;
-  const activeCount = rules.filter((r) => r.enabled).length;
-  const autotuneCount = rules.filter((r) => r.autotune).length;
+  return (
+    <div>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
+        <span style={{ fontSize: 11, color: 'var(--fg5)' }}>{rules.length} regras · {rules.filter((r) => r.enabled).length} ativas · {rules.filter((r) => r.autotune).length} em auto-tune</span>
+        <div style={{ display: 'flex', gap: 8 }}>
+          <button className="btn btn-ghost" onClick={reload}><Icon name="refresh" size={12}/> Recarregar</button>
+          <button className="btn btn-primary" onClick={() => setCreating((v) => !v)}><Icon name="plus" size={12}/> Nova regra</button>
+        </div>
+      </div>
+      {state.status === 'error' && <div className="panel" style={{ color: 'var(--danger)', marginBottom: 12 }}>Erro: {state.error}</div>}
+      {creating && <CopyRuleCreateForm onClose={() => setCreating(false)} onSaved={() => { setCreating(false); reload(); }}/>}
+      <div className="panel" style={{ padding: 0 }}>
+        <div className="tbl-wrap" style={{ margin: 0, padding: '0 4px' }}>
+          <table className="tbl">
+            <thead><tr><th>Afiliado</th><th>Tipo</th><th style={{ width: 240 }}>% Black 2</th><th>Auto-tune</th><th>Status</th><th>Última</th><th></th></tr></thead>
+            <tbody>
+              {state.status === 'loading' && <tr><td colSpan={7} style={{ textAlign: 'center', padding: 24, opacity: 0.6 }}>Carregando…</td></tr>}
+              {state.status === 'ready' && rules.length === 0 && <tr><td colSpan={7} style={{ textAlign: 'center', padding: 24, opacity: 0.6 }}>Nenhuma regra ainda. Crie a primeira.</td></tr>}
+              {rules.map((r) => <CopyRuleRow key={r.id} rule={r} onChanged={reload}/>)}
+            </tbody>
+          </table>
+        </div>
+      </div>
+      <div style={{ marginTop: 10, fontFamily: 'var(--f-mono)', fontSize: 10, color: 'var(--fg5)', lineHeight: 1.6 }}>
+        Decisão server-side · match por <b>aff_id</b> ou <b>aff_name</b> (verbatim, mais inclusivo vence) · bucket sticky djb2 · Black 2 só com email válido · pausar = % vira 0.
+      </div>
+    </div>
+  );
+}
 
+// ---------- Painel C — Observabilidade ----------
+const CO_PERIODS = [['1h', '1h'], ['24h', '24h'], ['7d', '7 dias'], ['30d', '30 dias']];
+function pctCell(s) { return s ? fmtPct(s.conv) : '—'; }
+
+function CopyObservabilityPanel() {
+  const [period, setPeriod] = useState('24h');
+  const [state, setState] = useState({ status: 'loading', data: null, error: null });
+  const [tick, setTick] = useState(0);
+
+  useEffect(() => {
+    let cancelled = false;
+    setState((s) => ({ ...s, status: 'loading' }));
+    window.NSApi.fetchCopyFunnel({ period })
+      .then((data) => { if (!cancelled) setState({ status: 'ready', data, error: null }); })
+      .catch((err) => { if (!cancelled) setState({ status: 'error', data: null, error: err.message || 'erro' }); });
+    return () => { cancelled = true; };
+  }, [period, tick]);
+
+  const d = state.data;
+  const empty = d && d.summary.totalViews === 0;
+
+  return (
+    <div>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+        <div style={{ display: 'flex', gap: 6 }}>
+          {CO_PERIODS.map(([id, label]) => (
+            <button key={id} className={`chip ${period === id ? 'is-active' : ''}`} onClick={() => setPeriod(id)}>{label}</button>
+          ))}
+        </div>
+        <button className="btn btn-ghost" onClick={() => setTick((t) => t + 1)}><Icon name="refresh" size={12}/> Atualizar</button>
+      </div>
+
+      {state.status === 'error' && <div className="panel" style={{ color: 'var(--danger)' }}>Erro: {state.error}</div>}
+      {state.status === 'loading' && <div className="panel" style={{ opacity: 0.6 }}>Carregando…</div>}
+      {empty && <div className="panel" style={{ opacity: 0.7 }}>Nenhuma view registrada nesse período. A <b>CopyView</b> popula após o cutover do renderer.</div>}
+
+      {d && !empty && (
+        <>
+          <div className="grid-2" style={{ gridTemplateColumns: 'repeat(4,1fr)', marginBottom: 12 }}>
+            <CopyKpi label="AOV NO PERÍODO" value={fmtCurrency(d.summary.aovOverall, 'USD', 2)}/>
+            <CopyKpi label="VIEWS" value={fmtInt(d.summary.totalViews)}/>
+            <CopyKpi label="CONVERSÃO" value={fmtPct(d.summary.convOverall)}/>
+            <CopyKpi label={`GAP vs ${fmtCurrency(d.summary.aovTarget, 'USD', 0)}`} value={(d.summary.aovGap >= 0 ? '+' : '') + fmtCurrency(d.summary.aovGap, 'USD', 2)} tone={d.summary.aovGap < 0 ? 'danger' : 'ok'}/>
+          </div>
+
+          <div className="grid-2" style={{ gridTemplateColumns: '1.4fr 1fr', marginBottom: 12 }}>
+            <div className="panel">
+              <div className="panel-head"><div className="panel-title">AOV diário</div></div>
+              <CopyAovLine daily={d.daily} target={d.summary.aovTarget}/>
+            </div>
+            <div className="panel">
+              <div className="panel-head"><div className="panel-title">Distribuição por layer</div></div>
+              <Donut items={[
+                { label: 'Black 1', value: d.summary.byLayer.black1 || 0, color: '#a8b7d8' },
+                { label: 'Black 2', value: d.summary.byLayer.black2 || 0, color: '#5BC8FF' },
+                { label: 'White', value: d.summary.byLayer.white || 0, color: '#8B7FFF' },
+              ]} totalLabel="views" format={(v) => fmtInt(v)}/>
+            </div>
+          </div>
+
+          <div className="panel" style={{ padding: 0, marginBottom: 12 }}>
+            <div className="panel-head" style={{ padding: '12px 14px 0' }}><div className="panel-title">Performance por stage</div></div>
+            <div className="tbl-wrap" style={{ margin: 0, padding: '0 4px' }}>
+              <table className="tbl">
+                <thead><tr><th>Stage</th><th>Produto</th><th className="num">Views</th><th className="num">B1 conv</th><th className="num">B2 conv</th><th className="num">Lift</th></tr></thead>
+                <tbody>
+                  {d.byStage.length === 0 && <tr><td colSpan={6} style={{ textAlign: 'center', padding: 16, opacity: 0.6 }}>Sem dados por stage.</td></tr>}
+                  {d.byStage.map((s) => (
+                    <tr key={s.stage}>
+                      <td className="cell-mono">{s.stage}</td>
+                      <td className="cell-mono" style={{ color: 'var(--fg5)' }}>{s.product || '—'}</td>
+                      <td className="num">{fmtInt(s.nViews)}</td>
+                      <td className="num">{pctCell(s.byLayer.black1)}</td>
+                      <td className="num">{pctCell(s.byLayer.black2)}</td>
+                      <td className="num" style={{ color: s.liftPp == null ? 'var(--fg5)' : s.liftPp >= 0 ? 'var(--success)' : 'var(--danger)' }}>{s.liftPp == null ? '—' : `${s.liftPp >= 0 ? '+' : ''}${s.liftPp}pp`}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <div className="panel" style={{ padding: 0 }}>
+            <div className="panel-head" style={{ padding: '12px 14px 0' }}><div className="panel-title">Performance por afiliado</div></div>
+            <div className="tbl-wrap" style={{ margin: 0, padding: '0 4px' }}>
+              <table className="tbl">
+                <thead><tr><th>Afiliado</th><th className="num">Leads</th><th className="num">B1 conv</th><th className="num">B2 conv</th><th className="num">Lift</th><th className="num">% atual</th></tr></thead>
+                <tbody>
+                  {d.byAffiliate.length === 0 && <tr><td colSpan={6} style={{ textAlign: 'center', padding: 16, opacity: 0.6 }}>Sem afiliados com amostra ≥5.</td></tr>}
+                  {d.byAffiliate.map((a) => (
+                    <tr key={a.key}>
+                      <td className="cell-mono">{a.key}{a.nLeads < 30 && <span className="badge neutral" style={{ marginLeft: 6, fontSize: 8 }}>amostra baixa</span>}</td>
+                      <td className="num">{fmtInt(a.nLeads)}</td>
+                      <td className="num">{pctCell(a.byLayer.black1)}</td>
+                      <td className="num">{pctCell(a.byLayer.black2)}</td>
+                      <td className="num" style={{ color: a.liftPp == null ? 'var(--fg5)' : a.liftPp >= 0 ? 'var(--success)' : 'var(--danger)' }}>{a.liftPp == null ? '—' : `${a.liftPp >= 0 ? '+' : ''}${a.liftPp}pp`}</td>
+                      <td className="num cell-mono">{a.currentPct == null ? '—' : `${a.currentPct}%`}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
+// ---------- Painel B — Calculadora ----------
+const CO_CALC_DEFAULTS = {
+  front: 220, orders: 1000, target: 340,
+  up: [
+    { name: 'UP1 (neu6u)', price: 147, floor: 20 },
+    { name: 'UP2 (nig6u)', price: 197, floor: 15 },
+    { name: 'UP3 (fleimu33u)', price: 297, floor: 10 },
+  ],
+};
+function CopyCalculatorPanel() {
+  const [inp, setInp] = useState(() => JSON.parse(JSON.stringify(CO_CALC_DEFAULTS)));
+  const [res, setRes] = useState(null);
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState(null);
+  const [applyMsg, setApplyMsg] = useState(null);
+
+  function setUp(i, field, v) { setInp((s) => { const up = s.up.map((u, j) => j === i ? { ...u, [field]: v } : u); return { ...s, up }; }); }
+
+  async function recalc() {
+    setBusy(true); setErr(null); setApplyMsg(null);
+    try {
+      const r = await window.NSApi.calcCopyAov({
+        front: Number(inp.front), orders: Number(inp.orders), target: Number(inp.target),
+        up: inp.up.map((u) => ({ name: u.name, price: Number(u.price), floor: Number(u.floor) / 100 })),
+      });
+      setRes(r);
+    } catch (e) { setErr(e.message || 'erro'); }
+    finally { setBusy(false); }
+  }
+
+  async function applySuggestion() {
+    if (!res || !res.suggestedRuleUpdates || res.suggestedRuleUpdates.rules.length === 0) return;
+    const updates = res.suggestedRuleUpdates.rules.filter((r) => r.newPct !== r.currentPct).map((r) => ({ key: r.key, newPct: r.newPct }));
+    if (updates.length === 0) { setApplyMsg('Nenhuma mudança a aplicar.'); return; }
+    if (!window.confirm(`Aplicar ${updates.length} mudança(s) de % nas regras?`)) return;
+    setBusy(true); setApplyMsg(null);
+    try { const r = await window.NSApi.batchApplyCopyRules({ source: 'calculator', updates }); setApplyMsg(`${r.applied} aplicadas, ${r.skipped} ignoradas.`); }
+    catch (e) { setApplyMsg('Erro: ' + (e.message || 'falha')); }
+    finally { setBusy(false); }
+  }
+
+  const sorted = res ? res.scenarios.slice().sort((a, b) => a.effort - b.effort) : [];
+  return (
+    <div className="grid-2" style={{ gridTemplateColumns: '1fr 1.2fr', alignItems: 'start' }}>
+      <div className="panel">
+        <div className="panel-head"><div className="panel-title">Configuração</div></div>
+        <div style={{ display: 'grid', gap: 10, marginTop: 8 }}>
+          <label style={coFieldLabel}><span>Front AOV ($)</span><input type="number" value={inp.front} onChange={(e) => setInp((s) => ({ ...s, front: e.target.value }))} style={coInputStyle}/></label>
+          <label style={coFieldLabel}><span>Base orders</span><input type="number" value={inp.orders} onChange={(e) => setInp((s) => ({ ...s, orders: e.target.value }))} style={coInputStyle}/></label>
+          <label style={coFieldLabel}><span>Target AOV ($)</span><input type="number" value={inp.target} onChange={(e) => setInp((s) => ({ ...s, target: e.target.value }))} style={coInputStyle}/></label>
+          {inp.up.map((u, i) => (
+            <div key={i} style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+              <label style={coFieldLabel}><span>{u.name} preço</span><input type="number" value={u.price} onChange={(e) => setUp(i, 'price', e.target.value)} style={coInputStyle}/></label>
+              <label style={coFieldLabel}><span>piso conv (%)</span><input type="number" value={u.floor} onChange={(e) => setUp(i, 'floor', e.target.value)} style={coInputStyle}/></label>
+            </div>
+          ))}
+          <button className="btn btn-primary" onClick={recalc} disabled={busy}>{busy ? '…' : 'Recalcular'}</button>
+          {err && <div style={{ color: 'var(--danger)', fontSize: 11 }}>{err}</div>}
+        </div>
+      </div>
+
+      <div style={{ display: 'grid', gap: 12 }}>
+        {res && (
+          <div className="grid-2" style={{ gridTemplateColumns: 'repeat(3,1fr)' }}>
+            <CopyKpi label="BASELINE" value={fmtCurrency(res.baselineAov, 'USD', 2)}/>
+            <CopyKpi label="GAP" value={(res.gap >= 0 ? '+' : '') + fmtCurrency(res.gap, 'USD', 2)} tone={res.gap > 0 ? 'danger' : 'ok'}/>
+            <CopyKpi label="MAIS FÁCIL" value={res.easiestScenario || '—'} sub="menor esforço"/>
+          </div>
+        )}
+        {res && (
+          <div className="grid-2" style={{ gridTemplateColumns: 'repeat(2,1fr)' }}>
+            {sorted.map((sc) => (
+              <div key={sc.label} className="panel" style={{ opacity: sc.status === 'over' ? 0.5 : 1, borderColor: sc.label === res.easiestScenario ? 'var(--glow-cyan)' : undefined }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                  <span style={{ fontWeight: 600, fontSize: 13 }}>{sc.label === res.easiestScenario ? '★ ' : ''}{sc.label}</span>
+                  <span className="badge" style={{ background: sc.status === 'ok' ? 'rgba(34,197,94,0.15)' : sc.status === 'below' ? 'rgba(91,200,255,0.15)' : 'rgba(239,68,68,0.15)', fontSize: 9 }}>{sc.status}</span>
+                </div>
+                <div style={{ fontFamily: 'var(--f-display)', fontSize: 18, marginTop: 4 }}>{fmtCurrency(sc.aov, 'USD', 0)}</div>
+                <div style={{ fontSize: 10, color: 'var(--fg5)', marginTop: 4 }}>convs: {sc.convs.map((c) => fmtPct(c)).join(' · ')}</div>
+                <div style={{ fontSize: 10, color: 'var(--fg5)' }}>esforço: {(sc.effort * 100).toFixed(1)}pp</div>
+              </div>
+            ))}
+          </div>
+        )}
+        {res && res.suggestedRuleUpdates && res.suggestedRuleUpdates.rules.length > 0 && (
+          <div className="panel">
+            <div className="panel-head"><div className="panel-title">Sugestão de regras</div></div>
+            <div style={{ display: 'grid', gap: 4, marginTop: 8, fontSize: 12 }}>
+              {res.suggestedRuleUpdates.rules.map((r) => (
+                <div key={r.key} style={{ display: 'flex', justifyContent: 'space-between', color: 'var(--fg2)' }}>
+                  <span className="cell-mono">{r.key}</span>
+                  <span>{r.currentPct}% → <b style={{ color: 'var(--glow-cyan)' }}>{r.newPct}%</b> <span style={{ color: 'var(--fg5)' }}>· {r.reasoning}</span></span>
+                </div>
+              ))}
+            </div>
+            <button className="btn btn-primary" style={{ marginTop: 10 }} onClick={applySuggestion} disabled={busy}>Aplicar sugestão</button>
+            {applyMsg && <div style={{ fontSize: 11, color: 'var(--fg3)', marginTop: 6 }}>{applyMsg}</div>}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ---------- Painel D — Auto-tune ----------
+const CO_CFG_FIELDS = [
+  ['cooldownH', 'Cooldown (h)'], ['windowH', 'Janela aval. (h)'], ['minSample', 'Min sample'],
+  ['liftThresholdPp', 'Lift threshold (pp)'], ['adverseThresholdPp', 'Adverse threshold (pp)'], ['globalTargetAov', 'Target AOV global ($)'],
+];
+function CopyAutotunePanel() {
+  const [cfg, setCfg] = useState(null);
+  const [logs, setLogs] = useState([]);
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    Promise.all([window.NSApi.fetchCopyAutotuneConfig(), window.NSApi.fetchCopyAutotuneLogs({ limit: 50 })])
+      .then(([c, l]) => { if (!cancelled) { setCfg(c.config); setLogs(l.logs || []); } })
+      .catch((e) => { if (!cancelled) setMsg('Erro: ' + (e.message || 'falha')); });
+    return () => { cancelled = true; };
+  }, []);
+
+  async function save() {
+    setBusy(true); setMsg(null);
+    try { const r = await window.NSApi.patchCopyAutotuneConfig(cfg); setCfg(r.config); setMsg('Config salva.'); }
+    catch (e) { setMsg('Erro: ' + (e.message || 'falha')); }
+    finally { setBusy(false); }
+  }
+
+  if (!cfg) return <div className="panel" style={{ opacity: 0.6 }}>{msg || 'Carregando…'}</div>;
+  return (
+    <div className="grid-2" style={{ gridTemplateColumns: '1fr 1.4fr', alignItems: 'start' }}>
+      <div className="panel">
+        <div className="panel-head"><div className="panel-title">Config global</div></div>
+        <div style={{ display: 'grid', gap: 8, marginTop: 8 }}>
+          {CO_CFG_FIELDS.map(([k, label]) => (
+            <label key={k} style={coFieldLabel}><span>{label}</span>
+              <input type="number" value={cfg[k]} onChange={(e) => setCfg((c) => ({ ...c, [k]: Number(e.target.value) }))} style={coInputStyle}/>
+            </label>
+          ))}
+          <button className="btn btn-primary" onClick={save} disabled={busy}>{busy ? '…' : 'Salvar'}</button>
+          {msg && <div style={{ fontSize: 11, color: 'var(--fg3)' }}>{msg}</div>}
+          <div style={{ fontSize: 10, color: 'var(--fg5)', lineHeight: 1.6 }}>O ciclo roda via cron externo (systemd/GH Actions) batendo em <span className="cell-mono">/api/admin/copy-autotune/run</span> com JOB_SECRET. Ligue o auto-tune por regra na aba <b>Regras</b>.</div>
+        </div>
+      </div>
+
+      <div className="panel" style={{ padding: 0 }}>
+        <div className="panel-head" style={{ padding: '12px 14px 0' }}><div className="panel-title">Histórico de decisões</div></div>
+        <div className="tbl-wrap" style={{ margin: 0, padding: '0 4px' }}>
+          <table className="tbl">
+            <thead><tr><th>Quando</th><th>Afiliado</th><th className="num">% antes→depois</th><th>Motivo</th></tr></thead>
+            <tbody>
+              {logs.length === 0 && <tr><td colSpan={4} style={{ textAlign: 'center', padding: 16, opacity: 0.6 }}>Nenhuma decisão registrada ainda.</td></tr>}
+              {logs.map((l) => (
+                <tr key={l.id}>
+                  <td className="cell-mono" style={{ fontSize: 10 }}>{fmtDateTime(l.decidedAt)}</td>
+                  <td className="cell-mono">{l.ruleKey || '—'}</td>
+                  <td className="num cell-mono">{l.pctBefore}% → {l.pctAfter}%</td>
+                  <td><span className="badge neutral" style={{ fontSize: 9 }}>{l.reason}</span></td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ---------- Shell com abas ----------
+const CO_TABS = [['rules', 'Regras'], ['observability', 'Observabilidade'], ['calculator', 'Calculadora'], ['autotune', 'Auto-tune']];
+function CopyOptimizerPage() {
+  const [tab, setTab] = useState('rules');
   return (
     <div className="page-in">
       <div className="page-head">
         <div className="lead">
           <span className="eyebrow">ADMIN · COPY OPTIMIZER</span>
           <h2>Copy <em>Optimizer</em></h2>
-          <span className="sub">
-            {rules.length} regras · {activeCount} ativas · {autotuneCount} em auto-tune · exposição da copy Black 2 no Upsell01 (BuyGoods)
-          </span>
-        </div>
-        <div className="page-head-actions">
-          <button className="btn btn-ghost" onClick={reload}><Icon name="refresh" size={12}/> Recarregar</button>
-          <button className="btn btn-primary" onClick={() => setCreating((v) => !v)}><Icon name="plus" size={12}/> Nova regra</button>
+          <span className="sub">Exposição da copy Black 2 no Upsell01 (BuyGoods) — regras, observabilidade, calculadora de AOV e auto-tune.</span>
         </div>
       </div>
-
-      {state.status === 'error' && (
-        <div className="panel" style={{ color: 'var(--danger)', marginBottom: 12 }}>Erro ao carregar: {state.error}</div>
-      )}
-
-      {creating && <CopyRuleCreateForm onClose={() => setCreating(false)} onSaved={() => { setCreating(false); reload(); }}/>}
-
-      <div className="panel" style={{ padding: 0 }}>
-        <div className="tbl-wrap" style={{ margin: 0, padding: '0 4px' }}>
-          <table className="tbl">
-            <thead>
-              <tr>
-                <th>Afiliado</th>
-                <th>Tipo</th>
-                <th style={{ width: 240 }}>% Black 2</th>
-                <th>Auto-tune</th>
-                <th>Status</th>
-                <th>Última</th>
-                <th></th>
-              </tr>
-            </thead>
-            <tbody>
-              {state.status === 'loading' && (
-                <tr><td colSpan={7} style={{ textAlign: 'center', padding: 24, opacity: 0.6 }}>Carregando…</td></tr>
-              )}
-              {state.status === 'ready' && rules.length === 0 && (
-                <tr><td colSpan={7} style={{ textAlign: 'center', padding: 24, opacity: 0.6 }}>Nenhuma regra ainda. Crie a primeira.</td></tr>
-              )}
-              {rules.map((r) => <CopyRuleRow key={r.id} rule={r} onChanged={reload}/>)}
-            </tbody>
-          </table>
-        </div>
+      <div style={{ display: 'flex', gap: 6, marginBottom: 14, borderBottom: '1px solid var(--border-soft)', paddingBottom: 0 }}>
+        {CO_TABS.map(([id, label]) => (
+          <button key={id} onClick={() => setTab(id)} style={funnelTabStyle(tab === id)}>{label}</button>
+        ))}
       </div>
-
-      <div style={{ marginTop: 10, fontFamily: 'var(--f-mono)', fontSize: 10, color: 'var(--fg5)', lineHeight: 1.6 }}>
-        Decisão server-side · match por <b>aff_id</b> ou <b>aff_name</b> (verbatim, mais inclusivo vence) · bucket sticky djb2 por order_id_global ·
-        Black 2 só com email válido · pausar = % vira 0. Mudanças refletem na decisão em segundos.
-      </div>
+      {tab === 'rules' && <CopyRulesPanel/>}
+      {tab === 'observability' && <CopyObservabilityPanel/>}
+      {tab === 'calculator' && <CopyCalculatorPanel/>}
+      {tab === 'autotune' && <CopyAutotunePanel/>}
     </div>
   );
 }
