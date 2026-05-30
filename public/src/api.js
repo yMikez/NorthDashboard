@@ -696,7 +696,61 @@ async function adminPatchPlatformFees(slug, { feeRatePct, allowancePct }) {
   return res.json();
 }
 
+// ---------- Copy Optimizer (admin, session-cookie auth) ----------
+// Endpoints usam requireAdmin() → cookie de sessão (same-origin), sem bearer.
+
+async function fetchCopyRules() {
+  const res = await fetch('/api/admin/copy-rules', { headers: { Accept: 'application/json' } });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.error || `HTTP ${res.status}`);
+  }
+  return res.json();
+}
+
+async function createCopyRule(body) {
+  const res = await fetch('/api/admin/copy-rules', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.error || `HTTP ${res.status}`);
+  }
+  return res.json();
+}
+
+async function patchCopyRule(id, body) {
+  const res = await fetch(`/api/admin/copy-rules/${encodeURIComponent(id)}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.error || `HTTP ${res.status}`);
+  }
+  return res.json();
+}
+
+async function deleteCopyRule(id) {
+  const res = await fetch(`/api/admin/copy-rules/${encodeURIComponent(id)}`, {
+    method: 'DELETE',
+    headers: { Accept: 'application/json' },
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.error || `HTTP ${res.status}`);
+  }
+  return res.json();
+}
+
 window.NSApi = {
+  fetchCopyRules,
+  createCopyRule,
+  patchCopyRule,
+  deleteCopyRule,
   fetchOverview,
   fetchOrders,
   fetchAffiliates,
