@@ -13,15 +13,19 @@
 // Gotcha 1: campo `total` chega corrompido em alguns IPNs ("1.95")
 // — encoding bug do lado BG. Usamos sempre total_amount_charged | total_clean.
 //
-// Gotcha 2: rr_createdate sem timezone. BuyGoods opera em EST/EDT (sede US).
-// Observação empírica de payloads reais: o timestamp já chega em UTC. Se
-// futuramente descobrir que é EST, ajustar pela função convertToUtc().
+// Gotcha 2: rr_createdate vem SEM timezone e em horário do Leste dos EUA
+// (America/New_York — EDT no verão = UTC-4, EST no inverno = UTC-5). Confirmado
+// com payload real: rr_createdate "11:43" + order_date_time "11:43 AM" para uma
+// venda que ocorreu 12:43 BRT (= 15:43 UTC = 11:43 EDT). ANTES tratávamos como
+// UTC, o que adiantava todo orderedAt em 4-5h e jogava vendas de madrugada BRT
+// pro dia anterior. Agora convertemos via wallClockToUtc('America/New_York').
 
 import type {
   NormalizedOrder,
   NormalizedOrderStatus,
   NormalizedProductType,
 } from '../../shared/types';
+import { wallClockToUtc } from '../../shared/datetime';
 import type { BuyGoodsPayload } from './types';
 
 export function parseBuyGoodsIngest(payload: BuyGoodsPayload): NormalizedOrder {
@@ -218,16 +222,13 @@ function parseFunnelStep(
 }
 
 /**
- * Parse rr_createdate "2026-05-14 01:06:55". Assume UTC.
- * Se virar empírico que BuyGoods envia em EST, trocar pra explicit offset.
+ * Parse rr_createdate "2026-05-14 01:06:55" como wall clock em America/New_York
+ * (Eastern) e converte pro UTC real. EDT/EST resolvidos automaticamente por DST.
  */
 function parseBuyGoodsTimestamp(raw: string | undefined): Date {
   if (!raw) return new Date();
-  // Aceita "YYYY-MM-DD HH:mm:ss" ou variants.
-  const normalized = raw.trim().replace(' ', 'T') + 'Z';
-  const d = new Date(normalized);
-  if (Number.isNaN(d.getTime())) return new Date();
-  return d;
+  const d = wallClockToUtc(raw, 'America/New_York');
+  return d ?? new Date();
 }
 
 /**

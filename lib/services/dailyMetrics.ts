@@ -117,8 +117,15 @@ export async function queryDailyMetrics(
   // Build WHERE clauses inline. Prisma.sql template strings are SQL-injection-
   // safe via parameter binding.
   const conds: Prisma.Sql[] = [];
-  conds.push(Prisma.sql`day >= ${startOfDayUtc(filters.startDate)}::date`);
-  conds.push(Prisma.sql`day <= ${endOfDayUtc(filters.endDate)}::date`);
+  // A coluna `day` da MV é um dia de calendário BRT (America/Sao_Paulo) — veja
+  // 20260429120000_daily_metrics_brt_bucket. As fronteiras do range chegam como
+  // instantes UTC alinhados ao dia BRT ([A 03:00 UTC, A+1 02:59:59 UTC]). Pra
+  // comparar com `day` precisamos da DATA BRT desses instantes, NÃO da data UTC.
+  // Truncar em UTC (o bug antigo) fazia o fim do range cair no dia UTC seguinte
+  // (A+1 02:59 UTC → date A+1), vazando o dia BRT seguinte inteiro pros KPIs —
+  // "vendas de hoje caindo em ontem" e AOV inflado em views de dia único.
+  conds.push(Prisma.sql`day >= (${filters.startDate}::timestamptz AT TIME ZONE 'America/Sao_Paulo')::date`);
+  conds.push(Prisma.sql`day <= (${filters.endDate}::timestamptz AT TIME ZONE 'America/Sao_Paulo')::date`);
   if (filters.platformSlugs?.length) {
     conds.push(Prisma.sql`platform = ANY(${filters.platformSlugs})`);
   }
@@ -160,15 +167,4 @@ export async function queryDailyMetrics(
     cogs: toDec(r.cogs),
     fulfillment: toDec(r.fulfillment),
   }));
-}
-
-function startOfDayUtc(d: Date): Date {
-  const x = new Date(d);
-  x.setUTCHours(0, 0, 0, 0);
-  return x;
-}
-function endOfDayUtc(d: Date): Date {
-  const x = new Date(d);
-  x.setUTCHours(23, 59, 59, 999);
-  return x;
 }
