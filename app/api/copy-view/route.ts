@@ -20,6 +20,8 @@ interface Body {
   aff_id?: unknown;
   aff_name?: unknown;
   bucket?: unknown;
+  stage?: unknown;
+  family?: unknown;
   page_url?: unknown;
   referrer?: unknown;
   sessid2?: unknown;
@@ -62,6 +64,8 @@ export async function POST(req: Request) {
       affId: str(body.aff_id),
       affName: str(body.aff_name),
       bucket,
+      stage: str(body.stage),
+      family: str(body.family),
       pageUrl: str(body.page_url),
       referrer: str(body.referrer),
       sessid2: str(body.sessid2),
