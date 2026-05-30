@@ -7260,10 +7260,21 @@ function CopyAutotunePanel() {
   );
 }
 
-// ---------- Shell com abas ----------
-const CO_TABS = [['rules', 'Regras'], ['observability', 'Observabilidade'], ['calculator', 'Calculadora'], ['autotune', 'Auto-tune']];
+// ---------- Seção empilhada (bloco com header) ----------
+function CopySection({ n, title, desc, first, children }) {
+  return (
+    <section style={{ marginTop: first ? 8 : 30, paddingTop: first ? 0 : 22, borderTop: first ? 'none' : '1px solid var(--border-soft)' }}>
+      <div style={{ marginBottom: 14 }}>
+        <div className="eyebrow" style={{ fontSize: 10 }}>{n ? `${n} · ` : ''}{title}</div>
+        {desc && <div style={{ fontSize: 11, color: 'var(--fg5)', marginTop: 3 }}>{desc}</div>}
+      </div>
+      {children}
+    </section>
+  );
+}
+
+// Shell: 4 painéis empilhados verticalmente no mesmo scroll (sem abas).
 function CopyOptimizerPage() {
-  const [tab, setTab] = useState('rules');
   return (
     <div className="page-in">
       <div className="page-head">
@@ -7273,15 +7284,22 @@ function CopyOptimizerPage() {
           <span className="sub">Exposição da copy Black 2 no Upsell01 (BuyGoods) — regras, observabilidade, calculadora de AOV e auto-tune.</span>
         </div>
       </div>
-      <div style={{ display: 'flex', gap: 6, marginBottom: 14, borderBottom: '1px solid var(--border-soft)', paddingBottom: 0 }}>
-        {CO_TABS.map(([id, label]) => (
-          <button key={id} onClick={() => setTab(id)} style={funnelTabStyle(tab === id)}>{label}</button>
-        ))}
-      </div>
-      {tab === 'rules' && <CopyRulesPanel/>}
-      {tab === 'observability' && <CopyObservabilityPanel/>}
-      {tab === 'calculator' && <CopyCalculatorPanel/>}
-      {tab === 'autotune' && <CopyAutotunePanel/>}
+
+      <CopySection n="01" title="REGRAS" desc="% de Black 2 por afiliado (decisão server-side)." first>
+        <CopyRulesPanel/>
+      </CopySection>
+
+      <CopySection n="02" title="OBSERVABILIDADE" desc="Conversão e AOV por stage / layer / afiliado.">
+        <CopyObservabilityPanel/>
+      </CopySection>
+
+      <CopySection n="03" title="CALCULADORA DE AOV" desc="Cenários pra atingir o target e sugestão de ajuste de regras.">
+        <CopyCalculatorPanel/>
+      </CopySection>
+
+      <CopySection n="04" title="AUTO-TUNE" desc="Config global do gradiente + histórico de decisões.">
+        <CopyAutotunePanel/>
+      </CopySection>
     </div>
   );
 }
