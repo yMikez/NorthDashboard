@@ -6762,9 +6762,228 @@ function ChatMessage({ message, compact, streaming }) {
   );
 }
 
+// ═══════════════════════════════════════════════════════════════════
+// Copy Optimizer — Painel A: CRUD das regras de exposição da copy Black 2
+// (Upsell01 BuyGoods). Admin-only. Decisão real roda server-side; aqui só
+// editamos % por afiliado. Mudança reflete na hora (cache 60s invalidado).
+// ═══════════════════════════════════════════════════════════════════
+
+const coInputStyle = {
+  width: '100%', padding: '8px 10px',
+  background: 'rgba(91,200,255,0.05)', border: '1px solid rgba(91,200,255,0.20)',
+  borderRadius: 6, color: 'var(--fg1)', fontFamily: 'var(--f-mono)', fontSize: 13, outline: 'none',
+};
+const coFieldLabel = { display: 'grid', gap: 4, fontSize: 11, color: 'var(--fg3)' };
+
+function CopyToggle({ on, onChange, disabled }) {
+  return (
+    <button
+      type="button"
+      disabled={disabled}
+      onClick={() => onChange(!on)}
+      aria-pressed={on}
+      title={on ? 'Ativo' : 'Inativo'}
+      style={{
+        width: 34, height: 18, borderRadius: 9, border: '1px solid var(--border)',
+        background: on ? 'rgba(91,200,255,0.30)' : 'rgba(255,255,255,0.05)',
+        position: 'relative', cursor: disabled ? 'default' : 'pointer', padding: 0,
+        transition: 'background 150ms', opacity: disabled ? 0.6 : 1,
+      }}
+    >
+      <span style={{
+        position: 'absolute', top: 1, left: on ? 17 : 1, width: 14, height: 14, borderRadius: '50%',
+        background: on ? 'var(--glow-cyan)' : 'var(--fg4)', transition: 'left 150ms',
+      }}/>
+    </button>
+  );
+}
+
+function CopyRuleRow({ rule, onChanged }) {
+  const [pct, setPct] = useState(rule.black2Pct);
+  const [saving, setSaving] = useState(false);
+  const [err, setErr] = useState(null);
+  const timer = useRef(null);
+
+  // Re-sincroniza se o parent recarregar com valor novo (ex: auto-tune mexeu).
+  useEffect(() => { setPct(rule.black2Pct); }, [rule.black2Pct]);
+
+  async function patch(body) {
+    setSaving(true); setErr(null);
+    try { await window.NSApi.patchCopyRule(rule.id, body); onChanged(); }
+    catch (e) { setErr(e.message || 'erro'); }
+    finally { setSaving(false); }
+  }
+
+  function onSlide(v) {
+    setPct(v);
+    if (timer.current) clearTimeout(timer.current);
+    timer.current = setTimeout(() => patch({ black2Pct: v }), 450);
+  }
+
+  async function remove() {
+    if (!window.confirm(`Remover a regra "${rule.key}"? O histórico de auto-tune também é apagado.`)) return;
+    setSaving(true); setErr(null);
+    try { await window.NSApi.deleteCopyRule(rule.id); onChanged(); }
+    catch (e) { setErr(e.message || 'erro'); setSaving(false); }
+  }
+
+  return (
+    <tr style={{ opacity: rule.enabled ? 1 : 0.5 }}>
+      <td className="cell-mono">{rule.key}</td>
+      <td><span className="badge neutral">{rule.keyType === 'id' ? 'aff_id' : 'aff_name'}</span></td>
+      <td>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <input
+            type="range" min={0} max={100} step={5} value={pct}
+            disabled={saving}
+            onChange={(e) => onSlide(Number(e.target.value))}
+            style={{ flex: 1, accentColor: 'var(--glow-cyan)' }}
+          />
+          <span className="cell-mono" style={{ width: 38, textAlign: 'right', color: pct > 0 ? 'var(--glow-cyan)' : 'var(--fg5)' }}>{pct}%</span>
+        </div>
+        {err && <div style={{ color: 'var(--danger)', fontSize: 10, marginTop: 2 }}>{err}</div>}
+      </td>
+      <td><CopyToggle on={rule.autotune} disabled={saving} onChange={(v) => patch({ autotune: v })}/></td>
+      <td><CopyToggle on={rule.enabled} disabled={saving} onChange={(v) => patch({ enabled: v })}/></td>
+      <td className="cell-mono" style={{ fontSize: 10, color: 'var(--fg5)' }}>{rule.updatedBy}</td>
+      <td style={{ textAlign: 'right' }}>
+        <button className="btn btn-ghost" style={{ padding: '4px 8px' }} onClick={remove} disabled={saving} title="Remover regra">
+          <Icon name="trash-2" size={12}/>
+        </button>
+      </td>
+    </tr>
+  );
+}
+
+function CopyRuleCreateForm({ onClose, onSaved }) {
+  const [key, setKey] = useState('');
+  const [keyType, setKeyType] = useState('id');
+  const [pct, setPct] = useState(50);
+  const [saving, setSaving] = useState(false);
+  const [err, setErr] = useState(null);
+
+  async function submit() {
+    if (!key.trim()) { setErr('Informe o aff_id ou aff_name.'); return; }
+    setSaving(true); setErr(null);
+    try {
+      await window.NSApi.createCopyRule({ key: key.trim(), keyType, black2Pct: pct });
+      onSaved();
+    } catch (e) { setErr(e.message || 'erro'); setSaving(false); }
+  }
+
+  return (
+    <div className="panel" style={{ marginBottom: 12 }}>
+      <div className="panel-head">
+        <div className="panel-title">Nova regra</div>
+        <button className="btn btn-ghost" onClick={onClose} style={{ padding: '4px 8px' }}><Icon name="x" size={12}/></button>
+      </div>
+      <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 1fr auto', gap: 10, alignItems: 'end', marginTop: 10 }}>
+        <label style={coFieldLabel}>
+          <span>aff_id ou aff_name</span>
+          <input value={key} onChange={(e) => setKey(e.target.value)} placeholder="46 ou Matheus Petersen" style={coInputStyle}/>
+        </label>
+        <label style={coFieldLabel}>
+          <span>Tipo</span>
+          <select value={keyType} onChange={(e) => setKeyType(e.target.value)} style={coInputStyle}>
+            <option value="id">aff_id</option>
+            <option value="name">aff_name</option>
+          </select>
+        </label>
+        <label style={coFieldLabel}>
+          <span>% Black 2</span>
+          <input type="number" min={0} max={100} value={pct} onChange={(e) => setPct(Number(e.target.value))} style={coInputStyle}/>
+        </label>
+        <button className="btn btn-primary" onClick={submit} disabled={saving}>{saving ? 'Salvando…' : 'Criar'}</button>
+      </div>
+      <div style={{ marginTop: 8, fontSize: 10, color: 'var(--fg5)' }}>
+        Dica: prefira <b>aff_id</b> — o aff_name do BuyGoods às vezes vem com espaço duplo e não casa por nome.
+      </div>
+      {err && <div style={{ color: 'var(--danger)', fontSize: 11, marginTop: 6 }}>{err}</div>}
+    </div>
+  );
+}
+
+function CopyOptimizerPage() {
+  const [state, setState] = useState({ status: 'loading', rules: [], error: null });
+  const [refresh, setRefresh] = useState(0);
+  const [creating, setCreating] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    setState((s) => ({ ...s, status: 'loading' }));
+    window.NSApi.fetchCopyRules()
+      .then((data) => { if (!cancelled) setState({ status: 'ready', rules: data.rules || [], error: null }); })
+      .catch((err) => { if (!cancelled) setState({ status: 'error', rules: [], error: err.message || 'erro' }); });
+    return () => { cancelled = true; };
+  }, [refresh]);
+
+  function reload() { setRefresh((n) => n + 1); }
+
+  const rules = state.rules;
+  const activeCount = rules.filter((r) => r.enabled).length;
+  const autotuneCount = rules.filter((r) => r.autotune).length;
+
+  return (
+    <div className="page-in">
+      <div className="page-head">
+        <div className="lead">
+          <span className="eyebrow">ADMIN · COPY OPTIMIZER</span>
+          <h2>Copy <em>Optimizer</em></h2>
+          <span className="sub">
+            {rules.length} regras · {activeCount} ativas · {autotuneCount} em auto-tune · exposição da copy Black 2 no Upsell01 (BuyGoods)
+          </span>
+        </div>
+        <div className="page-head-actions">
+          <button className="btn btn-ghost" onClick={reload}><Icon name="refresh" size={12}/> Recarregar</button>
+          <button className="btn btn-primary" onClick={() => setCreating((v) => !v)}><Icon name="plus" size={12}/> Nova regra</button>
+        </div>
+      </div>
+
+      {state.status === 'error' && (
+        <div className="panel" style={{ color: 'var(--danger)', marginBottom: 12 }}>Erro ao carregar: {state.error}</div>
+      )}
+
+      {creating && <CopyRuleCreateForm onClose={() => setCreating(false)} onSaved={() => { setCreating(false); reload(); }}/>}
+
+      <div className="panel" style={{ padding: 0 }}>
+        <div className="tbl-wrap" style={{ margin: 0, padding: '0 4px' }}>
+          <table className="tbl">
+            <thead>
+              <tr>
+                <th>Afiliado</th>
+                <th>Tipo</th>
+                <th style={{ width: 240 }}>% Black 2</th>
+                <th>Auto-tune</th>
+                <th>Status</th>
+                <th>Última</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody>
+              {state.status === 'loading' && (
+                <tr><td colSpan={7} style={{ textAlign: 'center', padding: 24, opacity: 0.6 }}>Carregando…</td></tr>
+              )}
+              {state.status === 'ready' && rules.length === 0 && (
+                <tr><td colSpan={7} style={{ textAlign: 'center', padding: 24, opacity: 0.6 }}>Nenhuma regra ainda. Crie a primeira.</td></tr>
+              )}
+              {rules.map((r) => <CopyRuleRow key={r.id} rule={r} onChanged={reload}/>)}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div style={{ marginTop: 10, fontFamily: 'var(--f-mono)', fontSize: 10, color: 'var(--fg5)', lineHeight: 1.6 }}>
+        Decisão server-side · match por <b>aff_id</b> ou <b>aff_name</b> (verbatim, mais inclusivo vence) · bucket sticky djb2 por order_id_global ·
+        Black 2 só com email válido · pausar = % vira 0. Mudanças refletem na decisão em segundos.
+      </div>
+    </div>
+  );
+}
+
 Object.assign(window, {
   FunnelPage, LeaderboardPage, AffiliateDrawer, AllAffiliatesPage,
   ProductsPage, TransactionsPage, IntegrationsPage, FXPage, UsersPage,
   HealthPage, CostsPage, InsightsPage, NetworksPage,
   PartnerShell, ChatPage, ChatWidget,
+  CopyOptimizerPage,
 });
