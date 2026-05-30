@@ -15,7 +15,8 @@
     "seed:catalog": "tsx scripts/seedCatalog.ts",
     "backfill:classify": "tsx scripts/backfillClassification.ts",
     "create:admin": "tsx scripts/createAdmin.ts",
-    "seed:admin": "tsx scripts/seedAdmin.ts"
+    "seed:admin": "tsx scripts/seedAdmin.ts",
+    "seed:copy-rules": "tsx scripts/seedCopyRules.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.95.2",
