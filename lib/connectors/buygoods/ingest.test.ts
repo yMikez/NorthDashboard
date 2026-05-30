@@ -115,8 +115,19 @@ describe('parseBuyGoodsIngest', () => {
     expect(o.deviceType).toBe('mobile');
     expect(o.browser).toBe('Safari');
 
-    // 2026-05-14 01:06:55 UTC
-    expect(o.orderedAt.toISOString()).toBe('2026-05-14T01:06:55.000Z');
+    // rr_createdate "2026-05-14 01:06:55" é America/New_York (EDT = UTC-4 em
+    // maio) → 05:06:55 UTC.
+    expect(o.orderedAt.toISOString()).toBe('2026-05-14T05:06:55.000Z');
+  });
+
+  it('interprets rr_createdate as US Eastern (EDT), not UTC', () => {
+    // Payload real: venda 12:43 BRT chega como rr_createdate 11:43 EDT.
+    // 11:43 EDT (UTC-4) → 15:43:10 UTC.
+    const o = parseBuyGoodsIngest({
+      ...realPayload,
+      rr_createdate: '2026-05-30 11:43:10',
+    });
+    expect(o.orderedAt.toISOString()).toBe('2026-05-30T15:43:10.000Z');
   });
 
   it('throws when order_id missing', () => {
