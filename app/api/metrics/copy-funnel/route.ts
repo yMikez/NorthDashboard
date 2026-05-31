@@ -6,7 +6,7 @@
 import { NextResponse } from 'next/server';
 import { requireAdmin } from '@/lib/auth/guard';
 import { getCopyFunnel, type CopyFunnelPeriod } from '@/lib/services/copyFunnel';
-import { DEFAULT_AUTOTUNE_CONFIG } from '@/lib/copy-optimizer/autotune';
+import { getAutotuneConfig } from '@/lib/copy-optimizer/autotuneRunner';
 import { logger } from '@/lib/logger';
 
 export const runtime = 'nodejs';
@@ -27,8 +27,12 @@ export async function GET(req: Request) {
   const stage = searchParams.get('stage') || null;
   const family = searchParams.get('family') || null;
   const affiliate = searchParams.get('affiliate') || null;
+  // Target: usa o param explícito se vier; senão o globalTargetAov SALVO na
+  // config (Painel D) — não o default fixo. Era o bug do "GAP vs $220".
   const targetRaw = Number(searchParams.get('target'));
-  const target = Number.isFinite(targetRaw) && targetRaw > 0 ? targetRaw : DEFAULT_AUTOTUNE_CONFIG.globalTargetAov;
+  const target = Number.isFinite(targetRaw) && targetRaw > 0
+    ? targetRaw
+    : (await getAutotuneConfig()).globalTargetAov;
 
   const key = JSON.stringify({ period, stage, family, affiliate, target });
   const hit = cache.get(key);
