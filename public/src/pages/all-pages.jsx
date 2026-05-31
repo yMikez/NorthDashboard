@@ -6934,11 +6934,53 @@ function CopyAovLine({ daily, target }) {
   );
 }
 
+// Form inline pra aplicar uma regra a TODOS os afiliados BuyGoods de uma vez.
+function CopyApplyAllForm({ onClose, onApplied }) {
+  const [pct, setPct] = useState(30);
+  const [autotune, setAutotune] = useState(true);
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState(null);
+
+  async function apply() {
+    if (!window.confirm(`Criar regra pra todos os afiliados que ainda não têm, a ${pct}% de Black 2${autotune ? ' com auto-tune ligado' : ''}? Regras existentes não são alteradas.`)) return;
+    setBusy(true); setMsg(null);
+    try {
+      const r = await window.NSApi.applyCopyRulesToAll({ black2Pct: Number(pct), autotune });
+      setMsg(`${r.created} criadas · ${r.skipped} já existiam · ${r.total} afiliados no total.`);
+      onApplied();
+    } catch (e) { setMsg('Erro: ' + (e.message || 'falha')); }
+    finally { setBusy(false); }
+  }
+
+  return (
+    <div className="panel" style={{ marginBottom: 12 }}>
+      <div className="panel-head">
+        <div className="panel-title">Aplicar a todos os afiliados</div>
+        <button className="btn btn-ghost" onClick={onClose} style={{ padding: '4px 8px' }}><Icon name="x" size={12}/></button>
+      </div>
+      <div style={{ display: 'flex', gap: 14, alignItems: 'end', marginTop: 10, flexWrap: 'wrap' }}>
+        <label style={coFieldLabel}><span>% Black 2 inicial</span>
+          <input type="number" min={0} max={100} value={pct} onChange={(e) => setPct(e.target.value)} style={{ ...coInputStyle, width: 120 }}/>
+        </label>
+        <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, color: 'var(--fg2)', cursor: 'pointer' }}>
+          <CopyToggle on={autotune} onChange={setAutotune}/> Já ligar auto-tune
+        </label>
+        <button className="btn btn-primary" onClick={apply} disabled={busy}>{busy ? 'Aplicando…' : 'Aplicar a todos'}</button>
+      </div>
+      <div style={{ marginTop: 8, fontSize: 10, color: 'var(--fg5)' }}>
+        Cria uma regra (por <b>aff_id</b>) pra cada afiliado BuyGoods <b>sem regra</b>. Regras já existentes ficam intactas. Com auto-tune ligado, o robô passa a balancear o % de cada um perseguindo o target de AOV.
+      </div>
+      {msg && <div style={{ marginTop: 6, fontSize: 11, color: 'var(--fg3)' }}>{msg}</div>}
+    </div>
+  );
+}
+
 // ---------- Painel A — Regras ----------
 function CopyRulesPanel() {
   const [state, setState] = useState({ status: 'loading', rules: [], error: null });
   const [refresh, setRefresh] = useState(0);
   const [creating, setCreating] = useState(false);
+  const [applyAll, setApplyAll] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -6957,10 +6999,12 @@ function CopyRulesPanel() {
         <span style={{ fontSize: 11, color: 'var(--fg5)' }}>{rules.length} regras · {rules.filter((r) => r.enabled).length} ativas · {rules.filter((r) => r.autotune).length} em auto-tune</span>
         <div style={{ display: 'flex', gap: 8 }}>
           <button className="btn btn-ghost" onClick={reload}><Icon name="refresh" size={12}/> Recarregar</button>
+          <button className="btn btn-ghost" onClick={() => setApplyAll((v) => !v)}><Icon name="users" size={12}/> Aplicar a todos</button>
           <button className="btn btn-primary" onClick={() => setCreating((v) => !v)}><Icon name="plus" size={12}/> Nova regra</button>
         </div>
       </div>
       {state.status === 'error' && <div className="panel" style={{ color: 'var(--danger)', marginBottom: 12 }}>Erro: {state.error}</div>}
+      {applyAll && <CopyApplyAllForm onClose={() => setApplyAll(false)} onApplied={reload}/>}
       {creating && <CopyRuleCreateForm onClose={() => setCreating(false)} onSaved={() => { setCreating(false); reload(); }}/>}
       <div className="panel" style={{ padding: 0 }}>
         <div className="tbl-wrap" style={{ margin: 0, padding: '0 4px' }}>
