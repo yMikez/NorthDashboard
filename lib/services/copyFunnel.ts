@@ -151,6 +151,55 @@ export interface CopyFunnelResponse {
     autotune: boolean | null;
   }>;
   daily: Array<{ date: string; aov: number; views: number; convOverall: number }>;
+  forecast: ForecastResult;
+}
+
+export interface ForecastResult {
+  // insufficient = poucos dias de dado; reached = já bateu; flat = AOV não sobe
+  // no ritmo atual (sem ETA); eta = tem estimativa.
+  status: 'insufficient' | 'reached' | 'flat' | 'eta';
+  currentAov: number; // nível atual estimado pela tendência (fitted no último dia)
+  target: number;
+  slopePerDay: number; // ritmo da tendência em $/dia
+  daysToTarget: number | null;
+  avgDailyViews: number;
+  daysOfData: number;
+}
+
+/**
+ * Previsão de tempo até a meta de AOV. Regressão linear da série diária de AOV
+ * (ritmo $/dia) extrapolada até o target. PURA — é uma estimativa "no ritmo
+ * atual", não garantia: assume a tendência recente constante.
+ */
+export function forecastToTarget(
+  daily: Array<{ aov: number; views: number }>,
+  target: number,
+): ForecastResult {
+  const n = daily.length;
+  const avgDailyViews = n ? Math.round(daily.reduce((s, d) => s + d.views, 0) / n) : 0;
+  const base = { target: round2(target), avgDailyViews, daysOfData: n };
+
+  if (n < 3) {
+    return { status: 'insufficient', currentAov: 0, slopePerDay: 0, daysToTarget: null, ...base };
+  }
+
+  let sx = 0, sy = 0, sxy = 0, sxx = 0;
+  daily.forEach((d, i) => { sx += i; sy += d.aov; sxy += i * d.aov; sxx += i * i; });
+  const denom = n * sxx - sx * sx;
+  const slope = denom !== 0 ? (n * sxy - sx * sy) / denom : 0;
+  const intercept = (sy - slope * sx) / n;
+  const currentFitted = slope * (n - 1) + intercept;
+  const cur = round2(currentFitted);
+  const sl = round2(slope);
+
+  if (currentFitted >= target) {
+    return { status: 'reached', currentAov: cur, slopePerDay: sl, daysToTarget: 0, ...base };
+  }
+  if (slope <= 0.0001) {
+    return { status: 'flat', currentAov: cur, slopePerDay: sl, daysToTarget: null, ...base };
+  }
+  const days = (target - currentFitted) / slope;
+  return { status: 'eta', currentAov: cur, slopePerDay: sl, daysToTarget: Math.round(days * 10) / 10, ...base };
 }
 
 export interface RuleInfo {
@@ -274,6 +323,7 @@ export function reduceCopyFunnel(
     byStage,
     byAffiliate,
     daily,
+    forecast: forecastToTarget(daily, target),
   };
 }
 
