@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { reduceCopyFunnel, type RawFunnelView, type RuleInfo } from './copyFunnel';
+import { reduceCopyFunnel, forecastToTarget, type RawFunnelView, type RuleInfo } from './copyFunnel';
 
 const DAY = '2026-05-30T15:00:00.000Z'; // BRT 2026-05-30 12:00 → bucket 2026-05-30
 
@@ -89,5 +89,39 @@ describe('reduceCopyFunnel', () => {
     expect(r.byStage).toEqual([]);
     expect(r.byAffiliate).toEqual([]);
     expect(r.daily).toEqual([]);
+    expect(r.forecast.status).toBe('insufficient');
+  });
+});
+
+describe('forecastToTarget', () => {
+  const d = (aov: number, views = 100) => ({ aov, views });
+
+  it('insufficient with <3 days', () => {
+    const f = forecastToTarget([d(200), d(210)], 300);
+    expect(f.status).toBe('insufficient');
+    expect(f.daysToTarget).toBeNull();
+    expect(f.daysOfData).toBe(2);
+  });
+
+  it('eta: rising trend extrapolates days to target', () => {
+    // 200→210→220→230 ($10/dia), fitted no último=230, target 300 → 7 dias
+    const f = forecastToTarget([d(200), d(210), d(220), d(230)], 300);
+    expect(f.status).toBe('eta');
+    expect(f.slopePerDay).toBeCloseTo(10, 6);
+    expect(f.currentAov).toBeCloseTo(230, 6);
+    expect(f.daysToTarget).toBeCloseTo(7, 6);
+    expect(f.avgDailyViews).toBe(100);
+  });
+
+  it('reached when trend already at/above target', () => {
+    const f = forecastToTarget([d(310), d(320), d(330)], 300);
+    expect(f.status).toBe('reached');
+    expect(f.daysToTarget).toBe(0);
+  });
+
+  it('flat when AOV not rising (no ETA)', () => {
+    const f = forecastToTarget([d(300), d(300), d(300)], 400);
+    expect(f.status).toBe('flat');
+    expect(f.daysToTarget).toBeNull();
   });
 });

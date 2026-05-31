@@ -6934,6 +6934,42 @@ function CopyAovLine({ daily, target }) {
   );
 }
 
+// Card de previsão de ETA até a meta de AOV (tendência da série diária).
+function CopyForecastCard({ forecast }) {
+  const f = forecast;
+  if (!f) return null;
+  let icon = 'arrow-up-right', color = 'var(--glow-cyan)', title = '', detail = '';
+  if (f.status === 'insufficient') {
+    icon = 'calendar'; color = 'var(--fg4)';
+    title = 'Previsão indisponível';
+    detail = `Só ${f.daysOfData} dia(s) de dado no período — precisa de ≥3 pra estimar a tendência. Aguarde acumular ou amplie o período.`;
+  } else if (f.status === 'reached') {
+    icon = 'sparkles'; color = 'var(--success)';
+    title = `Meta de ${fmtCurrency(f.target, 'USD', 0)} já atingida`;
+    detail = `O AOV no ritmo da tendência está em ${fmtCurrency(f.currentAov, 'USD', 2)}.`;
+  } else if (f.status === 'flat') {
+    icon = 'alert-triangle'; color = 'var(--warning)';
+    title = 'Sem previsão — AOV estável';
+    detail = `No ritmo atual o AOV (${fmtCurrency(f.currentAov, 'USD', 2)}) não sobe (${f.slopePerDay >= 0 ? '+' : ''}${fmtCurrency(f.slopePerDay, 'USD', 2)}/dia). Suba o % de Black 2 ou ligue auto-tune pra começar a empurrar.`;
+  } else {
+    const eta = new Date(Date.now() + f.daysToTarget * 86400000);
+    const etaStr = eta.toLocaleDateString('pt-BR', { day: '2-digit', month: 'short', year: 'numeric' });
+    title = `≈ ${f.daysToTarget} dias até ${fmtCurrency(f.target, 'USD', 0)}`;
+    detail = `No ritmo de +${fmtCurrency(f.slopePerDay, 'USD', 2)}/dia, partindo de ${fmtCurrency(f.currentAov, 'USD', 2)} → meta por volta de ${etaStr}. Volume médio: ${fmtInt(f.avgDailyViews)} views/dia.`;
+  }
+  return (
+    <div className="panel" style={{ marginBottom: 12, borderColor: color, display: 'flex', gap: 12, alignItems: 'flex-start' }}>
+      <Icon name={icon} size={18}/>
+      <div>
+        <div className="eyebrow" style={{ fontSize: 9 }}>PREVISÃO ATÉ A META</div>
+        <div style={{ fontWeight: 600, fontSize: 15, color, marginTop: 2 }}>{title}</div>
+        <div style={{ fontSize: 11, color: 'var(--fg4)', marginTop: 3, lineHeight: 1.5 }}>{detail}</div>
+        <div style={{ fontSize: 9, color: 'var(--fg5)', marginTop: 5, fontFamily: 'var(--f-mono)' }}>Extrapolação linear "no ritmo atual" sobre o período selecionado — estimativa, não garantia.</div>
+      </div>
+    </div>
+  );
+}
+
 // Form inline pra aplicar uma regra a TODOS os afiliados BuyGoods de uma vez.
 function CopyApplyAllForm({ onClose, onApplied }) {
   const [pct, setPct] = useState(30);
@@ -7069,6 +7105,8 @@ function CopyObservabilityPanel() {
             <CopyKpi label="CONVERSÃO" value={fmtPct(d.summary.convOverall)}/>
             <CopyKpi label={`GAP vs ${fmtCurrency(d.summary.aovTarget, 'USD', 0)}`} value={(d.summary.aovGap >= 0 ? '+' : '') + fmtCurrency(d.summary.aovGap, 'USD', 2)} tone={d.summary.aovGap < 0 ? 'danger' : 'ok'}/>
           </div>
+
+          <CopyForecastCard forecast={d.forecast}/>
 
           <div className="grid-2" style={{ gridTemplateColumns: '1.4fr 1fr', marginBottom: 12 }}>
             <div className="panel">
