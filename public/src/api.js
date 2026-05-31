@@ -768,6 +768,7 @@ function fetchCopyFunnel(params = {}) {
 }
 function calcCopyAov(body) { return coSend('/api/metrics/copy-aov-calculator', 'POST', body); }
 function batchApplyCopyRules(body) { return coSend('/api/admin/copy-rules/batch-apply', 'POST', body); }
+function applyCopyRulesToAll(body) { return coSend('/api/admin/copy-rules/apply-all', 'POST', body); }
 function fetchCopyAutotuneConfig() { return coGet('/api/admin/copy-autotune/config'); }
 function patchCopyAutotuneConfig(body) { return coSend('/api/admin/copy-autotune/config', 'PATCH', body); }
 function fetchCopyAutotuneLogs(params = {}) {
@@ -781,6 +782,7 @@ window.NSApi = {
   createCopyRule,
   patchCopyRule,
   deleteCopyRule,
+  applyCopyRulesToAll,
   fetchCopyFunnel,
   calcCopyAov,
   batchApplyCopyRules,
