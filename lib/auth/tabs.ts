@@ -12,6 +12,7 @@ export type TabId =
   | 'custos'
   | 'leaderboard'
   | 'all-affiliates'
+  | 'recovery'
   | 'products'
   | 'transactions'
   | 'platforms'
@@ -32,6 +33,7 @@ export const AVAILABLE_TABS: TabSpec[] = [
   { id: 'custos',         label: 'Custos',              group: 'Análise' },
   { id: 'leaderboard',    label: 'Ranking',             group: 'Afiliados' },
   { id: 'all-affiliates', label: 'Todos os afiliados',  group: 'Afiliados' },
+  { id: 'recovery',       label: 'Recuperação',         group: 'Afiliados' },
   { id: 'networks',       label: 'Networks',            group: 'Afiliados' },
   { id: 'products',       label: 'Produtos',            group: 'Catálogo' },
   { id: 'transactions',   label: 'Transações',          group: 'Catálogo' },
