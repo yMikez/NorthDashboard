@@ -1,6 +1,25 @@
 import { describe, expect, it } from 'vitest';
 import { classifyProduct, normalizeFamily } from './productClassification';
 
+// Nomes reais de produção (BuyGoods). Travam a classificação que alimenta o
+// funil multi-stage do NeuroMind e o role correto dos downsells.
+describe('classifyProduct — BuyGoods nomes reais', () => {
+  const cases: Array<[string, string, { type: string; step: number | null; family: string }]> = [
+    ['neu6', 'Neuro Mind Pro 6 Bottles', { type: 'FRONTEND', step: 1, family: 'NeuroMindPro' }],
+    ['neu6u', 'Neuro Mind Pro 6 Bottles (Upgrade)', { type: 'UPSELL', step: 2, family: 'NeuroMindPro' }],
+    ['nig6u', 'Night Calm 6 Bottles (Upgrade)', { type: 'UPSELL', step: 3, family: 'NightCalm' }],
+    ['fleimu33u', 'Flex Guard + Immune Guard 6 Bottles (Upgrade)', { type: 'UPSELL', step: 4, family: 'FlexImmuneGuard' }],
+    ['neu3d', 'Neuro Mind Pro 3 Bottles (Last Chance)', { type: 'DOWNSELL', step: 2, family: 'NeuroMindPro' }],
+    ['nig3d', 'Night Calm 3 Bottles (Last Chance)', { type: 'DOWNSELL', step: 3, family: 'NightCalm' }],
+  ];
+  it.each(cases)('%s "%s"', (cod, name, exp) => {
+    const c = classifyProduct(cod, name);
+    expect(c.type).toBe(exp.type);
+    expect(c.funnelStep).toBe(exp.step);
+    expect(c.family).toBe(exp.family);
+  });
+});
+
 describe('normalizeFamily', () => {
   it('canonicalizes the 4 known family spellings across CB/D24', () => {
     expect(normalizeFamily('NeuroMindPro')).toBe('NeuroMindPro');

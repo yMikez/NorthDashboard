@@ -98,7 +98,12 @@ export function parseBuyGoodsIngest(payload: BuyGoodsPayload): NormalizedOrder {
     state: notEmpty(payload.state) ?? notEmpty(payload.billing_state),
     city: notEmpty(payload.city) ?? notEmpty(payload.billing_city),
 
-    funnelSessionId: globalId ?? notEmpty(payload.sessid2),
+    // CHAVE DE SESSÃO = sessid2. O order_id_global do BuyGoods é ÚNICO POR
+    // TRANSAÇÃO (FE e cada upsell ganham um novo), então NÃO serve pra agrupar
+    // a sessão. O sessid2 é compartilhado por FE + upsells da mesma sessão
+    // (confirmado: 100% das orders têm, 99,2% com 1 FET). parentExternalId
+    // continua = globalId (o Copy Optimizer casa o FE por ele).
+    funnelSessionId: notEmpty(payload.sessid2) ?? globalId,
     funnelStep,
     clickId: notEmpty(payload.subid) ?? notEmpty(payload.referrer_sid),
     trackingId: notEmpty(payload.sid),

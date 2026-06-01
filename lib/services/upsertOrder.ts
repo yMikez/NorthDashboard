@@ -195,6 +195,15 @@ export async function upsertOrder(normalized: NormalizedOrder): Promise<UpsertOr
       ? classified.funnelStep
       : normalized.funnelStep;
 
+  // Order.productType: pro BuyGoods o role do IPN é pouco confiável — marca
+  // "Last Chance" (downsell) como UPSELL. Quando o classificador reconhece a
+  // família, ele sabe o role certo pelo NOME (DOWNSELL/UPSELL/RC). Então pra BG
+  // confiamos no classificador; demais plataformas mantêm o role do IPN.
+  const orderType: ProductType =
+    normalized.platformSlug === 'buygoods' && classified.family !== null
+      ? catalogType
+      : (normalized.productType as ProductType);
+
   const orderData = {
     platformId: platform.id,
     externalId: normalized.externalId,
@@ -205,7 +214,7 @@ export async function upsertOrder(normalized: NormalizedOrder): Promise<UpsertOr
     affiliateId,
     customerId,
 
-    productType: normalized.productType as ProductType,
+    productType: orderType,
 
     currencyOriginal: normalized.currencyOriginal,
     grossAmountOrig: new Prisma.Decimal(normalized.grossAmountOrig),
@@ -291,8 +300,13 @@ export async function upsertOrder(normalized: NormalizedOrder): Promise<UpsertOr
   // the order, recompute the session's total fulfillment and assign it
   // to a single primary order (FE preferred). Per-order fulfillmentUsd
   // values from the orderData snapshot get rewritten here for correctness.
-  const sessionKey = normalized.parentExternalId ?? normalized.externalId;
-  await rebalanceSessionFulfillment(platform.id, sessionKey);
+  // BuyGoods: a sessão (FE+upsells, mesmo pacote/frete) é identificada por
+  // funnelSessionId (=sessid2), não por parentExternalId (que é por-transação).
+  const isBuyGoods = normalized.platformSlug === 'buygoods';
+  const sessionKey = isBuyGoods
+    ? (normalized.funnelSessionId ?? normalized.externalId)
+    : (normalized.parentExternalId ?? normalized.externalId);
+  await rebalanceSessionFulfillment(platform.id, sessionKey, isBuyGoods ? 'session' : 'anchor');
 
   // Network commission accrual. Idempotent (UNIQUE on orderId). Only fires
   // for FE+APPROVED orders whose affiliate is linked to a Network. Errors

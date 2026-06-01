@@ -945,6 +945,7 @@ export async function getFunnel(
     select: {
       externalId: true,
       parentExternalId: true,
+      funnelSessionId: true,
       grossAmountUsd: true,
       funnelStep: true,
       productType: true,
@@ -952,6 +953,14 @@ export async function getFunnel(
       product: { select: { externalId: true, name: true, family: true } },
     },
   });
+
+  // Chave de sessão por plataforma. BuyGoods: order_id_global é por-transação,
+  // então a sessão real é o funnelSessionId (= sessid2). Demais plataformas:
+  // parentExternalId é o anchor da sessão (FE sem upsells = própria externalId).
+  const sessionKeyOf = (o: (typeof orders)[number]): string =>
+    o.platform.slug === 'buygoods'
+      ? (o.funnelSessionId ?? o.parentExternalId ?? o.externalId)
+      : (o.parentExternalId ?? o.externalId);
 
   // A "group" represents a single buyer's funnel session. Group key:
   //   parentExternalId when present (digistore order_id, clickbank upsellOriginalReceipt),
@@ -999,7 +1008,7 @@ export async function getFunnel(
   // Pass 1: FE orders only — establish each group's funnel identity.
   for (const o of orders) {
     if (o.productType !== 'FRONTEND') continue;
-    const groupKey = `${o.platform.slug}:${o.parentExternalId ?? o.externalId}`;
+    const groupKey = `${o.platform.slug}:${sessionKeyOf(o)}`;
     const g = getOrInit(groupKey, o.platform.slug);
     g.hasFE = true;
     g.feRevenue += toNumber(o.grossAmountUsd);
@@ -1022,7 +1031,7 @@ export async function getFunnel(
   // upsell/downsell volume + revenue land in the family bucket.
   for (const o of orders) {
     if (o.productType === 'FRONTEND') continue;
-    const groupKey = `${o.platform.slug}:${o.parentExternalId ?? o.externalId}`;
+    const groupKey = `${o.platform.slug}:${sessionKeyOf(o)}`;
     const g = getOrInit(groupKey, o.platform.slug);
     if (g.feProductFamily == null && o.product.family) {
       g.feProductFamily = o.product.family;
@@ -1050,7 +1059,7 @@ export async function getFunnel(
   // cross-sellar" — mas NÃO são mais excluídos das stages.
   for (const o of orders) {
     if (o.productType === 'FRONTEND') continue;
-    const groupKey = `${o.platform.slug}:${o.parentExternalId ?? o.externalId}`;
+    const groupKey = `${o.platform.slug}:${sessionKeyOf(o)}`;
     const g = getOrInit(groupKey, o.platform.slug);
     const gross = toNumber(o.grossAmountUsd);
     const t = o.productType;
