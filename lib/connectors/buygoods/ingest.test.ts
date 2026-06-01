@@ -109,7 +109,9 @@ describe('parseBuyGoodsIngest', () => {
     expect(o.state).toBe('New York');
     expect(o.city).toBe('Elmont');
 
-    expect(o.funnelSessionId).toBe('5QWERTYU');
+    // funnelSessionId = sessid2 (chave de sessão real, compartilhada FE+upsells).
+    // parentExternalId continua = order_id_global ('5QWERTYU').
+    expect(o.funnelSessionId).toBe('sessid222');
     expect(o.funnelStep).toBe(1);
     expect(o.clickId).toBe('aaa140323extra');
     expect(o.deviceType).toBe('mobile');
@@ -156,6 +158,19 @@ describe('parseBuyGoodsIngest', () => {
     });
     expect(o.productType).toBe('UPSELL');
     expect(o.funnelStep).toBe(2);
+  });
+
+  it('funnelSessionId = sessid2 even when order_id_global differs (per-transaction)', () => {
+    // Núcleo do fix de sessão: o order_id_global da BG é por-transação; o
+    // sessid2 é o elo real da sessão (FE+upsells compartilham). funnelSessionId
+    // tem que ser o sessid2; parentExternalId fica com o global.
+    const o = parseBuyGoodsIngest({
+      ...realPayload,
+      sessid2: 'sessid20260531170721742',
+      order_id_global: 'ABSZ2YVX', // global único da transação
+    });
+    expect(o.funnelSessionId).toBe('sessid20260531170721742');
+    expect(o.parentExternalId).toBe('ABSZ2YVX');
   });
 
   it('detects downsell from SKU pattern', () => {

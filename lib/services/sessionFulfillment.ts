@@ -29,15 +29,17 @@ import { calcCogs } from './cogs';
 export async function rebalanceSessionFulfillment(
   platformId: string,
   sessionKey: string,
+  // 'anchor' (CB/Digistore): sessão = parentExternalId/externalId == key.
+  // 'session' (BuyGoods): sessão = funnelSessionId == key (sessid2), porque o
+  // order_id_global da BG é por-transação e não agrupa FE+upsells.
+  matchBy: 'anchor' | 'session' = 'anchor',
 ): Promise<void> {
-  // Session = all orders whose parentExternalId matches OR whose externalId
-  // is the parent (the FE itself in CB legacy where parent is null and the
-  // FE acts as its own session anchor).
+  const sessionWhere =
+    matchBy === 'session'
+      ? { platformId, funnelSessionId: sessionKey }
+      : { platformId, OR: [{ parentExternalId: sessionKey }, { externalId: sessionKey }] };
   const sessionOrders = await db.order.findMany({
-    where: {
-      platformId,
-      OR: [{ parentExternalId: sessionKey }, { externalId: sessionKey }],
-    },
+    where: sessionWhere,
     include: {
       product: { select: { family: true, bottles: true, bonusBottles: true } },
     },
@@ -110,22 +112,30 @@ export async function backfillSessionFulfillment(): Promise<{
   // externalId. Build the unique set in JS since SQL DISTINCT on a COALESCE
   // expression is awkward via Prisma.
   const orders = await db.order.findMany({
-    select: { platformId: true, parentExternalId: true, externalId: true },
+    select: {
+      platformId: true, parentExternalId: true, externalId: true, funnelSessionId: true,
+      platform: { select: { slug: true } },
+    },
   });
+  // Marca o modo de match no key: 'S' = por funnelSessionId (BuyGoods),
+  // 'A' = por anchor parentExternalId/externalId (demais).
   const sessionKeys = new Set<string>();
   for (const o of orders) {
-    sessionKeys.add(`${o.platformId}|${o.parentExternalId ?? o.externalId}`);
+    if (o.platform.slug === 'buygoods') {
+      sessionKeys.add(`${o.platformId}|S|${o.funnelSessionId ?? o.externalId}`);
+    } else {
+      sessionKeys.add(`${o.platformId}|A|${o.parentExternalId ?? o.externalId}`);
+    }
   }
   let ordersTouched = 0;
   for (const key of sessionKeys) {
-    const [platformId, sessionKey] = key.split('|');
-    const before = await db.order.count({
-      where: {
-        platformId,
-        OR: [{ parentExternalId: sessionKey }, { externalId: sessionKey }],
-      },
-    });
-    await rebalanceSessionFulfillment(platformId, sessionKey);
+    const [platformId, mode, sessionKey] = key.split('|');
+    const matchBy = mode === 'S' ? 'session' : 'anchor';
+    const where = matchBy === 'session'
+      ? { platformId, funnelSessionId: sessionKey }
+      : { platformId, OR: [{ parentExternalId: sessionKey }, { externalId: sessionKey }] };
+    const before = await db.order.count({ where });
+    await rebalanceSessionFulfillment(platformId, sessionKey, matchBy);
     ordersTouched += before;
   }
   return { sessionsScanned: sessionKeys.size, ordersTouched };

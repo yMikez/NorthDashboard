@@ -74,12 +74,15 @@ export async function queryCopyFunnel(f: CopyFunnelFilters): Promise<RawFunnelVi
       cv."layer"   AS layer,
       cv."affName" AS aff_name,
       cv."affId"   AS aff_id,
+      -- converteu no STAGE: upsell APPROVED do produto esperado, NA MESMA
+      -- sessão. order_id_global da BG é por-transação, então a sessão é o
+      -- funnelSessionId (=sessid2) do FE — resolvido no LATERAL abaixo.
       EXISTS (
-        SELECT 1 FROM "Order" o
-        JOIN "Product" p ON p.id = o."productId"
-        WHERE o."parentExternalId" = cv."orderIdGlobal"
-          AND o."productType" = 'UPSELL'
-          AND o."status" = 'APPROVED'
+        SELECT 1 FROM "Order" up
+        JOIN "Product" p ON p.id = up."productId"
+        WHERE up."funnelSessionId" = fe.sess AND up."platformId" = fe.pid
+          AND up."productType" = 'UPSELL'
+          AND up."status" = 'APPROVED'
           AND p."externalId" = CASE cv."stage"
             WHEN 'Upsell01' THEN 'neu6u'
             WHEN 'Upsell02' THEN 'nig6u'
@@ -87,19 +90,31 @@ export async function queryCopyFunnel(f: CopyFunnelFilters): Promise<RawFunnelVi
             ELSE NULL END
       ) AS converted_stage,
       EXISTS (
-        SELECT 1 FROM "Order" o
-        WHERE o."parentExternalId" = cv."orderIdGlobal"
-          AND o."productType" = 'UPSELL'
-          AND o."status" = 'APPROVED'
+        SELECT 1 FROM "Order" up
+        WHERE up."funnelSessionId" = fe.sess AND up."platformId" = fe.pid
+          AND up."productType" = 'UPSELL'
+          AND up."status" = 'APPROVED'
       ) AS converted_any,
-      (
-        SELECT COALESCE(SUM(o."grossAmountUsd"), 0)
-        FROM "Order" o
-        WHERE o."parentExternalId" = cv."orderIdGlobal"
-          AND o."status" = 'APPROVED'
-      ) AS gross_session,
+      COALESCE((
+        SELECT SUM(s."grossAmountUsd")
+        FROM "Order" s
+        WHERE s."funnelSessionId" = fe.sess AND s."platformId" = fe.pid
+          AND s."status" = 'APPROVED'
+      ), 0) AS gross_session,
       cv."shownAt" AS shown_at
     FROM "CopyView" cv
+    -- FE da sessão: casa o order_id_global do CopyView com o FE (parentExternalId)
+    -- e pega o funnelSessionId/plataforma dele. null se o FE ainda não chegou.
+    LEFT JOIN LATERAL (
+      SELECT o."funnelSessionId" AS sess, o."platformId" AS pid
+      FROM "Order" o
+      JOIN "Platform" pl ON pl.id = o."platformId"
+      WHERE pl."slug" = 'buygoods'
+        AND o."parentExternalId" = cv."orderIdGlobal"
+        AND o."productType" = 'FRONTEND'
+      ORDER BY o."orderedAt"
+      LIMIT 1
+    ) fe ON true
     WHERE ${where}
   `);
 
