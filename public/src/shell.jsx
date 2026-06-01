@@ -19,6 +19,7 @@ function Sidebar({ active, onNav, user }) {
       items: [
         { id: 'leaderboard', label: 'Ranking', icon: 'trophy' },
         { id: 'all-affiliates', label: 'Todos os afiliados', icon: 'users' },
+        { id: 'recovery', label: 'Recuperação', icon: 'refresh' },
         { id: 'networks', label: 'Networks', icon: 'layers' },
       ]
     },

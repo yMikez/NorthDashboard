@@ -7386,10 +7386,149 @@ function CopyOptimizerPage() {
   );
 }
 
+// ═══════════════════════════════════════════════════════════════════
+// Recuperação — vendas trazidas por afiliados de recuperação (SMS/email)
+// + comissão devida. A "recuperação" é uma FONTE (o afiliado), não um
+// estágio de funil. Sem split SMS/email ainda (falta sinal no dado).
+// ═══════════════════════════════════════════════════════════════════
+
+function RecoveryManage({ affs, onChanged }) {
+  const [ext, setExt] = useState('');
+  const [plat, setPlat] = useState('digistore24');
+  const [pct, setPct] = useState(30);
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState(null);
+
+  async function add() {
+    if (!ext.trim()) { setMsg('Informe o ID do afiliado.'); return; }
+    setBusy(true); setMsg(null);
+    try {
+      await window.NSApi.addRecoveryAffiliate({ affiliateExternalId: ext.trim(), platformSlug: plat, commissionPct: Number(pct) });
+      setExt(''); setMsg('Afiliado marcado.'); onChanged();
+    } catch (e) { setMsg('Erro: ' + (e.message || 'falha')); }
+    finally { setBusy(false); }
+  }
+  async function remove(id, label) {
+    if (!window.confirm(`Remover ${label} da recuperação?`)) return;
+    try { await window.NSApi.deleteRecoveryAffiliate(id); onChanged(); }
+    catch (e) { setMsg('Erro: ' + (e.message || 'falha')); }
+  }
+
+  return (
+    <div className="panel" style={{ marginBottom: 12 }}>
+      <div className="panel-head"><div className="panel-title">Afiliados de recuperação</div></div>
+      <div style={{ display: 'flex', gap: 10, alignItems: 'end', marginTop: 10, flexWrap: 'wrap' }}>
+        <label style={coFieldLabel}><span>ID do afiliado</span><input value={ext} onChange={(e) => setExt(e.target.value)} placeholder="3722234" style={{ ...coInputStyle, width: 150 }}/></label>
+        <label style={coFieldLabel}><span>Plataforma</span>
+          <select value={plat} onChange={(e) => setPlat(e.target.value)} style={{ ...coInputStyle, width: 150 }}>
+            <option value="digistore24">Digistore24</option>
+            <option value="clickbank">ClickBank</option>
+            <option value="buygoods">BuyGoods</option>
+          </select>
+        </label>
+        <label style={coFieldLabel}><span>Comissão %</span><input type="number" min={0} max={100} value={pct} onChange={(e) => setPct(e.target.value)} style={{ ...coInputStyle, width: 100 }}/></label>
+        <button className="btn btn-primary" onClick={add} disabled={busy}>{busy ? '…' : 'Marcar'}</button>
+      </div>
+      {msg && <div style={{ fontSize: 11, color: 'var(--fg3)', marginTop: 6 }}>{msg}</div>}
+      <div style={{ marginTop: 12 }}>
+        {affs.length === 0 && <div style={{ fontSize: 11, color: 'var(--fg5)' }}>Nenhum afiliado marcado ainda.</div>}
+        {affs.map((a) => (
+          <div key={a.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '7px 0', borderTop: '1px solid var(--border-soft)' }}>
+            <span className="cell-mono" style={{ fontSize: 12 }}>{a.nickname || a.affiliateExternalId}<span style={{ color: 'var(--fg5)' }}> · {a.affiliateExternalId} · {a.platformSlug} · {(a.commissionPct * 100).toFixed(0)}%</span></span>
+            <button className="btn btn-ghost" style={{ padding: '4px 8px' }} onClick={() => remove(a.id, a.nickname || a.affiliateExternalId)} title="Remover"><Icon name="trash-2" size={12}/></button>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function RecoveryPage({ filters }) {
+  const [data, setData] = useState({ status: 'loading', m: null, err: null });
+  const [affs, setAffs] = useState([]);
+  const [refresh, setRefresh] = useState(0);
+  const [manage, setManage] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    setData((d) => ({ ...d, status: 'loading' }));
+    Promise.all([
+      window.NSApi.fetchRecovery(filters),
+      window.NSApi.fetchRecoveryAffiliates().catch(() => ({ affiliates: [] })), // admin-only; membro só vê métricas
+    ])
+      .then(([m, a]) => { if (!cancelled) { setData({ status: 'ready', m, err: null }); setAffs(a.affiliates || []); } })
+      .catch((err) => { if (!cancelled) setData({ status: 'error', m: null, err: err.message || 'erro' }); });
+    return () => { cancelled = true; };
+  }, [filters.dateRange.start.getTime(), filters.dateRange.end.getTime(), refresh]);
+
+  function reload() { setRefresh((n) => n + 1); }
+  const m = data.m;
+
+  return (
+    <div className="page-in">
+      <div className="page-head">
+        <div className="lead">
+          <span className="eyebrow">AFILIADOS · RECUPERAÇÃO</span>
+          <h2>Recuperação <em>de vendas</em></h2>
+          <span className="sub">Vendas trazidas por afiliados de recuperação (SMS/email) + comissão devida. Respeita o filtro de período.</span>
+        </div>
+        <div className="page-head-actions">
+          <button className="btn btn-ghost" onClick={reload}><Icon name="refresh" size={12}/> Recarregar</button>
+          <button className="btn btn-primary" onClick={() => setManage((v) => !v)}><Icon name="sliders" size={12}/> Gerenciar afiliados</button>
+        </div>
+      </div>
+
+      {data.status === 'error' && <div className="panel" style={{ color: 'var(--danger)', marginBottom: 12 }}>Erro: {data.err}</div>}
+      {manage && <RecoveryManage affs={affs} onChanged={reload}/>}
+
+      {m && (
+        <>
+          <div className="grid-2" style={{ gridTemplateColumns: 'repeat(4,1fr)', marginBottom: 12 }}>
+            <CopyKpi label="VENDAS RECUPERADAS" value={fmtInt(m.kpis.sales)}/>
+            <CopyKpi label="RECEITA" value={fmtCurrency(m.kpis.grossUsd, 'USD', 2)}/>
+            <CopyKpi label="COMISSÃO DEVIDA" value={fmtCurrency(m.kpis.commissionUsd, 'USD', 2)} tone="danger"/>
+            <CopyKpi label="LÍQUIDO (pós-comissão)" value={fmtCurrency(m.kpis.netUsd, 'USD', 2)} tone="ok"/>
+          </div>
+
+          <div className="panel" style={{ padding: 0 }}>
+            <div className="panel-head" style={{ padding: '12px 14px 0' }}><div className="panel-title">Por afiliado</div></div>
+            <div className="tbl-wrap" style={{ margin: 0, padding: '0 4px' }}>
+              <table className="tbl">
+                <thead><tr><th>Afiliado</th><th className="num">% comissão</th><th className="num">Vendas</th><th className="num">Receita</th><th className="num">Comissão devida</th></tr></thead>
+                <tbody>
+                  {data.status === 'loading' && <tr><td colSpan={5} style={{ textAlign: 'center', padding: 20, opacity: 0.6 }}>Carregando…</td></tr>}
+                  {data.status === 'ready' && m.byAffiliate.length === 0 && (
+                    <tr><td colSpan={5} style={{ textAlign: 'center', padding: 20, opacity: 0.6 }}>
+                      Nenhuma venda de recuperação no período.{affs.length === 0 ? ' Marque um afiliado em "Gerenciar afiliados".' : ''}
+                    </td></tr>
+                  )}
+                  {m.byAffiliate.map((a) => (
+                    <tr key={a.affiliateExternalId}>
+                      <td className="cell-mono">{a.nickname || a.affiliateExternalId}<span style={{ color: 'var(--fg5)', marginLeft: 6, fontSize: 10 }}>{a.affiliateExternalId}</span></td>
+                      <td className="num cell-mono">{(a.commissionPct * 100).toFixed(0)}%</td>
+                      <td className="num">{fmtInt(a.sales)}</td>
+                      <td className="num">{fmtCurrency(a.grossUsd, 'USD', 2)}</td>
+                      <td className="num" style={{ color: 'var(--glow-cyan)' }}>{fmtCurrency(a.commissionUsd, 'USD', 2)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <div style={{ marginTop: 10, fontFamily: 'var(--f-mono)', fontSize: 10, color: 'var(--fg5)', lineHeight: 1.6 }}>
+            Comissão = receita × % do afiliado, sobre cada venda APROVADA dele (FE + upsell). Split SMS vs email entra quando houver sinal no tracking.
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
 Object.assign(window, {
   FunnelPage, LeaderboardPage, AffiliateDrawer, AllAffiliatesPage,
   ProductsPage, TransactionsPage, IntegrationsPage, FXPage, UsersPage,
   HealthPage, CostsPage, InsightsPage, NetworksPage,
   PartnerShell, ChatPage, ChatWidget,
-  CopyOptimizerPage,
+  CopyOptimizerPage, RecoveryPage,
 });

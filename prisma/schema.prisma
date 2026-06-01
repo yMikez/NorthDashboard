@@ -105,9 +105,31 @@ model Affiliate {
   // network so commission attribution is unambiguous on each FE sale.
   networkLink NetworkAffiliate?
   commissions NetworkCommission[]
+  // Config de afiliado de RECUPERAÇÃO (re-engaja carrinho abandonado via
+  // SMS/email). Quando presente, todas as vendas APROVADAS dele são vendas
+  // recuperadas e ele recebe commissionPct sobre cada uma.
+  recovery    RecoveryAffiliate?
 
   @@unique([platformId, externalId])
   @@index([lastOrderAt])
+}
+
+// Afiliado de recuperação: marca quem traz vendas via SMS/email recovery e a
+// % de comissão que recebe sobre cada venda aprovada. Seção "Recuperação".
+model RecoveryAffiliate {
+  id            String    @id @default(cuid())
+  affiliateId   String    @unique
+  affiliate     Affiliate @relation(fields: [affiliateId], references: [id], onDelete: Cascade)
+
+  // Fração: 0.30 = 30%. Comissão = gross da venda × commissionPct.
+  commissionPct Decimal   @db.Decimal(5, 4)
+  enabled       Boolean   @default(true)
+  note          String?
+
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  @@index([enabled])
 }
 
 model Customer {

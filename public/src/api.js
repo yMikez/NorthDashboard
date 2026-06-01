@@ -769,6 +769,21 @@ function fetchCopyFunnel(params = {}) {
 function calcCopyAov(body) { return coSend('/api/metrics/copy-aov-calculator', 'POST', body); }
 function batchApplyCopyRules(body) { return coSend('/api/admin/copy-rules/batch-apply', 'POST', body); }
 function applyCopyRulesToAll(body) { return coSend('/api/admin/copy-rules/apply-all', 'POST', body); }
+
+// ---------- Recuperação ----------
+function fetchRecovery(filters) {
+  const qs = new URLSearchParams({
+    start_date: toISODate(filters.dateRange.start),
+    end_date: toISODate(filters.dateRange.end),
+  });
+  return coGet(`/api/metrics/recovery?${qs}`);
+}
+function fetchRecoveryAffiliates() { return coGet('/api/admin/recovery-affiliates'); }
+function addRecoveryAffiliate(body) { return coSend('/api/admin/recovery-affiliates', 'POST', body); }
+function deleteRecoveryAffiliate(id) {
+  return fetch(`/api/admin/recovery-affiliates/${encodeURIComponent(id)}`, { method: 'DELETE', headers: { Accept: 'application/json' } })
+    .then(async (r) => { if (!r.ok) { const e = await r.json().catch(() => ({})); throw new Error(e.error || `HTTP ${r.status}`); } return r.json(); });
+}
 function fetchCopyAutotuneConfig() { return coGet('/api/admin/copy-autotune/config'); }
 function patchCopyAutotuneConfig(body) { return coSend('/api/admin/copy-autotune/config', 'PATCH', body); }
 function fetchCopyAutotuneLogs(params = {}) {
@@ -783,6 +798,10 @@ window.NSApi = {
   patchCopyRule,
   deleteCopyRule,
   applyCopyRulesToAll,
+  fetchRecovery,
+  fetchRecoveryAffiliates,
+  addRecoveryAffiliate,
+  deleteRecoveryAffiliate,
   fetchCopyFunnel,
   calcCopyAov,
   batchApplyCopyRules,
