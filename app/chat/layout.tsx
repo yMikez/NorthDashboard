@@ -21,7 +21,10 @@ export default function ChatLayout({ children }: { children: ReactNode }) {
     <>
       <link rel="stylesheet" href="/styles/colors_and_type.css" />
       <link rel="stylesheet" href="/styles/dashboard.css" />
-      <div data-app-scope="chat" className="min-h-screen antialiased">
+      {/* h-screen + overflow-hidden ancora o app na viewport — sem isso a
+          MessageList cresce além de 100vh e empurra o ChatInput pra fora
+          da tela (usuário precisava dar zoom-out 60% pra ver o composer). */}
+      <div data-app-scope="chat" className="h-screen overflow-hidden antialiased">
         {children}
       </div>
     </>

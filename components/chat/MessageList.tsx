@@ -43,7 +43,10 @@ export function MessageList({
   }
 
   return (
-    <ScrollArea className="flex-1">
+    // min-h-0 obrigatório: sem isso o flex-1 usa min-content (altura
+    // intrínseca das mensagens), o container expande além do main e
+    // empurra o composer pra fora da viewport.
+    <ScrollArea className="flex-1 min-h-0">
       <div className="max-w-3xl mx-auto py-4">
         {messages.map((m, idx) =>
           m.role === 'user' ? (
@@ -77,7 +80,8 @@ export function MessageList({
 
 export function EmptyState({ onPickPrompt }: { onPickPrompt?: (q: string) => void } = {}) {
   return (
-    <div className="flex-1 overflow-y-auto">
+    // min-h-0 garante que o flex-1 respeita o limite do main flex column.
+    <div className="flex-1 min-h-0 overflow-y-auto">
       <div className="max-w-2xl mx-auto px-6 pt-20 pb-8 text-center">
         <div className="w-14 h-14 mx-auto rounded-xl flex items-center justify-center mb-5 relative bg-muted/60 border border-border">
           <Sparkles className="w-7 h-7 text-primary/80" />
