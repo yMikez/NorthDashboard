@@ -321,11 +321,11 @@ export function ChatShell({ user }: { user: ChatUser }) {
 
   const currentConv = conversations.find((c) => c.id === selectedId) ?? null;
 
+  // h-full = preenche o wrapper fixed do layout (100vh ancorado).
+  // grid-rows-[100%] força a única row implícita a respeitar 100% da
+  // altura do grid container — evita que filhos com height: 100vh
+  // (como .side sticky) inflem a row.
   return (
-    {/* h-full = preenche o wrapper fixed do layout (100vh ancorado).
-        grid-rows-[100%] força a única row implícita a respeitar 100% da
-        altura do grid container — evita que filhos com height: 100vh
-        (como .side sticky) inflem a row. */}
     <div className="grid grid-cols-[232px_auto_1fr] grid-rows-[100%] h-full overflow-hidden nx-chat-bg text-foreground relative">
       <div className="nx-fx-blobs" aria-hidden />
       <DashboardNav user={user} activeId="chat" />
