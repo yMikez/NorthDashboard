@@ -102,7 +102,28 @@ export async function getFilterOptions(): Promise<FilterOptionsResponse> {
     if (row.productType === 'FRONTEND') acc.feSkuCount++;
     if (row.niche) acc.niches.add(row.niche);
   }
+  // Filtra famílias "garbage" — resíduos de classificação onde a regex falhou
+  // e o nome inteiro do produto virou a família. Padrões observados em prod:
+  //   - "UP3 - Digest Flow + NeuroMind Pro (3 + 3 Bottles)" (D24 fallback)
+  //   - "DW3 - Night Calm + Flex Guard (1 + 1 Bottles)"
+  //   - "V1 Thermo Burn Pro" (variant prefix CB que não foi stripped)
+  //   - "Night Calm + Flex Guard" (combo BG sem normalização canônica)
+  // Esses NÃO são famílias reais — são SKUs específicos de upsell/downsell
+  // que ficaram com o nome cru porque o regex não pegou. O filtro do dropdown
+  // mostra só famílias "principais" — produtos canonicamente classificáveis.
+  //
+  // Heurística: rejeita nomes que (a) começam com prefixo de slot D24/CB
+  // (UP\d, DW\d, M\d, DS, RC, V\d), (b) contêm " - " ou " + ", ou (c) são
+  // o sentinel 'no-family' / vazios.
+  function isMainFamily(name: string): boolean {
+    if (!name || name === 'no-family') return false;
+    if (/\s[-+]\s/.test(name)) return false;
+    if (/^(UP\d|DW\d|M\d|DS\d*|RC|V\d)\b/i.test(name)) return false;
+    return true;
+  }
+
   const families = Array.from(byFamily.entries())
+    .filter(([name]) => isMainFamily(name))
     .map(([name, acc]) => ({
       id: name,
       label: name,
