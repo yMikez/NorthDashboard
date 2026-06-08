@@ -21,10 +21,12 @@ export default function ChatLayout({ children }: { children: ReactNode }) {
     <>
       <link rel="stylesheet" href="/styles/colors_and_type.css" />
       <link rel="stylesheet" href="/styles/dashboard.css" />
-      {/* h-screen + overflow-hidden ancora o app na viewport — sem isso a
-          MessageList cresce além de 100vh e empurra o ChatInput pra fora
-          da tela (usuário precisava dar zoom-out 60% pra ver o composer). */}
-      <div data-app-scope="chat" className="h-screen overflow-hidden antialiased">
+      {/* position fixed + inset-0 ancora o app exatamente na viewport,
+          ignorando o min-height:100vh do body (de dashboard.css) e o
+          height:100vh do .side (sticky). Sem isso a soma desses dois
+          fazia o body crescer além de 100vh e o ChatInput ia parar
+          abaixo da tela (usuário precisava zoom-out 60% pra ver). */}
+      <div data-app-scope="chat" className="fixed inset-0 overflow-hidden antialiased">
         {children}
       </div>
     </>
