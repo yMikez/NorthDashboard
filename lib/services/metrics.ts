@@ -34,6 +34,12 @@ export interface OverviewKPIs {
   approvedCount: number;
   totalCount: number;
   orderGroups: number;
+  // EPO (Earnings Per Order) — vendor lens: Net Sales / Conversions.
+  // Conversions aqui = orderGroups (DISTINCT funnelSessionId APPROVED FE),
+  // que é nosso proxy de "unique visitors who converted" — não temos
+  // visitor_id upstream nos IPNs (ver KnowledgeEntry "Limitação visitor").
+  // EPC (Net Sales / Visitors) NÃO é computado pelo mesmo motivo.
+  epo: number;
   // Real-cost lens: COGS + shipping spent across all orders (incl. refunds
   // — we ate the cost). Profit is net (approved revenue) minus CPA minus
   // these. Margin = profit / gross.
@@ -298,6 +304,13 @@ export interface AffiliateDetailResponse {
     // (com cross-sells) ÷ sessões. Lente "valor econômico do lead".
     attributedSessions: number;
     attributedRevenue: number;
+    // Affiliate EPO = Commissions Net / Conversions. Glossário padrão usa
+    // Visitors no denominador; aqui usamos feApprovedCount (sessões FE
+    // aprovadas do afiliado) — proxy de "conversões atribuídas a ele".
+    // Affiliate EPC (Commissions Net / Visitors) NÃO é computado — sem
+    // visitor tracking upstream. Para o afiliado, "Commissions Net" é o
+    // CPA pago neste recorte (já líquido — refunds zeram a CPA na IPN).
+    epo: number;
   };
   ltv: {
     revenue: number;
@@ -642,6 +655,8 @@ async function kpisFromRows(
     approvedCount,
     totalCount,
     orderGroups,
+    // EPO = Net Sales / Conversions (proxy: sessões FE APPROVED).
+    epo: round2(orderGroups ? net / orderGroups : 0),
     cogs: round2(cogs),
     fulfillment: round2(fulfillment),
     estimatedProfit,
@@ -2487,6 +2502,11 @@ export async function getAffiliateDetail(
     feApprovedCount,
     attributedSessions,
     attributedRevenue: round2(attributedRevenue),
+    // Affiliate EPO = "Commissions Net" / "Conversions". Para o afiliado,
+    // commissions net ≈ cpa pago neste período (refunds já zeram o cpa na
+    // IPN; sem voids separados a tratar). Conversions = feApprovedCount,
+    // nosso proxy de "FEs convertidas atribuídas a ele".
+    epo: round2(feApprovedCount > 0 ? cpa / feApprovedCount : 0),
   };
 
   // Daily series (only days within range)
@@ -3346,6 +3366,8 @@ function computeKPIs(orders: OrderWithJoins[]): OverviewKPIs {
     approvedCount,
     totalCount,
     orderGroups: groups.size,
+    // EPO = Net Sales / Conversions. Mesma definição do kpisFromRows.
+    epo: round2(groups.size ? net / groups.size : 0),
     cogs: round2(cogs),
     fulfillment: round2(fulfillment),
     estimatedProfit,
