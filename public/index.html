@@ -195,6 +195,10 @@ function App({ user }) {
     funnels: decodeSet(params.get('of')),
     families: decodeSet(params.get('fam')),
     countries: decodeSet(params.get('co')),
+    // Etapa do funil — front/upsell/downsell/recuperacao. Vai pro
+    // backend como query param `stages` (CSV) que mapeia pra
+    // Order.productType (FRONTEND/UPSELL/DOWNSELL/SMS_RECOVERY).
+    stages: decodeSet(params.get('st')),
     // Retained for backward-compat with pages still reading filters.trafficSources / filters.currency.
     // Both removed from FilterBar UI + URL persistence in Fase 2A cleanup.
     trafficSources: new Set(),
@@ -215,6 +219,7 @@ function App({ user }) {
     if (filters.funnels.size) p.set('of', encodeSet(filters.funnels));
     if (filters.families.size) p.set('fam', encodeSet(filters.families));
     if (filters.countries.size) p.set('co', encodeSet(filters.countries));
+    if (filters.stages?.size) p.set('st', encodeSet(filters.stages));
     const qs = p.toString();
     const desiredUrl = '/' + hashState.route + (qs ? '?' + qs : '');
     const currentUrl = location.pathname + location.search;
@@ -301,7 +306,7 @@ function FeesReviewPrompt({ user, setHashState }) {
     const start = new Date(now.getTime() - 30 * 24 * 3600 * 1000);
     window.NSApi.fetchPlatforms({
       dateRange: { start, end: now },
-      platforms: new Set(), countries: new Set(), funnels: new Set(), families: new Set(),
+      platforms: new Set(), countries: new Set(), funnels: new Set(), families: new Set(), stages: new Set(),
     }).then((data) => {
       if (cancelled) return;
       const SEVEN_DAYS = 7 * 24 * 3600 * 1000;

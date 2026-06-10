@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { getProducts } from '@/lib/services/metrics';
 import { requireTab } from '@/lib/auth/guard';
 import { logger } from '@/lib/logger';
+import { csvParam, stagesParam } from '@/lib/shared/queryParams';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -29,18 +30,13 @@ export async function GET(req: Request) {
   const countries = csvParam(searchParams.get('countries'));
   const productExternalIds = csvParam(searchParams.get('products'));
   const productFamilies = csvParam(searchParams.get('families'));
+  const productTypes = stagesParam(searchParams.get('stages'));
 
   try {
-    const data = await getProducts({ startDate, endDate, platformSlugs, countries, productExternalIds, productFamilies });
+    const data = await getProducts({ startDate, endDate, platformSlugs, countries, productExternalIds, productFamilies, productTypes });
     return NextResponse.json(data);
   } catch (err) {
     logger.error({ err }, 'metrics/products failed');
     return NextResponse.json({ error: 'query failed' }, { status: 500 });
   }
-}
-
-function csvParam(raw: string | null): string[] | undefined {
-  if (!raw) return undefined;
-  const parts = raw.split(',').map((s) => s.trim()).filter(Boolean);
-  return parts.length ? parts : undefined;
 }

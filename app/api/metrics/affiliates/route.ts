@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { getAffiliates } from '@/lib/services/metrics';
 import { requireAnyTab } from '@/lib/auth/guard';
 import { logger } from '@/lib/logger';
+import { csvParam, stagesParam } from '@/lib/shared/queryParams';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -30,6 +31,7 @@ export async function GET(req: Request) {
   const countries = csvParam(searchParams.get('countries'));
   const productExternalIds = csvParam(searchParams.get('products'));
   const productFamilies = csvParam(searchParams.get('families'));
+  const productTypes = stagesParam(searchParams.get('stages'));
 
   try {
     const data = await getAffiliates({
@@ -45,10 +47,4 @@ export async function GET(req: Request) {
     logger.error({ err }, 'metrics/affiliates failed');
     return NextResponse.json({ error: 'query failed' }, { status: 500 });
   }
-}
-
-function csvParam(raw: string | null): string[] | undefined {
-  if (!raw) return undefined;
-  const parts = raw.split(',').map((s) => s.trim()).filter(Boolean);
-  return parts.length ? parts : undefined;
 }

@@ -1,4 +1,5 @@
 import { Prisma } from '@prisma/client';
+import type { ProductType } from '@prisma/client';
 import { db } from '../db';
 import {
   refreshDailyMetricsIfStale,
@@ -17,6 +18,11 @@ export interface MetricsFilters {
   // at the GROUP level (group whose FE belongs to a selected family) — see
   // the specific implementation in that function.
   productFamilies?: string[];
+  // Filter by Order.productType — corresponde ao filtro "Etapa" na UI:
+  // FRONTEND='Front', UPSELL='Upsell', DOWNSELL='Downsell',
+  // SMS_RECOVERY='Recuperação'. Vazio = todas as etapas (inclui BUMP).
+  // Em getFunnel é IGNORADO (o funil É a quebra por etapa).
+  productTypes?: ProductType[];
 }
 
 export interface OverviewKPIs {
@@ -818,6 +824,9 @@ async function hourlyHeatmapQuery(
   if (filters.productFamilies?.length) {
     conds.push(Prisma.sql`pr."family" = ANY(${filters.productFamilies})`);
   }
+  if (filters.productTypes?.length) {
+    conds.push(Prisma.sql`o."productType" = ANY(${filters.productTypes}::"ProductType"[])`);
+  }
   const whereSql = Prisma.join(conds, ' AND ');
   const rows = await db.$queryRaw<Array<{
     dow: number;
@@ -864,6 +873,9 @@ async function topAffiliatesQuery(
   }
   if (filters.productFamilies?.length) {
     conds.push(Prisma.sql`pr."family" = ANY(${filters.productFamilies})`);
+  }
+  if (filters.productTypes?.length) {
+    conds.push(Prisma.sql`o."productType" = ANY(${filters.productTypes}::"ProductType"[])`);
   }
   const whereSql = Prisma.join(conds, ' AND ');
   const aggRows = await db.$queryRaw<Array<{
@@ -1366,6 +1378,9 @@ export async function getProducts(
       ...(filters.productFamilies?.length ? { family: { in: filters.productFamilies } } : {}),
     };
   }
+  if (filters.productTypes?.length) {
+    where.productType = { in: filters.productTypes };
+  }
 
   const orders = await db.order.findMany({
     where,
@@ -1683,6 +1698,9 @@ export async function getPlatforms(
       ...(filters.productFamilies?.length ? { family: { in: filters.productFamilies } } : {}),
     };
   }
+  if (filters.productTypes?.length) {
+    where.productType = { in: filters.productTypes };
+  }
 
   const orders = await db.order.findMany({
     where,
@@ -1885,6 +1903,9 @@ export async function getFulfillmentOverview(
       ...(filters.productFamilies?.length ? { family: { in: filters.productFamilies } } : {}),
     };
   }
+  if (filters.productTypes?.length) {
+    where.productType = { in: filters.productTypes };
+  }
 
   const [orders, familyCosts] = await Promise.all([
     db.order.findMany({
@@ -2007,6 +2028,9 @@ export async function getCostsOverview(
       ...(filters.productExternalIds?.length ? { externalId: { in: filters.productExternalIds } } : {}),
       ...(filters.productFamilies?.length ? { family: { in: filters.productFamilies } } : {}),
     };
+  }
+  if (filters.productTypes?.length) {
+    where.productType = { in: filters.productTypes };
   }
 
   const orders = await db.order.findMany({
@@ -2392,6 +2416,9 @@ export async function getAffiliateDetail(
       ...(filters.productFamilies?.length ? { family: { in: filters.productFamilies } } : {}),
     };
   }
+  if (filters.productTypes?.length) {
+    periodWhere.productType = { in: filters.productTypes };
+  }
 
   const periodOrders = await db.order.findMany({
     where: periodWhere,
@@ -2634,6 +2661,9 @@ export async function getAffiliates(
       ...(filters.productExternalIds?.length ? { externalId: { in: filters.productExternalIds } } : {}),
       ...(filters.productFamilies?.length ? { family: { in: filters.productFamilies } } : {}),
     };
+  }
+  if (filters.productTypes?.length) {
+    whereInCoverage.productType = { in: filters.productTypes };
   }
 
   const orders = await db.order.findMany({
@@ -3194,6 +3224,9 @@ export async function getOrders(
       ...(filters.productFamilies?.length ? { family: { in: filters.productFamilies } } : {}),
     };
   }
+  if (filters.productTypes?.length) {
+    where.productType = { in: filters.productTypes };
+  }
   if (options.search) {
     const q = options.search.trim();
     if (q) {
@@ -3306,6 +3339,9 @@ async function fetchOrders(filters: MetricsFilters): Promise<OrderWithJoins[]> {
       ...(filters.productExternalIds?.length ? { externalId: { in: filters.productExternalIds } } : {}),
       ...(filters.productFamilies?.length ? { family: { in: filters.productFamilies } } : {}),
     };
+  }
+  if (filters.productTypes?.length) {
+    where.productType = { in: filters.productTypes };
   }
 
   return db.order.findMany({

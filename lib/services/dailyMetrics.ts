@@ -135,6 +135,10 @@ export async function queryDailyMetrics(
   if (filters.productFamilies?.length) {
     conds.push(Prisma.sql`family = ANY(${filters.productFamilies})`);
   }
+  if (filters.productTypes?.length) {
+    // product_type é dimensão da MV — filtro nativo, sem fallback pra Order.
+    conds.push(Prisma.sql`product_type = ANY(${filters.productTypes})`);
+  }
   // productExternalIds is intentionally NOT applied here. The MV is keyed on
   // family, not SKU; SKU-level filtering forces a path back to the base table.
   // Callers that need productExternalIds should still use the legacy

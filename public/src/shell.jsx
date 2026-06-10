@@ -536,6 +536,16 @@ function FilterBar({ filters, setFilters, options, route }) {
         id: c.code, label: c.name, meta: c.code,
       }));
 
+  // Etapa do funil — mapeia pra Order.productType no backend via query
+  // param `stages`. Aceita o id curto (front/upsell/downsell/recuperacao)
+  // ou os enum values (FRONTEND/...); o stagesParam do servidor traduz.
+  const stageOpts = [
+    { id: 'front', label: 'Front', meta: 'FE' },
+    { id: 'upsell', label: 'Upsell', meta: 'UP' },
+    { id: 'downsell', label: 'Downsell', meta: 'DW' },
+    { id: 'recuperacao', label: 'Recuperação', meta: 'RC' },
+  ];
+
   const showCompare = ROUTES_WITH_COMPARE.has(route);
 
   return (
@@ -567,6 +577,8 @@ function FilterBar({ filters, setFilters, options, route }) {
         onChange={(s) => setFilters(f => ({ ...f, platforms: s }))}/>
       <MultiSelect label="Produto" icon="package" options={familyOpts} selected={filters.families}
         onChange={(s) => setFilters(f => ({ ...f, families: s }))}/>
+      <MultiSelect label="Etapa" icon="layers" options={stageOpts} selected={filters.stages || new Set()}
+        onChange={(s) => setFilters(f => ({ ...f, stages: s }))}/>
       <MultiSelect label="País" icon="globe" options={countryOpts} selected={filters.countries}
         onChange={(s) => setFilters(f => ({ ...f, countries: s }))}/>
     </div>

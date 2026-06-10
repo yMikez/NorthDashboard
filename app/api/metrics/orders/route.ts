@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { getOrders } from '@/lib/services/metrics';
 import { requireTab } from '@/lib/auth/guard';
 import { logger } from '@/lib/logger';
+import { csvParam, stagesParam } from '@/lib/shared/queryParams';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -29,6 +30,7 @@ export async function GET(req: Request) {
   const countries = csvParam(searchParams.get('countries'));
   const productExternalIds = csvParam(searchParams.get('products'));
   const productFamilies = csvParam(searchParams.get('families'));
+  const productTypes = stagesParam(searchParams.get('stages'));
   const status = searchParams.get('status') ?? undefined;
   const productType = searchParams.get('product_type') ?? undefined;
   const search = searchParams.get('search') ?? undefined;
@@ -37,7 +39,7 @@ export async function GET(req: Request) {
 
   try {
     const data = await getOrders(
-      { startDate, endDate, platformSlugs, countries, productExternalIds, productFamilies },
+      { startDate, endDate, platformSlugs, countries, productExternalIds, productFamilies, productTypes },
       { status, productType, search, limit, offset },
     );
     return NextResponse.json(data);
@@ -46,13 +48,6 @@ export async function GET(req: Request) {
     return NextResponse.json({ error: 'query failed' }, { status: 500 });
   }
 }
-
-function csvParam(raw: string | null): string[] | undefined {
-  if (!raw) return undefined;
-  const parts = raw.split(',').map((s) => s.trim()).filter(Boolean);
-  return parts.length ? parts : undefined;
-}
-
 function intParam(raw: string | null): number | undefined {
   if (!raw) return undefined;
   const n = Number.parseInt(raw, 10);
