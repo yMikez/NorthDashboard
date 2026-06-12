@@ -831,7 +831,24 @@ function fetchCopyAutotuneLogs(params = {}) {
   return coGet(`/api/admin/copy-autotune/logs${qs.toString() ? `?${qs}` : ''}`);
 }
 
-window.NSApi = {
+// Mutações invalidam o cache client-side de GETs: depois de salvar algo, o
+// refetch da página precisa ver o dado novo — não o cache de 15s. Cobertura
+// por convenção de nome (add/create/patch/delete/save/apply/...); helpers
+// fetch* são read-only e ficam de fora.
+const _MUTATION_NAME_RE = /^(add|create|update|patch|delete|remove|save|apply|reset|sign|mark|run|batch|seed|attach|detach|admin(?!List|Get|ContractPdf|BackfillStatus)|network(?!Me|My|ContractPdf))/i;
+function _wrapMutations(api) {
+  for (const [name, fn] of Object.entries(api)) {
+    if (typeof fn !== 'function' || !_MUTATION_NAME_RE.test(name)) continue;
+    api[name] = async (...args) => {
+      const out = await fn(...args);
+      _respCache.clear();
+      return out;
+    };
+  }
+  return api;
+}
+
+window.NSApi = _wrapMutations({
   fetchCopyRules,
   createCopyRule,
   patchCopyRule,
@@ -897,4 +914,4 @@ window.NSApi = {
   aiGetConversation,
   aiDeleteConversation,
   aiSendMessage,
-};
+});

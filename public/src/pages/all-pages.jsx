@@ -7212,15 +7212,29 @@ function RecoveryManage({ affs, onChanged }) {
         <label style={coFieldLabel}><span>Comissão %</span><input type="number" min={0} max={100} value={pct} onChange={(e) => setPct(e.target.value)} style={{ ...coInputStyle, width: 100 }}/></label>
         <button className="btn btn-primary" onClick={add} disabled={busy}>{busy ? '…' : 'Marcar'}</button>
       </div>
+      <div style={{ marginTop: 8, fontSize: 10, color: 'var(--fg5)' }}>
+        Pra alterar a % de quem já está marcado, re-marque com a nova % — as vendas antigas continuam
+        registradas com a taxa antiga e um novo contador começa com a nova.
+      </div>
       {msg && <div style={{ fontSize: 11, color: 'var(--fg3)', marginTop: 6 }}>{msg}</div>}
       <div style={{ marginTop: 12 }}>
         {affs.length === 0 && <div style={{ fontSize: 11, color: 'var(--fg5)' }}>Nenhum afiliado marcado ainda.</div>}
-        {affs.map((a) => (
-          <div key={a.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '7px 0', borderTop: '1px solid var(--border-soft)' }}>
-            <span className="cell-mono" style={{ fontSize: 12 }}>{a.nickname || a.affiliateExternalId}<span style={{ color: 'var(--fg5)' }}> · {a.affiliateExternalId} · {a.platformSlug} · {(a.commissionPct * 100).toFixed(0)}%</span></span>
-            <button className="btn btn-ghost" style={{ padding: '4px 8px' }} onClick={() => remove(a.id, a.nickname || a.affiliateExternalId)} title="Remover"><Icon name="trash-2" size={12}/></button>
-          </div>
-        ))}
+        {affs.map((a) => {
+          const history = (a.ratePeriods || []).filter((p) => p.effectiveTo != null);
+          return (
+            <div key={a.id} style={{ padding: '7px 0', borderTop: '1px solid var(--border-soft)' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <span className="cell-mono" style={{ fontSize: 12 }}>{a.nickname || a.affiliateExternalId}<span style={{ color: 'var(--fg5)' }}> · {a.affiliateExternalId} · {a.platformSlug} · </span><span style={{ color: 'var(--glow-cyan)' }}>{(a.commissionPct * 100).toFixed(0)}% vigente</span></span>
+                <button className="btn btn-ghost" style={{ padding: '4px 8px' }} onClick={() => remove(a.id, a.nickname || a.affiliateExternalId)} title="Remover"><Icon name="trash-2" size={12}/></button>
+              </div>
+              {history.length > 0 && (
+                <div className="cell-mono" style={{ fontSize: 10, color: 'var(--fg5)', marginTop: 2 }}>
+                  histórico: {history.map((p) => `${(p.commissionPct * 100).toFixed(0)}% até ${fmtDateShort(p.effectiveTo)}`).join(' · ')}
+                </div>
+              )}
+            </div>
+          );
+        })}
       </div>
     </div>
   );
@@ -7285,22 +7299,51 @@ function RecoveryPage({ filters }) {
                       Nenhuma venda de recuperação no período.{affs.length === 0 ? ' Marque um afiliado em "Gerenciar afiliados".' : ''}
                     </td></tr>
                   )}
-                  {m.byAffiliate.map((a) => (
-                    <tr key={a.affiliateExternalId}>
-                      <td className="cell-mono">{a.nickname || a.affiliateExternalId}<span style={{ color: 'var(--fg5)', marginLeft: 6, fontSize: 10 }}>{a.affiliateExternalId}</span></td>
-                      <td className="num cell-mono">{(a.commissionPct * 100).toFixed(0)}%</td>
-                      <td className="num">{fmtInt(a.sales)}</td>
-                      <td className="num">{fmtCurrency(a.grossUsd, 'USD', 2)}</td>
-                      <td className="num" style={{ color: 'var(--glow-cyan)' }}>{fmtCurrency(a.commissionUsd, 'USD', 2)}</td>
-                    </tr>
-                  ))}
+                  {m.byAffiliate.map((a) => {
+                    const multi = (a.periods || []).length > 1;
+                    return (
+                      <React.Fragment key={a.affiliateExternalId}>
+                        <tr>
+                          <td className="cell-mono">{a.nickname || a.affiliateExternalId}<span style={{ color: 'var(--fg5)', marginLeft: 6, fontSize: 10 }}>{a.affiliateExternalId}</span></td>
+                          <td className="num cell-mono">{(a.commissionPct * 100).toFixed(0)}%{multi && <span style={{ color: 'var(--warning)', marginLeft: 4 }} title="A % mudou dentro do período — contadores por taxa abaixo">*</span>}</td>
+                          <td className="num">{fmtInt(a.sales)}</td>
+                          <td className="num">{fmtCurrency(a.grossUsd, 'USD', 2)}</td>
+                          <td className="num" style={{ color: 'var(--glow-cyan)' }}>{fmtCurrency(a.commissionUsd, 'USD', 2)}</td>
+                        </tr>
+                        {/* Contadores por período de taxa: vendas feitas com a % antiga
+                            ficam registradas no contador antigo; a % nova acumula no novo. */}
+                        {multi && a.periods.map((p, i) => {
+                          const vigente = p.effectiveTo == null;
+                          const label = vigente
+                            ? `desde ${p.effectiveFrom ? fmtDateShort(p.effectiveFrom) : 'sempre'} · vigente`
+                            : p.effectiveFrom
+                              ? `${fmtDateShort(p.effectiveFrom)} → ${fmtDateShort(p.effectiveTo)}`
+                              : `até ${fmtDateShort(p.effectiveTo)}`;
+                          return (
+                            <tr key={`${a.affiliateExternalId}-p${i}`} style={{ background: 'rgba(91,200,255,0.025)' }}>
+                              <td className="cell-mono" style={{ paddingLeft: 26, fontSize: 10, color: vigente ? 'var(--fg3)' : 'var(--fg5)' }}>
+                                <Icon name="chevron-right" size={9}/> <span style={{ marginLeft: 4 }}>{label}</span>
+                              </td>
+                              <td className="num cell-mono" style={{ fontSize: 10, color: vigente ? 'var(--glow-cyan)' : 'var(--fg5)' }}>{(p.commissionPct * 100).toFixed(0)}%</td>
+                              <td className="num" style={{ fontSize: 11, color: 'var(--fg4)' }}>{fmtInt(p.sales)}</td>
+                              <td className="num" style={{ fontSize: 11, color: 'var(--fg4)' }}>{fmtCurrency(p.grossUsd, 'USD', 2)}</td>
+                              <td className="num" style={{ fontSize: 11, color: vigente ? 'var(--glow-cyan)' : 'var(--fg4)' }}>{fmtCurrency(p.commissionUsd, 'USD', 2)}</td>
+                            </tr>
+                          );
+                        })}
+                      </React.Fragment>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>
           </div>
 
           <div style={{ marginTop: 10, fontFamily: 'var(--f-mono)', fontSize: 10, color: 'var(--fg5)', lineHeight: 1.6 }}>
-            Comissão = receita × % do afiliado, sobre cada venda APROVADA dele (FE + upsell). Split SMS vs email entra quando houver sinal no tracking.
+            Comissão = receita × % VIGENTE NA DATA DA VENDA, sobre cada venda APROVADA (FE + upsell).
+            Alterar a % de um afiliado não reescreve o passado: vendas antigas ficam no contador da taxa
+            antiga (linhas com *) e um novo contador acumula com a taxa nova. Split SMS vs email entra
+            quando houver sinal no tracking.
           </div>
         </>
       )}

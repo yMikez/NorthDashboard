@@ -5,6 +5,7 @@ import { NextResponse } from 'next/server';
 import { Prisma } from '@prisma/client';
 import { db } from '@/lib/db';
 import { requireAdmin } from '@/lib/auth/guard';
+import { clearResponseCache } from '@/lib/cache/responseCache';
 import { logger } from '@/lib/logger';
 
 export const runtime = 'nodejs';
@@ -20,6 +21,7 @@ export async function DELETE(
 
   try {
     await db.recoveryAffiliate.delete({ where: { id } });
+    clearResponseCache();
     logger.info({ actorId: auth.user.id, id }, 'admin.recovery-affiliates.delete');
     return NextResponse.json({ ok: true });
   } catch (err) {

@@ -5,6 +5,7 @@
 
 import { NextResponse } from 'next/server';
 import { requireAdmin } from '@/lib/auth/guard';
+import { clearResponseCache } from '@/lib/cache/responseCache';
 import { listRecoveryAffiliates, upsertRecoveryAffiliate } from '@/lib/services/recovery';
 import { logger } from '@/lib/logger';
 
@@ -46,6 +47,10 @@ export async function POST(req: Request) {
     note,
   });
   if ('error' in res) return NextResponse.json({ error: res.error }, { status: 404 });
+
+  // Derruba o cache de respostas pra mudança de % refletir já no
+  // /api/metrics/recovery (TTL 30s seria confuso logo após salvar).
+  clearResponseCache();
 
   logger.info({ actorId: auth.user.id, affiliateExternalId, platformSlug, pct: pctNum }, 'admin.recovery-affiliates.upsert');
   return NextResponse.json({ ok: true });

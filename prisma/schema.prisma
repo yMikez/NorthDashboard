@@ -121,7 +121,10 @@ model RecoveryAffiliate {
   affiliateId   String    @unique
   affiliate     Affiliate @relation(fields: [affiliateId], references: [id], onDelete: Cascade)
 
-  // Fração: 0.30 = 30%. Comissão = gross da venda × commissionPct.
+  // Fração: 0.30 = 30%. Taxa VIGENTE (denormalizada pra listagem rápida).
+  // A fonte de verdade pra COMISSIONAR cada venda é ratePeriods: a venda usa
+  // a taxa do período que continha o orderedAt dela — mudar a % não reescreve
+  // comissões passadas.
   commissionPct Decimal   @db.Decimal(5, 4)
   enabled       Boolean   @default(true)
   note          String?
@@ -129,7 +132,28 @@ model RecoveryAffiliate {
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
 
+  ratePeriods   RecoveryRatePeriod[]
+
   @@index([enabled])
+}
+
+// Histórico de taxas do afiliado de recuperação. Período vigente tem
+// effectiveTo NULL. Mudar a % fecha o período aberto (effectiveTo = agora) e
+// abre um novo — vendas antigas ficam registradas com a taxa antiga e a UI
+// mostra um contador por período. O período inicial nasce com effectiveFrom
+// na epoch pra cobrir vendas anteriores à marcação (comportamento de sempre).
+model RecoveryRatePeriod {
+  id                  String            @id @default(cuid())
+  recoveryAffiliateId String
+  recoveryAffiliate   RecoveryAffiliate @relation(fields: [recoveryAffiliateId], references: [id], onDelete: Cascade)
+
+  commissionPct Decimal   @db.Decimal(5, 4)
+  effectiveFrom DateTime
+  effectiveTo   DateTime?
+
+  createdAt     DateTime  @default(now())
+
+  @@index([recoveryAffiliateId, effectiveFrom])
 }
 
 model Customer {
