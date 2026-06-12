@@ -16,12 +16,32 @@
 
 import { Prisma } from '@prisma/client';
 import { db } from '../db';
+import { logger } from '../logger';
+import { clearResponseCache } from '../cache/responseCache';
 import type { MetricsFilters } from './metrics';
 
 const STALE_AFTER_MS = 60_000; // 1 minute
 
 let lastRefreshAt = 0;
 let refreshInFlight: Promise<void> | null = null;
+let postIngestTimer: NodeJS.Timeout | null = null;
+
+/**
+ * Agenda um refresh ~15s após o último ingest. Bursts de IPN (FE + upsells
+ * da mesma sessão chegam em sequência) coalescem num único REFRESH. O timer
+ * é unref'd pra não segurar o processo vivo em shutdown. Chamado no fim de
+ * upsertOrder() — choke point único das 3 rotas de ingest.
+ */
+export function scheduleDailyMetricsRefresh(delayMs = 15_000): void {
+  if (postIngestTimer) return;
+  postIngestTimer = setTimeout(() => {
+    postIngestTimer = null;
+    doRefresh().catch((err) => {
+      logger.error({ err }, 'daily_metrics post-ingest refresh failed');
+    });
+  }, delayMs);
+  postIngestTimer.unref?.();
+}
 
 export async function refreshDailyMetricsIfStale(): Promise<void> {
   const age = Date.now() - lastRefreshAt;
@@ -54,6 +74,9 @@ async function doRefresh(): Promise<void> {
     await db.$executeRawUnsafe('REFRESH MATERIALIZED VIEW daily_metrics');
   }
   lastRefreshAt = Date.now();
+  // Dado novo na MV invalida as respostas cacheadas dos /api/metrics/* —
+  // o staleness do cache fica acoplado à frescura real dos dados.
+  clearResponseCache();
 }
 
 // ---------- Query helpers ----------

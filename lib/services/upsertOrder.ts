@@ -6,6 +6,7 @@ import { classifyProduct } from './productClassification';
 import { calcCogs } from './cogs';
 import { rebalanceSessionFulfillment } from './sessionFulfillment';
 import { accrueCommissionForOrder } from './networkAccrual';
+import { scheduleDailyMetricsRefresh } from './dailyMetrics';
 import { logger } from '../logger';
 
 export interface UpsertOrderResult {
@@ -316,6 +317,11 @@ export async function upsertOrder(normalized: NormalizedOrder): Promise<UpsertOr
   } catch (err) {
     logger.error({ err, orderId: result.orderId }, '[upsertOrder] networkAccrual failed');
   }
+
+  // Venda nova → MV fica stale. Agenda refresh com debounce (15s) pra
+  // bursts de IPN da mesma sessão coalescerem num REFRESH só. O dashboard
+  // não espera esse refresh — leitura é stale-while-revalidate.
+  scheduleDailyMetricsRefresh();
 
   return result;
 }

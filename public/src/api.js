@@ -13,6 +13,18 @@ function setToCSV(set) {
   return Array.from(set).join(',');
 }
 
+// Cache client-side de GETs + dedup de requests em voo. Navegar entre abas
+// e voltar (mesmo filtro) vira resposta instantânea; duas páginas pedindo a
+// mesma URL ao mesmo tempo compartilham 1 request. TTL curto (15s) porque
+// empilha com o cache server-side de 30s — pior caso de staleness ~45s.
+// structuredClone no retorno é obrigatório: páginas mutam o payload; uma
+// referência compartilhada causaria bugs cruzados entre páginas.
+const _respCache = new Map(); // url -> { ts, promise }
+const _RESP_TTL_MS = 15_000;
+const _clone = typeof structuredClone === 'function'
+  ? structuredClone
+  : (v) => JSON.parse(JSON.stringify(v));
+
 async function fetchJSON(path, params) {
   const qs = new URLSearchParams();
   for (const [k, v] of Object.entries(params)) {
@@ -20,12 +32,29 @@ async function fetchJSON(path, params) {
     qs.set(k, v);
   }
   const url = `${API_BASE}${path}?${qs.toString()}`;
-  const res = await fetch(url, { headers: { Accept: 'application/json' } });
-  if (!res.ok) {
-    const body = await res.text().catch(() => '');
-    throw new Error(`${res.status} ${path}: ${body}`);
+
+  const hit = _respCache.get(url);
+  if (hit && Date.now() - hit.ts < _RESP_TTL_MS) {
+    return _clone(await hit.promise);
   }
-  return res.json();
+
+  const promise = (async () => {
+    const res = await fetch(url, { headers: { Accept: 'application/json' } });
+    if (!res.ok) {
+      const body = await res.text().catch(() => '');
+      throw new Error(`${res.status} ${path}: ${body}`);
+    }
+    return res.json();
+  })();
+
+  if (_respCache.size > 200) _respCache.clear();
+  _respCache.set(url, { ts: Date.now(), promise });
+  try {
+    return _clone(await promise);
+  } catch (e) {
+    _respCache.delete(url); // erro não fica cacheado
+    throw e;
+  }
 }
 
 /**

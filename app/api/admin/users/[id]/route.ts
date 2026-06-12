@@ -9,6 +9,7 @@ import { NextResponse } from 'next/server';
 import type { UserRole } from '@prisma/client';
 import { db } from '@/lib/db';
 import { requireAdmin } from '@/lib/auth/guard';
+import { invalidateSessionCache } from '@/lib/auth/session';
 import { sanitizeTabs } from '@/lib/auth/tabs';
 import { logger } from '@/lib/logger';
 
@@ -136,6 +137,9 @@ export async function PATCH(
   if (data.active === false) {
     await db.session.deleteMany({ where: { userId: id } }).catch(() => {});
   }
+  // Role/tabs/active mudaram → derruba o cache de sessão pra propagar já
+  // (sem isso a mudança levaria até 30s pra valer em requests autenticados).
+  invalidateSessionCache();
 
   logger.info({ actorId: auth.user.id, userId: id, changes: Object.keys(data) }, 'admin.users.patch');
 
@@ -170,6 +174,7 @@ export async function DELETE(
 
   await db.user.update({ where: { id }, data: { active: false } });
   await db.session.deleteMany({ where: { userId: id } }).catch(() => {});
+  invalidateSessionCache();
 
   logger.info({ actorId: auth.user.id, userId: id }, 'admin.users.delete');
   return NextResponse.json({ ok: true });

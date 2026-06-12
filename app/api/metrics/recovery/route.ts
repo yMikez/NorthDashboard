@@ -5,6 +5,7 @@ import { NextResponse } from 'next/server';
 import { requireTab } from '@/lib/auth/guard';
 import { getRecovery } from '@/lib/services/recovery';
 import { logger } from '@/lib/logger';
+import { respondCached } from '@/lib/shared/metricsResponse';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -26,8 +27,7 @@ export async function GET(req: Request) {
   }
 
   try {
-    const data = await getRecovery({ startDate, endDate });
-    return NextResponse.json(data);
+    return await respondCached('recovery', searchParams, () => getRecovery({ startDate, endDate }));
   } catch (err) {
     logger.error({ err }, 'metrics/recovery failed');
     return NextResponse.json({ error: 'query failed' }, { status: 500 });

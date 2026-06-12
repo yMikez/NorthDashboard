@@ -6,16 +6,34 @@ const { useState, useEffect, useMemo, useRef, useCallback } = React;
 // ---------- utils ----------
 const ROOT = window; // mock lives on window.MOCK
 
+// Formatters Intl são caros de instanciar (~0.1-1ms cada). Numa tabela de
+// 500 linhas × 12 colunas isso vira ~6k instâncias POR RENDER — gargalo real
+// de scroll/filtro. Cache por chave de opções: instancia 1x, reusa sempre.
+const _fmtCache = new Map();
+function _numFmt(key, opts) {
+  let f = _fmtCache.get(key);
+  if (!f) { f = new Intl.NumberFormat('en-US', opts); _fmtCache.set(key, f); }
+  return f;
+}
+function _dateFmt(key, opts) {
+  let f = _fmtCache.get(key);
+  if (!f) { f = new Intl.DateTimeFormat('en-US', opts); _fmtCache.set(key, f); }
+  return f;
+}
+
 function fmtCurrency(n, currency = 'USD', digits = 0) {
-  const opts = { style: 'currency', currency, minimumFractionDigits: digits, maximumFractionDigits: digits };
-  try { return new Intl.NumberFormat('en-US', opts).format(n); } catch (e) { return '$' + n.toFixed(digits); }
+  try {
+    return _numFmt(`c:${currency}:${digits}`, {
+      style: 'currency', currency, minimumFractionDigits: digits, maximumFractionDigits: digits,
+    }).format(n);
+  } catch (e) { return '$' + n.toFixed(digits); }
 }
 function fmtK(n) {
   if (Math.abs(n) >= 1e6) return (n / 1e6).toFixed(2).replace(/\.00$/, '') + 'M';
   if (Math.abs(n) >= 1e3) return (n / 1e3).toFixed(1).replace(/\.0$/, '') + 'k';
   return String(Math.round(n));
 }
-function fmtInt(n) { return new Intl.NumberFormat('en-US').format(Math.round(n)); }
+function fmtInt(n) { return _numFmt('int', {}).format(Math.round(n)); }
 function fmtPct(n, digits = 1) { return (n * 100).toFixed(digits) + '%'; }
 // Bucket dates from the API are date-only strings like '2026-04-29' that
 // represent BRT calendar days. JS parses them as UTC midnight, so formatting
@@ -24,17 +42,17 @@ function fmtPct(n, digits = 1) { return (n * 100).toFixed(digits) + '%'; }
 // the label matches the bucket's date semantics regardless of viewer TZ.
 function fmtDateShort(d) {
   const dt = typeof d === 'string' ? new Date(d) : d;
-  return dt.toLocaleDateString('en-US', { month: 'short', day: '2-digit', timeZone: 'UTC' });
+  return _dateFmt('ds', { month: 'short', day: '2-digit', timeZone: 'UTC' }).format(dt);
 }
 function fmtDateLong(d) {
   const dt = typeof d === 'string' ? new Date(d) : d;
-  return dt.toLocaleDateString('en-US', { month: 'short', day: '2-digit', year: 'numeric', timeZone: 'UTC' });
+  return _dateFmt('dl', { month: 'short', day: '2-digit', year: 'numeric', timeZone: 'UTC' }).format(dt);
 }
 // fmtDateTime opera em timestamps reais (orderedAt etc) — o user QUER ver
 // no fuso local (BRT) pra saber a hora real do pedido. Mantém local.
 function fmtDateTime(d) {
   const dt = typeof d === 'string' ? new Date(d) : d;
-  return dt.toLocaleString('en-US', { month: 'short', day: '2-digit', hour: '2-digit', minute: '2-digit', hour12: false });
+  return _dateFmt('dt', { month: 'short', day: '2-digit', hour: '2-digit', minute: '2-digit', hour12: false }).format(dt);
 }
 function initials(name) {
   return name.split(/\s+/).map(w => w[0]).slice(0, 2).join('').toUpperCase();

@@ -32,6 +32,20 @@ export function newSessionId(): string {
   return randomBytes(32).toString('hex');
 }
 
+// Cache in-process do lookup de sessão. Sem isso, TODA chamada autenticada
+// (a SPA dispara várias por navegação) paga 1 roundtrip ao Postgres só pra
+// validar o cookie. TTL curto: revogação/desativação de user e mudança de
+// allowedTabs demoram no máx 30s pra propagar — aceitável pro perfil de uso
+// (signout na própria instância invalida na hora via destroySession).
+const SESSION_CACHE_TTL_MS = 30_000;
+const SESSION_CACHE_MAX = 500; // guarda de memória
+const sessionCache = new Map<string, { user: SessionUser; cachedAt: number }>();
+
+export function invalidateSessionCache(sessionId?: string): void {
+  if (sessionId) sessionCache.delete(sessionId);
+  else sessionCache.clear();
+}
+
 export async function createSession(
   userId: string,
   meta: { ipAddress?: string | null; userAgent?: string | null } = {},
@@ -51,6 +65,7 @@ export async function createSession(
 }
 
 export async function destroySession(sessionId: string): Promise<void> {
+  sessionCache.delete(sessionId);
   // Best-effort delete; if row doesn't exist (already expired/cleaned), no-op.
   await db.session.deleteMany({ where: { id: sessionId } });
 }
@@ -63,6 +78,9 @@ export async function getSessionUser(): Promise<SessionUser | null> {
 }
 
 export async function getSessionUserById(sessionId: string): Promise<SessionUser | null> {
+  const hit = sessionCache.get(sessionId);
+  if (hit && Date.now() - hit.cachedAt < SESSION_CACHE_TTL_MS) return hit.user;
+
   const session = await db.session.findUnique({
     where: { id: sessionId },
     select: {
@@ -89,7 +107,7 @@ export async function getSessionUserById(sessionId: string): Promise<SessionUser
       .catch(() => {});
   }
 
-  return {
+  const user: SessionUser = {
     id: session.user.id,
     email: session.user.email,
     name: session.user.name,
@@ -97,6 +115,9 @@ export async function getSessionUserById(sessionId: string): Promise<SessionUser
     allowedTabs: session.user.allowedTabs as TabId[],
     networkId: session.user.networkId,
   };
+  if (sessionCache.size >= SESSION_CACHE_MAX) sessionCache.clear();
+  sessionCache.set(sessionId, { user, cachedAt: Date.now() });
+  return user;
 }
 
 export function buildCookieHeader(sessionId: string, expiresAt: Date): string {

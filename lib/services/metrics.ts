@@ -554,13 +554,29 @@ export interface OverviewResponse {
   }>;
 }
 
-type OrderWithJoins = Prisma.OrderGetPayload<{
-  include: {
-    platform: { select: { slug: true; displayName: true } };
-    product: { select: { externalId: true; name: true; productType: true } };
-    affiliate: { select: { externalId: true; nickname: true } };
-  };
-}>;
+// União exata dos campos que os compute* legacy consomem. select explícito
+// em vez de include: o include trazia TODAS as colunas escalares da Order —
+// inclusive rawMetadata (Json do IPN inteiro), que inflava o payload DB→Node
+// no caminho legacy (filtro por SKU) sem nenhum uso.
+const ORDER_COMPUTE_SELECT = {
+  externalId: true,
+  parentExternalId: true,
+  status: true,
+  productType: true,
+  orderedAt: true,
+  country: true,
+  grossAmountUsd: true,
+  originalGrossUsd: true,
+  netAmountUsd: true,
+  cpaPaidUsd: true,
+  cogsUsd: true,
+  fulfillmentUsd: true,
+  platform: { select: { slug: true, displayName: true } },
+  product: { select: { externalId: true, name: true, productType: true } },
+  affiliate: { select: { externalId: true, nickname: true } },
+} satisfies Prisma.OrderSelect;
+
+type OrderWithJoins = Prisma.OrderGetPayload<{ select: typeof ORDER_COMPUTE_SELECT }>;
 
 export async function getOverview(
   filters: MetricsFilters,
@@ -573,16 +589,26 @@ export async function getOverview(
     return getOverviewLegacy(filters, compare);
   }
 
-  await refreshDailyMetricsIfStale();
-  const rows = await queryDailyMetrics(filters);
+  // Stale-while-revalidate: dispara o refresh em background quando a MV
+  // está velha e responde já com o que ela tem (até ~60s de atraso, mesmo
+  // regime de antes — só que agora ninguém paga o REFRESH na latência).
+  void refreshDailyMetricsIfStale().catch(() => { /* logado em doRefresh */ });
 
-  const kpis = await kpisFromRows(rows, filters);
+  const [rows, orderGroups, topAffiliates, hourlyHeatmap, platforms] = await Promise.all([
+    queryDailyMetrics(filters),
+    orderGroupsCount(filters),
+    topAffiliatesQuery(filters, 5),
+    hourlyHeatmapQuery(filters),
+    db.platform.findMany({
+      select: { slug: true, displayName: true, lastSyncAt: true },
+    }),
+  ]);
+
+  const kpis = kpisFromRows(rows, orderGroups);
   const daily = dailyFromRows(rows, filters.startDate, filters.endDate);
   const byCountry = byCountryFromRows(rows);
   const byProductType = byProductTypeFromRows(rows);
-  const platformHealth = await platformHealthFromRows(rows);
-  const topAffiliates = await topAffiliatesQuery(filters, 5);
-  const hourlyHeatmap = await hourlyHeatmapQuery(filters);
+  const platformHealth = platformHealthFromRows(rows, platforms);
 
   const response: OverviewResponse = {
     range: {
@@ -603,8 +629,11 @@ export async function getOverview(
     const prevEnd = new Date(filters.startDate.getTime() - 1);
     const prevStart = new Date(prevEnd.getTime() - span);
     const prevFilters = { ...filters, startDate: prevStart, endDate: prevEnd };
-    const prevRows = await queryDailyMetrics(prevFilters);
-    response.previous = await kpisFromRows(prevRows, prevFilters);
+    const [prevRows, prevGroups] = await Promise.all([
+      queryDailyMetrics(prevFilters),
+      orderGroupsCount(prevFilters),
+    ]);
+    response.previous = kpisFromRows(prevRows, prevGroups);
   }
 
   return response;
@@ -616,10 +645,10 @@ export async function getOverview(
 // where catalog joins are needed (platformHealth → Platform.lastSyncAt,
 // topAffiliates → Affiliate table).
 
-async function kpisFromRows(
+function kpisFromRows(
   rows: DailyMetricsRow[],
-  filters: MetricsFilters,
-): Promise<OverviewKPIs> {
+  orderGroups: number,
+): OverviewKPIs {
   let gross = 0, grossOriginal = 0, net = 0, cpa = 0, cogs = 0, fulfillment = 0;
   let approvedCount = 0, refundedCount = 0, chargebackCount = 0;
   for (const r of rows) {
@@ -635,7 +664,6 @@ async function kpisFromRows(
   }
   const totalCount = rows.reduce((s, r) => s + r.total_count, 0);
   const denom = totalCount || 1;
-  const orderGroups = await orderGroupsCount(filters);
 
   // Profit = vendor revenue − COGS − shipping.
   // CPA is NOT subtracted again — it's already excluded from `net`. Both
@@ -779,12 +807,10 @@ export function byProductTypeFromRows(
     .map(([label, value]) => ({ label, value: round2(value) }));
 }
 
-async function platformHealthFromRows(
+function platformHealthFromRows(
   rows: DailyMetricsRow[],
-): Promise<OverviewResponse['platformHealth']> {
-  const platforms = await db.platform.findMany({
-    select: { slug: true, displayName: true, lastSyncAt: true },
-  });
+  platforms: Array<{ slug: string; displayName: string; lastSyncAt: Date | null }>,
+): OverviewResponse['platformHealth'] {
   const bySlug = new Map<string, { totalOrders: number; totalRevenue: number }>();
   for (const r of rows) {
     const e = bySlug.get(r.platform) ?? { totalOrders: 0, totalRevenue: 0 };
@@ -931,23 +957,28 @@ async function getOverviewLegacy(
   filters: MetricsFilters,
   compare: boolean,
 ): Promise<OverviewResponse> {
-  const orders = await fetchOrders(filters);
+  const span = filters.endDate.getTime() - filters.startDate.getTime();
+  const prevEnd = new Date(filters.startDate.getTime() - 1);
+  const prevStart = new Date(prevEnd.getTime() - span);
+
+  const [orders, hourlyHeatmap, prevOrders] = await Promise.all([
+    fetchOrders(filters),
+    hourlyHeatmapQuery(filters),
+    compare
+      ? fetchOrders({ ...filters, startDate: prevStart, endDate: prevEnd })
+      : Promise.resolve(null),
+  ]);
   const kpis = computeKPIs(orders);
   const daily = computeDaily(orders, filters.startDate, filters.endDate);
   const byCountry = computeByCountry(orders);
   const byProductType = computeByProductType(orders);
   const topAffiliates = computeTopAffiliates(orders, 5);
   const platformHealth = await computePlatformHealth(orders);
-  const hourlyHeatmap = await hourlyHeatmapQuery(filters);
   const response: OverviewResponse = {
     range: { start: filters.startDate.toISOString(), end: filters.endDate.toISOString() },
     kpis, daily, byCountry, byProductType, topAffiliates, platformHealth, hourlyHeatmap,
   };
-  if (compare) {
-    const span = filters.endDate.getTime() - filters.startDate.getTime();
-    const prevEnd = new Date(filters.startDate.getTime() - 1);
-    const prevStart = new Date(prevEnd.getTime() - span);
-    const prevOrders = await fetchOrders({ ...filters, startDate: prevStart, endDate: prevEnd });
+  if (prevOrders) {
     response.previous = computeKPIs(prevOrders);
   }
   return response;
@@ -1363,6 +1394,14 @@ export function aggregateGroups(
 export async function getProducts(
   filters: MetricsFilters,
 ): Promise<ProductsResponse> {
+  return USE_SQL_ATTRIBUTION ? getProductsSql(filters) : getProductsLegacy(filters);
+}
+
+// Implementação legacy: findMany O(orders) + agregação em JS. Mantida
+// SOMENTE pra prova de paridade e rollback — ver getProductsSql abaixo.
+export async function getProductsLegacy(
+  filters: MetricsFilters,
+): Promise<ProductsResponse> {
   const where: Prisma.OrderWhereInput = {
     orderedAt: { gte: filters.startDate, lte: filters.endDate },
   };
@@ -1394,6 +1433,10 @@ export async function getProducts(
       vendorAccount: true,
       orderedAt: true,
       productType: true,
+      // Chaves de sessão pro attribution pass abaixo — mesma findMany
+      // alimenta os dois loops (antes eram 2 queries idênticas).
+      parentExternalId: true,
+      externalId: true,
       product: {
         select: {
           externalId: true, name: true, productType: true, id: true,
@@ -1508,27 +1551,9 @@ export async function getProducts(
     fulfillment: number;
   }
   const attBySku = new Map<string, SkuAttAgg>();
-  // We need to fetch parent_external_id and external_id which weren't in
-  // the prior select. Re-query with just session-grouping fields — cheap.
-  const sessionRows = await db.order.findMany({
-    where,
-    select: {
-      status: true,
-      grossAmountUsd: true,
-      netAmountUsd: true,
-      cpaPaidUsd: true,
-      cogsUsd: true,
-      fulfillmentUsd: true,
-      productType: true,
-      parentExternalId: true,
-      externalId: true,
-      product: { select: { externalId: true } },
-      platform: { select: { slug: true } },
-    },
-  });
-  // Group by session
-  const sessionGroups = new Map<string, typeof sessionRows>();
-  for (const o of sessionRows) {
+  // Group by session — reusa as rows da findMany de cima (mesmo where).
+  const sessionGroups = new Map<string, typeof orders>();
+  for (const o of orders) {
     const key = `${o.platform.slug}:${o.parentExternalId ?? o.externalId}`;
     let arr = sessionGroups.get(key);
     if (!arr) { arr = []; sessionGroups.set(key, arr); }
@@ -1662,27 +1687,271 @@ export async function getProducts(
   return { byType, products };
 }
 
+// ============================================================
+// getProducts — pushdown SQL (Fase B). Mesma resposta da legacy com as
+// agregações no Postgres (O(SKUs) rows em vez de O(orders)). Divergências
+// documentadas vs legacy (todas eram não-determinísticas na legacy por
+// iteração sem orderBy):
+//   1. FE da sessão: legacy pegava o primeiro FRONTEND na ordem do heap;
+//      SQL pega o mais cedo (orderedAt ASC, id ASC).
+//   2. vendorAccount do SKU: legacy pegava o da primeira order processada;
+//      SQL usa MIN() — determinístico.
+//   3. productType de exibição em empate de contagem: SQL desempata por
+//      nome do tipo ASC.
+// ============================================================
+export async function getProductsSql(
+  filters: MetricsFilters,
+): Promise<ProductsResponse> {
+  const conds: Prisma.Sql[] = [
+    Prisma.sql`o."orderedAt" >= ${filters.startDate}`,
+    Prisma.sql`o."orderedAt" <= ${filters.endDate}`,
+  ];
+  if (filters.platformSlugs?.length) {
+    conds.push(Prisma.sql`pl."slug" = ANY(${filters.platformSlugs})`);
+  }
+  if (filters.countries?.length) {
+    conds.push(Prisma.sql`o."country" = ANY(${filters.countries})`);
+  }
+  if (filters.productExternalIds?.length) {
+    conds.push(Prisma.sql`pr."externalId" = ANY(${filters.productExternalIds})`);
+  }
+  if (filters.productFamilies?.length) {
+    conds.push(Prisma.sql`pr."family" = ANY(${filters.productFamilies})`);
+  }
+  if (filters.productTypes?.length) {
+    conds.push(Prisma.sql`o."productType" = ANY(${filters.productTypes}::"ProductType"[])`);
+  }
+  const where = Prisma.join(conds, ' AND ');
+
+  const [skuRows, typeCountRows, byTypeRows, attRows] = await Promise.all([
+    // (A) Agregados + catálogo por SKU (só SKUs com order no período).
+    db.$queryRaw<Array<{
+      product_id: string;
+      external_id: string;
+      name: string;
+      catalog_type: string;
+      family: string | null;
+      variant: string | null;
+      bottles: number | null;
+      catalog_price_usd: Prisma.Decimal | null;
+      sales_page_url: string | null;
+      checkout_url: string | null;
+      thanks_page_url: string | null;
+      drive_url: string | null;
+      catalog_status: string | null;
+      platform_slug: string;
+      vendor_account: string | null;
+      all_orders: bigint;
+      approved_orders: bigint;
+      refunds: bigint;
+      chargebacks: bigint;
+      revenue: Prisma.Decimal;
+      net: Prisma.Decimal;
+      cpa: Prisma.Decimal;
+      cogs: Prisma.Decimal;
+      fulfillment: Prisma.Decimal;
+      first_sold_at: Date | null;
+      last_sold_at: Date | null;
+    }>>(Prisma.sql`
+      SELECT
+        pr.id AS product_id,
+        pr."externalId" AS external_id,
+        pr."name" AS name,
+        pr."productType"::text AS catalog_type,
+        pr."family" AS family,
+        pr."variant" AS variant,
+        pr."bottles" AS bottles,
+        pr."catalogPriceUsd" AS catalog_price_usd,
+        pr."salesPageUrl" AS sales_page_url,
+        pr."checkoutUrl" AS checkout_url,
+        pr."thanksPageUrl" AS thanks_page_url,
+        pr."driveUrl" AS drive_url,
+        pr."catalogStatus" AS catalog_status,
+        pl."slug" AS platform_slug,
+        MIN(o."vendorAccount") AS vendor_account,
+        COUNT(*)::bigint AS all_orders,
+        COUNT(*) FILTER (WHERE o."status" = 'APPROVED')::bigint AS approved_orders,
+        COUNT(*) FILTER (WHERE o."status" = 'REFUNDED')::bigint AS refunds,
+        COUNT(*) FILTER (WHERE o."status" = 'CHARGEBACK')::bigint AS chargebacks,
+        COALESCE(SUM(o."grossAmountUsd") FILTER (WHERE o."status" = 'APPROVED'), 0) AS revenue,
+        COALESCE(SUM(o."netAmountUsd"), 0) AS net,
+        COALESCE(SUM(o."cpaPaidUsd"), 0) AS cpa,
+        COALESCE(SUM(o."cogsUsd"), 0) AS cogs,
+        COALESCE(SUM(o."fulfillmentUsd"), 0) AS fulfillment,
+        MIN(o."orderedAt") FILTER (WHERE o."status" = 'APPROVED') AS first_sold_at,
+        MAX(o."orderedAt") FILTER (WHERE o."status" = 'APPROVED') AS last_sold_at
+      FROM "Order" o
+      JOIN "Platform" pl ON o."platformId" = pl.id
+      JOIN "Product" pr ON o."productId" = pr.id
+      WHERE ${where}
+      GROUP BY pr.id, pl."slug"
+    `),
+    // (B) Contagem por tipo de order por SKU → productType de exibição
+    // (tipo dominante; catálogo é fallback quando empate em zero não rola).
+    db.$queryRaw<Array<{ product_id: string; t: string; cnt: bigint }>>(Prisma.sql`
+      SELECT pr.id AS product_id, o."productType"::text AS t, COUNT(*)::bigint AS cnt
+      FROM "Order" o
+      JOIN "Platform" pl ON o."platformId" = pl.id
+      JOIN "Product" pr ON o."productId" = pr.id
+      WHERE ${where}
+      GROUP BY 1, 2
+      ORDER BY cnt DESC, t ASC
+    `),
+    // (C) Buckets byType (productType POR ORDER, não por SKU).
+    db.$queryRaw<Array<{
+      t: string;
+      orders: bigint;
+      revenue: Prisma.Decimal;
+      net: Prisma.Decimal;
+      cpa: Prisma.Decimal;
+      product_count: bigint;
+    }>>(Prisma.sql`
+      SELECT
+        o."productType"::text AS t,
+        COUNT(*) FILTER (WHERE o."status" = 'APPROVED')::bigint AS orders,
+        COALESCE(SUM(o."grossAmountUsd") FILTER (WHERE o."status" = 'APPROVED'), 0) AS revenue,
+        COALESCE(SUM(o."netAmountUsd"), 0) AS net,
+        COALESCE(SUM(o."cpaPaidUsd"), 0) AS cpa,
+        COUNT(DISTINCT pr.id)::bigint AS product_count
+      FROM "Order" o
+      JOIN "Platform" pl ON o."platformId" = pl.id
+      JOIN "Product" pr ON o."productId" = pr.id
+      WHERE ${where}
+      GROUP BY 1
+    `),
+    // (D) Session attribution: sessão inteira creditada ao SKU da FE mais
+    // cedo da sessão. Mesmo WHERE das lentes diretas (igual à legacy, que
+    // re-consultava com o mesmo where).
+    db.$queryRaw<Array<{
+      product_id: string;
+      sessions: bigint;
+      orders: bigint;
+      revenue: Prisma.Decimal;
+      net: Prisma.Decimal;
+      cpa: Prisma.Decimal;
+      cogs: Prisma.Decimal;
+      fulfillment: Prisma.Decimal;
+    }>>(Prisma.sql`
+      WITH base AS (
+        SELECT o.id, o."productType", o."status", o."orderedAt",
+               o."grossAmountUsd", o."netAmountUsd", o."cpaPaidUsd", o."cogsUsd", o."fulfillmentUsd",
+               pr.id AS product_id,
+               pl."slug" || ':' || COALESCE(o."parentExternalId", o."externalId") AS skey
+        FROM "Order" o
+        JOIN "Platform" pl ON o."platformId" = pl.id
+        JOIN "Product" pr ON o."productId" = pr.id
+        WHERE ${where}
+      ),
+      fe AS (
+        SELECT DISTINCT ON (skey) skey, product_id
+        FROM base
+        WHERE "productType" = 'FRONTEND'
+        ORDER BY skey, "orderedAt" ASC, id ASC
+      )
+      SELECT
+        fe.product_id,
+        COUNT(DISTINCT b.skey)::bigint AS sessions,
+        COUNT(*)::bigint AS orders,
+        COALESCE(SUM(b."grossAmountUsd") FILTER (WHERE b."status" = 'APPROVED'), 0) AS revenue,
+        COALESCE(SUM(b."netAmountUsd") FILTER (WHERE b."status" = 'APPROVED'), 0) AS net,
+        COALESCE(SUM(b."cpaPaidUsd"), 0) AS cpa,
+        COALESCE(SUM(b."cogsUsd"), 0) AS cogs,
+        COALESCE(SUM(b."fulfillmentUsd"), 0) AS fulfillment
+      FROM base b
+      JOIN fe ON fe.skey = b.skey
+      GROUP BY fe.product_id
+    `),
+  ]);
+
+  // Tipo dominante: rows vêm ORDER BY cnt DESC, t ASC — primeiro row por
+  // SKU é o tipo de exibição.
+  const displayTypeById = new Map<string, string>();
+  for (const r of typeCountRows) {
+    if (!displayTypeById.has(r.product_id)) displayTypeById.set(r.product_id, r.t);
+  }
+
+  const attById = new Map(attRows.map((r) => [r.product_id, r]));
+
+  const products = skuRows
+    .map((p) => {
+      const att = attById.get(p.product_id);
+      const net = toNumber(p.net);
+      const cogs = toNumber(p.cogs);
+      const fulfillment = toNumber(p.fulfillment);
+      const revenue = toNumber(p.revenue);
+      const allOrders = Number(p.all_orders);
+      const orders = Number(p.approved_orders);
+      const attRevenue = att ? toNumber(att.revenue) : 0;
+      const attNet = att ? toNumber(att.net) : 0;
+      const attProfit = attNet - (att ? toNumber(att.cogs) : 0) - (att ? toNumber(att.fulfillment) : 0);
+      return {
+        externalId: p.external_id,
+        name: p.name,
+        productType: displayTypeById.get(p.product_id) ?? p.catalog_type,
+        family: p.family,
+        variant: p.variant,
+        bottles: p.bottles,
+        catalogPriceUsd: p.catalog_price_usd != null ? Number(p.catalog_price_usd) : null,
+        salesPageUrl: p.sales_page_url,
+        checkoutUrl: p.checkout_url,
+        thanksPageUrl: p.thanks_page_url,
+        driveUrl: p.drive_url,
+        catalogStatus: p.catalog_status,
+        platformSlug: p.platform_slug,
+        vendorAccount: p.vendor_account,
+        revenue: round2(revenue),
+        orders,
+        allOrders,
+        refunds: Number(p.refunds),
+        chargebacks: Number(p.chargebacks),
+        net: round2(net),
+        cpa: round2(toNumber(p.cpa)),
+        cogs: round2(cogs),
+        fulfillment: round2(fulfillment),
+        estimatedProfit: round2(net - cogs - fulfillment),
+        estimatedMarginPct: revenue > 0
+          ? Math.round(((net - cogs - fulfillment) / revenue) * 10000) / 100
+          : 0,
+        approvalRate: allOrders ? round4(orders / allOrders) : 0,
+        firstSoldAt: p.first_sold_at?.toISOString() ?? null,
+        lastSoldAt: p.last_sold_at?.toISOString() ?? null,
+        attributedSessions: att ? Number(att.sessions) : 0,
+        attributedOrders: att ? Number(att.orders) : 0,
+        attributedRevenue: round2(attRevenue),
+        attributedNet: round2(attNet),
+        attributedCpa: round2(att ? toNumber(att.cpa) : 0),
+        attributedCogs: round2(att ? toNumber(att.cogs) : 0),
+        attributedFulfillment: round2(att ? toNumber(att.fulfillment) : 0),
+        attributedProfit: round2(attProfit),
+        attributedMarginPct: attRevenue > 0
+          ? Math.round((attProfit / attRevenue) * 10000) / 100
+          : 0,
+      };
+    })
+    .sort((a, b) => b.revenue - a.revenue);
+
+  const byTypeMap = new Map(byTypeRows.map((r) => [r.t, r]));
+  const TYPE_ORDER = ['FRONTEND', 'UPSELL', 'BUMP', 'DOWNSELL'];
+  const byType = TYPE_ORDER.map((productType) => {
+    const e = byTypeMap.get(productType);
+    return {
+      productType,
+      revenue: round2(e ? toNumber(e.revenue) : 0),
+      orders: e ? Number(e.orders) : 0,
+      net: round2(e ? toNumber(e.net) : 0),
+      cpa: round2(e ? toNumber(e.cpa) : 0),
+      productCount: e ? Number(e.product_count) : 0,
+    };
+  });
+
+  return { byType, products };
+}
+
 export async function getPlatforms(
   filters: MetricsFilters,
 ): Promise<PlatformsResponse> {
   // When the user filters by platform, drop the others from the page entirely
   // (cards for unfiltered platforms would just show zeros and add noise).
-  const platforms = await db.platform.findMany({
-    where: filters.platformSlugs?.length
-      ? { slug: { in: filters.platformSlugs } }
-      : undefined,
-    select: {
-      id: true,
-      slug: true,
-      displayName: true,
-      isActive: true,
-      lastSyncAt: true,
-      feeRatePct: true,
-      allowancePct: true,
-      feesUpdatedAt: true,
-    },
-  });
-
   const where: Prisma.OrderWhereInput = {
     orderedAt: { gte: filters.startDate, lte: filters.endDate },
   };
@@ -1702,22 +1971,38 @@ export async function getPlatforms(
     where.productType = { in: filters.productTypes };
   }
 
-  const orders = await db.order.findMany({
-    where,
-    select: {
-      status: true,
-      grossAmountUsd: true,
-      cpaPaidUsd: true,
-      affiliateId: true,
-      platform: { select: { id: true, slug: true } },
-      product: { select: { externalId: true, name: true } },
-    },
-  });
-
-  const affiliatesTotalByPlatform = await db.affiliate.groupBy({
-    by: ['platformId'],
-    _count: { _all: true },
-  });
+  const [platforms, orders, affiliatesTotalByPlatform] = await Promise.all([
+    db.platform.findMany({
+      where: filters.platformSlugs?.length
+        ? { slug: { in: filters.platformSlugs } }
+        : undefined,
+      select: {
+        id: true,
+        slug: true,
+        displayName: true,
+        isActive: true,
+        lastSyncAt: true,
+        feeRatePct: true,
+        allowancePct: true,
+        feesUpdatedAt: true,
+      },
+    }),
+    db.order.findMany({
+      where,
+      select: {
+        status: true,
+        grossAmountUsd: true,
+        cpaPaidUsd: true,
+        affiliateId: true,
+        platform: { select: { id: true, slug: true } },
+        product: { select: { externalId: true, name: true } },
+      },
+    }),
+    db.affiliate.groupBy({
+      by: ['platformId'],
+      _count: { _all: true },
+    }),
+  ]);
   const affTotalMap = new Map<string, number>();
   for (const row of affiliatesTotalByPlatform) {
     affTotalMap.set(row.platformId, row._count._all);
@@ -2420,27 +2705,37 @@ export async function getAffiliateDetail(
     periodWhere.productType = { in: filters.productTypes };
   }
 
-  const periodOrders = await db.order.findMany({
-    where: periodWhere,
-    select: {
-      status: true,
-      grossAmountUsd: true,
-      netAmountUsd: true,
-      cpaPaidUsd: true,
-      country: true,
-      orderedAt: true,
-      productType: true,
-      product: { select: { externalId: true, name: true } },
-    },
-    orderBy: { orderedAt: 'asc' },
-  });
-
-  // LTV (all-time, all platforms — represents total business with this affiliate)
-  const ltvAgg = await db.order.aggregate({
-    where: { affiliateId: aff.id, status: 'APPROVED' },
-    _sum: { grossAmountUsd: true },
-    _count: { _all: true },
-  });
+  const [periodOrders, ltvAgg, feSessionKeys] = await Promise.all([
+    db.order.findMany({
+      where: periodWhere,
+      select: {
+        status: true,
+        grossAmountUsd: true,
+        netAmountUsd: true,
+        cpaPaidUsd: true,
+        country: true,
+        orderedAt: true,
+        productType: true,
+        product: { select: { externalId: true, name: true } },
+      },
+      orderBy: { orderedAt: 'asc' },
+    }),
+    // LTV (all-time, all platforms — represents total business with this affiliate)
+    db.order.aggregate({
+      where: { affiliateId: aff.id, status: 'APPROVED' },
+      _sum: { grossAmountUsd: true },
+      _count: { _all: true },
+    }),
+    // Chaves de sessão das FEs do afiliado no período (pro session-AOV abaixo).
+    db.order.findMany({
+      where: {
+        affiliateId: aff.id,
+        productType: 'FRONTEND',
+        orderedAt: { gte: filters.startDate, lte: filters.endDate },
+      },
+      select: { parentExternalId: true, externalId: true, platformId: true },
+    }),
+  ]);
 
   // KPIs
   let revenue = 0;
@@ -2468,14 +2763,6 @@ export async function getAffiliateDetail(
   // Matches the Overview/Funnel "AOV global per buyer" definition — captures
   // upsells/downsells/bumps the same buyer purchased after entering via
   // this affiliate's FE.
-  const feSessionKeys = await db.order.findMany({
-    where: {
-      affiliateId: aff.id,
-      productType: 'FRONTEND',
-      orderedAt: { gte: filters.startDate, lte: filters.endDate },
-    },
-    select: { parentExternalId: true, externalId: true, platformId: true },
-  });
   let attributedRevenue = 0;
   let attributedSessions = 0;
   if (feSessionKeys.length > 0) {
@@ -2487,22 +2774,27 @@ export async function getAffiliateDetail(
     }
     attributedSessions = Array.from(keysByPlatform.values())
       .reduce((sum, s) => sum + s.size, 0);
-    for (const [platformId, keys] of keysByPlatform.entries()) {
-      const keysArr = Array.from(keys);
-      const sessionOrders = await db.order.findMany({
-        where: {
-          platformId,
-          status: 'APPROVED',
-          OR: [
-            { parentExternalId: { in: keysArr } },
-            { externalId: { in: keysArr } },
-          ],
-        },
-        select: { grossAmountUsd: true },
-      });
-      for (const o of sessionOrders) {
-        attributedRevenue += toNumber(o.grossAmountUsd);
-      }
+    // Soma no banco (não em JS) e em paralelo por plataforma. Mantém o OR
+    // exato do código antigo — COALESCE não é equivalente quando uma FE tem
+    // parentExternalId próprio setado.
+    const sums = await Promise.all(
+      Array.from(keysByPlatform.entries()).map(([platformId, keys]) => {
+        const keysArr = Array.from(keys);
+        return db.order.aggregate({
+          where: {
+            platformId,
+            status: 'APPROVED',
+            OR: [
+              { parentExternalId: { in: keysArr } },
+              { externalId: { in: keysArr } },
+            ],
+          },
+          _sum: { grossAmountUsd: true },
+        });
+      }),
+    );
+    for (const s of sums) {
+      attributedRevenue += toNumber(s._sum.grossAmountUsd ?? 0);
     }
   }
 
@@ -2637,7 +2929,21 @@ export async function getAffiliateDetail(
   };
 }
 
+// Flag de rollback do pushdown SQL (Fase B). Default ON; setar
+// METRICS_SQL_ATTRIBUTION=0 volta pras implementações legacy (agregação em
+// JS sobre findMany) sem deploy. Remover legacy+flag após 1-2 semanas
+// estáveis em prod.
+const USE_SQL_ATTRIBUTION = process.env.METRICS_SQL_ATTRIBUTION !== '0';
+
 export async function getAffiliates(
+  filters: MetricsFilters,
+): Promise<AffiliatesResponse> {
+  return USE_SQL_ATTRIBUTION ? getAffiliatesSql(filters) : getAffiliatesLegacy(filters);
+}
+
+// Implementação legacy: 2 findMany O(orders) + agregação em JS. Mantida
+// SOMENTE pra prova de paridade e rollback — ver getAffiliatesSql abaixo.
+export async function getAffiliatesLegacy(
   filters: MetricsFilters,
 ): Promise<AffiliatesResponse> {
   const span = filters.endDate.getTime() - filters.startDate.getTime();
@@ -2666,55 +2972,71 @@ export async function getAffiliates(
     whereInCoverage.productType = { in: filters.productTypes };
   }
 
-  const orders = await db.order.findMany({
-    where: whereInCoverage,
-    select: {
-      status: true,
-      grossAmountUsd: true,
-      netAmountUsd: true,
-      cpaPaidUsd: true,
-      cogsUsd: true,
-      fulfillmentUsd: true,
-      country: true,
-      orderedAt: true,
-      productType: true,
-      affiliate: { select: { externalId: true, nickname: true, platformId: true } },
-      platform: { select: { slug: true } },
-    },
-  });
-
-  // ---------------- Session attribution pass ----------------
-  // Fetch ALL orders in the period (no affiliate filter) so we can build
-  // session siblings even when an upsell row has affiliateId = null. Then
-  // attribute every order in a session to the FE affiliate of that session.
-  // Captures the full economic value an affiliate's lead generates.
+  // WHERE da session attribution: TODAS as orders do período (sem filtro de
+  // afiliado) pra montar irmãos de sessão mesmo quando o upsell tem
+  // affiliateId = null. productFamilies NÃO entra aqui de propósito — a
+  // sessão inteira (FE + cross-sells de outras famílias) é atribuída ao
+  // afiliado da FE; filtrar por família dropava sessões com upsell
+  // cross-family e quebrava a matemática de atribuição.
   const periodWhere: Prisma.OrderWhereInput = {
     orderedAt: { gte: filters.startDate, lte: filters.endDate },
   };
   if (filters.platformSlugs?.length) periodWhere.platform = { slug: { in: filters.platformSlugs } };
   if (filters.countries?.length) periodWhere.country = { in: filters.countries };
-  // Note: productFamilies filter NOT applied here. We want full session
-  // (FE + cross-sells/bumps from other families) attributed to the FE
-  // affiliate. Filtering by family at this level would drop sessions
-  // whose FE is the chosen family but has cross-family upsells, breaking
-  // attribution math.
-  const periodOrders = await db.order.findMany({
-    where: periodWhere,
-    select: {
-      status: true,
-      grossAmountUsd: true,
-      netAmountUsd: true,
-      cpaPaidUsd: true,
-      cogsUsd: true,
-      fulfillmentUsd: true,
-      productType: true,
-      parentExternalId: true,
-      externalId: true,
-      orderedAt: true,
-      affiliate: { select: { externalId: true, nickname: true } },
-      platform: { select: { slug: true } },
-    },
-  });
+
+  const [orders, periodOrders, ltvByAff, affiliatesAll] = await Promise.all([
+    db.order.findMany({
+      where: whereInCoverage,
+      select: {
+        status: true,
+        grossAmountUsd: true,
+        netAmountUsd: true,
+        cpaPaidUsd: true,
+        cogsUsd: true,
+        fulfillmentUsd: true,
+        country: true,
+        orderedAt: true,
+        productType: true,
+        affiliate: { select: { externalId: true, nickname: true, platformId: true } },
+        platform: { select: { slug: true } },
+      },
+    }),
+    db.order.findMany({
+      where: periodWhere,
+      select: {
+        status: true,
+        grossAmountUsd: true,
+        netAmountUsd: true,
+        cpaPaidUsd: true,
+        cogsUsd: true,
+        fulfillmentUsd: true,
+        productType: true,
+        parentExternalId: true,
+        externalId: true,
+        orderedAt: true,
+        affiliate: { select: { externalId: true, nickname: true } },
+        platform: { select: { slug: true } },
+      },
+    }),
+    db.order.groupBy({
+      by: ['affiliateId'],
+      where: { affiliateId: { not: null }, status: 'APPROVED' },
+      _sum: { grossAmountUsd: true },
+      _count: { _all: true },
+    }),
+    db.affiliate.findMany({
+      select: {
+        externalId: true,
+        nickname: true,
+        firstSeenAt: true,
+        lastOrderAt: true,
+        platform: { select: { slug: true } },
+        id: true,
+      },
+    }),
+  ]);
+
+  // ---------------- Session attribution pass ----------------
 
   interface SessAtt {
     feAffKey: string | null;
@@ -2779,23 +3101,6 @@ export async function getAffiliates(
     }
   }
   // ---------------- /attribution pass ----------------
-
-  const ltvByAff = await db.order.groupBy({
-    by: ['affiliateId'],
-    where: { affiliateId: { not: null }, status: 'APPROVED' },
-    _sum: { grossAmountUsd: true },
-    _count: { _all: true },
-  });
-  const affiliatesAll = await db.affiliate.findMany({
-    select: {
-      externalId: true,
-      nickname: true,
-      firstSeenAt: true,
-      lastOrderAt: true,
-      platform: { select: { slug: true } },
-      id: true,
-    },
-  });
 
   const ltvMap = new Map<string, { revenue: number; orders: number }>();
   for (const row of ltvByAff) {
@@ -3034,6 +3339,342 @@ export async function getAffiliates(
   };
 }
 
+// ============================================================
+// getAffiliates — pushdown SQL (Fase B). Mesma resposta da legacy, mas as
+// agregações rodam no Postgres e voltam O(afiliados) rows em vez de
+// O(orders). Divergências documentadas vs legacy (ambas eram NÃO
+// determinísticas na legacy por iteração sem orderBy):
+//   1. FE da sessão em empate de orderedAt: SQL desempata por id ASC.
+//   2. Sparkline: contribuições pré-período agora sempre contam quando o
+//      afiliado tem atividade no período (na legacy dependia da ordem do
+//      heap do Postgres).
+//   3. topCountry em empate de contagem: SQL desempata por código ASC.
+// ============================================================
+export async function getAffiliatesSql(
+  filters: MetricsFilters,
+): Promise<AffiliatesResponse> {
+  const span = filters.endDate.getTime() - filters.startDate.getTime();
+  const prevEnd = new Date(filters.startDate.getTime() - 1);
+  const prevStart = new Date(prevEnd.getTime() - span);
+  const SPARK_DAYS = 30;
+  const sparkStart = new Date(filters.endDate.getTime() - SPARK_DAYS * 24 * 3600 * 1000);
+  const coverageStart = new Date(Math.min(prevStart.getTime(), sparkStart.getTime()));
+
+  // WHERE compartilhado das lentes diretas (espelha whereInCoverage da
+  // legacy): janela de cobertura + todos os filtros do dashboard.
+  const directConds: Prisma.Sql[] = [
+    Prisma.sql`o."affiliateId" IS NOT NULL`,
+    Prisma.sql`o."orderedAt" >= ${coverageStart}`,
+    Prisma.sql`o."orderedAt" <= ${filters.endDate}`,
+  ];
+  if (filters.platformSlugs?.length) {
+    directConds.push(Prisma.sql`pl."slug" = ANY(${filters.platformSlugs})`);
+  }
+  if (filters.countries?.length) {
+    directConds.push(Prisma.sql`o."country" = ANY(${filters.countries})`);
+  }
+  if (filters.productExternalIds?.length) {
+    directConds.push(Prisma.sql`pr."externalId" = ANY(${filters.productExternalIds})`);
+  }
+  if (filters.productFamilies?.length) {
+    directConds.push(Prisma.sql`pr."family" = ANY(${filters.productFamilies})`);
+  }
+  if (filters.productTypes?.length) {
+    directConds.push(Prisma.sql`o."productType" = ANY(${filters.productTypes}::"ProductType"[])`);
+  }
+  const directWhere = Prisma.join(directConds, ' AND ');
+  const inPeriod = Prisma.sql`(o."orderedAt" >= ${filters.startDate} AND o."orderedAt" <= ${filters.endDate})`;
+
+  // WHERE da session attribution (espelha periodWhere da legacy): período +
+  // platforms/countries APENAS. Famílias/SKUs/etapas ficam de fora de
+  // propósito — a sessão inteira (incl. cross-sells) vai pro afiliado da FE.
+  const sessConds: Prisma.Sql[] = [
+    Prisma.sql`o."orderedAt" >= ${filters.startDate}`,
+    Prisma.sql`o."orderedAt" <= ${filters.endDate}`,
+  ];
+  if (filters.platformSlugs?.length) {
+    sessConds.push(Prisma.sql`pl."slug" = ANY(${filters.platformSlugs})`);
+  }
+  if (filters.countries?.length) {
+    sessConds.push(Prisma.sql`o."country" = ANY(${filters.countries})`);
+  }
+  const sessWhere = Prisma.join(sessConds, ' AND ');
+
+  const [aggRows, sparkRows, countryRows, cpaModeRows, attRows, ltvByAff, affiliatesAll] =
+    await Promise.all([
+      // (A) Agregados diretos por afiliado, janelas período+prev via FILTER.
+      db.$queryRaw<Array<{
+        affiliate_id: string;
+        all_orders: bigint;
+        approved_orders: bigint;
+        refunds: bigint;
+        chargebacks: bigint;
+        cpa: Prisma.Decimal;
+        net: Prisma.Decimal;
+        cogs: Prisma.Decimal;
+        fulfillment: Prisma.Decimal;
+        revenue: Prisma.Decimal;
+        fe_approved_count: bigint;
+        fe_cpa_paid_count: bigint;
+        seen_prev: boolean;
+      }>>(Prisma.sql`
+        SELECT
+          o."affiliateId" AS affiliate_id,
+          COUNT(*) FILTER (WHERE ${inPeriod})::bigint AS all_orders,
+          COUNT(*) FILTER (WHERE ${inPeriod} AND o."status" = 'APPROVED')::bigint AS approved_orders,
+          COUNT(*) FILTER (WHERE ${inPeriod} AND o."status" = 'REFUNDED')::bigint AS refunds,
+          COUNT(*) FILTER (WHERE ${inPeriod} AND o."status" = 'CHARGEBACK')::bigint AS chargebacks,
+          COALESCE(SUM(o."cpaPaidUsd") FILTER (WHERE ${inPeriod}), 0) AS cpa,
+          COALESCE(SUM(o."netAmountUsd") FILTER (WHERE ${inPeriod}), 0) AS net,
+          COALESCE(SUM(o."cogsUsd") FILTER (WHERE ${inPeriod}), 0) AS cogs,
+          COALESCE(SUM(o."fulfillmentUsd") FILTER (WHERE ${inPeriod}), 0) AS fulfillment,
+          COALESCE(SUM(o."grossAmountUsd") FILTER (WHERE ${inPeriod} AND o."status" = 'APPROVED'), 0) AS revenue,
+          COUNT(*) FILTER (WHERE ${inPeriod} AND o."status" = 'APPROVED' AND o."productType" = 'FRONTEND')::bigint AS fe_approved_count,
+          COUNT(*) FILTER (WHERE ${inPeriod} AND o."status" = 'APPROVED' AND o."productType" = 'FRONTEND' AND o."cpaPaidUsd" > 0)::bigint AS fe_cpa_paid_count,
+          BOOL_OR(o."orderedAt" >= ${prevStart} AND o."orderedAt" <= ${prevEnd}) AS seen_prev
+        FROM "Order" o
+        JOIN "Platform" pl ON o."platformId" = pl.id
+        JOIN "Product" pr ON o."productId" = pr.id
+        WHERE ${directWhere}
+        GROUP BY o."affiliateId"
+      `),
+      // (B) Sparkline: gross APPROVED por bucket de dia da janela de 30d.
+      db.$queryRaw<Array<{ affiliate_id: string; idx: number; gross: Prisma.Decimal }>>(Prisma.sql`
+        SELECT
+          o."affiliateId" AS affiliate_id,
+          LEAST(${SPARK_DAYS - 1}, FLOOR(EXTRACT(EPOCH FROM (o."orderedAt" - ${sparkStart})) / 86400))::int AS idx,
+          SUM(o."grossAmountUsd") AS gross
+        FROM "Order" o
+        JOIN "Platform" pl ON o."platformId" = pl.id
+        JOIN "Product" pr ON o."productId" = pr.id
+        WHERE ${directWhere}
+          AND o."orderedAt" >= ${sparkStart}
+          AND o."status" = 'APPROVED'
+        GROUP BY 1, 2
+      `),
+      // (C) Contagem por país no período (todas as statuses) → topCountry.
+      db.$queryRaw<Array<{ affiliate_id: string; country: string; cnt: bigint }>>(Prisma.sql`
+        SELECT o."affiliateId" AS affiliate_id, o."country" AS country, COUNT(*)::bigint AS cnt
+        FROM "Order" o
+        JOIN "Platform" pl ON o."platformId" = pl.id
+        JOIN "Product" pr ON o."productId" = pr.id
+        WHERE ${directWhere} AND ${inPeriod} AND o."country" IS NOT NULL
+        GROUP BY 1, 2
+        ORDER BY cnt DESC, country ASC
+      `),
+      // (D) Buckets de CPA (FE+APPROVED+cpa>0) → modeOf em JS, mesmo
+      // tie-break da legacy (não usar mode() WITHIN GROUP do Postgres).
+      db.$queryRaw<Array<{ affiliate_id: string; cpa_val: Prisma.Decimal; cnt: bigint }>>(Prisma.sql`
+        SELECT o."affiliateId" AS affiliate_id, ROUND(o."cpaPaidUsd", 2) AS cpa_val, COUNT(*)::bigint AS cnt
+        FROM "Order" o
+        JOIN "Platform" pl ON o."platformId" = pl.id
+        JOIN "Product" pr ON o."productId" = pr.id
+        WHERE ${directWhere} AND ${inPeriod}
+          AND o."status" = 'APPROVED' AND o."productType" = 'FRONTEND' AND o."cpaPaidUsd" > 0
+        GROUP BY 1, 2
+      `),
+      // (E) Session attribution: sessão inteira creditada ao afiliado da FE
+      // mais cedo (DISTINCT ON com desempate por id — determinístico).
+      db.$queryRaw<Array<{
+        affiliate_id: string;
+        sessions: bigint;
+        orders: bigint;
+        revenue: Prisma.Decimal;
+        net: Prisma.Decimal;
+        cpa: Prisma.Decimal;
+        cogs: Prisma.Decimal;
+        fulfillment: Prisma.Decimal;
+      }>>(Prisma.sql`
+        WITH base AS (
+          SELECT o.id, o."affiliateId", o."productType", o."status", o."orderedAt",
+                 o."grossAmountUsd", o."netAmountUsd", o."cpaPaidUsd", o."cogsUsd", o."fulfillmentUsd",
+                 pl."slug" || ':' || COALESCE(o."parentExternalId", o."externalId") AS skey
+          FROM "Order" o
+          JOIN "Platform" pl ON o."platformId" = pl.id
+          WHERE ${sessWhere}
+        ),
+        fe AS (
+          SELECT DISTINCT ON (skey) skey, "affiliateId"
+          FROM base
+          WHERE "productType" = 'FRONTEND' AND "affiliateId" IS NOT NULL
+          ORDER BY skey, "orderedAt" ASC, id ASC
+        )
+        SELECT
+          fe."affiliateId" AS affiliate_id,
+          COUNT(DISTINCT b.skey)::bigint AS sessions,
+          COUNT(*)::bigint AS orders,
+          COALESCE(SUM(b."grossAmountUsd") FILTER (WHERE b."status" = 'APPROVED'), 0) AS revenue,
+          COALESCE(SUM(b."netAmountUsd") FILTER (WHERE b."status" = 'APPROVED'), 0) AS net,
+          COALESCE(SUM(b."cpaPaidUsd"), 0) AS cpa,
+          COALESCE(SUM(b."cogsUsd"), 0) AS cogs,
+          COALESCE(SUM(b."fulfillmentUsd"), 0) AS fulfillment
+        FROM base b
+        JOIN fe ON fe.skey = b.skey
+        GROUP BY fe."affiliateId"
+      `),
+      db.order.groupBy({
+        by: ['affiliateId'],
+        where: { affiliateId: { not: null }, status: 'APPROVED' },
+        _sum: { grossAmountUsd: true },
+        _count: { _all: true },
+      }),
+      db.affiliate.findMany({
+        select: {
+          externalId: true,
+          nickname: true,
+          firstSeenAt: true,
+          lastOrderAt: true,
+          platform: { select: { slug: true } },
+          id: true,
+        },
+      }),
+    ]);
+
+  const aggById = new Map(aggRows.map((r) => [r.affiliate_id, r]));
+  const attById = new Map(attRows.map((r) => [r.affiliate_id, r]));
+
+  const sparkById = new Map<string, number[]>();
+  for (const r of sparkRows) {
+    let arr = sparkById.get(r.affiliate_id);
+    if (!arr) { arr = new Array(SPARK_DAYS).fill(0); sparkById.set(r.affiliate_id, arr); }
+    arr[r.idx] += toNumber(r.gross);
+  }
+
+  // Rows já vêm ORDER BY cnt DESC, country ASC — primeiro row por afiliado
+  // é o topCountry com desempate determinístico.
+  const topCountryById = new Map<string, string>();
+  for (const r of countryRows) {
+    if (!topCountryById.has(r.affiliate_id)) topCountryById.set(r.affiliate_id, r.country);
+  }
+
+  const cpaCountsById = new Map<string, Map<number, number>>();
+  for (const r of cpaModeRows) {
+    let m = cpaCountsById.get(r.affiliate_id);
+    if (!m) { m = new Map(); cpaCountsById.set(r.affiliate_id, m); }
+    const key = Math.round(toNumber(r.cpa_val) * 100) / 100;
+    m.set(key, (m.get(key) ?? 0) + Number(r.cnt));
+  }
+
+  // Mesmo tie-break da legacy: empate de contagem → valor MAIOR ganha.
+  function modeOf(counts: Map<number, number>): number {
+    let modeVal = 0, modeCount = 0;
+    for (const [v, c] of counts) {
+      if (c > modeCount || (c === modeCount && v > modeVal)) {
+        modeCount = c;
+        modeVal = v;
+      }
+    }
+    return modeVal;
+  }
+
+  const ltvMap = new Map<string, { revenue: number; orders: number }>();
+  for (const row of ltvByAff) {
+    if (!row.affiliateId) continue;
+    ltvMap.set(row.affiliateId, {
+      revenue: toNumber(row._sum.grossAmountUsd),
+      orders: row._count._all,
+    });
+  }
+
+  // Summary — mesmas definições da legacy, derivadas das rows agregadas.
+  let activeNow = 0, activePrev = 0, newAff = 0, churnedAff = 0, totalRevenue = 0;
+  const revenues: number[] = [];
+  for (const r of aggRows) {
+    const hasPeriod = Number(r.all_orders) > 0;
+    const rev = toNumber(r.revenue);
+    if (hasPeriod) {
+      activeNow++;
+      totalRevenue += rev;
+      revenues.push(rev);
+    }
+    if (r.seen_prev) {
+      activePrev++;
+      if (!hasPeriod) churnedAff++;
+    } else if (hasPeriod) {
+      newAff++;
+    }
+  }
+  revenues.sort((a, b) => b - a);
+  const top5Revenue = revenues.slice(0, 5).reduce((s, v) => s + v, 0);
+  const concentration = totalRevenue > 0 ? top5Revenue / totalRevenue : 0;
+
+  const emptySpark = new Array(SPARK_DAYS).fill(0);
+  const affiliates = affiliatesAll.map((aff) => {
+    const a = aggById.get(aff.id);
+    const hasPeriod = a ? Number(a.all_orders) > 0 : false;
+    const att = attById.get(aff.id);
+    const ltv = ltvMap.get(aff.id);
+
+    const allOrders = a ? Number(a.all_orders) : 0;
+    const orders = a ? Number(a.approved_orders) : 0;
+    const refunds = a ? Number(a.refunds) : 0;
+    const chargebacks = a ? Number(a.chargebacks) : 0;
+    const denom = allOrders || 1;
+    const cpa = a ? toNumber(a.cpa) : 0;
+    const net = a ? toNumber(a.net) : 0;
+    const cogs = a ? toNumber(a.cogs) : 0;
+    const fulfillment = a ? toNumber(a.fulfillment) : 0;
+    const feApprovedCount = a ? Number(a.fe_approved_count) : 0;
+    const attNet = att ? toNumber(att.net) : 0;
+    const attCogs = att ? toNumber(att.cogs) : 0;
+    const attFulfillment = att ? toNumber(att.fulfillment) : 0;
+    const attRevenue = att ? toNumber(att.revenue) : 0;
+    const cpaCounts = hasPeriod ? cpaCountsById.get(aff.id) : undefined;
+
+    return {
+      externalId: aff.externalId,
+      platformSlug: aff.platform.slug,
+      nickname: aff.nickname,
+      revenue: round2(a ? toNumber(a.revenue) : 0),
+      orders,
+      allOrders,
+      refunds,
+      chargebacks,
+      approvalRate: allOrders ? round4(orders / denom) : 0,
+      refundRate: allOrders ? round4(refunds / denom) : 0,
+      cbRate: allOrders ? round4(chargebacks / denom) : 0,
+      cpa: round2(cpa),
+      feApprovedCount,
+      feCpaPaidCount: a ? Number(a.fe_cpa_paid_count) : 0,
+      cpaPerFe: cpaCounts ? round2(modeOf(cpaCounts)) : 0,
+      cpaPerFeApproved: feApprovedCount > 0 ? round2(cpa / feApprovedCount) : 0,
+      netMargin: round2(net - cpa),
+      cogs: round2(cogs),
+      fulfillment: round2(fulfillment),
+      estimatedProfit: round2(net - cogs - fulfillment),
+      attributedSessions: att ? Number(att.sessions) : 0,
+      attributedOrders: att ? Number(att.orders) : 0,
+      attributedRevenue: round2(attRevenue),
+      attributedNet: round2(attNet),
+      attributedCpa: round2(att ? toNumber(att.cpa) : 0),
+      attributedCogs: round2(attCogs),
+      attributedFulfillment: round2(attFulfillment),
+      attributedProfit: round2(attNet - attCogs - attFulfillment),
+      attributedMarginPct: attRevenue > 0
+        ? Math.round(((attNet - attCogs - attFulfillment) / attRevenue) * 10000) / 100
+        : 0,
+      topCountry: hasPeriod ? (topCountryById.get(aff.id) ?? null) : null,
+      ltvRevenue: round2(ltv?.revenue ?? 0),
+      ltvOrders: ltv?.orders ?? 0,
+      firstSeenAt: aff.firstSeenAt.toISOString(),
+      lastOrderAt: aff.lastOrderAt?.toISOString() ?? null,
+      sparkline: (hasPeriod ? (sparkById.get(aff.id) ?? emptySpark) : emptySpark).map((v) => round2(v)),
+    };
+  }).sort((a, b) => b.revenue - a.revenue);
+
+  return {
+    summary: {
+      activeNow,
+      activePrev,
+      concentration: round4(concentration),
+      newAff,
+      churnedAff,
+      totalRevenue: round2(totalRevenue),
+    },
+    affiliates,
+  };
+}
+
 export async function getOrderDetail(
   externalId: string,
   platformSlug?: string,
@@ -3239,38 +3880,6 @@ export async function getOrders(
     }
   }
 
-  const countsRaw = await db.order.groupBy({
-    by: ['status'],
-    where,
-    _count: { _all: true },
-  });
-  const statusCounts: Record<string, number> = {
-    all: 0,
-    approved: 0,
-    pending: 0,
-    refunded: 0,
-    chargeback: 0,
-    canceled: 0,
-  };
-  for (const row of countsRaw) {
-    const key = row.status.toLowerCase();
-    statusCounts[key] = row._count._all;
-    statusCounts.all += row._count._all;
-  }
-
-  const typeCountsRaw = await db.order.groupBy({
-    by: ['productType'],
-    where,
-    _count: { _all: true },
-  });
-  const typeCounts: Record<string, number> = {
-    all: 0, FRONTEND: 0, UPSELL: 0, DOWNSELL: 0, BUMP: 0, SMS_RECOVERY: 0,
-  };
-  for (const row of typeCountsRaw) {
-    typeCounts[row.productType] = row._count._all;
-    typeCounts.all += row._count._all;
-  }
-
   const filteredWhere: Prisma.OrderWhereInput = { ...where };
   if (options.status && options.status !== 'all') {
     filteredWhere.status = options.status.toUpperCase() as Prisma.OrderWhereInput['status'];
@@ -3280,21 +3889,50 @@ export async function getOrders(
       options.productType.toUpperCase() as Prisma.OrderWhereInput['productType'];
   }
 
-  const total = await db.order.count({ where: filteredWhere });
   const limit = Math.min(Math.max(options.limit ?? 500, 1), 1000);
   const offset = Math.max(options.offset ?? 0, 0);
 
-  const rows = await db.order.findMany({
-    where: filteredWhere,
-    include: {
-      platform: { select: { slug: true, displayName: true } },
-      product: { select: { externalId: true, name: true, productType: true } },
-      affiliate: { select: { externalId: true, nickname: true } },
-    },
-    orderBy: { orderedAt: 'desc' },
-    take: limit,
-    skip: offset,
-  });
+  // Um groupBy só por (status, productType) alimenta os dois breakdowns —
+  // somar as partições por eixo dá exatamente os mesmos totais das duas
+  // queries antigas. count + findMany rodam em paralelo junto.
+  const [countsRaw, total, rows] = await Promise.all([
+    db.order.groupBy({
+      by: ['status', 'productType'],
+      where,
+      _count: { _all: true },
+    }),
+    db.order.count({ where: filteredWhere }),
+    db.order.findMany({
+      where: filteredWhere,
+      include: {
+        platform: { select: { slug: true, displayName: true } },
+        product: { select: { externalId: true, name: true, productType: true } },
+        affiliate: { select: { externalId: true, nickname: true } },
+      },
+      orderBy: { orderedAt: 'desc' },
+      take: limit,
+      skip: offset,
+    }),
+  ]);
+
+  const statusCounts: Record<string, number> = {
+    all: 0,
+    approved: 0,
+    pending: 0,
+    refunded: 0,
+    chargeback: 0,
+    canceled: 0,
+  };
+  const typeCounts: Record<string, number> = {
+    all: 0, FRONTEND: 0, UPSELL: 0, DOWNSELL: 0, BUMP: 0, SMS_RECOVERY: 0,
+  };
+  for (const row of countsRaw) {
+    const n = row._count._all;
+    statusCounts[row.status.toLowerCase()] = (statusCounts[row.status.toLowerCase()] ?? 0) + n;
+    statusCounts.all += n;
+    typeCounts[row.productType] = (typeCounts[row.productType] ?? 0) + n;
+    typeCounts.all += n;
+  }
 
   return {
     orders: rows.map((o) => ({
@@ -3346,11 +3984,7 @@ async function fetchOrders(filters: MetricsFilters): Promise<OrderWithJoins[]> {
 
   return db.order.findMany({
     where,
-    include: {
-      platform: { select: { slug: true, displayName: true } },
-      product: { select: { externalId: true, name: true, productType: true } },
-      affiliate: { select: { externalId: true, nickname: true } },
-    },
+    select: ORDER_COMPUTE_SELECT,
     orderBy: { orderedAt: 'asc' },
   });
 }

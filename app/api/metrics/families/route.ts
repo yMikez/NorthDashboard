@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { getFamilies } from '@/lib/services/families';
 import { requireTab } from '@/lib/auth/guard';
 import { logger } from '@/lib/logger';
+import { respondCached } from '@/lib/shared/metricsResponse';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -30,14 +31,15 @@ export async function GET(req: Request) {
   const productFamilies = csvParam(searchParams.get('families'));
 
   try {
-    const data = await getFamilies({
-      startDate,
-      endDate,
-      platformSlugs,
-      countries,
-      productFamilies,
-    });
-    return NextResponse.json(data);
+    return await respondCached('families', searchParams, () =>
+      getFamilies({
+        startDate,
+        endDate,
+        platformSlugs,
+        countries,
+        productFamilies,
+      }),
+    );
   } catch (err) {
     logger.error({ err }, 'metrics/families failed');
     return NextResponse.json({ error: 'query failed' }, { status: 500 });

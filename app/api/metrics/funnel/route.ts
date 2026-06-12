@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { getFunnel } from '@/lib/services/metrics';
 import { requireTab } from '@/lib/auth/guard';
 import { logger } from '@/lib/logger';
+import { respondCached } from '@/lib/shared/metricsResponse';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -31,8 +32,9 @@ export async function GET(req: Request) {
   const productFamilies = csvParam(searchParams.get('families'));
 
   try {
-    const data = await getFunnel({ startDate, endDate, platformSlugs, countries, productExternalIds, productFamilies });
-    return NextResponse.json(data);
+    return await respondCached('funnel', searchParams, () =>
+      getFunnel({ startDate, endDate, platformSlugs, countries, productExternalIds, productFamilies }),
+    );
   } catch (err) {
     logger.error({ err }, 'metrics/funnel failed');
     return NextResponse.json({ error: 'query failed' }, { status: 500 });

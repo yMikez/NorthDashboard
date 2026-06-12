@@ -3,6 +3,7 @@ import { getPlatforms } from '@/lib/services/metrics';
 import { requireTab } from '@/lib/auth/guard';
 import { logger } from '@/lib/logger';
 import { csvParam, stagesParam } from '@/lib/shared/queryParams';
+import { respondCached } from '@/lib/shared/metricsResponse';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -33,8 +34,9 @@ export async function GET(req: Request) {
   const productTypes = stagesParam(searchParams.get('stages'));
 
   try {
-    const data = await getPlatforms({ startDate, endDate, platformSlugs, countries, productExternalIds, productFamilies, productTypes });
-    return NextResponse.json(data);
+    return await respondCached('platforms', searchParams, () =>
+      getPlatforms({ startDate, endDate, platformSlugs, countries, productExternalIds, productFamilies, productTypes }),
+    );
   } catch (err) {
     logger.error({ err }, 'metrics/platforms failed');
     return NextResponse.json({ error: 'query failed' }, { status: 500 });

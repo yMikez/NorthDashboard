@@ -247,7 +247,15 @@ model Order {
   @@index([orderedAt])
   @@index([affiliateId, orderedAt])
   @@index([productId, orderedAt])
-  @@index([status])
+  // Compostos pros WHEREs quentes do dashboard: todo endpoint filtra
+  // orderedAt-range combinado com platformId/status/productType/country.
+  // (status) solto foi removido — o prefixo de (status, orderedAt) cobre.
+  // (productType, status, orderedAt) atende orderGroupsCount (FE+APPROVED
+  // +range), que roda em TODO overview como denominador do AOV.
+  @@index([platformId, orderedAt])
+  @@index([status, orderedAt])
+  @@index([productType, status, orderedAt])
+  @@index([country, orderedAt])
   @@index([funnelSessionId])
   @@index([parentExternalId])
   @@index([vendorAccount, orderedAt])

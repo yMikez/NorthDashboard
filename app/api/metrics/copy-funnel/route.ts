@@ -1,21 +1,20 @@
 // GET /api/metrics/copy-funnel — observabilidade do Copy Optimizer (Painel C).
 // Agrega CopyView × Order por stage/afiliado/layer + série diária. Admin-only
-// (toda a área copy-optimizer é admin no dash). Cache em memória de 60s por
-// combinação de filtros — janelas de horas não mudam a cada request.
+// (toda a área copy-optimizer é admin no dash). Cache de resposta via
+// respondCached (TTL 30s por querystring) — janelas de horas não mudam a
+// cada request.
 
 import { NextResponse } from 'next/server';
 import { requireAdmin } from '@/lib/auth/guard';
 import { getCopyFunnel, type CopyFunnelPeriod } from '@/lib/services/copyFunnel';
 import { getAutotuneConfig } from '@/lib/copy-optimizer/autotuneRunner';
 import { logger } from '@/lib/logger';
+import { respondCached } from '@/lib/shared/metricsResponse';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
 const PERIODS: CopyFunnelPeriod[] = ['1h', '24h', '7d', '30d'];
-
-const CACHE_TTL_MS = 60_000;
-const cache = new Map<string, { at: number; data: unknown }>();
 
 export async function GET(req: Request) {
   const auth = await requireAdmin();
@@ -34,16 +33,9 @@ export async function GET(req: Request) {
     ? targetRaw
     : (await getAutotuneConfig()).globalTargetAov;
 
-  const key = JSON.stringify({ period, stage, family, affiliate, target });
-  const hit = cache.get(key);
-  if (hit && Date.now() - hit.at < CACHE_TTL_MS) {
-    return NextResponse.json(hit.data);
-  }
-
   try {
-    const data = await getCopyFunnel({ period, stage, family, affiliate, target });
-    cache.set(key, { at: Date.now(), data });
-    return NextResponse.json(data);
+    return await respondCached('copy-funnel', searchParams, () =>
+      getCopyFunnel({ period, stage, family, affiliate, target }));
   } catch (err) {
     logger.error({ err }, 'metrics/copy-funnel failed');
     return NextResponse.json({ error: 'query failed' }, { status: 500 });

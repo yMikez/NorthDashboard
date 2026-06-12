@@ -3,6 +3,7 @@ import { getAffiliates } from '@/lib/services/metrics';
 import { requireAnyTab } from '@/lib/auth/guard';
 import { logger } from '@/lib/logger';
 import { csvParam, stagesParam } from '@/lib/shared/queryParams';
+import { respondCached } from '@/lib/shared/metricsResponse';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -34,15 +35,16 @@ export async function GET(req: Request) {
   const productTypes = stagesParam(searchParams.get('stages'));
 
   try {
-    const data = await getAffiliates({
-      startDate,
-      endDate,
-      platformSlugs,
-      countries,
-      productExternalIds,
-      productFamilies,
-    });
-    return NextResponse.json(data);
+    return await respondCached('affiliates', searchParams, () =>
+      getAffiliates({
+        startDate,
+        endDate,
+        platformSlugs,
+        countries,
+        productExternalIds,
+        productFamilies,
+      }),
+    );
   } catch (err) {
     logger.error({ err }, 'metrics/affiliates failed');
     return NextResponse.json({ error: 'query failed' }, { status: 500 });
