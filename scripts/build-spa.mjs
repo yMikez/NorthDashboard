@@ -20,6 +20,7 @@ const options = {
   entryPoints: [
     'public/src/utils.jsx',
     'public/src/charts.jsx',
+    'public/src/ns-charts.jsx',
     'public/src/shell.jsx',
     'public/src/pages/overview.jsx',
     'public/src/pages/custos.jsx',
@@ -37,10 +38,31 @@ const options = {
   logLevel: 'info',
 };
 
+// Bundle do recharts (npm) → global window.Recharts. React/ReactDOM ficam
+// FORA do bundle: os shims apontam pros UMDs globais já servidos de /vendor,
+// então o React é um só pra SPA inteira (hooks quebrariam com 2 cópias).
+const vendorOptions = {
+  entryPoints: ['public/src/vendor-charts.entry.js'],
+  outfile: 'public/dist/vendor-recharts.js',
+  bundle: true,
+  minify: true,
+  format: 'iife',
+  target: 'es2019',
+  define: { 'process.env.NODE_ENV': '"production"' },
+  alias: {
+    'react': './public/src/shims/react-shim.js',
+    'react-dom': './public/src/shims/react-dom-shim.js',
+    'react/jsx-runtime': './public/src/shims/jsx-runtime-shim.js',
+  },
+  logLevel: 'info',
+};
+
 if (process.argv.includes('--watch')) {
   const ctx = await context(options);
   await ctx.watch();
+  // Vendor não precisa de watch (só muda quando o package muda) — builda 1x.
+  await build(vendorOptions);
   console.log('[build-spa] watching public/src/**/*.jsx ...');
 } else {
-  await build(options);
+  await Promise.all([build(options), build(vendorOptions)]);
 }

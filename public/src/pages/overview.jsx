@@ -1,4 +1,4 @@
-/* global React, useState, useMemo, Icon, Sparkline, LineChart, Donut, CountryBars,
+/* global React, useState, useMemo, Icon, Sparkline, NSTimeSeries, Donut, CountryBars,
    fmtCurrency, fmtInt, avatarColor, initials */
 /* Overview page: fetches /api/metrics/overview, renders 8 KPIs + charts + tables. */
 
@@ -193,12 +193,17 @@ function OverviewPage({ filters, setFilters }) {
   const sparkAov = buckets.map((b) => (b.approvedOrders ? b.gross / b.approvedOrders : 0));
   const approvalSpark = buckets.map((b) => (b.allOrders ? b.approvedOrders / b.allOrders : 0));
 
+  // stageId: token do filtro global "Etapa" (filters.stages / param `st`).
+  // BUMP não tem etapa filtrável na UI → segmento não-clicável.
+  const STAGE_TOKEN = { FRONTEND: 'front', UPSELL: 'upsell', DOWNSELL: 'downsell' };
   const typeItems = ['FRONTEND', 'UPSELL', 'BUMP', 'DOWNSELL'].map((key) => {
     const found = byProductType.find((x) => x.label === key);
     return {
       label: PRODUCT_TYPE_LABELS[key],
       value: found ? found.value : 0,
       color: PRODUCT_TYPE_COLORS[key],
+      stageId: STAGE_TOKEN[key] || null,
+      clickable: !!STAGE_TOKEN[key],
     };
   });
 
@@ -330,8 +335,38 @@ function OverviewPage({ filters, setFilters }) {
             </div>
           </div>
         </div>
-        <LineChart buckets={buckets} compareBuckets={null}
-          metric={metric} currency={cur} height={260}/>
+        {(() => {
+          const MONEY = new Set(['gross', 'net', 'profit']);
+          const chartData = buckets.map((b) => ({
+            date: b.date,
+            gross: b.gross,
+            net: b.net,
+            profit: b.profit ?? 0,
+            orders: b.approvedOrders,
+            aov: b.approvedOrders ? b.gross / b.approvedOrders : 0,
+            approvalRate: b.allOrders ? b.approvedOrders / b.allOrders : 0,
+          }));
+          // Métricas monetárias: 3 séries juntas, a do chip em destaque (área),
+          // as outras como linhas finas de contexto. Demais métricas: série única
+          // (unidades diferentes não dividem eixo).
+          const series = MONEY.has(metric)
+            ? [
+                { key: 'gross', label: 'Bruto', color: '#5BC8FF' },
+                { key: 'net', label: 'Líquido', color: '#8B7FFF' },
+                { key: 'profit', label: 'Lucro', color: '#28C878' },
+              ]
+            : [{
+                key: metric,
+                label: metric === 'orders' ? 'Pedidos' : metric === 'aov' ? 'AOV' : 'Aprovação',
+                color: '#5BC8FF',
+                format: metric === 'orders' ? 'int' : metric === 'aov' ? 'money2' : 'pct',
+              }];
+          return (
+            <NSTimeSeries data={chartData} series={series} height={260} currency={cur}
+              focusKey={MONEY.has(metric) ? metric : null}
+              toggles={MONEY.has(metric)}/>
+          );
+        })()}
       </div>
 
       <div className="grid-2">
@@ -342,7 +377,15 @@ function OverviewPage({ filters, setFilters }) {
               <div className="panel-sub">Apenas pedidos aprovados · receita bruta</div>
             </div>
           </div>
-          <Donut items={typeItems} totalLabel="Aprovado" format={(v) => fmtCurrency(v, cur, 0)}/>
+          <Donut items={typeItems} totalLabel="Aprovado" format={(v) => fmtCurrency(v, cur, 0)}
+            onItemClick={setFilters ? (it) => {
+              if (!it.stageId) return;
+              setFilters((f) => {
+                const next = new Set(f.stages || []);
+                if (next.has(it.stageId)) next.delete(it.stageId); else next.add(it.stageId);
+                return { ...f, stages: next };
+              });
+            } : null}/>
         </div>
 
         <div className="panel">
@@ -458,7 +501,7 @@ function OverviewPage({ filters, setFilters }) {
         <div className="panel-head">
           <div className="panel-title">
             <span className="panel-eyebrow">PADRÃO DE COMPRA · HORA × DIA DA SEMANA</span>
-            <div className="panel-sub">Pedidos aprovados · UTC · hover pra ver detalhe</div>
+            <div className="panel-sub">Pedidos aprovados · horário de Brasília · hover pra ver detalhe</div>
           </div>
           <div className="panel-legend">
             <span className="legend-dot cyan"><span/>intensidade = volume</span>

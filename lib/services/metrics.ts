@@ -854,6 +854,10 @@ async function hourlyHeatmapQuery(
     conds.push(Prisma.sql`o."productType" = ANY(${filters.productTypes}::"ProductType"[])`);
   }
   const whereSql = Prisma.join(conds, ' AND ');
+  // DOW/HOUR extraídos em BRT (não UTC): o usuário opera em horário de
+  // Brasília — em UTC o padrão de horário de venda aparecia deslocado 3h
+  // (e vendas de fim de noite caíam no dia seguinte). Mesmo idioma de
+  // conversão da MV daily_metrics.
   const rows = await db.$queryRaw<Array<{
     dow: number;
     hour: number;
@@ -861,8 +865,8 @@ async function hourlyHeatmapQuery(
     gross: Prisma.Decimal;
   }>>(Prisma.sql`
     SELECT
-      EXTRACT(DOW FROM o."orderedAt")::int AS dow,
-      EXTRACT(HOUR FROM o."orderedAt")::int AS hour,
+      EXTRACT(DOW FROM ((o."orderedAt" AT TIME ZONE 'UTC') AT TIME ZONE 'America/Sao_Paulo'))::int AS dow,
+      EXTRACT(HOUR FROM ((o."orderedAt" AT TIME ZONE 'UTC') AT TIME ZONE 'America/Sao_Paulo'))::int AS hour,
       COUNT(*) FILTER (WHERE o."status" = 'APPROVED')::bigint AS orders,
       COALESCE(SUM(o."grossAmountUsd") FILTER (WHERE o."status"='APPROVED'), 0)::numeric(14,2) AS gross
     FROM "Order" o

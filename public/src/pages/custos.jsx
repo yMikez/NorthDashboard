@@ -1,4 +1,4 @@
-/* global React, Icon, LineChart, fmtCurrency, fmtInt, fmtPct, encodeSet */
+/* global React, Icon, NSTimeSeries, fmtCurrency, fmtInt, fmtPct, encodeSet */
 /* Custos page: fetches /api/metrics/costs-overview, renders KPIs +
    daily chart com lente de custos + tabelas por plataforma e família +
    card de allowance rolling 60d. */
@@ -54,7 +54,6 @@ function CostKpi({ label, value, icon, hint, accent }) {
 
 function CustosPage({ filters }) {
   const [state, setState] = useStateCu({ status: 'loading', data: null, error: null });
-  const [metric, setMetric] = useStateCu('profit');
 
   useEffectCu(() => {
     let cancelled = false;
@@ -87,19 +86,25 @@ function CustosPage({ filters }) {
 
   const { kpis, daily, byPlatform, byFamily, allowance } = state.data;
 
-  // Buckets do LineChart: o componente espera fields com nomes específicos.
-  // gross/profit nativos; fulfillment/cogs/platformFees/cpa via passthrough.
-  const buckets = daily.map((d) => ({
-    date: new Date(d.date),
+  // Série da composição de custos: os 4 componentes EMPILHADOS (a soma das
+  // áreas é o custo total do dia) + bruto e lucro como linhas de referência.
+  const chartData = daily.map((d) => ({
+    date: d.date,
     gross: d.grossUsd,
     profit: d.profitUsd,
     fulfillment: d.fulfillmentUsd,
     cogs: d.cogsUsd,
     platformFees: d.platformFeesUsd,
     cpa: d.cpaUsd,
-    // campos requeridos pela LineChart (denoms) — defaults seguros
-    net: d.grossUsd, approvedOrders: 0, allOrders: 0,
   }));
+  const costSeries = [
+    { key: 'platformFees', label: 'Plataforma', color: '#8B7FFF', stackId: 'cost' },
+    { key: 'cpa', label: 'CPA', color: '#FFB14E', stackId: 'cost' },
+    { key: 'cogs', label: 'Produção', color: '#FF8FCF', stackId: 'cost' },
+    { key: 'fulfillment', label: 'Frete', color: '#4A90FF', stackId: 'cost' },
+    { key: 'gross', label: 'Bruto', color: '#5BC8FF', kind: 'line' },
+    { key: 'profit', label: 'Lucro', color: '#28C878', kind: 'line' },
+  ];
 
   return (
     <div className="page-in">
@@ -184,41 +189,21 @@ function CustosPage({ filters }) {
         />
       </div>
 
-      {/* Série temporal — switch entre métricas de custo */}
+      {/* Série temporal — composição de custos empilhada + bruto/lucro */}
       <div className="panel" style={{ marginBottom: 14 }}>
         <div className="panel-head">
           <div className="panel-title">
-            <span className="panel-eyebrow">SÉRIE TEMPORAL · DIÁRIA</span>
+            <span className="panel-eyebrow">COMPOSIÇÃO DIÁRIA · CUSTOS EMPILHADOS vs BRUTO E LUCRO</span>
             <div className="panel-metric">
-              {metric === 'gross' && fmtCurrency(kpis.grossUsd, cur, 0)}
-              {metric === 'profit' && fmtCurrency(kpis.profitUsd, cur, 0)}
-              {metric === 'platformFees' && fmtCurrency(kpis.platformFeesUsd, cur, 0)}
-              {metric === 'cpa' && fmtCurrency(kpis.cpaUsd, cur, 0)}
-              {metric === 'cogs' && fmtCurrency(kpis.cogsUsd, cur, 0)}
-              {metric === 'fulfillment' && fmtCurrency(kpis.fulfillmentUsd, cur, 0)}
-            </div>
-          </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
-            <div className="metric-seg">
-              {[
-                ['profit', 'Lucro'],
-                ['gross', 'Bruto'],
-                ['platformFees', 'Plataforma'],
-                ['cpa', 'CPA'],
-                ['cogs', 'Produção'],
-                ['fulfillment', 'Frete'],
-              ].map(([k, l]) => (
-                <button
-                  key={k}
-                  className={`metric-opt ${metric === k ? 'is-active' : ''}`}
-                  onClick={() => setMetric(k)}
-                >{l}</button>
-              ))}
+              {fmtCurrency(kpis.profitUsd, cur, 0)}
+              <span className={`delta ${kpis.profitUsd >= 0 ? 'up' : 'down'}`}>
+                margem {kpis.marginPct.toFixed(1)}%
+              </span>
             </div>
           </div>
         </div>
-        <LineChart buckets={buckets} compareBuckets={null}
-          metric={metric} currency={cur} height={260}/>
+        <NSTimeSeries data={chartData} series={costSeries} height={280}
+          currency={cur} toggles brush="auto"/>
       </div>
 
       {/* Allowance — 3 mini stats lado a lado */}

@@ -567,16 +567,7 @@ function AffiliateDrawer({ affiliateId, filters, onClose }) {
   const { cls: platClass, short: platShort } = platBadge(aff.platformSlug);
   const joinedDaysAgo = Math.floor((Date.now() - new Date(aff.firstSeenAt).getTime()) / 86400000);
 
-  // Convert daily series to LineChart buckets shape
-  const buckets = data.daily.map((d) => ({
-    date: new Date(d.date),
-    gross: d.revenue,
-    net: d.revenue,
-    cpa: 0,
-    orders: d.orders,
-    approvedOrders: d.orders,
-    allOrders: d.allOrders,
-  }));
+  const dailySeries = data.daily.map((d) => ({ date: d.date, gross: d.revenue }));
 
   return (
     <>
@@ -676,8 +667,9 @@ function AffiliateDrawer({ affiliateId, filters, onClose }) {
                 <div className="panel-sub">Gross aprovado de {displayName}</div>
               </div>
             </div>
-            {buckets.length > 0
-              ? <LineChart buckets={buckets} metric="gross" height={200} currency={cur}/>
+            {dailySeries.length > 0
+              ? <NSTimeSeries data={dailySeries} height={200} currency={cur}
+                  series={[{ key: 'gross', label: 'Receita', color: '#5BC8FF' }]}/>
               : <div style={{ padding: 24, textAlign: 'center', opacity: 0.6 }}>Sem vendas no período</div>}
           </div>
 
@@ -3305,212 +3297,6 @@ function fmtAgo(seconds) {
 }
 
 // ---------- COSTS (editable cost tables) ----------
-// Inline daily chart pro comparativo RedRock × ShipOffers (2 séries de
-// contagem de pedidos). Espelha o estilo do LineChart geral (glow, área
-// preenchida, grid dasheado, hover tooltip), mas com 2 séries paralelas
-// em cores distintas (vermelho RedRock × ciano ShipOffers).
-function SupplierDailyChart({ daily, height = 240 }) {
-  const [hover, setHover] = useState(null);
-  const ref = React.useRef(null);
-  const W = 1000, H = height, PAD_L = 52, PAD_R = 20, PAD_T = 18, PAD_B = 32;
-  const innerW = W - PAD_L - PAD_R;
-  const innerH = H - PAD_T - PAD_B;
-
-  if (!daily || daily.length === 0) {
-    return <div style={{ padding: 24, color: 'var(--fg5)', fontSize: 12 }}>Sem dados no período.</div>;
-  }
-
-  const series = daily.map((d) => ({
-    date: d.date,
-    red: d.redRockOrders ?? 0,
-    ship: d.shipOffersOrders ?? 0,
-  }));
-  const max = Math.max(1, ...series.flatMap((s) => [s.red, s.ship]));
-  const xFor = (i) => PAD_L + (series.length <= 1 ? 0 : (i / (series.length - 1)) * innerW);
-  const yFor = (v) => PAD_T + innerH - (v / max) * innerH;
-  const buildPath = (key) => 'M' + series.map((s, i) => `${xFor(i)} ${yFor(s[key])}`).join(' L ');
-  const buildArea = (key) => buildPath(key)
-    + ` L ${xFor(series.length - 1)} ${PAD_T + innerH}`
-    + ` L ${PAD_L} ${PAD_T + innerH} Z`;
-  const pathRed = buildPath('red');
-  const pathShip = buildPath('ship');
-  const areaRed = buildArea('red');
-  const areaShip = buildArea('ship');
-
-  // y-axis ticks (5 níveis com números arredondados pra parecer eixo limpo).
-  const ticks = 4;
-  const yTicks = Array.from({ length: ticks + 1 }).map((_, i) => Math.round((i / ticks) * max));
-  // x labels: até 7 datas destacadas.
-  const nLabels = Math.min(7, series.length);
-  const xLabelIdx = nLabels <= 1
-    ? [0]
-    : Array.from({ length: nLabels }).map((_, i) =>
-        Math.round((i / (nLabels - 1)) * (series.length - 1)),
-      );
-
-  function onMove(e) {
-    if (!ref.current) return;
-    const rect = ref.current.getBoundingClientRect();
-    const scale = W / rect.width;
-    const x = (e.clientX - rect.left) * scale;
-    if (x < PAD_L || x > W - PAD_R) { setHover(null); return; }
-    const t = (x - PAD_L) / innerW;
-    const idx = Math.round(t * (series.length - 1));
-    setHover(Math.max(0, Math.min(series.length - 1, idx)));
-  }
-  function onLeave() { setHover(null); }
-
-  return (
-    <div style={{ position: 'relative' }}>
-      <svg
-        ref={ref}
-        viewBox={`0 0 ${W} ${H}`}
-        style={{ width: '100%', height, display: 'block' }}
-        preserveAspectRatio="none"
-        onMouseMove={onMove}
-        onMouseLeave={onLeave}
-      >
-        <defs>
-          <linearGradient id="gradSupplierRed" x1="0" x2="0" y1="0" y2="1">
-            <stop offset="0%" stopColor="#ff5a5a" stopOpacity="0.30"/>
-            <stop offset="100%" stopColor="#ff5a5a" stopOpacity="0"/>
-          </linearGradient>
-          <linearGradient id="gradSupplierShip" x1="0" x2="0" y1="0" y2="1">
-            <stop offset="0%" stopColor="#5BC8FF" stopOpacity="0.30"/>
-            <stop offset="100%" stopColor="#5BC8FF" stopOpacity="0"/>
-          </linearGradient>
-          <filter id="glowRed" x="-20%" y="-20%" width="140%" height="140%">
-            <feGaussianBlur stdDeviation="2.2" result="blur"/>
-            <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
-          </filter>
-          <filter id="glowShip" x="-20%" y="-20%" width="140%" height="140%">
-            <feGaussianBlur stdDeviation="2.2" result="blur"/>
-            <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
-          </filter>
-        </defs>
-
-        {/* Grid dasheado (mesmo estilo do LineChart geral) */}
-        <g className="chart-grid">
-          {yTicks.map((v, i) => (
-            <line key={i} x1={PAD_L} x2={W - PAD_R} y1={yFor(v)} y2={yFor(v)}/>
-          ))}
-        </g>
-
-        {/* Y axis labels */}
-        <g className="chart-axis">
-          {yTicks.map((v, i) => (
-            <text key={i} x={PAD_L - 10} y={yFor(v) + 3} textAnchor="end">{fmtInt(v)}</text>
-          ))}
-        </g>
-
-        {/* X axis labels */}
-        <g className="chart-axis">
-          {xLabelIdx.map((i) => (
-            <text key={i} x={xFor(i)} y={H - 10} textAnchor="middle">
-              {series[i].date.slice(5)}
-            </text>
-          ))}
-        </g>
-
-        {/* Áreas (ShipOffers atrás — geralmente menor; RedRock por cima) */}
-        <path d={areaShip} fill="url(#gradSupplierShip)" opacity="0.85"/>
-        <path d={areaRed} fill="url(#gradSupplierRed)" opacity="0.85"/>
-
-        {/* Linhas com glow */}
-        <path d={pathShip} fill="none" stroke="#5BC8FF" strokeWidth="2.4"
-          strokeLinejoin="round" strokeLinecap="round" filter="url(#glowShip)"
-          style={{ filter: 'drop-shadow(0 0 5px rgba(91,200,255,0.55))' }}/>
-        <path d={pathRed} fill="none" stroke="#ff5a5a" strokeWidth="2.4"
-          strokeLinejoin="round" strokeLinecap="round" filter="url(#glowRed)"
-          style={{ filter: 'drop-shadow(0 0 5px rgba(255,90,90,0.55))' }}/>
-
-        {/* Hover state — vertical guide + 2 dots */}
-        {hover != null && (
-          <g>
-            <line
-              x1={xFor(hover)} x2={xFor(hover)}
-              y1={PAD_T} y2={PAD_T + innerH}
-              stroke="rgba(255,255,255,0.18)"
-              strokeWidth="1"
-              strokeDasharray="2 3"
-            />
-            <circle cx={xFor(hover)} cy={yFor(series[hover].ship)} r="4.5"
-              fill="#0c1620" stroke="#5BC8FF" strokeWidth="2"/>
-            <circle cx={xFor(hover)} cy={yFor(series[hover].red)} r="4.5"
-              fill="#0c1620" stroke="#ff5a5a" strokeWidth="2"/>
-          </g>
-        )}
-      </svg>
-
-      {/* Tooltip */}
-      {hover != null && (() => {
-        const leftPct = Math.min(85, Math.max(2, (xFor(hover) / W) * 100));
-        const s = series[hover];
-        const total = s.red + s.ship;
-        return (
-          <div style={{
-            position: 'absolute',
-            left: `${leftPct}%`,
-            top: 8,
-            transform: 'translateX(-50%)',
-            background: 'rgba(10,18,28,0.85)',
-            border: '1px solid rgba(255,255,255,0.12)',
-            backdropFilter: 'blur(18px) saturate(180%)',
-            WebkitBackdropFilter: 'blur(18px) saturate(180%)',
-            borderRadius: 8,
-            padding: '10px 12px',
-            minWidth: 160,
-            pointerEvents: 'none',
-            fontFamily: 'var(--f-mono)',
-            fontSize: 11,
-            color: 'var(--fg2)',
-            letterSpacing: '0.02em',
-            boxShadow: '0 12px 32px -10px rgba(0,0,0,0.6), 0 0 0 1px rgba(255,255,255,0.04) inset',
-            zIndex: 2,
-          }}>
-            <div style={{
-              fontSize: 10, color: 'var(--fg5)',
-              letterSpacing: '0.1em', textTransform: 'uppercase',
-              marginBottom: 6,
-            }}>
-              {s.date}
-            </div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
-              <span style={{
-                display: 'inline-block', width: 8, height: 8, borderRadius: '50%',
-                background: '#ff5a5a',
-                boxShadow: '0 0 6px rgba(255,90,90,0.7)',
-              }}/>
-              <span style={{ flex: 1, color: 'var(--fg3)' }}>RedRock</span>
-              <span style={{ color: 'var(--fg1)', fontWeight: 600 }}>{fmtInt(s.red)}</span>
-            </div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              <span style={{
-                display: 'inline-block', width: 8, height: 8, borderRadius: '50%',
-                background: '#5BC8FF',
-                boxShadow: '0 0 6px rgba(91,200,255,0.7)',
-              }}/>
-              <span style={{ flex: 1, color: 'var(--fg3)' }}>ShipOffers</span>
-              <span style={{ color: 'var(--fg1)', fontWeight: 600 }}>{fmtInt(s.ship)}</span>
-            </div>
-            {total > 0 && (
-              <div style={{
-                marginTop: 6, paddingTop: 6,
-                borderTop: '1px solid rgba(255,255,255,0.06)',
-                display: 'flex', justifyContent: 'space-between',
-                color: 'var(--fg4)',
-              }}>
-                <span>Total</span>
-                <span style={{ color: 'var(--fg2)' }}>{fmtInt(total)}</span>
-              </div>
-            )}
-          </div>
-        );
-      })()}
-    </div>
-  );
-}
-
 function CostsPage({ filters }) {
   const [state, setCostState] = useState({ status: 'loading', data: null, error: null });
   const [draftFamilies, setDraftFamilies] = useState({});  // { [family]: unitCost string }
@@ -3575,14 +3361,9 @@ function CostsPage({ filters }) {
       filters && Array.from(filters.countries).join(','),
       filters && Array.from(filters.families).join(',')]);
 
-  // Buckets pro LineChart: costs-overview retorna daily[].fulfillmentUsd.
   const fulfillmentBuckets = (fulfillmentKpi.daily || []).map((b) => ({
-    date: new Date(b.date),
+    date: b.date,
     fulfillment: b.fulfillmentUsd ?? 0,
-    gross: b.grossUsd ?? 0,
-    net: b.grossUsd ?? 0,
-    approvedOrders: 0,
-    allOrders: 0,
   }));
   const fulfillmentDays = fulfillmentBuckets.length;
   const fulfillmentAvgDay = fulfillmentDays > 0
@@ -4086,7 +3867,16 @@ function CostsPage({ filters }) {
                   </span>
                 </div>
               </div>
-              <SupplierDailyChart daily={fulfDist.daily} height={240} />
+              <NSTimeSeries height={240} format="int"
+                data={(fulfDist.daily || []).map((d) => ({
+                  date: d.date,
+                  red: d.redRockOrders ?? 0,
+                  ship: d.shipOffersOrders ?? 0,
+                }))}
+                series={[
+                  { key: 'ship', label: 'ShipOffers', color: '#5BC8FF' },
+                  { key: 'red', label: 'RedRock', color: '#FF6B6B' },
+                ]}/>
             </div>
           )}
         </>
@@ -4155,8 +3945,8 @@ function CostsPage({ filters }) {
               <span className="legend-dot cyan"><span/>USD / dia</span>
             </div>
           </div>
-          <LineChart buckets={fulfillmentBuckets} compareBuckets={null}
-            metric="fulfillment" currency={cur} height={220}/>
+          <NSTimeSeries data={fulfillmentBuckets} height={220} currency={cur}
+            series={[{ key: 'fulfillment', label: 'Frete', color: '#5BC8FF' }]}/>
         </div>
       )}
 
@@ -6914,23 +6704,16 @@ function CopyKpi({ label, value, sub, tone }) {
   );
 }
 
-// Mini-line SVG do AOV diário com linha de target.
+// AOV diário com linha de target — NSTimeSeries com refLine.
 function CopyAovLine({ daily, target }) {
   if (!daily || daily.length === 0) return <div style={{ padding: 20, color: 'var(--fg5)', fontSize: 12 }}>Sem série diária ainda.</div>;
-  const W = 600, H = 120, P = 8;
-  const vals = daily.map((d) => d.aov).concat([target]);
-  const max = Math.max(1, ...vals) * 1.1, min = 0;
-  const x = (i) => P + (daily.length <= 1 ? 0 : (i / (daily.length - 1)) * (W - 2 * P));
-  const y = (v) => H - P - ((v - min) / (max - min)) * (H - 2 * P);
-  const path = 'M' + daily.map((d, i) => `${x(i).toFixed(1)} ${y(d.aov).toFixed(1)}`).join(' L ');
-  const ty = y(target);
   return (
-    <svg viewBox={`0 0 ${W} ${H}`} style={{ width: '100%', height: 120 }}>
-      <line x1={P} y1={ty} x2={W - P} y2={ty} stroke="var(--warning)" strokeWidth="1" strokeDasharray="4 4" opacity="0.7"/>
-      <text x={W - P} y={ty - 4} textAnchor="end" fill="var(--warning)" style={{ fontFamily: 'var(--f-mono)', fontSize: 9 }}>target {fmtCurrency(target, 'USD', 0)}</text>
-      <path d={path} fill="none" stroke="var(--glow-cyan)" strokeWidth="2"/>
-      {daily.map((d, i) => <circle key={i} cx={x(i)} cy={y(d.aov)} r="2.5" fill="var(--glow-cyan)"/>)}
-    </svg>
+    <NSTimeSeries
+      data={daily.map((d) => ({ date: d.date, aov: d.aov }))}
+      series={[{ key: 'aov', label: 'AOV', color: '#5BC8FF', format: 'money2' }]}
+      height={150} brush={false}
+      refLines={[{ y: target, label: `target ${fmtCurrency(target, 'USD', 0)}`, color: 'var(--warning)' }]}
+    />
   );
 }
 
