@@ -33,10 +33,11 @@ const PLATFORM_DISPLAY_NAMES: Record<string, string> = {
 };
 
 // Plataformas cuja sessão de funil é agrupada por funnelSessionId (não pelo
-// parentExternalId/anchor): BuyGoods (sessid2) e Cartpanda (cid/click). Nessas,
-// o ID de transação se repete ou muda entre FE+upsells, então o agrupamento
-// confiável é a chave de sessão do visitante.
-const SESSION_GROUPED_PLATFORMS = new Set(['buygoods', 'cartpanda']);
+// parentExternalId/anchor): BuyGoods (sessid2) — o order_id_global é
+// por-transação, então a sessão real é o sessid2. (Cartpanda NÃO entra aqui:
+// o webhook traz FE+upsells como line items do MESMO pedido, então o
+// parentExternalId = order_id já agrupa a sessão pelo anchor padrão.)
+const SESSION_GROUPED_PLATFORMS = new Set(['buygoods']);
 
 export async function upsertOrder(normalized: NormalizedOrder): Promise<UpsertOrderResult> {
   const platform = await db.platform.upsert({

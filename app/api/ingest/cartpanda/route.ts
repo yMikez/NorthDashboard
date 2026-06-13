@@ -1,76 +1,82 @@
-// GET|POST /api/ingest/cartpanda
+// POST /api/ingest/cartpanda
 //
-// Recebe o POSTBACK da Cartpanda (proxied via N8N). Diferente das outras
-// plataformas (IPN com JSON/form), aqui os campos chegam como query string
-// (GET) ou no body (form-urlencoded ou JSON, conforme o n8n repassar). O
-// handler aceita os dois métodos e todas as formas de body — extrai a união
-// dos params da URL + body.
+// Recebe o WEBHOOK da Cartpanda (proxied via N8N). Body é JSON com a estrutura
+// { event, order: { ..., line_items: [...] }, webhook }. Um pedido pode ter
+// vários line items (FE + upsells) — geramos uma Order por item.
 //
-// Auth: x-ingest-secret (header, caminho n8n) OU ?secret= na query (caso o
-// postback aponte direto pro endpoint, sem n8n). Qualquer um serve.
+// Eventos: order.paid, order.upsell (→ APPROVED), order.refunded (→ REFUNDED),
+// order.chargeback (→ CHARGEBACK).
 //
-// O canal só dispara pra venda aprovada (front + upsell) — sem refund/CB.
+// Auth: x-ingest-secret (header, caminho n8n) OU ?secret= na query.
 
 import { NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { checkIngestSecret } from '@/lib/ingest/auth';
-import { parseCartpandaIngest } from '@/lib/connectors/cartpanda/ingest';
-import type { CartpandaPostback } from '@/lib/connectors/cartpanda/types';
+import { parseCartpandaWebhook } from '@/lib/connectors/cartpanda/ingest';
+import type { CartpandaWebhook } from '@/lib/connectors/cartpanda/types';
 import { upsertOrder } from '@/lib/services/upsertOrder';
 import { logger, maskEmail } from '@/lib/logger';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
+// GET serve só pra ping no navegador / teste de conectividade.
 export async function GET(req: Request) {
-  return handle(req);
+  const url = new URL(req.url);
+  const ok = checkIngestSecret(req.headers.get('x-ingest-secret'))
+    || checkIngestSecret(url.searchParams.get('secret'));
+  if (!ok) return NextResponse.json({ error: 'unauthorized' }, { status: 401 });
+  return NextResponse.json({ ok: true, ready: true });
 }
 
 export async function POST(req: Request) {
-  return handle(req);
-}
-
-async function handle(req: Request) {
   const url = new URL(req.url);
-  // Auth: header (n8n) OU ?secret= (postback direto). `secret` na query é
-  // descartado do payload logado logo abaixo.
-  const headerSecret = req.headers.get('x-ingest-secret');
-  const querySecret = url.searchParams.get('secret');
-  if (!checkIngestSecret(headerSecret) && !checkIngestSecret(querySecret)) {
+  if (!checkIngestSecret(req.headers.get('x-ingest-secret'))
+    && !checkIngestSecret(url.searchParams.get('secret'))) {
     return NextResponse.json({ error: 'unauthorized' }, { status: 401 });
   }
 
-  const params = await extractParams(req, url);
-  delete params.secret; // não persistir o segredo no IngestLog
+  let body: CartpandaWebhook;
+  try {
+    body = (await req.json()) as CartpandaWebhook;
+  } catch {
+    return NextResponse.json({ error: 'invalid json body' }, { status: 400 });
+  }
 
-  const eventType = (params.order_type ?? 'sale').toLowerCase();
+  const event = (body?.event ?? 'unknown').toLowerCase();
+  const order = body?.order;
+  const orderId = order?.id != null ? String(order.id) : null;
 
   const log = await db.ingestLog.create({
     data: {
       source: 'n8n-cartpanda',
       platformSlug: 'cartpanda',
-      eventType,
-      externalId: params.order_id ?? null,
-      payload: params as unknown as object,
-      // Cartpanda postback não assina (SHA) — auth é via shared secret.
+      eventType: event,
+      externalId: orderId,
+      payload: body as unknown as object,
       signatureOk: null,
     },
     select: { id: true },
   });
 
-  // Test ping (botão de teste do painel Cartpanda ou do n8n).
-  if (params.is_test === '1' || eventType === 'test' || eventType === 'connection_test') {
+  // Pedido de teste explícito da Cartpanda (order.test=1): registra e ignora.
+  // Pedidos de sandbox (is_cartx_test=1) seguem o fluxo normal pra permitir
+  // verificação ponta-a-ponta.
+  if (Number(order?.test) === 1 || event === 'test' || event === 'connection_test') {
     await db.ingestLog.update({
       where: { id: log.id },
       data: { processedOk: true, processedAt: new Date() },
     });
-    logger.info({ platform: 'cartpanda', orderId: params.order_id }, 'cartpanda test/connection received');
-    return NextResponse.json({ ok: true, event: eventType, test: true });
+    logger.info({ platform: 'cartpanda', event, orderId }, 'cartpanda test received');
+    return NextResponse.json({ ok: true, event, test: true });
   }
 
   try {
-    const normalized = parseCartpandaIngest(params);
-    const result = await upsertOrder(normalized);
+    const normalizedOrders = parseCartpandaWebhook(body);
+    const results = [];
+    for (const normalized of normalizedOrders) {
+      results.push(await upsertOrder(normalized));
+    }
 
     await db.ingestLog.update({
       where: { id: log.id },
@@ -80,18 +86,17 @@ async function handle(req: Request) {
     logger.info(
       {
         platform: 'cartpanda',
-        externalId: normalized.externalId,
-        status: normalized.status,
-        productType: normalized.productType,
-        gross: normalized.grossAmountUsd,
-        cpa: normalized.cpaPaidUsd,
-        created: result.created,
-        customerEmail: maskEmail(normalized.customerEmail),
+        event,
+        orderId,
+        lineItems: normalizedOrders.length,
+        created: results.filter((r) => r.created).length,
+        status: normalizedOrders[0]?.status,
+        customerEmail: maskEmail(normalizedOrders[0]?.customerEmail ?? null),
       },
       'cartpanda ingest ok',
     );
 
-    return NextResponse.json({ ok: true, ...result });
+    return NextResponse.json({ ok: true, event, lineItems: results.length });
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     await db.ingestLog.update({
@@ -101,34 +106,4 @@ async function handle(req: Request) {
     logger.error({ err, logId: log.id }, 'cartpanda ingest failed');
     return NextResponse.json({ error: 'processing failed' }, { status: 500 });
   }
-}
-
-/**
- * Extrai params da query (GET/postback direto) E do body (POST via n8n —
- * form-urlencoded ou JSON), com o body sobrescrevendo a query em conflito.
- */
-async function extractParams(req: Request, url: URL): Promise<CartpandaPostback> {
-  const out: CartpandaPostback = {};
-  for (const [k, v] of url.searchParams.entries()) out[k] = v;
-
-  if (req.method === 'POST') {
-    const ct = (req.headers.get('content-type') ?? '').toLowerCase();
-    try {
-      if (ct.includes('application/json')) {
-        const body = (await req.json()) as Record<string, unknown>;
-        for (const [k, v] of Object.entries(body)) {
-          if (v != null) out[k] = String(v);
-        }
-      } else {
-        // form-urlencoded (default) ou text — parse como query string.
-        const raw = await req.text();
-        if (raw) {
-          for (const [k, v] of new URLSearchParams(raw).entries()) out[k] = v;
-        }
-      }
-    } catch {
-      /* body vazio/ilegível — segue só com a query */
-    }
-  }
-  return out;
 }

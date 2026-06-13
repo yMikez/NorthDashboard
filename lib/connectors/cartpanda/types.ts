@@ -1,74 +1,100 @@
-// Tipos do POSTBACK URL da Cartpanda.
+// Tipos do WEBHOOK da Cartpanda.
 //
-// Diferente das outras plataformas (que mandam JSON/form de IPN com o ciclo de
-// vida completo da venda), a Cartpanda dispara um POSTBACK — um GET numa URL
-// que NÓS configuramos no painel deles, com macros {token} substituídas. Os
-// valores chegam todos como string na query string (ou no body, conforme o
-// n8n repassa). O conjunto de campos é o que escolhemos incluir na URL; aqui
-// listamos todas as macros disponíveis no painel (print 2026-06-13).
+// A Cartpanda dispara um webhook (POST JSON) por EVENTO de pedido, com o
+// objeto `order` inteiro aninhado. Eventos assinados pelo usuário:
+//   order.paid       — pedido pago (FE + bumps de checkout)
+//   order.upsell     — upsell pós-compra adicionado ao pedido
+//   order.refunded   — pedido reembolsado
+//   order.chargeback — chargeback (disputa)
 //
-// IMPORTANTE: pelo print, o postback dispara só pra VENDA aprovada (front e
-// upsell). Não há campo de evento/status de refund/chargeback nesse canal —
-// rastrear estorno exigiria o webhook da Cartpanda (feature futura). Por isso
-// toda order desse ingest entra como APPROVED.
+// O payload é ENORME (inclui shop_info, settings, domínio, etc). Tipamos só
+// os campos que o parser usa; o resto vem via index signature. Schema baseado
+// em payloads reais capturados em 2026-06-13.
+//
+// MODELO: um webhook = um pedido com line_items[]. A FE e cada upsell são
+// itens do MESMO pedido (order.id é a sessão). Geramos uma Order por line
+// item, agrupadas por order.id (parentExternalId). Reprocessar o mesmo evento
+// é idempotente: externalId = `${order.id}-${line_item.id}`.
 
-export interface CartpandaPostback {
-  // ---- Identificadores ----
-  order_id?: string;       // ID da order Cartpanda. Compartilhado entre FE e
-                           // upsells da mesma compra (anchor da sessão).
-  product_id?: string;     // ID numérico do produto
-  product_name?: string;   // Nome livre do produto
-  shop_slug?: string;      // Slug da loja (vendor account)
-  cid?: string;            // click_id — chave da sessão do funil (compartilhada
-                           // pelo visitante em FE + upsells; mais confiável que
-                           // order_id pra agrupar, igual ao sessid2 do BuyGoods)
+export interface CartpandaLineItem {
+  id: number;
+  sku?: string | null;
+  name?: string | null;
+  title?: string | null;
+  price?: number | string;
+  quantity?: number;
+  product_id?: number;
+  variant_id?: number;
+  // up_sell_id = 0 no FE; > 0 em upsell. up_sell_type = "Upsell 1" / "Upsell 2"
+  // / "Downsell 1" / null. São a fonte de verdade do papel no funil.
+  up_sell_id?: number;
+  up_sell_type?: string | null;
+  is_refunded?: number;
+  refunded_quantity?: number;
+}
 
-  // ---- Funil ----
-  order_type?: string;     // Tipo da order (ex: "front"/"upsell"/"downsell"/"bump").
-                           // Vocabulário exato a confirmar com postback real.
-  upsell_no?: string;      // Número do upsell: 0 = front, 1+ = upsell N
-
-  // ---- Valores ----
-  total_price?: string;    // Gross da venda
-  amount_net?: string;     // Net (residual do vendor, conforme a Cartpanda reporta)
-  amount_affiliate?: string; // Comissão paga ao afiliado (CPA)
-  currency?: string;       // ISO (ex "USD", "BRL")
-
-  // ---- Afiliado ----
-  afid?: string;           // ID do afiliado (numérico)
-  affiliate_slug?: string; // Slug/nome do afiliado
-
-  // ---- Customer ----
+export interface CartpandaOrder {
+  id: number;
+  name?: string;
+  number?: number;
+  order_number?: string;
   email?: string;
-  first_name?: string;
-  last_name?: string;
-  phone_number?: string;
+  phone?: string;
+  // test = 1 → pedido de teste explícito (não ingerir). is_cartx_test = 1 →
+  // pedido de sandbox (ingerido normalmente, pra permitir verificação).
+  test?: number;
+  is_cartx_test?: number;
+  currency?: string;
+  // Valores podem vir como número OU string em formato BR ("7,50"). O parser
+  // (parseMoney) trata os dois.
+  total_price?: number | string;
+  subtotal_price?: number | string;
+  unformatted_total_price?: number; // total em centavos (inteiro)
+  // Afiliado (CPA): comissão do afiliado sobre o pedido.
+  afid?: string | null;
+  affiliate_slug?: string | null;
+  affiliate_amount?: number | string | null;
+  created_at?: string;
+  processed_at?: string;
+  chargeback_received?: number;
+  status_id?: string;
+  payment_type?: string;
+  thank_you_page?: string;
+  shop_id?: number;
 
-  // ---- Geo ----
-  country?: string;        // Código do país (ex "BR", "US")
+  customer?: {
+    id?: number;
+    email?: string;
+    first_name?: string;
+    last_name?: string;
+    full_name?: string;
+    phone?: string;
+  } | null;
+  address?: {
+    country_code?: string;
+    city?: string;
+    province_code?: string;
+  } | null;
+  shop?: {
+    id?: number;
+    slug?: string;
+    name?: string;
+  } | null;
+  payment?: {
+    type?: string;
+    gateway?: string;
+    split_fee?: number | string;      // taxa da plataforma
+    seller_split_amount?: number | string;
+    amount?: number | string;
+  } | null;
+  line_items?: CartpandaLineItem[];
+  refunds?: Array<{ total_amount?: number | string }> | null;
 
-  // ---- Tempo ----
-  datetime_unix?: string;  // Epoch em segundos — autoritativo (sem ambiguidade de fuso)
-  datetime_utc?: string;   // "YYYY-MM-DD HH:mm:ss" em UTC
-  datetime_full?: string;  // Display
+  [key: string]: unknown;
+}
 
-  // ---- Flags ----
-  is_test?: string;        // "1" = teste/sandbox
-
-  // ---- Tracking ----
-  campaignkey?: string;
-  src?: string;
-  sck?: string;
-  utm_source?: string;
-  utm_medium?: string;
-  utm_campaign?: string;
-  utm_term?: string;
-  utm_content?: string;
-  gclid?: string;
-  adclid?: string;
-  adclida?: string;
-  random?: string;
-
-  // Permite macros ad-hoc que a Cartpanda possa adicionar.
-  [key: string]: string | undefined;
+export interface CartpandaWebhook {
+  event: string; // "order.paid" | "order.upsell" | "order.refunded" | "order.chargeback"
+  order: CartpandaOrder;
+  webhook?: unknown;
 }

@@ -1,115 +1,195 @@
 import { describe, it, expect } from 'vitest';
-import { parseCartpandaIngest } from './ingest';
-import type { CartpandaPostback } from './types';
+import { parseCartpandaWebhook } from './ingest';
+import type { CartpandaWebhook } from './types';
 
-// Postback baseado nas macros do painel Cartpanda (print 2026-06-13).
-const fePostback: CartpandaPostback = {
-  order_id: 'CP10042',
-  product_id: '777',
-  product_name: 'Neuro Mind Pro 6 Bottles',
-  shop_slug: 'minha-loja',
-  cid: 'click_abc123',
-  order_type: 'front',
-  upsell_no: '0',
-  total_price: '199.00',
-  amount_net: '120.00',
-  amount_affiliate: '60.00',
-  currency: 'USD',
-  afid: '4521',
-  affiliate_slug: 'joao-afiliado',
-  email: 'buyer@example.com',
-  first_name: 'João',
-  last_name: 'Silva',
-  phone_number: '+5511999999999',
-  country: 'BR',
-  datetime_unix: '1781841600', // 2026-06-19 04:00:00 UTC
-  datetime_utc: '2026-06-19 04:00:00',
-  is_test: '0',
-  utm_source: 'facebook',
-  campaignkey: 'camp42',
-  src: 'src_xyz',
+// Payloads enxutos baseados nos webhooks reais capturados em 2026-06-13
+// (loja de teste testecartx). Mantidos só os campos que o parser usa.
+
+const paidSingleFE: CartpandaWebhook = {
+  event: 'order.paid',
+  order: {
+    id: 10993186,
+    number: 2800,
+    order_number: '2800',
+    test: 0,
+    is_cartx_test: 0,
+    email: 'teste@cartpanda.com',
+    currency: 'BRL',
+    total_price: '7,50',
+    afid: null,
+    affiliate_slug: null,
+    affiliate_amount: null,
+    created_at: '2022-07-16 01:18:23',
+    status_id: 'New',
+    shop: { id: 9, slug: 'testecartx', name: 'Teste Cartpanda' },
+    customer: { id: 1, email: 'teste@cartpanda.com', first_name: 'Cartpanda', last_name: 'Teste' },
+    address: { country_code: 'BR', city: 'Franca', province_code: 'SP' },
+    payment: { type: 'boleto', split_fee: 3.6, seller_split_amount: 3.9, amount: 7.5 },
+    line_items: [
+      { id: 9536765, sku: 'v-17106571', name: '[PROMO] Garantiax Preto', price: 15, quantity: 1, product_id: 4916560, up_sell_id: 0, up_sell_type: null, is_refunded: 0 },
+    ],
+  },
 };
 
-describe('parseCartpandaIngest', () => {
-  it('FE: campos básicos + sessão por cid', () => {
-    const o = parseCartpandaIngest(fePostback);
+const upsellMultiLine: CartpandaWebhook = {
+  event: 'order.upsell',
+  order: {
+    id: 32502750,
+    number: 193,
+    test: 0,
+    is_cartx_test: 1,
+    email: 'test@cartpanda.com',
+    currency: 'BRL',
+    total_price: 38,
+    afid: null,
+    affiliate_slug: null,
+    affiliate_amount: null,
+    created_at: '2025-02-05T07:21:07.000000Z',
+    shop: { id: 9, slug: 'testecartx' },
+    customer: { email: 'test@cartpanda.com', first_name: 'Test', last_name: 'cartpanda' },
+    address: { country_code: 'BR' },
+    payment: { type: 'cc', split_fee: 0 },
+    line_items: [
+      { id: 37807619, sku: 'TESTBRP', name: 'Test BR P Default', price: 15, quantity: 1, product_id: 22678013, up_sell_id: 0, up_sell_type: null },
+      { id: 37807667, sku: 'UPS1', name: 'Test Upsell Default', price: 10, quantity: 1, product_id: 22264763, up_sell_id: 42186, up_sell_type: 'Upsell 1' },
+      { id: 37807680, sku: 'UPS2', name: 'Test Upsell 2', price: 13, quantity: 1, product_id: 22264763, up_sell_id: 42187, up_sell_type: 'Upsell 2' },
+    ],
+  },
+};
+
+const refundedWithAffiliate: CartpandaWebhook = {
+  event: 'order.refunded',
+  order: {
+    id: 34656145,
+    number: 4072,
+    test: 0,
+    email: 'test@cartpanda.com',
+    currency: 'USD',
+    total_price: '5,88',
+    afid: 'ppB15ZXbN0',
+    affiliate_slug: 'caju',
+    affiliate_amount: '2.20',
+    created_at: '2025-04-15 11:15:37',
+    status_id: 'Refunded',
+    chargeback_received: 0,
+    shop: { id: 9, slug: 'testecartx' },
+    customer: { email: 'test@cartpanda.com', first_name: 'test', last_name: 'cartpanda' },
+    address: { country_code: 'BR' },
+    payment: { type: 'cc', split_fee: 1.49 },
+    refunds: [{ total_amount: 5.88 }],
+    line_items: [
+      { id: 40825139, sku: '6978791', name: 'Product A', price: 5.88, quantity: 1, product_id: 6978789, up_sell_id: 0, up_sell_type: null, is_refunded: 0, refunded_quantity: 0 },
+    ],
+  },
+};
+
+describe('parseCartpandaWebhook — order.paid (FE única)', () => {
+  const [o] = parseCartpandaWebhook(paidSingleFE);
+
+  it('1 Order, FRONTEND, status APPROVED', () => {
+    expect(parseCartpandaWebhook(paidSingleFE)).toHaveLength(1);
     expect(o.platformSlug).toBe('cartpanda');
-    expect(o.externalId).toBe('CP10042'); // FE = order_id limpo
-    expect(o.parentExternalId).toBe('CP10042'); // anchor
-    expect(o.funnelSessionId).toBe('click_abc123'); // cid = sessão
-    expect(o.clickId).toBe('click_abc123');
     expect(o.productType).toBe('FRONTEND');
     expect(o.funnelStep).toBe(1);
-    expect(o.status).toBe('APPROVED'); // canal só manda venda aprovada
-    expect(o.vendorAccount).toBe('minha-loja');
+    expect(o.status).toBe('APPROVED');
   });
 
-  it('FE: valores — gross/net/cpa e fee implícita', () => {
-    const o = parseCartpandaIngest(fePostback);
-    expect(o.grossAmountUsd).toBe(199);
-    expect(o.netAmountUsd).toBe(120);
-    expect(o.cpaPaidUsd).toBe(60);
-    // fee implícita = gross - net - cpa = 199 - 120 - 60 = 19
-    expect(o.fees).toBe(19);
-    expect(o.currencyOriginal).toBe('USD');
+  it('externalId = orderId-lineId; parent/sessão = orderId', () => {
+    expect(o.externalId).toBe('10993186-9536765');
+    expect(o.parentExternalId).toBe('10993186');
+    expect(o.funnelSessionId).toBe('10993186');
   });
 
-  it('FE: afiliado e customer', () => {
-    const o = parseCartpandaIngest(fePostback);
-    expect(o.affiliateExternalId).toBe('4521');
-    expect(o.affiliateNickname).toBe('joao-afiliado');
-    expect(o.customerEmail).toBe('buyer@example.com');
-    expect(o.customerExternalId).toBe('buyer@example.com');
-    expect(o.customerFirstName).toBe('João');
+  it('gross = price × qty; net = gross − fee − cpa', () => {
+    expect(o.grossAmountUsd).toBe(15);  // 15 × 1
+    expect(o.cpaPaidUsd).toBe(0);       // sem afiliado
+    expect(o.fees).toBe(3.6);           // split_fee na linha FE
+    expect(o.netAmountUsd).toBe(11.4);  // 15 − 3.6 − 0
+    expect(o.currencyOriginal).toBe('BRL');
+  });
+
+  it('produto, customer, país, vendor', () => {
+    expect(o.productExternalId).toBe('v-17106571'); // sku
+    expect(o.productName).toBe('[PROMO] Garantiax Preto');
+    expect(o.customerEmail).toBe('teste@cartpanda.com');
     expect(o.country).toBe('BR');
+    expect(o.vendorAccount).toBe('testecartx');
   });
 
-  it('timestamp: usa datetime_unix (epoch) como autoritativo', () => {
-    const o = parseCartpandaIngest(fePostback);
-    expect(o.orderedAt.toISOString()).toBe('2026-06-19T04:00:00.000Z');
+  it('timestamp "YYYY-MM-DD HH:mm:ss" tratado como UTC', () => {
+    expect(o.orderedAt.toISOString()).toBe('2022-07-16T01:18:23.000Z');
+  });
+});
+
+describe('parseCartpandaWebhook — order.upsell (multi-linha)', () => {
+  const orders = parseCartpandaWebhook(upsellMultiLine);
+
+  it('3 Orders (1 FE + 2 upsells), mesma sessão', () => {
+    expect(orders).toHaveLength(3);
+    expect(orders.every((o) => o.parentExternalId === '32502750')).toBe(true);
+    expect(orders.map((o) => o.productType)).toEqual(['FRONTEND', 'UPSELL', 'UPSELL']);
   });
 
-  it('timestamp: fallback datetime_utc tratado como UTC literal (sem shift)', () => {
-    const o = parseCartpandaIngest({ ...fePostback, datetime_unix: undefined });
-    expect(o.orderedAt.toISOString()).toBe('2026-06-19T04:00:00.000Z');
+  it('upsell step vem do up_sell_type ("Upsell 1" → 2, "Upsell 2" → 3)', () => {
+    expect(orders[1].funnelStep).toBe(2);
+    expect(orders[2].funnelStep).toBe(3);
   });
 
-  it('upsell: externalId ganha sufixo -uN, role UPSELL, step segue o número', () => {
-    const o = parseCartpandaIngest({
-      ...fePostback,
-      order_type: 'upsell',
-      upsell_no: '1',
-      product_name: 'Neuro Mind Pro 6 Bottles',
-      total_price: '79.00',
-      amount_net: '50.00',
-      amount_affiliate: '20.00',
-    });
-    expect(o.externalId).toBe('CP10042-u1'); // único, mesmo reusando order_id
-    expect(o.parentExternalId).toBe('CP10042'); // mesmo anchor do FE
-    expect(o.funnelSessionId).toBe('click_abc123'); // mesma sessão do FE
-    expect(o.productType).toBe('UPSELL');
-    expect(o.funnelStep).toBe(2); // up1 → step 2
+  it('grosses por linha; externalId único por linha', () => {
+    expect(orders.map((o) => o.grossAmountUsd)).toEqual([15, 10, 13]);
+    expect(orders.map((o) => o.externalId)).toEqual([
+      '32502750-37807619', '32502750-37807667', '32502750-37807680',
+    ]);
   });
 
-  it('upsell 2 → step 3', () => {
-    const o = parseCartpandaIngest({ ...fePostback, upsell_no: '2', order_type: 'upsell' });
-    expect(o.externalId).toBe('CP10042-u2');
-    expect(o.funnelStep).toBe(3);
+  it('timestamp ISO UTC parseado direto', () => {
+    expect(orders[0].orderedAt.toISOString()).toBe('2025-02-05T07:21:07.000Z');
+  });
+});
+
+describe('parseCartpandaWebhook — order.refunded', () => {
+  const [o] = parseCartpandaWebhook(refundedWithAffiliate);
+
+  it('status REFUNDED (reembolso total — nenhuma linha flagada)', () => {
+    expect(o.status).toBe('REFUNDED');
   });
 
-  it('downsell detectado por order_type', () => {
-    const o = parseCartpandaIngest({ ...fePostback, upsell_no: '1', order_type: 'downsell' });
-    expect(o.productType).toBe('DOWNSELL');
-  });
-
-  it('sem order_id → erro (campo obrigatório)', () => {
-    expect(() => parseCartpandaIngest({ ...fePostback, order_id: undefined }))
-      .toThrow(/order_id/);
-  });
-
-  it('currency default USD + cid ausente cai pro order_id como sessão', () => {
-    const o = parseCartpandaIngest({ ...fePostback, currency: undefined, cid: undefined });
+  it('CPA do afiliado na linha FE; net desconta fee+cpa', () => {
+    expect(o.affiliateExternalId).toBe('ppB15ZXbN0');
+    expect(o.affiliateNickname).toBe('caju');
+    expect(o.cpaPaidUsd).toBe(2.2);
+    expect(o.grossAmountUsd).toBe(5.88);
+    expect(o.fees).toBe(1.49);
+    expect(o.netAmountUsd).toBe(2.19); // 5.88 − 1.49 − 2.20
     expect(o.currencyOriginal).toBe('USD');
-    expect(o.funnelSessionId).toBe('CP10042');
+  });
+});
+
+describe('parseCartpandaWebhook — eventos e edge cases', () => {
+  it('order.chargeback → CHARGEBACK', () => {
+    const [o] = parseCartpandaWebhook({ ...paidSingleFE, event: 'order.chargeback' });
+    expect(o.status).toBe('CHARGEBACK');
+  });
+
+  it('chargeback_received=1 → CHARGEBACK mesmo em outro evento', () => {
+    const wh = { ...paidSingleFE, order: { ...paidSingleFE.order, chargeback_received: 1 } };
+    const [o] = parseCartpandaWebhook(wh);
+    expect(o.status).toBe('CHARGEBACK');
+  });
+
+  it('valor BR "1.234,56" parseado como 1234.56', () => {
+    const wh: CartpandaWebhook = {
+      ...paidSingleFE,
+      order: {
+        ...paidSingleFE.order,
+        line_items: [{ id: 1, name: 'X', price: '1.234,56', quantity: 1, up_sell_id: 0 }],
+      },
+    };
+    expect(parseCartpandaWebhook(wh)[0].grossAmountUsd).toBe(1234.56);
+  });
+
+  it('sem order.id → erro', () => {
+    expect(() => parseCartpandaWebhook({ event: 'order.paid', order: {} as never }))
+      .toThrow(/order\.id/);
   });
 });

@@ -1,134 +1,254 @@
-// Parser do POSTBACK Cartpanda → NormalizedOrder.
+// Parser do WEBHOOK Cartpanda → NormalizedOrder[].
 //
-// Decisões de mapeamento (confirmadas com o usuário em 2026-06-13):
-//   - Canal só dispara pra VENDA aprovada (front + upsell) → status SEMPRE
-//     APPROVED. Refund/chargeback não vêm por aqui.
-//   - Funil: upsell_no=0 → FRONTEND; upsell_no>=1 → UPSELL. order_type pode
-//     marcar downsell/bump explicitamente (vocabulário a confirmar com um
-//     postback real; o default por upsell_no já cobre FE vs upsell).
-//   - Sessão: order_id é o anchor (parentExternalId); cid (click) é a chave de
-//     agrupamento do funil (funnelSessionId) — compartilhada por FE+upsells do
-//     mesmo visitante, mais robusta que order_id (mesma lição do BuyGoods/sessid2).
-//   - externalId precisa ser único por (plataforma, externalId). Como os
-//     upsells repetem o order_id, o upsell ganha sufixo `-uN`; o FE fica com o
-//     order_id limpo.
-//   - Timestamp: datetime_unix (epoch) é autoritativo; fallback datetime_utc
-//     (tratado como UTC literal — a Cartpanda já entrega em UTC).
+// Um webhook = um pedido com line_items[]. Geramos UMA Order por line item:
+//   - FE (up_sell_id=0)        → externalId `${orderId}-${lineId}`, FRONTEND
+//   - upsell (up_sell_id>0)    → idem, UPSELL (ou DOWNSELL por up_sell_type)
+//   - todas com parentExternalId = funnelSessionId = orderId (a sessão = o
+//     pedido). Reprocessar o mesmo evento é idempotente (externalId estável).
+//
+// Status vem do EVENTO: paid/upsell → APPROVED, refunded → REFUNDED,
+// chargeback → CHARGEBACK. Em refund, marca só as linhas reembolsadas (ou
+// todas, se nenhuma vier flagada — caso comum de reembolso total).
+//
+// CPA (affiliate_amount) e taxa da plataforma (payment.split_fee) são do
+// PEDIDO → atribuídas à linha FE; os agregados (total cpa/fees/net por
+// plataforma) ficam corretos. Receita por linha = price × quantity (preço de
+// lista da oferta). NOTA: descontos/cupons de nível-pedido NÃO são subtraídos
+// — raro nos funis de nutra do usuário (preço fixo por oferta); se virar
+// problema, alocar o desconto por linha.
 
 import type {
   NormalizedOrder,
+  NormalizedOrderStatus,
   NormalizedProductType,
 } from '../../shared/types';
-import type { CartpandaPostback } from './types';
+import type { CartpandaWebhook, CartpandaOrder, CartpandaLineItem } from './types';
 
-export function parseCartpandaIngest(payload: CartpandaPostback): NormalizedOrder {
-  const orderId = required(payload, 'order_id');
-  const upsellNo = parseIntSafe(payload.upsell_no, 0);
+export function parseCartpandaWebhook(wh: CartpandaWebhook): NormalizedOrder[] {
+  const order = wh.order;
+  if (!order || order.id == null) {
+    throw new Error('Cartpanda webhook missing order.id');
+  }
+  const event = (wh.event || '').toLowerCase();
+  const orderId = String(order.id);
+  const currency = (order.currency || 'USD').toUpperCase();
+  const orderStatus = mapStatus(event, order);
+  const cpaTotal = parseMoney(order.affiliate_amount);
+  const feeTotal = parseMoney(order.payment?.split_fee);
+  const country = notEmpty(order.address?.country_code);
+  const affId = notEmpty(order.afid);
+  const affSlug = notEmpty(order.affiliate_slug);
+  const cust = order.customer ?? {};
+  const orderedAt = parseTimestamp(order.created_at ?? order.processed_at);
+  const vendor = notEmpty(order.shop?.slug) ?? (order.shop_id != null ? String(order.shop_id) : null);
+  const lines = order.line_items ?? [];
 
-  // externalId único: FE = order_id; upsell = order_id-uN (Cartpanda reusa o
-  // order_id entre FE e upsells da mesma compra).
-  const externalId = upsellNo > 0 ? `${orderId}-u${upsellNo}` : orderId;
+  // Linha FE = primeira sem up_sell. Carrega o CPA + a taxa do pedido.
+  const feIdx = lines.findIndex((l) => lineType(l).type === 'FRONTEND');
+  const feLineIdx = feIdx === -1 ? 0 : feIdx;
 
-  const currency = (payload.currency || 'USD').toUpperCase();
-  const gross = decimal(payload.total_price);
-  const cpa = decimal(payload.amount_affiliate);
-  // amount_net = residual do vendor conforme a Cartpanda reporta (mesma lente
-  // de amount_vendor do Digistore / totalAccountAmount do CB: pós-comissão).
-  const net = decimal(payload.amount_net);
-  // Taxa implícita da plataforma = gross - net - cpa (>= 0). Sem breakdown de
-  // fee no postback; isso aproxima pra página de Custos.
-  const fees = round2(Math.max(0, gross - net - cpa));
+  // Em refund, se NENHUMA linha vier flagada como reembolsada, é reembolso
+  // total → marca todas. Se vier flag, marca só as flagadas.
+  const anyLineFlagged = lines.some(
+    (l) => Number(l.is_refunded) === 1 || Number(l.refunded_quantity) > 0,
+  );
 
-  const productType = mapProductType(payload, upsellNo);
-  const funnelStep = upsellNo > 0 ? upsellNo + 1 : 1;
+  // Pedido sem line_items (raro) → 1 Order única com o total do pedido.
+  if (lines.length === 0) {
+    const gross = round2(parseMoney(order.total_price ?? toUnits(order.unformatted_total_price)));
+    return [buildOrder({
+      orderId, lineSuffix: 'main', productExternalId: orderId, productName: notEmpty(order.name) ?? '',
+      type: 'FRONTEND', step: 1, gross, fee: feeTotal, cpa: cpaTotal, status: orderStatus,
+      currency, country, affId, affSlug, cust, order, orderedAt, vendor, event, lineRaw: null,
+    })];
+  }
 
-  // Afiliado: afid (id numérico) é a chave; affiliate_slug é o nome. Se só o
-  // slug vier, ele vira a chave também.
-  const affExternalId = notEmpty(payload.afid) ?? notEmpty(payload.affiliate_slug);
-  const affNickname = notEmpty(payload.affiliate_slug);
+  return lines.map((line, i) => {
+    const qty = Number(line.quantity) || 1;
+    const gross = round2(parseMoney(line.price) * qty);
+    const t = lineType(line);
+    const isFe = i === feLineIdx;
+    const cpa = isFe ? cpaTotal : 0;
+    const fee = isFe ? feeTotal : 0;
 
-  return {
-    platformSlug: 'cartpanda',
-    externalId,
-    parentExternalId: orderId,
-    previousTransactionId: null,
-    vendorAccount: notEmpty(payload.shop_slug),
+    let status = orderStatus;
+    if (event === 'order.refunded') {
+      const refunded =
+        Number(line.is_refunded) === 1 || Number(line.refunded_quantity) > 0 || !anyLineFlagged;
+      status = refunded ? 'REFUNDED' : 'APPROVED';
+    }
 
-    productExternalId: notEmpty(payload.product_id) ?? notEmpty(payload.product_name) ?? 'unknown',
-    productName: notEmpty(payload.product_name) ?? '',
-    productType,
-
-    affiliateExternalId: affExternalId,
-    affiliateNickname: affNickname,
-
-    customerExternalId: notEmpty(payload.email),
-    customerEmail: notEmpty(payload.email),
-    customerFirstName: notEmpty(payload.first_name),
-    customerLastName: notEmpty(payload.last_name),
-    customerLanguage: null,
-
-    // Canal só manda venda aprovada (FE + upsell).
-    status: 'APPROVED',
-    eventType: notEmpty(payload.order_type) ?? 'sale',
-    billingType: 'SINGLE_PAYMENT',
-    paySequenceNo: null,
-    numberOfInstallments: null,
-
-    currencyOriginal: currency,
-    grossAmountOrig: gross,
-    // FX TODO: se a Cartpanda enviar não-USD, converter aqui. Por ora passthrough.
-    grossAmountUsd: gross,
-    taxAmount: 0,
-    fees,
-    netAmountUsd: net,
-    cpaPaidUsd: cpa,
-
-    paymentMethod: null,
-    country: notEmpty(payload.country),
-    state: null,
-    city: null,
-
-    // Sessão do funil = click (cid). Fallback pro order_id quando ausente.
-    funnelSessionId: notEmpty(payload.cid) ?? orderId,
-    funnelStep,
-    clickId: notEmpty(payload.cid),
-    trackingId: notEmpty(payload.src) ?? notEmpty(payload.sck),
-    campaignKey: notEmpty(payload.campaignkey),
-    trafficSource: notEmpty(payload.utm_source),
-    deviceType: null,
-    browser: null,
-
-    detailsUrl: null,
-
-    orderedAt: parseCartpandaTimestamp(payload),
-    rawMetadata: payload as unknown as Record<string, unknown>,
-  };
+    return buildOrder({
+      orderId,
+      lineSuffix: String(line.id),
+      productExternalId:
+        notEmpty(line.sku) ?? (line.product_id != null ? String(line.product_id) : null) ?? notEmpty(line.name) ?? 'unknown',
+      productName: notEmpty(line.name) ?? notEmpty(line.title) ?? '',
+      type: t.type,
+      step: t.step,
+      gross,
+      fee,
+      cpa,
+      status,
+      currency,
+      country,
+      affId,
+      affSlug,
+      cust,
+      order,
+      orderedAt,
+      vendor,
+      event,
+      lineRaw: line,
+    });
+  });
 }
 
 // ---------------------- helpers ----------------------
 
-function required(p: CartpandaPostback, key: keyof CartpandaPostback): string {
-  const v = p[key];
-  if (!v) throw new Error(`Cartpanda postback missing required field: ${String(key)}`);
-  return String(v);
+interface BuildArgs {
+  orderId: string;
+  lineSuffix: string;
+  productExternalId: string;
+  productName: string;
+  type: NormalizedProductType;
+  step: number;
+  gross: number;
+  fee: number;
+  cpa: number;
+  status: NormalizedOrderStatus;
+  currency: string;
+  country: string | null;
+  affId: string | null;
+  affSlug: string | null;
+  cust: NonNullable<CartpandaOrder['customer']>;
+  order: CartpandaOrder;
+  orderedAt: Date;
+  vendor: string | null;
+  event: string;
+  lineRaw: CartpandaLineItem | null;
 }
 
-function notEmpty(v: string | undefined | null): string | null {
+function buildOrder(a: BuildArgs): NormalizedOrder {
+  const net = round2(a.gross - a.fee - a.cpa);
+  return {
+    platformSlug: 'cartpanda',
+    externalId: `${a.orderId}-${a.lineSuffix}`,
+    parentExternalId: a.orderId, // a sessão = o pedido
+    previousTransactionId: null,
+    vendorAccount: a.vendor,
+
+    productExternalId: a.productExternalId,
+    productName: a.productName,
+    productType: a.type,
+
+    affiliateExternalId: a.affId ?? a.affSlug,
+    affiliateNickname: a.affSlug,
+
+    customerExternalId: notEmpty(a.cust.email) ?? notEmpty(a.order.email),
+    customerEmail: notEmpty(a.cust.email) ?? notEmpty(a.order.email),
+    customerFirstName: notEmpty(a.cust.first_name),
+    customerLastName: notEmpty(a.cust.last_name),
+    customerLanguage: null,
+
+    status: a.status,
+    eventType: a.event || 'order.paid',
+    billingType: 'SINGLE_PAYMENT',
+    paySequenceNo: null,
+    numberOfInstallments: null,
+
+    currencyOriginal: a.currency,
+    grossAmountOrig: a.gross,
+    grossAmountUsd: a.gross, // FX TODO se a loja não for USD
+    taxAmount: 0,
+    fees: a.fee,
+    netAmountUsd: net,
+    cpaPaidUsd: a.cpa,
+
+    paymentMethod: notEmpty(a.order.payment?.type) ?? notEmpty(a.order.payment_type),
+    country: a.country,
+    state: notEmpty(a.order.address?.province_code),
+    city: notEmpty(a.order.address?.city),
+
+    funnelSessionId: a.orderId,
+    funnelStep: a.step,
+    clickId: null,
+    trackingId: null,
+    campaignKey: null,
+    trafficSource: null,
+    deviceType: null,
+    browser: null,
+
+    detailsUrl: notEmpty(a.order.thank_you_page),
+
+    orderedAt: a.orderedAt,
+    // rawMetadata enxuto: o payload bruto é gigante (shop_info, settings...).
+    // Guardamos só evento + a linha + resumo do pedido.
+    rawMetadata: {
+      event: a.event,
+      orderId: a.orderId,
+      lineItem: a.lineRaw as unknown as Record<string, unknown> | null,
+      orderSummary: {
+        number: a.order.number ?? a.order.order_number ?? null,
+        currency: a.order.currency ?? null,
+        total_price: a.order.total_price ?? null,
+        affiliate_slug: a.order.affiliate_slug ?? null,
+        afid: a.order.afid ?? null,
+        affiliate_amount: a.order.affiliate_amount ?? null,
+        status_id: a.order.status_id ?? null,
+      },
+    },
+  };
+}
+
+function mapStatus(event: string, order: CartpandaOrder): NormalizedOrderStatus {
+  if (event.includes('chargeback') || Number(order.chargeback_received) === 1) return 'CHARGEBACK';
+  if (event.includes('refund')) return 'REFUNDED';
+  // paid / upsell / created / qualquer outro com pagamento → aprovado.
+  return 'APPROVED';
+}
+
+/**
+ * Papel no funil a partir da linha. up_sell_id>0 ou up_sell_type "Upsell N" →
+ * UPSELL (step N+1). "Downsell N" → DOWNSELL. Senão FRONTEND (step 1).
+ */
+function lineType(line: CartpandaLineItem): { type: NormalizedProductType; step: number } {
+  const t = (line.up_sell_type ?? '').toLowerCase();
+  if (/down\s*sell|downsell/.test(t)) {
+    const n = parseInt((t.match(/(\d+)/) ?? [])[1] ?? '1', 10);
+    return { type: 'DOWNSELL', step: n + 1 };
+  }
+  if (Number(line.up_sell_id) > 0 || /up\s*sell|upsell/.test(t)) {
+    const n = parseInt((t.match(/(\d+)/) ?? [])[1] ?? '1', 10);
+    return { type: 'UPSELL', step: n + 1 };
+  }
+  return { type: 'FRONTEND', step: 1 };
+}
+
+function notEmpty(v: string | number | undefined | null): string | null {
   if (v == null) return null;
   const s = String(v).trim();
   return s.length > 0 ? s : null;
 }
 
-function decimal(v: string | undefined | null): number {
+/**
+ * Parse de valor monetário tolerante: número direto, ou string em formato BR
+ * ("1.234,56" → 1234.56; "5,88" → 5.88) ou US ("5.88"). Vírgula seguida de
+ * 1-2 dígitos no fim = separador decimal; senão = milhar.
+ */
+function parseMoney(v: number | string | undefined | null): number {
   if (v == null) return 0;
-  const cleaned = String(v).replace(/[^\d.\-]/g, '');
-  const n = parseFloat(cleaned);
+  if (typeof v === 'number') return Number.isFinite(v) ? v : 0;
+  let s = String(v).trim();
+  if (!s) return 0;
+  if (/,\d{1,2}$/.test(s)) s = s.replace(/\./g, '').replace(',', '.');
+  else s = s.replace(/,/g, '');
+  const n = parseFloat(s.replace(/[^\d.\-]/g, ''));
   return Number.isFinite(n) ? n : 0;
 }
 
-function parseIntSafe(v: string | undefined | null, fallback: number): number {
-  const n = parseInt(String(v ?? ''), 10);
-  return Number.isFinite(n) ? n : fallback;
+function toUnits(cents: number | undefined): number {
+  return cents != null && Number.isFinite(cents) ? cents / 100 : 0;
 }
 
 function round2(n: number): number {
@@ -136,37 +256,17 @@ function round2(n: number): number {
 }
 
 /**
- * FE vs Upsell vem do upsell_no (confiável). order_type pode marcar downsell/
- * bump explicitamente — checamos o texto. Default: upsell_no>=1 → UPSELL.
+ * Timestamp: ISO com Z/offset → parse direto. "YYYY-MM-DD HH:mm:ss" (formato
+ * antigo sem fuso) → tratado como UTC. Payloads novos da Cartpanda usam ISO
+ * UTC (.000000Z), então pedidos reais são inequívocos.
  */
-function mapProductType(payload: CartpandaPostback, upsellNo: number): NormalizedProductType {
-  const t = (payload.order_type ?? '').toLowerCase();
-  const name = (payload.product_name ?? '').toLowerCase();
-  if (/down\s*sell|downsell|\bds\b|last\s*chance/.test(t + ' ' + name)) return 'DOWNSELL';
-  if (/\bbump\b|order\s*bump/.test(t + ' ' + name)) return 'BUMP';
-  if (upsellNo >= 1 || /up\s*sell|upsell/.test(t)) return 'UPSELL';
-  return 'FRONTEND';
-}
-
-/**
- * datetime_unix (epoch segundos) é autoritativo. Fallback: datetime_utc, que a
- * Cartpanda entrega em UTC — parseado como wall clock UTC literal (sem shift de
- * fuso, diferente do BuyGoods que vem em horário do Leste). Último fallback: now.
- */
-function parseCartpandaTimestamp(payload: CartpandaPostback): Date {
-  const unix = parseInt(String(payload.datetime_unix ?? ''), 10);
-  if (Number.isFinite(unix) && unix > 0) {
-    // Heurística: epoch em segundos (10 dígitos) vs ms (13 dígitos).
-    return new Date(unix < 1e12 ? unix * 1000 : unix);
-  }
-  const utc = (payload.datetime_utc ?? '').trim();
-  if (utc) {
-    // ISO com Z/offset → parse direto. "YYYY-MM-DD HH:mm:ss" → tratar como UTC.
-    const iso = /[zZ]|[+-]\d{2}:?\d{2}$/.test(utc)
-      ? utc
-      : utc.replace(' ', 'T') + 'Z';
-    const d = new Date(iso);
+function parseTimestamp(raw: string | undefined): Date {
+  if (!raw) return new Date();
+  const s = String(raw).trim();
+  if (s.includes('T') || /[zZ]|[+-]\d{2}:?\d{2}$/.test(s)) {
+    const d = new Date(s);
     if (!Number.isNaN(d.getTime())) return d;
   }
-  return new Date();
+  const d = new Date(s.replace(' ', 'T') + 'Z');
+  return Number.isNaN(d.getTime()) ? new Date() : d;
 }

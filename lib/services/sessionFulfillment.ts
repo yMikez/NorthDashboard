@@ -117,9 +117,10 @@ export async function backfillSessionFulfillment(): Promise<{
       platform: { select: { slug: true } },
     },
   });
-  // Marca o modo de match no key: 'S' = por funnelSessionId (BuyGoods sessid2 /
-  // Cartpanda cid), 'A' = por anchor parentExternalId/externalId (demais).
-  const SESSION_GROUPED = new Set(['buygoods', 'cartpanda']);
+  // Marca o modo de match no key: 'S' = por funnelSessionId (BuyGoods sessid2),
+  // 'A' = por anchor parentExternalId/externalId (demais, incl. Cartpanda cujo
+  // parentExternalId = order_id já agrupa FE+upsells da mesma compra).
+  const SESSION_GROUPED = new Set(['buygoods']);
   const sessionKeys = new Set<string>();
   for (const o of orders) {
     if (SESSION_GROUPED.has(o.platform.slug)) {
