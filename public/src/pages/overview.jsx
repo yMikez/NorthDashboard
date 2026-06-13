@@ -52,15 +52,22 @@ function KpiCard({
   label, value, unit, icon, alert, hint, sparkData,
   cur, prev, directionPreference = 'higher',
   threshold, hideSparkline, onClick,
+  index, countValue, countFormat,
 }) {
   const { display, trend, good } = deltaFor(cur, prev, directionPreference);
   const colorClass = good === true ? 'good' : good === false ? 'bad' : 'flat';
   const arrowIcon = trend === 'up' ? 'arrow-up-right'
                   : trend === 'down' ? 'arrow-down-right'
                   : 'trending-up';
+  // Count-up animado quando o valor numérico bruto + formatter são passados;
+  // senão usa o `value` já formatado (retrocompat).
+  const valueNode = (countValue != null && countFormat)
+    ? <CountUp value={countValue} format={countFormat}/>
+    : value;
   return (
     <div
-      className={`kpi ${alert ? 'is-alert' : ''} ${onClick ? 'is-clickable' : ''}`}
+      className={`kpi anim-in ${alert ? 'is-alert' : ''} ${onClick ? 'is-clickable' : ''}`}
+      style={index != null ? { '--i': index } : undefined}
       onClick={onClick}
       role={onClick ? 'button' : undefined}
       tabIndex={onClick ? 0 : undefined}
@@ -74,7 +81,7 @@ function KpiCard({
         <span className="kpi-icon"><Icon name={icon} size={12}/></span>
       </div>
       <div className="kpi-value">
-        {value}{unit && <span className="unit">{unit}</span>}
+        {valueNode}{unit && <span className="unit">{unit}</span>}
       </div>
       <div className="kpi-foot">
         <span className={`delta ${colorClass}`}>
@@ -148,11 +155,11 @@ function OverviewPage({ filters, setFilters }) {
   const cur = filters.currency || 'USD';
 
   if (state.status === 'loading' && !state.data) {
-    return <div className="page-in"><div className="panel">Carregando métricas...</div></div>;
+    return <SkelOverview/>;
   }
   if (state.status === 'error') {
-    return <div className="page-in"><div className="panel" style={{ color: 'var(--danger)' }}>
-      Erro ao carregar: {state.error}
+    return <div className="page-in"><div className="panel" style={{ color: 'var(--danger)', display: 'flex', alignItems: 'center', gap: 10 }}>
+      <Icon name="alert-triangle" size={16}/> Erro ao carregar: {state.error}
     </div></div>;
   }
 
@@ -246,27 +253,27 @@ function OverviewPage({ filters, setFilters }) {
       </div>
 
       <div className="kpi-grid">
-        <KpiCard label="RECEITA BRUTA" icon="dollar"
-          value={fmtCurrency(kpis.gross, cur, 0)}
+        <KpiCard label="RECEITA BRUTA" icon="dollar" index={0}
+          countValue={kpis.gross} countFormat={(n) => fmtCurrency(n, cur, 0)}
           cur={kpis.gross} prev={prev.gross}
           sparkData={sparkGross} hideSparkline={hideSpark}
           onClick={() => window.NSNavigate('transactions')}/>
-        <KpiCard label="RECEITA LÍQUIDA" icon="wallet"
-          value={fmtCurrency(kpis.net, cur, 0)}
+        <KpiCard label="RECEITA LÍQUIDA" icon="wallet" index={1}
+          countValue={kpis.net} countFormat={(n) => fmtCurrency(n, cur, 0)}
           cur={kpis.net} prev={prev.net}
           sparkData={sparkNet} hideSparkline={hideSpark}
           onClick={() => window.NSNavigate('transactions')}/>
-        <KpiCard label="PEDIDOS APROVADOS" icon="shopping-cart"
-          value={fmtInt(kpis.approvedCount)}
+        <KpiCard label="PEDIDOS APROVADOS" icon="shopping-cart" index={2}
+          countValue={kpis.approvedCount} countFormat={(n) => fmtInt(n)}
           cur={kpis.approvedCount} prev={prev.approvedCount}
           sparkData={sparkOrders} hideSparkline={hideSpark}
           onClick={() => window.NSNavigate('transactions', { status: 'approved' })}/>
-        <KpiCard label="AOV" icon="trending-up"
-          value={fmtCurrency(kpis.aov, cur, 2)}
+        <KpiCard label="AOV" icon="trending-up" index={3}
+          countValue={kpis.aov} countFormat={(n) => fmtCurrency(n, cur, 2)}
           cur={kpis.aov} prev={prev.aov}
           sparkData={sparkAov} hideSparkline={hideSpark}/>
-        <KpiCard label="TAXA DE APROVAÇÃO" icon="check"
-          value={(kpis.approvalRate * 100).toFixed(1)} unit="%"
+        <KpiCard label="TAXA DE APROVAÇÃO" icon="check" index={4}
+          countValue={kpis.approvalRate * 100} countFormat={(n) => n.toFixed(1)} unit="%"
           cur={kpis.approvalRate} prev={prev.approvalRate}
           sparkData={approvalSpark} hideSparkline={hideSpark}
           threshold={{
@@ -274,8 +281,8 @@ function OverviewPage({ filters, setFilters }) {
             state: KPI_THRESHOLDS.approvalRate.state(kpis.approvalRate),
           }}
           onClick={() => window.NSNavigate('transactions')}/>
-        <KpiCard label="TAXA DE REEMBOLSO" icon="refresh"
-          value={(kpis.refundRate * 100).toFixed(2)} unit="%"
+        <KpiCard label="TAXA DE REEMBOLSO" icon="refresh" index={5}
+          countValue={kpis.refundRate * 100} countFormat={(n) => n.toFixed(2)} unit="%"
           cur={kpis.refundRate} prev={prev.refundRate}
           directionPreference="lower"
           threshold={KPI_THRESHOLDS.refundRate.label(kpis.refundRate) ? {
@@ -283,9 +290,9 @@ function OverviewPage({ filters, setFilters }) {
             state: KPI_THRESHOLDS.refundRate.state(kpis.refundRate),
           } : null}
           onClick={() => window.NSNavigate('transactions', { status: 'refunded' })}/>
-        <KpiCard label="CHARGEBACK" icon="alert-triangle"
+        <KpiCard label="CHARGEBACK" icon="alert-triangle" index={6}
           alert={kpis.cbRate >= 0.02}
-          value={(kpis.cbRate * 100).toFixed(2)} unit="%"
+          countValue={kpis.cbRate * 100} countFormat={(n) => n.toFixed(2)} unit="%"
           cur={kpis.cbRate} prev={prev.cbRate}
           directionPreference="lower"
           threshold={{
@@ -293,9 +300,9 @@ function OverviewPage({ filters, setFilters }) {
             state: KPI_THRESHOLDS.cbRate.state(kpis.cbRate),
           }}
           onClick={() => window.NSNavigate('transactions', { status: 'chargeback' })}/>
-        <KpiCard label="LUCRO ESTIMADO" icon="target"
+        <KpiCard label="LUCRO ESTIMADO" icon="target" index={7}
           alert={kpis.estimatedProfit < 0}
-          value={fmtCurrency(kpis.estimatedProfit ?? kpis.netProfit, cur, 0)}
+          countValue={kpis.estimatedProfit ?? kpis.netProfit} countFormat={(n) => fmtCurrency(n, cur, 0)}
           cur={kpis.estimatedProfit ?? kpis.netProfit}
           prev={prev.estimatedProfit ?? prev.netProfit}
           hint={kpis.estimatedMarginPct != null

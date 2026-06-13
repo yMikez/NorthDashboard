@@ -180,9 +180,7 @@ function FunnelPage({ filters }) {
                 </tr>
               </thead>
               <tbody>
-                {state.status === 'loading' && (
-                  <tr><td colSpan={4} style={{ textAlign: 'center', padding: 24, opacity: 0.6 }}>Carregando...</td></tr>
-                )}
+                {state.status === 'loading' && <SkelTableRows rows={6} cols={4}/>}
                 {stages.map((s) => {
                   const isFE = s.id === 'frontend';
                   const rateColor = isFE
@@ -442,9 +440,7 @@ function LeaderboardPage({ filters, onOpenAffiliate }) {
               </tr>
             </thead>
             <tbody>
-              {state.status === 'loading' && (
-                <tr><td colSpan={15} style={{ textAlign: 'center', padding: 24, opacity: 0.6 }}>Carregando...</td></tr>
-              )}
+              {state.status === 'loading' && <SkelTableRows rows={10} cols={9}/>}
               {state.status === 'ready' && rows.length === 0 && (
                 <tr><td colSpan={15} style={{ textAlign: 'center', padding: 24, opacity: 0.6 }}>
                   Nenhum afiliado com pelo menos {minOrders} pedido{minOrders > 1 ? 's' : ''} no período
@@ -895,9 +891,7 @@ function AllAffiliatesPage({ filters, onOpenAffiliate }) {
               </tr>
             </thead>
             <tbody>
-              {state.status === 'loading' && (
-                <tr><td colSpan={10} style={{ textAlign: 'center', padding: 24, opacity: 0.6 }}>Carregando...</td></tr>
-              )}
+              {state.status === 'loading' && <SkelTableRows rows={10} cols={8}/>}
               {state.status === 'ready' && rows.length === 0 && (
                 <tr><td colSpan={10} style={{ textAlign: 'center', padding: 24, opacity: 0.6 }}>
                   {query ? 'Nenhum afiliado encontrado' : 'Nenhum afiliado ainda'}
@@ -1053,7 +1047,7 @@ function FamilyGrid({ state, cur, onPick }) {
         <div className="panel" style={{ color: 'var(--danger)' }}>Erro ao carregar: {state.error}</div>
       )}
       {state.status === 'loading' && (
-        <div className="panel" style={{ textAlign: 'center', padding: 32, opacity: 0.6 }}>Carregando...</div>
+        <SkelCardGrid n={6}/>
       )}
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))', gap: 14 }}>
@@ -1153,7 +1147,7 @@ function FamilyDrillDown({ family, familyAgg, productsState, cur, onBack, onPick
       </div>
 
       {productsState.status === 'loading' && (
-        <div className="panel" style={{ textAlign: 'center', padding: 32, opacity: 0.6 }}>Carregando variantes...</div>
+        <SkelInline steps={['Carregando variantes…', 'Agregando por etapa…']} height={160}/>
       )}
       {productsState.status === 'error' && (
         <div className="panel" style={{ color: 'var(--danger)' }}>Erro ao carregar: {productsState.error}</div>
@@ -1459,7 +1453,7 @@ function _LegacyProductsPage({ filters }) {
       )}
 
       {state.status === 'loading' && (
-        <div className="panel" style={{ textAlign: 'center', padding: 32, opacity: 0.6 }}>Carregando...</div>
+        <SkelCardGrid n={6}/>
       )}
 
       {state.status === 'ready' && products.length === 0 && (
@@ -1749,9 +1743,7 @@ function TransactionsPage({ filters }) {
               </tr>
             </thead>
             <tbody>
-              {state.status === 'loading' && (
-                <tr><td colSpan={12} style={{ textAlign: 'center', padding: 24, opacity: 0.6 }}>Carregando...</td></tr>
-              )}
+              {state.status === 'loading' && <SkelTableRows rows={12} cols={8}/>}
               {state.status === 'ready' && orders.length === 0 && (
                 <tr><td colSpan={12} style={{ textAlign: 'center', padding: 24, opacity: 0.6 }}>Nenhuma transação no período</td></tr>
               )}
@@ -2188,8 +2180,8 @@ function IntegrationsPage({ filters }) {
 
       <div className="grid-3">
         {state.status === 'loading' && (
-          <div className="panel" style={{ gridColumn: '1 / -1', textAlign: 'center', padding: 24, opacity: 0.6 }}>
-            Carregando...
+          <div style={{ gridColumn: '1 / -1' }}>
+            <SkelInline steps={['Carregando plataformas…', 'Checando sincronização…']} height={150}/>
           </div>
         )}
 
@@ -2619,9 +2611,7 @@ function UsersPage({ currentUser }) {
               </tr>
             </thead>
             <tbody>
-              {state.status === 'loading' && (
-                <tr><td colSpan={6} style={{ textAlign: 'center', padding: 24, opacity: 0.6 }}>Carregando...</td></tr>
-              )}
+              {state.status === 'loading' && <SkelTableRows rows={6} cols={6}/>}
               {state.status === 'ready' && state.users.map((u) => {
                 const isSelf = currentUser && u.id === currentUser.id;
                 const display = u.name || u.email;
@@ -3128,7 +3118,13 @@ function HealthPage() {
   }, [refreshTick]);
 
   if (state.status === 'loading' && !state.data) {
-    return <div className="page-in"><div className="panel">Carregando saúde do dado...</div></div>;
+    return (
+      <div className="page-in">
+        <SkelPageHead/>
+        <SkelMiniKpis n={3}/>
+        <div style={{ marginTop: 14 }}><SkelTablePanel rows={8} cols={5} i={1}/></div>
+      </div>
+    );
   }
   if (state.status === 'error') {
     return <div className="page-in"><div className="panel" style={{ color: 'var(--danger)' }}>Erro: {state.error}</div></div>;
@@ -3652,7 +3648,7 @@ function CostsPage({ filters }) {
   }
 
   if (state.status === 'loading' && !state.data) {
-    return <div className="page-in"><div className="panel">Carregando custos...</div></div>;
+    return <SkelTablePage miniKpis={4} chart chartHeight={220} dualTable cols={5} rows={6}/>;
   }
   if (state.status === 'error') {
     return <div className="page-in"><div className="panel" style={{ color: 'var(--danger)' }}>Erro: {state.error}</div></div>;
@@ -4421,7 +4417,22 @@ function InsightsPage() {
   }, []);
 
   if (state.status === 'loading' && !state.data) {
-    return <div className="page-in"><div className="panel">Computando insights...</div></div>;
+    return (
+      <div className="page-in">
+        <SkelPageHead/>
+        <div style={{ margin: '2px 2px 16px' }}>
+          <LoadingMsg steps={['Computando insights…', 'Analisando lucro & afiliados…', 'Cruzando funil e operação…', 'Quase lá…']} interval={1300}/>
+        </div>
+        <div className="grid-3">
+          {[0, 1, 2, 3, 4, 5].map((i) => (
+            <div key={i} className="skel-panel anim-in" style={{ '--i': i, display: 'flex', flexDirection: 'column', gap: 12, minHeight: 130 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}><Skel w={26} h={26} r={8}/><SkelLine w="55%"/></div>
+              <SkelLine w="85%"/><SkelLine w="70%"/><SkelLine w="45%" size="sm"/>
+            </div>
+          ))}
+        </div>
+      </div>
+    );
   }
   if (state.status === 'error') {
     return <div className="page-in"><div className="panel" style={{ color: 'var(--danger)' }}>Erro: {state.error}</div></div>;
@@ -4807,9 +4818,7 @@ function NetworksPage() {
               </tr>
             </thead>
             <tbody>
-              {state.status === 'loading' && (
-                <tr><td colSpan={9} style={{ textAlign: 'center', padding: 24, opacity: 0.6 }}>Carregando...</td></tr>
-              )}
+              {state.status === 'loading' && <SkelTableRows rows={8} cols={8}/>}
               {state.status === 'ready' && state.networks.length === 0 && (
                 <tr><td colSpan={9} style={{ textAlign: 'center', padding: 24, color: 'var(--fg4)' }}>
                   Nenhuma network cadastrada. Click em <strong>Nova network</strong> pra começar.
@@ -5400,9 +5409,7 @@ function NetCommissions({ fetcher, statusFilter, onStatusChange }) {
             </tr>
           </thead>
           <tbody>
-            {data.status === 'loading' && (
-              <tr><td colSpan={7} style={{ textAlign: 'center', padding: 16, opacity: 0.6 }}>Carregando...</td></tr>
-            )}
+            {data.status === 'loading' && <SkelTableRows rows={4} cols={7}/>}
             {data.status !== 'loading' && data.items.length === 0 && (
               <tr><td colSpan={7} style={{ textAlign: 'center', padding: 24, color: 'var(--fg4)', fontSize: 12 }}>
                 Nenhuma comissão{statusFilter ? ` ${statusFilter.toLowerCase()}` : ''}.
@@ -5476,9 +5483,7 @@ function NetPayouts({ fetcher, onGenerate, onMarkPaid, accruedUsd, accruedCount,
             </tr>
           </thead>
           <tbody>
-            {data.status === 'loading' && (
-              <tr><td colSpan={7} style={{ textAlign: 'center', padding: 16, opacity: 0.6 }}>Carregando...</td></tr>
-            )}
+            {data.status === 'loading' && <SkelTableRows rows={4} cols={7}/>}
             {data.status !== 'loading' && data.items.length === 0 && (
               <tr><td colSpan={7} style={{ textAlign: 'center', padding: 24, color: 'var(--fg4)', fontSize: 12 }}>Nenhum payout gerado ainda.</td></tr>
             )}
@@ -5880,7 +5885,7 @@ function PartnerShell({ user, onLogout }) {
   }
 
   if (state.status === 'loading') {
-    return <div style={{ padding: 40, textAlign: 'center', color: 'var(--fg4)' }}>Carregando...</div>;
+    return <SkelDrawerLoading steps={['Carregando contrato…']}/>;
   }
   if (state.status === 'error') {
     return <div style={{ padding: 40, textAlign: 'center', color: 'var(--danger)' }}>Erro: {state.error}</div>;
@@ -6830,7 +6835,7 @@ function CopyRulesPanel() {
           <table className="tbl">
             <thead><tr><th>Afiliado</th><th>Tipo</th><th style={{ width: 240 }}>% Black 2</th><th>Auto-tune</th><th>Status</th><th>Última</th><th></th></tr></thead>
             <tbody>
-              {state.status === 'loading' && <tr><td colSpan={7} style={{ textAlign: 'center', padding: 24, opacity: 0.6 }}>Carregando…</td></tr>}
+              {state.status === 'loading' && <SkelTableRows rows={6} cols={7}/>}
               {state.status === 'ready' && rules.length === 0 && <tr><td colSpan={7} style={{ textAlign: 'center', padding: 24, opacity: 0.6 }}>Nenhuma regra ainda. Crie a primeira.</td></tr>}
               {rules.map((r) => <CopyRuleRow key={r.id} rule={r} onChanged={reload}/>)}
             </tbody>
@@ -6877,7 +6882,7 @@ function CopyObservabilityPanel() {
       </div>
 
       {state.status === 'error' && <div className="panel" style={{ color: 'var(--danger)' }}>Erro: {state.error}</div>}
-      {state.status === 'loading' && <div className="panel" style={{ opacity: 0.6 }}>Carregando…</div>}
+      {state.status === 'loading' && <SkelInline steps={['Carregando regras de copy…']} height={120}/>}
       {empty && <div className="panel" style={{ opacity: 0.7 }}>Nenhuma view registrada nesse período. A <b>CopyView</b> popula após o cutover do renderer.</div>}
 
       {d && !empty && (
@@ -7279,6 +7284,13 @@ function RecoveryPage({ filters }) {
       {data.status === 'error' && <div className="panel" style={{ color: 'var(--danger)', marginBottom: 12 }}>Erro: {data.err}</div>}
       {manage && <RecoveryManage affs={affs} onChanged={reload}/>}
 
+      {data.status === 'loading' && !m && (
+        <>
+          <SkelMiniKpis n={4}/>
+          <div style={{ marginTop: 12 }}><SkelTablePanel rows={5} cols={5} i={1}/></div>
+        </>
+      )}
+
       {m && (
         <>
           <div className="grid-2" style={{ gridTemplateColumns: 'repeat(4,1fr)', marginBottom: 12 }}>
@@ -7294,7 +7306,7 @@ function RecoveryPage({ filters }) {
               <table className="tbl">
                 <thead><tr><th>Afiliado</th><th className="num">% comissão</th><th className="num">Vendas</th><th className="num">Receita</th><th className="num">Comissão devida</th></tr></thead>
                 <tbody>
-                  {data.status === 'loading' && <tr><td colSpan={5} style={{ textAlign: 'center', padding: 20, opacity: 0.6 }}>Carregando…</td></tr>}
+                  {data.status === 'loading' && <SkelTableRows rows={5} cols={5}/>}
                   {data.status === 'ready' && m.byAffiliate.length === 0 && (
                     <tr><td colSpan={5} style={{ textAlign: 'center', padding: 20, opacity: 0.6 }}>
                       Nenhuma venda de recuperação no período.{affs.length === 0 ? ' Marque um afiliado em "Gerenciar afiliados".' : ''}

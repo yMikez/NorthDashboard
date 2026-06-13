@@ -31,9 +31,12 @@ function MiniStat({ label, value, sub, color }) {
 
 // KpiCard simplificado (sem delta vs período anterior, sem sparkline).
 // /custos não usa o modo compare; visualizações são "este período é assim".
-function CostKpi({ label, value, icon, hint, accent }) {
+function CostKpi({ label, value, icon, hint, accent, index, countValue, countFormat }) {
+  const valueNode = (countValue != null && countFormat)
+    ? <CountUp value={countValue} format={countFormat}/>
+    : value;
   return (
-    <div className="kpi" style={accent ? { borderColor: accent + '4D' } : undefined}>
+    <div className="kpi anim-in" style={{ ...(accent ? { borderColor: accent + '4D' } : {}), ...(index != null ? { '--i': index } : {}) }}>
       <span className="corner-tl"/>
       <span className="corner-br"/>
       <div className="kpi-row">
@@ -42,7 +45,7 @@ function CostKpi({ label, value, icon, hint, accent }) {
           <Icon name={icon} size={12}/>
         </span>
       </div>
-      <div className="kpi-value" style={accent ? { color: accent } : undefined}>{value}</div>
+      <div className="kpi-value" style={accent ? { color: accent } : undefined}>{valueNode}</div>
       {hint && (
         <div className="kpi-foot">
           <span className="delta flat" style={{ background: 'transparent' }}>{hint}</span>
@@ -76,11 +79,11 @@ function CustosPage({ filters }) {
   const cur = filters.currency || 'USD';
 
   if (state.status === 'loading' && !state.data) {
-    return <div className="page-in"><div className="panel">Carregando custos...</div></div>;
+    return <SkelCustos/>;
   }
   if (state.status === 'error') {
-    return <div className="page-in"><div className="panel" style={{ color: 'var(--danger)' }}>
-      Erro ao carregar: {state.error}
+    return <div className="page-in"><div className="panel" style={{ color: 'var(--danger)', display: 'flex', alignItems: 'center', gap: 10 }}>
+      <Icon name="alert-triangle" size={16}/> Erro ao carregar: {state.error}
     </div></div>;
   }
 
@@ -130,7 +133,8 @@ function CustosPage({ filters }) {
         <CostKpi
           label="RECEITA BRUTA"
           icon="dollar"
-          value={fmtCurrency(kpis.grossUsd, cur, 0)}
+          index={0}
+          countValue={kpis.grossUsd} countFormat={(n) => fmtCurrency(n, cur, 0)}
           hint={kpis.refundsCount
             ? `− ${fmtCurrency(kpis.refundsUsd, cur, 0)} em ${fmtInt(kpis.refundsCount)} reemb.`
             : 'sem reembolsos no período'}
@@ -138,14 +142,16 @@ function CustosPage({ filters }) {
         <CostKpi
           label="LUCRO ESTIMADO"
           icon="target"
+          index={1}
           accent={kpis.profitUsd >= 0 ? 'var(--success)' : 'var(--danger)'}
-          value={fmtCurrency(kpis.profitUsd, cur, 0)}
+          countValue={kpis.profitUsd} countFormat={(n) => fmtCurrency(n, cur, 0)}
           hint={`margem ${kpis.marginPct.toFixed(1)}%`}
         />
         <CostKpi
           label="TAXA PLATAFORMA"
           icon="plug"
-          value={fmtCurrency(kpis.platformFeesUsd, cur, 0)}
+          index={2}
+          countValue={kpis.platformFeesUsd} countFormat={(n) => fmtCurrency(n, cur, 0)}
           hint={kpis.grossUsd > 0
             ? `${((kpis.platformFeesUsd / kpis.grossUsd) * 100).toFixed(1)}% do gross`
             : 'sem vendas'}
@@ -153,7 +159,8 @@ function CustosPage({ filters }) {
         <CostKpi
           label="CPA AFILIADO"
           icon="users"
-          value={fmtCurrency(kpis.cpaUsd, cur, 0)}
+          index={3}
+          countValue={kpis.cpaUsd} countFormat={(n) => fmtCurrency(n, cur, 0)}
           hint={kpis.grossUsd > 0
             ? `${((kpis.cpaUsd / kpis.grossUsd) * 100).toFixed(1)}% do gross`
             : 'sem vendas'}
@@ -161,7 +168,8 @@ function CustosPage({ filters }) {
         <CostKpi
           label="PRODUÇÃO · POTES"
           icon="package"
-          value={fmtCurrency(kpis.cogsUsd, cur, 0)}
+          index={4}
+          countValue={kpis.cogsUsd} countFormat={(n) => fmtCurrency(n, cur, 0)}
           hint={kpis.grossUsd > 0
             ? `${((kpis.cogsUsd / kpis.grossUsd) * 100).toFixed(1)}% · custo pago ao fornecedor (incl. refund)`
             : 'custo pago ao fornecedor por pote'}
@@ -169,7 +177,8 @@ function CustosPage({ filters }) {
         <CostKpi
           label="FRETE · ENVIO"
           icon="map"
-          value={fmtCurrency(kpis.fulfillmentUsd, cur, 0)}
+          index={5}
+          countValue={kpis.fulfillmentUsd} countFormat={(n) => fmtCurrency(n, cur, 0)}
           hint={kpis.grossUsd > 0
             ? `${((kpis.fulfillmentUsd / kpis.grossUsd) * 100).toFixed(1)}% · transportadora (incl. refund)`
             : 'envio do pacote ao cliente'}
@@ -177,14 +186,16 @@ function CustosPage({ filters }) {
         <CostKpi
           label="ALLOWANCE RESERVADO"
           icon="clock"
-          value={fmtCurrency(kpis.allowanceReservedUsd, cur, 0)}
+          index={6}
+          countValue={kpis.allowanceReservedUsd} countFormat={(n) => fmtCurrency(n, cur, 0)}
           hint="estimativa rolling 60d"
         />
         <CostKpi
           label="MARGEM"
           icon="trending-up"
+          index={7}
           accent={kpis.marginPct >= 10 ? 'var(--success)' : kpis.marginPct >= 5 ? 'var(--warning)' : 'var(--danger)'}
-          value={kpis.marginPct.toFixed(1) + '%'}
+          countValue={kpis.marginPct} countFormat={(n) => n.toFixed(1) + '%'}
           hint={kpis.profitUsd >= 0 ? 'lucro / receita bruta' : 'NEGATIVA — revise custos'}
         />
       </div>

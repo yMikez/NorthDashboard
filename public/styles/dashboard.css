@@ -393,7 +393,7 @@ body { overflow-x: hidden; }
   transition: all 200ms var(--ease-smooth);
   overflow: hidden;
 }
-.kpi:hover { border-color: var(--border); }
+.kpi:hover { border-color: var(--border); transform: translateY(-2px); box-shadow: 0 8px 22px -12px rgba(91,200,255,0.22); }
 .kpi.is-alert { border-color: rgba(239,68,68,0.35); background: linear-gradient(135deg, rgba(66,20,28,0.4), rgba(6,13,37,0.55)); }
 .kpi .corner-tl, .kpi .corner-br {
   position: absolute; width: 10px; height: 10px; border-color: var(--border-strong);
@@ -874,7 +874,9 @@ body { overflow-x: hidden; }
   background: rgba(15,31,77,0.3);
   border: 1px solid var(--border-soft);
   border-radius: 8px;
+  transition: transform 200ms var(--ease-smooth), border-color 200ms var(--ease-smooth), box-shadow 200ms var(--ease-smooth);
 }
+.mini-kpi:hover { transform: translateY(-2px); border-color: var(--border); box-shadow: 0 8px 22px -12px rgba(91,200,255,0.20); }
 .mini-kpi .l { font-family: var(--f-mono); font-size: 10px; letter-spacing: 0.18em; text-transform: uppercase; color: var(--glow-cyan); margin-bottom: 8px; }
 .mini-kpi .v { font-family: var(--f-display); font-size: 26px; font-weight: 600; color: var(--white); letter-spacing: -0.025em; line-height: 1; }
 .mini-kpi .s { font-family: var(--f-mono); font-size: 10px; color: var(--navy-300); letter-spacing: 0.03em; margin-top: 6px; }
@@ -1751,4 +1753,130 @@ body { overflow-x: hidden; }
 }
 .chat-md hr {
   border: 0; border-top: 1px solid var(--border-soft); margin: 12px 0;
+}
+
+/* ============================================================
+   SKELETONS + LOADING — placeholders com shimmer que espelham a
+   FORMA da página enquanto carrega (em vez de deixar vazio/texto).
+   ============================================================ */
+.skel {
+  position: relative;
+  overflow: hidden;
+  border-radius: var(--r-md);
+  background: linear-gradient(100deg,
+    rgba(91,200,255,0.05) 0%,
+    rgba(91,200,255,0.05) 40%,
+    rgba(91,200,255,0.12) 50%,
+    rgba(91,200,255,0.05) 60%,
+    rgba(91,200,255,0.05) 100%);
+  background-size: 220% 100%;
+  animation: nsShimmer 1.4s ease-in-out infinite;
+}
+[data-theme="light"] .skel {
+  background: linear-gradient(100deg,
+    rgba(30,58,138,0.06) 0%,
+    rgba(30,58,138,0.06) 40%,
+    rgba(30,58,138,0.13) 50%,
+    rgba(30,58,138,0.06) 60%,
+    rgba(30,58,138,0.06) 100%);
+  background-size: 220% 100%;
+}
+@keyframes nsShimmer {
+  0%   { background-position: 120% 0; }
+  100% { background-position: -120% 0; }
+}
+/* primitivos de linha/bloco */
+.skel-line { height: 12px; border-radius: var(--r-sm); }
+.skel-line.sm { height: 9px; }
+.skel-line.lg { height: 16px; }
+.skel-line.xl { height: 28px; border-radius: var(--r-md); }
+.skel-pill { height: 22px; border-radius: var(--r-full); }
+.skel-circle { border-radius: var(--r-full); }
+.skel-w-40 { width: 40%; } .skel-w-50 { width: 50%; } .skel-w-60 { width: 60%; }
+.skel-w-70 { width: 70%; } .skel-w-80 { width: 80%; } .skel-w-90 { width: 90%; }
+/* uma "carta" KPI fantasma — mesma silhueta do .kpi real */
+.skel-kpi {
+  border: 1px solid var(--border-soft);
+  border-radius: var(--r-lg);
+  background: var(--bg-raised);
+  padding: 16px 16px 14px;
+  display: flex; flex-direction: column; gap: 12px;
+  min-height: 118px;
+}
+/* painel fantasma com mesmo chrome do .panel */
+.skel-panel {
+  border: 1px solid var(--border-soft);
+  border-radius: var(--r-lg);
+  background: var(--bg-raised);
+  padding: 16px;
+}
+/* barra de progresso indeterminada (topo de painel/tabela) */
+.skel-bar {
+  position: relative; height: 2px; width: 100%;
+  background: var(--border-soft); overflow: hidden; border-radius: 2px;
+}
+.skel-bar::after {
+  content: ''; position: absolute; inset: 0;
+  width: 40%; border-radius: 2px;
+  background: linear-gradient(90deg, transparent, var(--glow-cyan), transparent);
+  animation: nsIndeterminate 1.2s ease-in-out infinite;
+}
+@keyframes nsIndeterminate {
+  0%   { left: -45%; }
+  100% { left: 100%; }
+}
+/* texto pulsante pra mensagens informativas de loading */
+.loading-msg {
+  display: inline-flex; align-items: center; gap: 8px;
+  font-family: var(--f-mono); font-size: 11px; letter-spacing: 0.08em;
+  text-transform: uppercase; color: var(--fg5);
+  animation: nsPulse 1.6s ease-in-out infinite;
+}
+.loading-msg .dot {
+  width: 6px; height: 6px; border-radius: 50%;
+  background: var(--glow-cyan);
+  box-shadow: 0 0 8px var(--glow-cyan);
+  animation: nsPulseDot 1.2s ease-in-out infinite;
+}
+@keyframes nsPulse    { 0%,100% { opacity: 0.55; } 50% { opacity: 1; } }
+@keyframes nsPulseDot { 0%,100% { transform: scale(0.7); opacity: 0.5; } 50% { transform: scale(1.15); opacity: 1; } }
+
+/* ============================================================
+   ENTRADA ANIMADA — fade-up com stagger. Usado em cards/painéis
+   DENTRO das páginas (nunca no wrapper .page-in, por causa dos
+   drawers fixed). Stagger via --i (índice) → animation-delay.
+   ============================================================ */
+@keyframes nsFadeUp {
+  from { opacity: 0; transform: translateY(10px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.anim-in {
+  animation: nsFadeUp 460ms var(--ease-smooth) both;
+  animation-delay: calc(var(--i, 0) * 55ms);
+}
+/* variante mais sutil (painéis grandes) — menos deslocamento */
+.anim-in-soft {
+  animation: nsFadeUp 520ms var(--ease-smooth) both;
+  animation-delay: calc(var(--i, 0) * 70ms);
+}
+/* destaque rápido quando um valor muda (flash sutil) */
+@keyframes nsValueFlash {
+  0%   { color: var(--glow-cyan); }
+  100% { color: inherit; }
+}
+.value-flash { animation: nsValueFlash 600ms var(--ease-out); }
+
+/* glow pulsante pra estados de alerta/atenção */
+@keyframes nsAlertPulse {
+  0%,100% { box-shadow: 0 0 0 0 rgba(239,68,68,0.0); }
+  50%     { box-shadow: 0 0 0 3px rgba(239,68,68,0.12); }
+}
+
+/* respeita preferência de redução de movimento do sistema */
+@media (prefers-reduced-motion: reduce) {
+  .skel, .skel-bar::after, .loading-msg, .loading-msg .dot,
+  .anim-in, .anim-in-soft, .value-flash, .ns-bg::before, .ns-bg::after {
+    animation: none !important;
+  }
+  .anim-in, .anim-in-soft { opacity: 1; transform: none; }
 }

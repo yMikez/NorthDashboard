@@ -19,6 +19,7 @@ import { build, context } from 'esbuild';
 const options = {
   entryPoints: [
     'public/src/utils.jsx',
+    'public/src/skeletons.jsx',
     'public/src/charts.jsx',
     'public/src/ns-charts.jsx',
     'public/src/shell.jsx',
