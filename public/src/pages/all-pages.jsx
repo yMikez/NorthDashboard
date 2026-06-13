@@ -7207,6 +7207,7 @@ function RecoveryManage({ affs, onChanged }) {
             <option value="digistore24">Digistore24</option>
             <option value="clickbank">ClickBank</option>
             <option value="buygoods">BuyGoods</option>
+            <option value="cartpanda">Cartpanda</option>
           </select>
         </label>
         <label style={coFieldLabel}><span>Comissão %</span><input type="number" min={0} max={100} value={pct} onChange={(e) => setPct(e.target.value)} style={{ ...coInputStyle, width: 100 }}/></label>

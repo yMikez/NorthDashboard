@@ -1016,11 +1016,12 @@ export async function getFunnel(
     },
   });
 
-  // Chave de sessão por plataforma. BuyGoods: order_id_global é por-transação,
-  // então a sessão real é o funnelSessionId (= sessid2). Demais plataformas:
-  // parentExternalId é o anchor da sessão (FE sem upsells = própria externalId).
+  // Chave de sessão por plataforma. BuyGoods (sessid2) e Cartpanda (cid): o ID
+  // de transação é por-transação/se repete, então a sessão real é o
+  // funnelSessionId. Demais plataformas: parentExternalId é o anchor da sessão
+  // (FE sem upsells = própria externalId).
   const sessionKeyOf = (o: (typeof orders)[number]): string =>
-    o.platform.slug === 'buygoods'
+    o.platform.slug === 'buygoods' || o.platform.slug === 'cartpanda'
       ? (o.funnelSessionId ?? o.parentExternalId ?? o.externalId)
       : (o.parentExternalId ?? o.externalId);
 

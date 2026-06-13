@@ -29,7 +29,14 @@ const PLATFORM_DISPLAY_NAMES: Record<string, string> = {
   clickbank: 'ClickBank',
   digistore24: 'Digistore24',
   buygoods: 'BuyGoods',
+  cartpanda: 'Cartpanda',
 };
+
+// Plataformas cuja sessão de funil é agrupada por funnelSessionId (não pelo
+// parentExternalId/anchor): BuyGoods (sessid2) e Cartpanda (cid/click). Nessas,
+// o ID de transação se repete ou muda entre FE+upsells, então o agrupamento
+// confiável é a chave de sessão do visitante.
+const SESSION_GROUPED_PLATFORMS = new Set(['buygoods', 'cartpanda']);
 
 export async function upsertOrder(normalized: NormalizedOrder): Promise<UpsertOrderResult> {
   const platform = await db.platform.upsert({
@@ -191,8 +198,13 @@ export async function upsertOrder(normalized: NormalizedOrder): Promise<UpsertOr
   // pattern says DW2→step 3 / DW3→step 4. Without this, new ingests would
   // need the periodic backfill to land correctly. Only override when the
   // classifier has both family AND a derived step.
+  //
+  // EXCEÇÃO Cartpanda: o product_name NÃO carrega anotação de funil (ao
+  // contrário de CB/D24/BG), então o classificador leria todo upsell como FE.
+  // Aqui o role/step vem do upsell_no do postback (confiável) — nunca do nome.
+  const trustParserRole = normalized.platformSlug === 'cartpanda';
   const finalFunnelStep =
-    classified.family != null && classified.funnelStep != null
+    !trustParserRole && classified.family != null && classified.funnelStep != null
       ? classified.funnelStep
       : normalized.funnelStep;
 
@@ -301,13 +313,14 @@ export async function upsertOrder(normalized: NormalizedOrder): Promise<UpsertOr
   // the order, recompute the session's total fulfillment and assign it
   // to a single primary order (FE preferred). Per-order fulfillmentUsd
   // values from the orderData snapshot get rewritten here for correctness.
-  // BuyGoods: a sessão (FE+upsells, mesmo pacote/frete) é identificada por
-  // funnelSessionId (=sessid2), não por parentExternalId (que é por-transação).
-  const isBuyGoods = normalized.platformSlug === 'buygoods';
-  const sessionKey = isBuyGoods
+  // BuyGoods/Cartpanda: a sessão (FE+upsells, mesmo pacote/frete) é
+  // identificada por funnelSessionId (sessid2/cid), não por parentExternalId
+  // (que é por-transação ou se repete entre upsells).
+  const isSessionGrouped = SESSION_GROUPED_PLATFORMS.has(normalized.platformSlug);
+  const sessionKey = isSessionGrouped
     ? (normalized.funnelSessionId ?? normalized.externalId)
     : (normalized.parentExternalId ?? normalized.externalId);
-  await rebalanceSessionFulfillment(platform.id, sessionKey, isBuyGoods ? 'session' : 'anchor');
+  await rebalanceSessionFulfillment(platform.id, sessionKey, isSessionGrouped ? 'session' : 'anchor');
 
   // Network commission accrual. Idempotent (UNIQUE on orderId). Only fires
   // for FE+APPROVED orders whose affiliate is linked to a Network. Errors

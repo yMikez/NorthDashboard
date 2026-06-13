@@ -65,6 +65,7 @@ const PLATFORM_BADGE = {
   clickbank:    { short: 'CB',  cls: 'plat-cb',  upper: 'CLICKBANK' },
   digistore24:  { short: 'D24', cls: 'plat-d24', upper: 'DIGISTORE24' },
   buygoods:     { short: 'BG',  cls: 'plat-bg',  upper: 'BUYGOODS' },
+  cartpanda:    { short: 'CP',  cls: 'plat-cp',  upper: 'CARTPANDA' },
 };
 function platBadge(slug) {
   return PLATFORM_BADGE[slug] || { short: (slug || '??').slice(0,3).toUpperCase(), cls: 'plat-cb', upper: (slug || '').toUpperCase() };
