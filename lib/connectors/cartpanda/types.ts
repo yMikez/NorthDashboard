@@ -21,7 +21,8 @@ export interface CartpandaLineItem {
   sku?: string | null;
   name?: string | null;
   title?: string | null;
-  price?: number | string;
+  price?: number | string;          // preço da linha na MOEDA DA LOJA (base ccy)
+  actual_price_paid?: number | string; // mesmo preço já em USD (quando há conversão)
   quantity?: number;
   product_id?: number;
   variant_id?: number;
@@ -44,11 +45,18 @@ export interface CartpandaOrder {
   // pedido de sandbox (ingerido normalmente, pra permitir verificação).
   test?: number;
   is_cartx_test?: number;
+  // ATENÇÃO: order.currency NÃO é confiável — vem "USD" mesmo em loja BRL.
+  // A moeda REAL dos amounts (total_price/line.price) é a da loja
+  // (payment.currency / shop.settings_general.base_currency). Ver resolveUsd().
   currency?: string;
+  // Taxa base→USD que a Cartpanda aplicou NESTA transação (ex "0.19863300" =
+  // 1 BRL ≈ 0.1986 USD). Fonte de verdade pra conversão; sem API externa.
+  exchange_rate_USD?: number | string;
   // Valores podem vir como número OU string em formato BR ("7,50"). O parser
-  // (parseMoney) trata os dois.
+  // (parseMoney) trata os dois. Estão na MOEDA DA LOJA (base currency).
   total_price?: number | string;
   subtotal_price?: number | string;
+  total_tax?: number | string;
   unformatted_total_price?: number; // total em centavos (inteiro)
   // Afiliado (CPA): comissão do afiliado sobre o pedido.
   afid?: string | null;
@@ -79,14 +87,39 @@ export interface CartpandaOrder {
     id?: number;
     slug?: string;
     name?: string;
+    settings_general?: { base_currency?: string; currency?: string } | null;
+  } | null;
+  // shop_info espelha shop mas é onde o settings_general (com base_currency)
+  // costuma vir no payload real.
+  shop_info?: {
+    settings_general?: { base_currency?: string; currency?: string } | null;
   } | null;
   payment?: {
     type?: string;
     gateway?: string;
-    split_fee?: number | string;      // taxa da plataforma
-    seller_split_amount?: number | string;
+    currency?: string;                       // moeda real do pedido (ex "BRL")
+    split_fee?: number | string;             // % ou taxa-base (não é o $ retido)
+    seller_split_amount?: number | string;   // o que o vendedor recebe (base ccy)
+    cartpanda_pay_split_amount?: number | string; // $ retido pela Cartpanda (base ccy)
     amount?: number | string;
+    actual_exchange_rate?: number | string;  // taxa base→USD
+    actual_price_paid?: number | string;     // total pago já em USD
+    actual_price_paid_currency?: string;     // "USD"
   } | null;
+  // all_payments / transactions trazem os mesmos campos de conversão por
+  // transação (fallback quando payment não tiver).
+  all_payments?: Array<{
+    actual_exchange_rate?: number | string;
+    actual_price_paid?: number | string;
+    actual_price_paid_currency?: string;
+    seller_split_amount?: number | string;
+    cartpanda_pay_split_amount?: number | string;
+  }> | null;
+  transactions?: Array<{
+    actual_exchange_rate?: number | string;
+    actual_price_paid?: number | string;
+    actual_price_paid_currency?: string;
+  }> | null;
   line_items?: CartpandaLineItem[];
   refunds?: Array<{ total_amount?: number | string }> | null;
 

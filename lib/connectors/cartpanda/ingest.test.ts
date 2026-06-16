@@ -83,6 +83,60 @@ const refundedWithAffiliate: CartpandaWebhook = {
   },
 };
 
+// Payload real (loja Horse Peak, BRL base, vendendo em USD). order.currency
+// vem "USD" mentindo; os amounts estão em BRL e a Cartpanda manda a taxa.
+const multiCurrencyBRL: CartpandaWebhook = {
+  event: 'order.paid',
+  order: {
+    id: 50222500, number: 15, test: 0, is_cartx_test: 1,
+    email: 'kennyd6237@aol.com',
+    currency: 'USD', // MENTIROSO — a loja é BRL
+    exchange_rate_USD: '0.19863300',
+    total_price: 1115.07, subtotal_price: 1042.12, total_tax: 72.95,
+    afid: null, affiliate_slug: null, affiliate_amount: null,
+    created_at: '2026-06-16 09:52:10', status_id: 'New',
+    shop: { id: 787216, slug: 'horse-peak-gelatin' },
+    shop_info: { settings_general: { base_currency: 'BRL', currency: 'BRL' } },
+    customer: { email: 'kennyd6237@aol.com', first_name: 'KENNY', last_name: 'DAWSON' },
+    address: { country_code: 'US', province_code: 'MS', city: 'Florence' },
+    payment: {
+      type: 'cc', currency: 'BRL', split_fee: 8.5, seller_split_amount: 945.84,
+      cartpanda_pay_split_amount: 96.28, actual_exchange_rate: 0.198633,
+      actual_price_paid: 221.490277, actual_price_paid_currency: 'USD',
+    },
+    all_payments: [{
+      seller_split_amount: 945.84, cartpanda_pay_split_amount: 96.28,
+      actual_price_paid_currency: 'USD', actual_price_paid: 221.490277, actual_exchange_rate: 0.198633,
+    }],
+    line_items: [
+      { id: 63206358, sku: 'HORSEPEAKFE-3BOTTLES', name: 'Horse Peak Gelatin - FE 3 Bottles', title: 'Horse Peak Gelatin - FE', price: 1042.12, actual_price_paid: 207, quantity: 1, product_id: 29662470, up_sell_id: 0, up_sell_type: null },
+    ],
+  },
+};
+
+describe('parseCartpandaWebhook — multi-moeda (loja BRL → USD)', () => {
+  const [o] = parseCartpandaWebhook(multiCurrencyBRL);
+
+  it('moeda base = BRL (ignora order.currency "USD" mentiroso)', () => {
+    expect(o.currencyOriginal).toBe('BRL');
+  });
+
+  it('grossAmountOrig em BRL; grossAmountUsd convertido pela taxa do payload', () => {
+    expect(o.grossAmountOrig).toBe(1042.12);       // valor BRL original preservado
+    expect(o.grossAmountUsd).toBeCloseTo(207, 1);  // 1042.12 × 0.198633 ≈ 207
+  });
+
+  it('fee = cartpanda_pay_split_amount em USD; net ≈ seller_split em USD', () => {
+    expect(o.fees).toBeCloseTo(19.13, 1);          // 96.28 × 0.198633
+    expect(o.cpaPaidUsd).toBe(0);
+    expect(o.netAmountUsd).toBeCloseTo(187.87, 1); // 207 − 19.13 ≈ 945.84 × taxa
+  });
+
+  it('NÃO mostra o valor em BRL como se fosse USD (bug reportado)', () => {
+    expect(o.grossAmountUsd).toBeLessThan(300);    // ~207, não 1042
+  });
+});
+
 describe('parseCartpandaWebhook — order.paid (FE única)', () => {
   const [o] = parseCartpandaWebhook(paidSingleFE);
 

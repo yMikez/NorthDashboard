@@ -10,12 +10,19 @@
 // chargeback → CHARGEBACK. Em refund, marca só as linhas reembolsadas (ou
 // todas, se nenhuma vier flagada — caso comum de reembolso total).
 //
-// CPA (affiliate_amount) e taxa da plataforma (payment.split_fee) são do
-// PEDIDO → atribuídas à linha FE; os agregados (total cpa/fees/net por
+// CPA (affiliate_amount) e taxa da plataforma (cartpanda_pay_split_amount) são
+// do PEDIDO → atribuídas à linha FE; os agregados (total cpa/fees/net por
 // plataforma) ficam corretos. Receita por linha = price × quantity (preço de
 // lista da oferta). NOTA: descontos/cupons de nível-pedido NÃO são subtraídos
 // — raro nos funis de nutra do usuário (preço fixo por oferta); se virar
 // problema, alocar o desconto por linha.
+//
+// MOEDA: os amounts (total_price, line.price, split_fee, affiliate_amount) vêm
+// na MOEDA DA LOJA (base currency, ex BRL) — `order.currency` é "USD" mesmo em
+// loja BRL e NÃO deve ser usado. A Cartpanda manda a taxa base→USD no próprio
+// payload (exchange_rate_USD / actual_exchange_rate), por-transação. Convertemos
+// tudo pra USD com essa taxa (sem API externa). grossAmountOrig guarda o valor
+// na moeda base; grossAmountUsd o convertido. Ver resolveUsd().
 
 import type {
   NormalizedOrder,
@@ -31,10 +38,16 @@ export function parseCartpandaWebhook(wh: CartpandaWebhook): NormalizedOrder[] {
   }
   const event = (wh.event || '').toLowerCase();
   const orderId = String(order.id);
-  const currency = (order.currency || 'USD').toUpperCase();
+  const { baseCcy, toUsd } = resolveUsd(order);
   const orderStatus = mapStatus(event, order);
   const cpaTotal = parseMoney(order.affiliate_amount);
-  const feeTotal = parseMoney(order.payment?.split_fee);
+  // Taxa da plataforma = o $ que a Cartpanda reteve (cartpanda_pay_split_amount),
+  // não split_fee (que é %/taxa-base). Fallback pro split_fee se ausente.
+  const feeTotal = parseMoney(
+    order.all_payments?.[0]?.cartpanda_pay_split_amount
+    ?? order.payment?.cartpanda_pay_split_amount
+    ?? order.payment?.split_fee,
+  );
   const country = notEmpty(order.address?.country_code);
   const affId = notEmpty(order.afid);
   const affSlug = notEmpty(order.affiliate_slug);
@@ -59,7 +72,7 @@ export function parseCartpandaWebhook(wh: CartpandaWebhook): NormalizedOrder[] {
     return [buildOrder({
       orderId, lineSuffix: 'main', productExternalId: orderId, productName: notEmpty(order.name) ?? '',
       type: 'FRONTEND', step: 1, gross, fee: feeTotal, cpa: cpaTotal, status: orderStatus,
-      currency, country, affId, affSlug, cust, order, orderedAt, vendor, event, lineRaw: null,
+      baseCcy, toUsd, country, affId, affSlug, cust, order, orderedAt, vendor, event, lineRaw: null,
     })];
   }
 
@@ -90,7 +103,8 @@ export function parseCartpandaWebhook(wh: CartpandaWebhook): NormalizedOrder[] {
       fee,
       cpa,
       status,
-      currency,
+      baseCcy,
+      toUsd,
       country,
       affId,
       affSlug,
@@ -113,11 +127,12 @@ interface BuildArgs {
   productName: string;
   type: NormalizedProductType;
   step: number;
-  gross: number;
-  fee: number;
-  cpa: number;
+  gross: number;   // na moeda base (ex BRL)
+  fee: number;     // na moeda base
+  cpa: number;     // na moeda base
   status: NormalizedOrderStatus;
-  currency: string;
+  baseCcy: string; // moeda real do pedido (ex BRL)
+  toUsd: number;   // multiplicador base→USD (1 se já USD)
   country: string | null;
   affId: string | null;
   affSlug: string | null;
@@ -130,7 +145,12 @@ interface BuildArgs {
 }
 
 function buildOrder(a: BuildArgs): NormalizedOrder {
-  const net = round2(a.gross - a.fee - a.cpa);
+  // gross/fee/cpa chegam na moeda base (ex BRL); convertemos pra USD com a taxa
+  // do payload. net é calculado já em USD.
+  const grossUsd = round2(a.gross * a.toUsd);
+  const feeUsd = round2(a.fee * a.toUsd);
+  const cpaUsd = round2(a.cpa * a.toUsd);
+  const netUsd = round2(grossUsd - feeUsd - cpaUsd);
   return {
     platformSlug: 'cartpanda',
     externalId: `${a.orderId}-${a.lineSuffix}`,
@@ -157,13 +177,13 @@ function buildOrder(a: BuildArgs): NormalizedOrder {
     paySequenceNo: null,
     numberOfInstallments: null,
 
-    currencyOriginal: a.currency,
-    grossAmountOrig: a.gross,
-    grossAmountUsd: a.gross, // FX TODO se a loja não for USD
+    currencyOriginal: a.baseCcy,
+    grossAmountOrig: a.gross,  // valor na moeda base (ex BRL)
+    grossAmountUsd: grossUsd,  // convertido pela taxa do payload
     taxAmount: 0,
-    fees: a.fee,
-    netAmountUsd: net,
-    cpaPaidUsd: a.cpa,
+    fees: feeUsd,
+    netAmountUsd: netUsd,
+    cpaPaidUsd: cpaUsd,
 
     paymentMethod: notEmpty(a.order.payment?.type) ?? notEmpty(a.order.payment_type),
     country: a.country,
@@ -190,7 +210,8 @@ function buildOrder(a: BuildArgs): NormalizedOrder {
       lineItem: a.lineRaw as unknown as Record<string, unknown> | null,
       orderSummary: {
         number: a.order.number ?? a.order.order_number ?? null,
-        currency: a.order.currency ?? null,
+        baseCurrency: a.baseCcy,
+        usdRate: a.toUsd,
         total_price: a.order.total_price ?? null,
         affiliate_slug: a.order.affiliate_slug ?? null,
         afid: a.order.afid ?? null,
@@ -199,6 +220,39 @@ function buildOrder(a: BuildArgs): NormalizedOrder {
       },
     },
   };
+}
+
+/**
+ * Resolve a moeda base do pedido e o multiplicador base→USD.
+ *
+ * order.currency é "USD" mesmo em loja BRL → NÃO usar. A moeda real é a da
+ * loja (payment.currency / shop.settings_general.base_currency). A taxa é a
+ * que a Cartpanda aplicou nesta transação (exchange_rate_USD / actual_exchange
+ * _rate), presente no payload. Fallback: deriva da razão valor-pago-USD ÷
+ * total-base. Loja já em USD → toUsd = 1 (sem conversão).
+ */
+function resolveUsd(order: CartpandaOrder): { baseCcy: string; toUsd: number } {
+  const pay = order.payment ?? {};
+  const altPay = order.all_payments?.[0] ?? order.transactions?.[0] ?? {};
+  const baseCcy = (
+    pay.currency
+    || order.shop_info?.settings_general?.base_currency
+    || order.shop?.settings_general?.base_currency
+    || order.currency
+    || 'USD'
+  ).toUpperCase();
+
+  if (baseCcy === 'USD') return { baseCcy, toUsd: 1 };
+
+  let rate = Number(order.exchange_rate_USD ?? pay.actual_exchange_rate ?? altPay.actual_exchange_rate);
+  if (!(rate > 0)) {
+    // Deriva a taxa do total pago em USD ÷ total na moeda base.
+    const paidUsd = Number(pay.actual_price_paid ?? altPay.actual_price_paid);
+    const paidCcy = (pay.actual_price_paid_currency ?? altPay.actual_price_paid_currency ?? '').toUpperCase();
+    const totalBase = parseMoney(order.total_price);
+    if (paidCcy === 'USD' && paidUsd > 0 && totalBase > 0) rate = paidUsd / totalBase;
+  }
+  return { baseCcy, toUsd: rate > 0 ? rate : 1 };
 }
 
 function mapStatus(event: string, order: CartpandaOrder): NormalizedOrderStatus {
