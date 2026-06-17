@@ -756,3 +756,32 @@ model AutotuneLog {
 
   @@index([ruleId, decidedAt])
 }
+
+// ═══════════════════════════════════════════════════════════════════
+// Funnel Page State — beacon manual de "estado da página" (Black/White)
+// ═══════════════════════════════════════════════════════════════════
+//
+// As páginas de Upsell 01 reportam (via navigator.sendBeacon, fire-and-forget)
+// qual variante de copy estão rodando: 'black' | 'white' | outras. Guardamos só
+// o ÚLTIMO estado por (plataforma, productKey) — upsert. A premissa do usuário:
+// se o Upsell 01 está num estado, o resto do funil está de acordo. Exibido nos
+// cards de Produto. Endpoint aberto + validado + auto-corrigível (cada visita
+// reescreve o estado real), então não precisa de segredo client-side.
+model FunnelPageState {
+  id           String   @id @default(cuid())
+  // Slug da plataforma (clickbank/digistore24/buygoods/cartpanda) — minúsculo.
+  platformSlug String
+  // Identificador do produto/funil que o usuário define no script (slug livre,
+  // ex "horsepeak", "neuro"). Casado de forma tolerante com a família nos cards.
+  productKey   String
+  // Estado reportado: 'black' | 'white' | livre (cores no front por convenção).
+  state        String
+  // URL da página que reportou (opcional, pra auditoria).
+  pageUrl      String?
+
+  reportedAt   DateTime @default(now())
+  createdAt    DateTime @default(now())
+
+  @@unique([platformSlug, productKey])
+  @@index([reportedAt])
+}

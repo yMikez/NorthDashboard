@@ -227,6 +227,14 @@ async function fetchFamilies(filters) {
 }
 
 /**
+ * Fetch /api/metrics/page-states — último estado de página (Black/White)
+ * reportado por cada (plataforma, produto). Sem filtros (é "agora").
+ */
+async function fetchPageStates() {
+  return fetchJSON('/api/metrics/page-states', {});
+}
+
+/**
  * Fetch /api/metrics/health — operational signals about ingestion freshness,
  * approval/refund rates, and catalog classification coverage. No filters
  * apply (it's "right now" data).
@@ -874,6 +882,7 @@ window.NSApi = _wrapMutations({
   fetchFunnel,
   fetchFilterOptions,
   fetchFamilies,
+  fetchPageStates,
   fetchHealth,
   fetchOrderDetail,
   fetchCosts,

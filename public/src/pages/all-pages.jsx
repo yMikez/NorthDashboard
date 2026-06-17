@@ -955,6 +955,7 @@ function ProductsPage({ filters }) {
   // Lazy-load /products only when we drill down — avoids fetching all SKUs
   // for the grid view since FamilyGrid uses /families aggregates.
   const productsState = useProductsData(filters, selectedFamily !== null);
+  const pageStates = usePageStates();
   const cur = filters.currency || 'USD';
 
   if (selectedFamily) {
@@ -977,6 +978,7 @@ function ProductsPage({ filters }) {
       state={familiesState}
       cur={cur}
       onPick={setSelectedFamily}
+      pageStates={pageStates}
     />
   );
 }
@@ -1031,8 +1033,68 @@ function familyAccent(family) {
   return FAMILY_ACCENT[family] || '#5BC8FF';
 }
 
-function FamilyGrid({ state, cur, onPick }) {
+// ----- Funnel page-state (Black/White) -----
+// Estados reportados pelas páginas de Upsell 01 (beacon → /api/page-state).
+function usePageStates() {
+  const [states, setStates] = useState([]);
+  useEffect(() => {
+    let cancelled = false;
+    window.NSApi.fetchPageStates()
+      .then((d) => { if (!cancelled) setStates(d.states || []); })
+      .catch(() => { /* silencioso — recurso opcional */ });
+    return () => { cancelled = true; };
+  }, []);
+  return states;
+}
+
+function normKey(s) { return String(s || '').toLowerCase().replace(/[^a-z0-9]/g, ''); }
+
+// Casa o slug do produto reportado com o nome da família (tolerante: um contém
+// o outro depois de normalizar). Ex: slug "horsepeak" ↔ família "Horse Peak Gelatin".
+function pageStatesForFamily(pageStates, family) {
+  const fk = normKey(family);
+  if (!fk) return [];
+  return (pageStates || []).filter((s) => {
+    const pk = normKey(s.product);
+    return pk && (fk.includes(pk) || pk.includes(fk));
+  });
+}
+
+// Cores por estado (convenção): black escuro, white claro, gray cinza, resto ciano.
+function pageStateStyle(state) {
+  const s = String(state || '').toLowerCase();
+  if (s === 'black' || s === 'black2' || s === 'black1') {
+    return { bg: 'rgba(20,20,26,0.85)', fg: '#e7e9f0', border: 'rgba(255,255,255,0.30)' };
+  }
+  if (s === 'white') {
+    return { bg: 'rgba(255,255,255,0.92)', fg: '#0a0b12', border: 'rgba(255,255,255,0.6)' };
+  }
+  if (s === 'gray' || s === 'grey') {
+    return { bg: 'rgba(120,130,160,0.30)', fg: '#cdd5e8', border: 'rgba(160,170,200,0.45)' };
+  }
+  return { bg: 'rgba(91,200,255,0.18)', fg: 'var(--glow-cyan)', border: 'rgba(91,200,255,0.45)' };
+}
+
+function PageStateBadge({ state, platform, size = 'sm' }) {
+  const st = pageStateStyle(state);
+  const plat = platform ? platBadge(platform) : null;
+  return (
+    <span style={{
+      display: 'inline-flex', alignItems: 'center', gap: 5,
+      fontFamily: 'var(--f-mono)', fontSize: size === 'sm' ? 9.5 : 11, fontWeight: 600,
+      letterSpacing: '0.06em', textTransform: 'uppercase',
+      padding: size === 'sm' ? '2px 7px' : '3px 9px', borderRadius: 'var(--r-full)',
+      background: st.bg, color: st.fg, border: `1px solid ${st.border}`, whiteSpace: 'nowrap',
+    }}>
+      {plat && <span style={{ opacity: 0.7 }}>{plat.short}</span>}
+      {String(state).toUpperCase()}
+    </span>
+  );
+}
+
+function FamilyGrid({ state, cur, onPick, pageStates }) {
   const families = state.data?.families || [];
+  const allStates = pageStates || [];
   return (
     <div className="page-in">
       <div className="page-head">
@@ -1042,6 +1104,30 @@ function FamilyGrid({ state, cur, onPick }) {
           <span className="sub">{families.length} famílias no catálogo · clica em uma pra ver as variantes</span>
         </div>
       </div>
+
+      {allStates.length > 0 && (
+        <div className="panel" style={{ marginBottom: 14 }}>
+          <div className="panel-head" style={{ marginBottom: 10 }}>
+            <div className="panel-title">
+              <span className="panel-eyebrow">ESTADO DAS PÁGINAS · FUNIL (UPSELL 01)</span>
+              <div className="panel-sub">Último estado reportado por cada página de upsell — Black / White</div>
+            </div>
+          </div>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+            {allStates.map((s) => (
+              <div key={`${s.platform}:${s.product}`} style={{
+                display: 'inline-flex', alignItems: 'center', gap: 8,
+                padding: '6px 10px', borderRadius: 8,
+                background: 'rgba(91,200,255,0.04)', border: '1px solid var(--border-soft)',
+              }}>
+                <span style={{ fontFamily: 'var(--f-mono)', fontSize: 11, color: 'var(--fg2)' }}>{s.product}</span>
+                <PageStateBadge state={s.state} platform={s.platform}/>
+                <span style={{ fontFamily: 'var(--f-mono)', fontSize: 9.5, color: 'var(--fg5)' }}>{fmtSyncAgo(s.reportedAt)}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {state.status === 'error' && (
         <div className="panel" style={{ color: 'var(--danger)' }}>Erro ao carregar: {state.error}</div>
@@ -1055,6 +1141,7 @@ function FamilyGrid({ state, cur, onPick }) {
           const accent = familyAccent(f.family);
           const liftPct = f.upsellLiftPct;
           const hasOrders = f.totalOrders > 0;
+          const fStates = pageStatesForFamily(allStates, f.family);
           return (
             <button
               key={f.family}
@@ -1074,6 +1161,15 @@ function FamilyGrid({ state, cur, onPick }) {
                   ))}
                 </div>
               </div>
+
+              {fStates.length > 0 && (
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 10 }}
+                  title="Último estado de página registrado no Upsell 01">
+                  {fStates.map((s) => (
+                    <PageStateBadge key={`${s.platform}:${s.product}`} state={s.state} platform={s.platform}/>
+                  ))}
+                </div>
+              )}
 
               <div style={{ display: 'flex', alignItems: 'baseline', gap: 10, marginBottom: 12 }}>
                 <div style={{ fontFamily: 'var(--f-display)', fontSize: 28, color: 'var(--fg1)', letterSpacing: '-0.01em' }}>
