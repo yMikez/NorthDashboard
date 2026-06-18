@@ -215,6 +215,17 @@ describe('classifyProduct (DigiStore name patterns)', () => {
     expect(r.bottles).toBe(1);
     expect(r.bonusBottles).toBe(1);
   });
+
+  // Combo D24 escrito com "+" no nome da família (caso real em prod:
+  // "DS3 - FlexGuard + ImmuneGuard (1+1 Bottles)"). Antes ficava family=null
+  // (o "+" não estava na classe de chars da família) → produto não listado.
+  it('DS3 - FlexGuard + ImmuneGuard combo (+ no nome, 1+1 sem espaços)', () => {
+    const r = classifyProduct('700345', 'DS3 - FlexGuard + ImmuneGuard (1+1 Bottles)');
+    expect(r.family).toBe('FlexImmuneGuard');
+    expect(r.type).toBe('DOWNSELL');
+    expect(r.bottles).toBe(1);
+    expect(r.bonusBottles).toBe(1);
+  });
 });
 
 describe('classifyProduct (cross-sell & unknown)', () => {

@@ -1092,6 +1092,118 @@ function PageStateBadge({ state, platform, size = 'sm' }) {
   );
 }
 
+// ── Beacon de estado do funil (script copiável por produto) ──────────────────
+// O dashboard gera o <script> já com o PRODUCT certo embutido (= nome da
+// família, que é exatamente o que o card casa). O usuário só edita PLATFORM
+// depois de colar. O estado black/white NÃO é hardcodado: o script lê a decisão
+// do copy-switch.js já presente na página (window._copyBlack / window.CopySwitch
+// / classe .copy-black). Por isso DEVE ser colado DEPOIS do copy-switch.js.
+
+function beaconEndpoint() {
+  // O dashboard é servido do mesmo host que recebe o beacon.
+  try { return window.location.origin + '/api/page-state'; }
+  catch (e) { return 'https://dash.thenorthscales.com/api/page-state'; }
+}
+
+function beaconScriptFor(product) {
+  const endpoint = beaconEndpoint();
+  const prod = JSON.stringify(String(product == null ? '' : product));
+  return [
+    '<!-- NorthScale · beacon de estado do funil (Upsell 01). -->',
+    '<!-- Cole DEPOIS do copy-switch.js. Edite apenas PLATFORM. -->',
+    '<script>',
+    '(function () {',
+    '  "use strict";',
+    '  var PLATFORM = "EDITE_AQUI"; // clickbank | digistore24 | buygoods | cartpanda',
+    '  var PRODUCT  = ' + prod + '; // gerado pelo dashboard — NÃO altere',
+    '  var ENDPOINT = "' + endpoint + '";',
+    '',
+    '  // Lê a variante decidida pelo copy-switch.js (já rodou nesta página).',
+    '  function detectState() {',
+    '    if (typeof window._copyBlack === "boolean") return window._copyBlack ? "black" : "white";',
+    '    if (window.CopySwitch && typeof window.CopySwitch.detectBlack === "function")',
+    '      return window.CopySwitch.detectBlack() ? "black" : "white";',
+    '    if (document.documentElement.classList.contains("copy-black")) return "black";',
+    '    return "white";',
+    '  }',
+    '',
+    '  function send() {',
+    '    var body = JSON.stringify({ platform: PLATFORM, product: PRODUCT, state: detectState(), url: location.href });',
+    '    try { if (navigator.sendBeacon && navigator.sendBeacon(ENDPOINT, body)) return; } catch (e) {}',
+    '    try { fetch(ENDPOINT, { method: "POST", body: body, keepalive: true, headers: { "Content-Type": "text/plain" } }); } catch (e) {}',
+    '  }',
+    '',
+    '  if (document.readyState === "loading")',
+    '    document.addEventListener("DOMContentLoaded", function () { setTimeout(send, 0); });',
+    '  else setTimeout(send, 0);',
+    '})();',
+    '<' + '/script>',
+  ].join('\n');
+}
+
+function fallbackCopy(text) {
+  try {
+    const ta = document.createElement('textarea');
+    ta.value = text;
+    ta.style.position = 'fixed';
+    ta.style.opacity = '0';
+    document.body.appendChild(ta);
+    ta.focus();
+    ta.select();
+    document.execCommand('copy');
+    document.body.removeChild(ta);
+    return true;
+  } catch (e) { return false; }
+}
+
+function copyBeaconScript(product, onDone) {
+  const text = beaconScriptFor(product);
+  try {
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(text).then(
+        () => onDone && onDone(true),
+        () => onDone && onDone(fallbackCopy(text))
+      );
+      return;
+    }
+  } catch (e) { /* cai no fallback */ }
+  onDone && onDone(fallbackCopy(text));
+}
+
+function CopyBeaconChip({ product, accent, label = 'Script', block = false }) {
+  const [copied, setCopied] = useState(false);
+  const onCopy = (e) => {
+    if (e) { e.stopPropagation(); e.preventDefault(); }
+    copyBeaconScript(product, (ok) => {
+      if (ok === false) return;
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1600);
+    });
+  };
+  const col = copied ? 'var(--success)' : (accent || 'var(--glow-cyan)');
+  return (
+    <span
+      role="button"
+      tabIndex={0}
+      onClick={onCopy}
+      onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') onCopy(e); }}
+      title="Copiar o script do beacon deste produto — cole nas páginas de Upsell 01, depois do copy-switch.js. Só edite PLATFORM."
+      style={{
+        display: 'inline-flex', alignItems: 'center', gap: 6,
+        cursor: 'pointer', userSelect: 'none',
+        fontFamily: 'var(--f-mono)', fontSize: 10.5, fontWeight: 600,
+        letterSpacing: '0.04em', whiteSpace: 'nowrap',
+        padding: block ? '7px 12px' : '3px 9px',
+        borderRadius: 'var(--r-full)',
+        background: copied ? 'rgba(58,214,140,0.14)' : `${col}1a`,
+        color: col, border: `1px solid ${col}55`,
+      }}
+    >
+      {copied ? '✓ Copiado' : '⧉ ' + label}
+    </span>
+  );
+}
+
 function FamilyGrid({ state, cur, onPick, pageStates }) {
   const families = state.data?.families || [];
   const allStates = pageStates || [];
@@ -1188,9 +1300,12 @@ function FamilyGrid({ state, cur, onPick, pageStates }) {
                 <div className="prod-stat"><div className="l">AOV</div><div className="v sm">{hasOrders ? fmtCurrency(f.aov, cur, 0) : '—'}</div></div>
               </div>
 
-              <div style={{ paddingTop: 10, borderTop: '1px solid rgba(91,200,255,0.15)', display: 'flex', justifyContent: 'space-between', fontSize: 11, color: 'var(--fg4)', fontFamily: 'var(--f-mono)' }}>
+              <div style={{ paddingTop: 10, borderTop: '1px solid rgba(91,200,255,0.15)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: 11, color: 'var(--fg4)', fontFamily: 'var(--f-mono)' }}>
                 <span>{f.feSkuCount} FE · {f.upSkuCount} UP · {f.dwSkuCount} DW · {f.rcSkuCount} RC</span>
-                <span style={{ color: accent }}>Abrir →</span>
+                <span style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                  <CopyBeaconChip product={f.family} accent={accent}/>
+                  <span style={{ color: accent }}>Abrir →</span>
+                </span>
               </div>
             </button>
           );
@@ -1240,6 +1355,34 @@ function FamilyDrillDown({ family, familyAgg, productsState, cur, onBack, onPick
               : 'Sem vendas no período'}
           </span>
         </div>
+      </div>
+
+      <div className="panel" style={{ marginBottom: 14 }}>
+        <div className="panel-head" style={{ marginBottom: 10 }}>
+          <div className="panel-title">
+            <span className="panel-eyebrow">BEACON DE ESTADO · UPSELL 01</span>
+            <div className="panel-sub">
+              Cole o script abaixo nas páginas de Upsell 01 de <strong>{family}</strong>. O produto já vem embutido —
+              você só edita a <strong>plataforma</strong> depois de colar.
+            </div>
+          </div>
+          <CopyBeaconChip product={family} accent={accent} label="Copiar script" block/>
+        </div>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 18, fontSize: 11.5, color: 'var(--fg3)', fontFamily: 'var(--f-mono)', marginBottom: 4 }}>
+          <span><span style={{ color: accent }}>1.</span> Cole <strong>depois</strong> do <code>copy-switch.js</code></span>
+          <span><span style={{ color: accent }}>2.</span> Edite só <code>PLATFORM</code></span>
+          <span><span style={{ color: accent }}>3.</span> Black/White é lido <strong>automático</strong> do Copy Switch</span>
+        </div>
+        <details style={{ marginTop: 8 }}>
+          <summary style={{ cursor: 'pointer', fontFamily: 'var(--f-mono)', fontSize: 11, color: 'var(--fg4)' }}>
+            ver o script (produto: <code>{family}</code>)
+          </summary>
+          <pre style={{
+            marginTop: 8, padding: 12, borderRadius: 8, overflowX: 'auto',
+            background: 'rgba(0,0,0,0.25)', border: '1px solid var(--border-soft)',
+            fontFamily: 'var(--f-mono)', fontSize: 10.5, lineHeight: 1.5, color: 'var(--fg2)',
+          }}>{beaconScriptFor(family)}</pre>
+        </details>
       </div>
 
       {productsState.status === 'loading' && (

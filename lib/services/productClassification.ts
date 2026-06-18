@@ -35,10 +35,11 @@ const CB_SKU_RE =
 
 // DigiStore name pattern. Accepts type variants like "UP1-V1" or "UP1-vsnova"
 // e a forma de recovery "RC - Glyco Pulse (6 + 2 Bottles)" onde "+ 2" é
-// bonus. Family character class agora aceita hífen (Flex-ImmuneGuard) e
-// dígitos no meio (caso futuro). Type group também genérico.
+// bonus. Family character class agora aceita hífen (Flex-ImmuneGuard), "+"
+// (combos "DS3 - FlexGuard + ImmuneGuard (1+1 Bottles)") e dígitos no meio
+// (caso futuro). Type group também genérico.
 const D24_NAME_RE =
-  /^(?<typeFull>M\d+|UP\d+(?:-[A-Za-z0-9]+)?|DW\d+(?:-[A-Za-z0-9]+)?|DS\d*|RC)\s*-\s*(?<family>[A-Za-z][A-Za-z0-9 \-]+?)\s*\((?<bottles>\d+)(?:\s*\+\s*(?<bonus>\d+))?\s*Bottles?\)$/i;
+  /^(?<typeFull>M\d+|UP\d+(?:-[A-Za-z0-9]+)?|DW\d+(?:-[A-Za-z0-9]+)?|DS\d*|RC)\s*-\s*(?<family>[A-Za-z][A-Za-z0-9 \-+]+?)\s*\((?<bottles>\d+)(?:\s*\+\s*(?<bonus>\d+))?\s*Bottles?\)$/i;
 
 // BuyGoods classifier — convenção do vendor:
 //
