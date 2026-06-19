@@ -482,3 +482,58 @@ describe('classifyProduct (BuyGoods collision: NeuroMindPro ↔ NeuroPulsePro)',
     expect(pulse.type).toBe('FRONTEND');
   });
 });
+
+// ── Cartpanda (platform-aware) ───────────────────────────────────────────────
+// Família vem do nome (1º segmento / sem "- FE"); o PAPEL é só best-effort aqui
+// porque o connector (up_sell_id) é a fonte de verdade. O ponto crítico: FE e
+// upsells do MESMO produto têm que cair na MESMA família pro funil conectar.
+describe('classifyProduct (cartpanda)', () => {
+  it('FE: "Horse Peak Gelatin - FE 6 Bottles" → família "Horse Peak Gelatin"', () => {
+    const r = classifyProduct('HORSEPEAKFE-6BOTTLES', 'Horse Peak Gelatin - FE 6 Bottles', 'cartpanda');
+    expect(r.family).toBe('Horse Peak Gelatin');
+    expect(r.bottles).toBe(6);
+  });
+
+  it('upsell com pipe: "Horse Peak Gelatin | 6 Bottles | Upsell 01" → mesma família', () => {
+    const r = classifyProduct('HORSEPEAKGELATINUP1-6BOTTLES', 'Horse Peak Gelatin | 6 Bottles | Upsell 01', 'cartpanda');
+    expect(r.family).toBe('Horse Peak Gelatin');
+    expect(r.bottles).toBe(6);
+    expect(r.type).toBe('UPSELL'); // best-effort do nome
+  });
+
+  it('FE e upsell do mesmo produto compartilham a família (funil conecta)', () => {
+    const fe = classifyProduct('HORSEPEAKFE-3BOTTLES', 'Horse Peak Gelatin - FE 3 Bottles', 'cartpanda');
+    const up = classifyProduct('HORSEPEAKGELATINUP1-9BOTTLES', 'Horse Peak Gelatin | 9 Bottles | Upsell 01', 'cartpanda');
+    expect(fe.family).toBe(up.family);
+    expect(fe.family).toBe('Horse Peak Gelatin');
+  });
+
+  it('"Giant Power | 6 Bottles | Upsell 02-Default" → família "Giant Power" (sem pipe sujo)', () => {
+    const r = classifyProduct('GIANTPOWERUP2-6BOTTLES', 'Giant Power | 6 Bottles | Upsell 02-Default', 'cartpanda');
+    expect(r.family).toBe('Giant Power');
+    expect(r.type).toBe('UPSELL');
+    expect(r.funnelStep).toBe(3); // UP2 → step 3 (best-effort)
+  });
+
+  it('downsell: "Giant Power | 3 Bottles | Downsell 02.1-De" → DOWNSELL, mesma família', () => {
+    const r = classifyProduct('GIANTPOWERUP2-3BOTTLES', 'Giant Power | 3 Bottles | Downsell 02.1-De', 'cartpanda');
+    expect(r.family).toBe('Giant Power');
+    expect(r.type).toBe('DOWNSELL');
+  });
+
+  it('combo no nome: "GlycoPulse + ProstaFlow | 3+3 Bottles | Upsell 03" → família + bônus', () => {
+    const r = classifyProduct('GLYCOPROSTAUP3-6BOTTLES', 'GlycoPulse + ProstaFlow | 3+3 Bottles | Upsell 03', 'cartpanda');
+    expect(r.family).toBe('GlycoPulse + ProstaFlow');
+    expect(r.bottles).toBe(3);
+    expect(r.bonusBottles).toBe(3);
+  });
+
+  it('sem platform=cartpanda, o nome com "|" cairia no classificador errado', () => {
+    // Garantia de que o roteamento por plataforma é o que conserta — o mesmo
+    // nome sem a flag NÃO produz a família limpa (regex genérico do BuyGoods).
+    const certo = classifyProduct('GIANTPOWERUP2-6BOTTLES', 'Giant Power | 6 Bottles | Upsell 02-Default', 'cartpanda');
+    const errado = classifyProduct('GIANTPOWERUP2-6BOTTLES', 'Giant Power | 6 Bottles | Upsell 02-Default');
+    expect(certo.family).toBe('Giant Power');
+    expect(errado.family).not.toBe('Giant Power');
+  });
+});

@@ -171,10 +171,65 @@ function buyGoodsType(
   return classifyType('FE');
 }
 
+// Cartpanda classifier. Diferente de CB/D24/BG, o PAPEL no funil (FE/UP/DW +
+// etapa) NÃO sai do nome — vem do `up_sell_id` do webhook, lido no connector
+// (lib/connectors/cartpanda/ingest.ts). Os nomes usam "Upsell 0X", que o
+// classificador genérico do BuyGoods leria errado como FRONTEND. Aqui só
+// derivamos a FAMÍLIA (limpa e CONSISTENTE entre o FE e seus upsells, pra o
+// funil conectar) + a contagem de potes. O type/step retornados são
+// best-effort do nome e servem só de fallback — upsertOrder e
+// classifyExistingProducts tratam o Cartpanda como "papel vem do connector"
+// e NÃO sobrescrevem productType/funnelStep com o do nome.
+//
+// Família = 1º segmento antes de " | " (ex "Giant Power | 6 Bottles | Upsell 02"
+// → "Giant Power"); sem pipe, remove "N Bottles" + o sufixo "- FE" (ex
+// "Horse Peak Gelatin - FE 6 Bottles" → "Horse Peak Gelatin"). Assim o FE
+// ("... - FE") e os upsells ("..." puro) caem na MESMA família.
+function classifyCartpanda(sku: string, name?: string | null): ProductClassification {
+  const raw = (name || sku || '').trim();
+
+  let fam = raw;
+  if (fam.includes('|')) {
+    fam = fam.split('|')[0];
+  } else {
+    // Remove a contagem de potes e tudo depois ("... 6 Bottles ...").
+    fam = fam.replace(/\s+\d+\s*(?:\+\s*\d+\s*)?bottles?.*$/i, '');
+  }
+  // Remove o rótulo de frontend "- FE" (e qualquer cauda).
+  fam = fam.replace(/\s*[-–]\s*FE\b.*$/i, '').replace(/\s{2,}/g, ' ').trim();
+  const family = fam ? normalizeFamily(fam) : null;
+
+  // Potes: "N Bottles" ou combo "N + M Bottles" / "N+M Bottles".
+  const bm = raw.match(/(\d+)\s*(?:\+\s*(\d+))?\s*bottles?/i);
+  const bottles = bm ? parseInt(bm[1], 10) : null;
+  const bonusBottles = bm && bm[2] ? parseInt(bm[2], 10) : null;
+
+  // Papel best-effort do nome (FALLBACK — o connector/up_sell_id é a verdade).
+  let type: ProductType = 'FRONTEND';
+  let funnelStep: number | null = 1;
+  const dw = raw.match(/down\s*sell\s*0*(\d+)/i);
+  const up = raw.match(/up\s*sell\s*0*(\d+)/i);
+  if (dw) {
+    type = 'DOWNSELL';
+    funnelStep = parseInt(dw[1], 10) + 1;
+  } else if (up) {
+    type = 'UPSELL';
+    funnelStep = parseInt(up[1], 10) + 1;
+  }
+
+  return { family, type, funnelStep, variant: null, bottles, bonusBottles };
+}
+
 export function classifyProduct(
   sku: string,
   name?: string | null,
+  platform?: string | null,
 ): ProductClassification {
+  // Cartpanda tem caminho próprio: família do nome, papel do connector.
+  if (platform === 'cartpanda') {
+    return classifyCartpanda(sku, name);
+  }
+
   // 1) ClickBank pattern on SKU (most informative — has family in the prefix).
   const cb = CB_SKU_RE.exec(sku.trim());
   if (cb?.groups) {

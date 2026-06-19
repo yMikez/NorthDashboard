@@ -38,7 +38,7 @@ export async function GET(req: Request) {
   // Reroda o classifier AGORA em cada produto pra ver o que ele devolveria
   // (vs o que está gravado) — revela mismatch nome↔regex.
   const rows = products.map((p) => {
-    const c = classifyProduct(p.externalId, p.name);
+    const c = classifyProduct(p.externalId, p.name, platformSlug);
     return {
       externalId: p.externalId,
       name: p.name,

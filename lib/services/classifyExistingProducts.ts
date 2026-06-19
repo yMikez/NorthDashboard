@@ -25,7 +25,14 @@ export interface BackfillStats {
 
 export async function classifyExistingProducts(): Promise<BackfillStats> {
   const products = await db.product.findMany({
-    select: { id: true, externalId: true, name: true, productType: true, family: true },
+    select: {
+      id: true,
+      externalId: true,
+      name: true,
+      productType: true,
+      family: true,
+      platform: { select: { slug: true } },
+    },
   });
 
   const stats: BackfillStats = {
@@ -49,13 +56,20 @@ export async function classifyExistingProducts(): Promise<BackfillStats> {
   const productsToFixFunnelStep: Array<{ id: string; funnelStep: number }> = [];
 
   for (const p of products) {
-    const c = classifyProduct(p.externalId, p.name);
+    const c = classifyProduct(p.externalId, p.name, p.platform?.slug);
     if (!c.family) {
       // Classifier has no confident opinion — leave the row alone.
       if (!p.family) stats.unrecognized.push(p.externalId);
       continue;
     }
-    const productTypeChanged = p.productType !== c.type;
+    // Cartpanda: o PAPEL (productType/funnelStep) é do connector (up_sell_id),
+    // não do nome. O classifyCartpanda só dá a família (limpa). Então aqui
+    // atualizamos família/potes mas NUNCA o productType, e NÃO reconciliamos
+    // Order.productType/funnelStep — senão "Upsell 0X" (que o nome não anota
+    // como upgrade) seria reescrito pra FRONTEND e o funil quebraria.
+    const isCartpanda = p.platform?.slug === 'cartpanda';
+
+    const productTypeChanged = !isCartpanda && p.productType !== c.type;
     await db.product.update({
       where: { id: p.id },
       data: {
@@ -65,11 +79,13 @@ export async function classifyExistingProducts(): Promise<BackfillStats> {
         // bonusBottles também — combos BuyGoods/RC ("3 + 3 Bottles")
         // precisam disso pro total de potes (COGS+frete) no backfill.
         bonusBottles: c.bonusBottles,
-        productType: c.type,
+        ...(isCartpanda ? {} : { productType: c.type }),
       },
     });
     stats.classified++;
     if (productTypeChanged) stats.productTypeFixed++;
+
+    if (isCartpanda) continue;
 
     // Catálogo é autoritativo pro Order.productType de TODA order desse
     // produto (qualquer direção, não só FE→outro). Sem isso, um "Last

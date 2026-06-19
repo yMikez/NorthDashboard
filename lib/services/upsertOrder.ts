@@ -59,9 +59,17 @@ export async function upsertOrder(normalized: NormalizedOrder): Promise<UpsertOr
   const classified = classifyProduct(
     normalized.productExternalId,
     normalized.productName || normalized.productExternalId,
+    normalized.platformSlug,
   );
+  // Cartpanda: o papel (productType) do catálogo vem do connector (up_sell_id),
+  // não do classificador de nome — o classifyCartpanda só derivou a família.
+  // Demais plataformas: o classificador é autoritativo quando reconhece a família.
   const catalogType: ProductType =
-    classified.family !== null ? classified.type : (normalized.productType as ProductType);
+    normalized.platformSlug === 'cartpanda'
+      ? (normalized.productType as ProductType)
+      : classified.family !== null
+        ? classified.type
+        : (normalized.productType as ProductType);
 
   // BG codename collision handling: BuyGoods compartilha o mesmo
   // product_codename entre produtos distintos (NeuroMindPro ↔ NeuroPulse).
