@@ -1060,19 +1060,47 @@ function pageStatesForFamily(pageStates, family) {
   });
 }
 
-// Cores por estado (convenção): black escuro, white claro, gray cinza, resto ciano.
-function pageStateStyle(state) {
-  const s = String(state || '').toLowerCase();
-  if (s === 'black' || s === 'black2' || s === 'black1') {
-    return { bg: 'rgba(20,20,26,0.85)', fg: '#e7e9f0', border: 'rgba(255,255,255,0.30)' };
+// Uma entrada POR PLATAFORMA pra uma família (o estado mais recente de cada).
+// Garante que o card mostre uma pill por plataforma, mesmo se houver slugs
+// variados reportando o mesmo produto. Ordena por plataforma (estável).
+function platformStatesForFamily(pageStates, family) {
+  const byPlat = {};
+  for (const s of pageStatesForFamily(pageStates, family)) {
+    const k = s.platform || '?';
+    if (!byPlat[k] || new Date(s.reportedAt) > new Date(byPlat[k].reportedAt)) byPlat[k] = s;
   }
-  if (s === 'white') {
+  return Object.values(byPlat).sort((a, b) => String(a.platform).localeCompare(String(b.platform)));
+}
+
+// Normaliza o estado pra comparação: minúsculo, sem espaços ("Black 2"→"black2").
+function normState(state) { return String(state || '').toLowerCase().replace(/\s+/g, ''); }
+
+// Cores por estado (convenção): white claro; black escuro; black2 escuro com
+// acento âmbar (pra distinguir do black num relance); gray cinza; resto ciano.
+function pageStateStyle(state) {
+  const s = normState(state);
+  if (s === 'white' || s === 'white1' || s === 'white01') {
     return { bg: 'rgba(255,255,255,0.92)', fg: '#0a0b12', border: 'rgba(255,255,255,0.6)' };
+  }
+  if (s === 'black2' || s === 'black02' || s === 'blacktwo' || s === 'blackii') {
+    return { bg: 'rgba(20,20,26,0.92)', fg: '#FFCF8B', border: 'rgba(255,184,91,0.65)' };
+  }
+  if (s === 'black' || s === 'black1' || s === 'black01') {
+    return { bg: 'rgba(20,20,26,0.85)', fg: '#e7e9f0', border: 'rgba(255,255,255,0.30)' };
   }
   if (s === 'gray' || s === 'grey') {
     return { bg: 'rgba(120,130,160,0.30)', fg: '#cdd5e8', border: 'rgba(160,170,200,0.45)' };
   }
   return { bg: 'rgba(91,200,255,0.18)', fg: 'var(--glow-cyan)', border: 'rgba(91,200,255,0.45)' };
+}
+
+// Rótulo amigável: "black2"→"BLACK 2", "white"→"WHITE", senão UPPER do que veio.
+function pageStateLabel(state) {
+  const s = normState(state);
+  if (s === 'black2' || s === 'black02' || s === 'blacktwo' || s === 'blackii') return 'BLACK 2';
+  if (s === 'black' || s === 'black1' || s === 'black01') return 'BLACK';
+  if (s === 'white' || s === 'white1' || s === 'white01') return 'WHITE';
+  return String(state || '').toUpperCase();
 }
 
 function PageStateBadge({ state, platform, size = 'sm' }) {
@@ -1087,7 +1115,7 @@ function PageStateBadge({ state, platform, size = 'sm' }) {
       background: st.bg, color: st.fg, border: `1px solid ${st.border}`, whiteSpace: 'nowrap',
     }}>
       {plat && <span style={{ opacity: 0.7 }}>{plat.short}</span>}
-      {String(state).toUpperCase()}
+      {pageStateLabel(state)}
     </span>
   );
 }
@@ -1095,9 +1123,10 @@ function PageStateBadge({ state, platform, size = 'sm' }) {
 // ── Beacon de estado do funil (script copiável por produto) ──────────────────
 // O dashboard gera o <script> já com o PRODUCT certo embutido (= nome da
 // família, que é exatamente o que o card casa). O usuário só edita PLATFORM
-// depois de colar. O estado black/white NÃO é hardcodado: o script lê a decisão
-// do copy-switch.js já presente na página (window._copyBlack / window.CopySwitch
-// / classe .copy-black). Por isso DEVE ser colado DEPOIS do copy-switch.js.
+// depois de colar. O estado NÃO é hardcodado: o script lê a VARIANTE
+// VISUALIZADA do copy-switch.js (window._copyVariant / data-copy-variant /
+// classe .copy-black2|.copy-black / window._copyBlack) → white/black/black2/+.
+// Por isso DEVE ser colado DEPOIS do copy-switch.js.
 
 function beaconEndpoint() {
   // O dashboard é servido do mesmo host que recebe o beacon.
@@ -1118,17 +1147,22 @@ function beaconScriptFor(product) {
     '  var PRODUCT  = ' + prod + '; // gerado pelo dashboard — NÃO altere',
     '  var ENDPOINT = "' + endpoint + '";',
     '',
-    '  // Reporta a VARIANTE CONFIGURADA da página (o deploy), não o que um',
-    '  // visitante viu. O copy-switch novo expõe window.SHOW_COPY_BLACK = essa',
-    '  // config. NÃO usamos _copyBlack: com REQUIRE_AFFILIATE ele vira "white"',
-    '  // pra tráfego sem afiliado (visita direta/bot/preview) e falsearia o',
-    '  // estado da página. Fallbacks p/ copy-switch antigo no fim.',
+    '  // Reporta a VARIANTE VISUALIZADA (o tráfego sempre vem de afiliado, então',
+    '  // o efetivo é confiável e captura white/black/black2/+). Ordem de leitura:',
+    '  //   1) window._copyVariant  (string — exponha isto no copy-switch p/ multi)',
+    '  //   2) <html data-copy-variant="...">',
+    '  //   3) classe .copy-black2 / .copy-black no <html>/<body>',
+    '  //   4) window._copyBlack (booleano do copy-switch atual)',
     '  function detectState() {',
-    '    if (typeof window.SHOW_COPY_BLACK === "boolean") return window.SHOW_COPY_BLACK ? "black" : "white";',
+    '    var de = document.documentElement, bd = document.body || {};',
+    '    var v = window._copyVariant;',
+    '    if (typeof v === "string" && v.trim()) return v.trim().toLowerCase().replace(/\\s+/g, "");',
+    '    var attr = (de.getAttribute && de.getAttribute("data-copy-variant")) || "";',
+    '    if (attr.trim()) return attr.trim().toLowerCase().replace(/\\s+/g, "");',
+    '    function hasCls(c) { return (de.classList && de.classList.contains(c)) || (bd.classList && bd.classList.contains(c)); }',
+    '    if (hasCls("copy-black2")) return "black2";',
+    '    if (hasCls("copy-black")) return "black";',
     '    if (typeof window._copyBlack === "boolean") return window._copyBlack ? "black" : "white";',
-    '    if (window.CopySwitch && typeof window.CopySwitch.detectBlack === "function")',
-    '      return window.CopySwitch.detectBlack() ? "black" : "white";',
-    '    if (document.documentElement.classList.contains("copy-black")) return "black";',
     '    return "white";',
     '  }',
     '',
@@ -1227,7 +1261,7 @@ function FamilyGrid({ state, cur, onPick, pageStates }) {
           <div className="panel-head" style={{ marginBottom: 10 }}>
             <div className="panel-title">
               <span className="panel-eyebrow">ESTADO DAS PÁGINAS · FUNIL (UPSELL 01)</span>
-              <div className="panel-sub">Último estado reportado por cada página de upsell — Black / White</div>
+              <div className="panel-sub">Variante visualizada na página de upsell, por plataforma — White / Black / Black 2</div>
             </div>
           </div>
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
@@ -1258,7 +1292,7 @@ function FamilyGrid({ state, cur, onPick, pageStates }) {
           const accent = familyAccent(f.family);
           const liftPct = f.upsellLiftPct;
           const hasOrders = f.totalOrders > 0;
-          const fStates = pageStatesForFamily(allStates, f.family);
+          const fStates = platformStatesForFamily(allStates, f.family);
           return (
             <button
               key={f.family}
@@ -1376,7 +1410,7 @@ function FamilyDrillDown({ family, familyAgg, productsState, cur, onBack, onPick
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 18, fontSize: 11.5, color: 'var(--fg3)', fontFamily: 'var(--f-mono)', marginBottom: 4 }}>
           <span><span style={{ color: accent }}>1.</span> Cole <strong>depois</strong> do <code>copy-switch.js</code></span>
           <span><span style={{ color: accent }}>2.</span> Edite só <code>PLATFORM</code></span>
-          <span><span style={{ color: accent }}>3.</span> Black/White é lido <strong>automático</strong> do Copy Switch</span>
+          <span><span style={{ color: accent }}>3.</span> A variante (White/Black/Black 2) é lida <strong>automático</strong> do Copy Switch</span>
         </div>
         <details style={{ marginTop: 8 }}>
           <summary style={{ cursor: 'pointer', fontFamily: 'var(--f-mono)', fontSize: 11, color: 'var(--fg4)' }}>
