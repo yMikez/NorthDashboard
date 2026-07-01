@@ -3571,6 +3571,25 @@ function fmtAgo(seconds) {
 }
 
 // ---------- COSTS (editable cost tables) ----------
+// Fornecedores de fulfillment — metadados p/ UI genérica (redrock/shipoffers/
+// fullstack/+). Cores usadas nos cards de distribuição, barra, chart e selos.
+const SUPPLIER_META = {
+  shipoffers: { label: 'ShipOffers', solid: '#5BC8FF', text: '#7cd0ff', darkText: true,
+    grad: 'linear-gradient(180deg, #7cd0ff 0%, #5BC8FF 50%, #2a9cd6 100%)', glow: 'rgba(91,200,255,0.45)', chipBg: 'rgba(124,208,255,0.18)' },
+  redrock: { label: 'RedRock', solid: '#ff5a5a', text: '#ff8a8a', darkText: false,
+    grad: 'linear-gradient(180deg, #ff7373 0%, #ff5a5a 50%, #e83838 100%)', glow: 'rgba(255,90,90,0.45)', chipBg: 'rgba(255,138,138,0.18)' },
+  fullstack: { label: 'FullStack', solid: '#9b7bff', text: '#b99cff', darkText: false,
+    grad: 'linear-gradient(180deg, #b99cff 0%, #9b7bff 50%, #6f4de0 100%)', glow: 'rgba(155,123,255,0.45)', chipBg: 'rgba(155,123,255,0.18)' },
+};
+function supMeta(s) {
+  return SUPPLIER_META[s] || {
+    label: s ? String(s).charAt(0).toUpperCase() + String(s).slice(1) : '—',
+    solid: '#8aa0c0', text: '#aab8d0', darkText: false,
+    grad: 'linear-gradient(180deg, #9aa8c0 0%, #8aa0c0 50%, #6a7890 100%)', glow: 'rgba(140,160,190,0.4)', chipBg: 'rgba(140,160,190,0.18)',
+  };
+}
+const SUPPLIER_OPTIONS = ['shipoffers', 'redrock', 'fullstack'];
+
 function CostsPage({ filters }) {
   const [state, setCostState] = useState({ status: 'loading', data: null, error: null });
   const [draftFamilies, setDraftFamilies] = useState({});  // { [family]: unitCost string }
@@ -3578,7 +3597,7 @@ function CostsPage({ filters }) {
   const [draftRates, setDraftRates] = useState({});         // { ['supplier|family|bottlesMax']: price string }
   const [fulfillmentKpi, setFulfillmentKpi] = useState({ status: 'loading', value: 0, gross: 0, daily: [] });
   // Distribuição RedRock vs ShipOffers (kpis + série diária). Respeita filtros.
-  const [fulfDist, setFulfDist] = useState({ status: 'loading', kpis: null, daily: [] });
+  const [fulfDist, setFulfDist] = useState({ status: 'loading', kpis: null, bySupplier: [], daily: [] });
   // Cadastro de SKUs: lista de Products com supplier resolvido + drafts de
   // override (chave = productId, valor = 'redrock'|'shipoffers'|null|undefined).
   // undefined = sem mudança nesse SKU.
@@ -3625,10 +3644,11 @@ function CostsPage({ filters }) {
         setFulfDist({
           status: 'ready',
           kpis: data.kpis,
+          bySupplier: Array.isArray(data.bySupplier) ? data.bySupplier : [],
           daily: Array.isArray(data.daily) ? data.daily : [],
         });
       })
-      .catch(() => { if (!cancelled) setFulfDist({ status: 'error', kpis: null, daily: [] }); });
+      .catch(() => { if (!cancelled) setFulfDist({ status: 'error', kpis: null, bySupplier: [], daily: [] }); });
     return () => { cancelled = true; };
   }, [filters?.dateRange.start.getTime(), filters?.dateRange.end.getTime(),
       filters && Array.from(filters.platforms).join(','),
@@ -3973,50 +3993,30 @@ function CostsPage({ filters }) {
               </div>
               <div className="s">APPROVED · pacotes enviados</div>
             </div>
-            <div className="mini-kpi" style={{
-              borderColor: 'rgba(255,90,90,0.4)',
-              background: 'linear-gradient(180deg, rgba(255,90,90,0.07), rgba(255,90,90,0.02))',
-              boxShadow: '0 0 24px -8px rgba(255,90,90,0.35), inset 0 1px 0 rgba(255,255,255,0.04)',
-            }}>
-              <div className="l" style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                <span style={{
-                  display: 'inline-block', width: 8, height: 8, borderRadius: '50%',
-                  background: '#ff5a5a',
-                  boxShadow: '0 0 8px rgba(255,90,90,0.7)',
-                }}/>
-                <span style={{ color: '#ff8a8a' }}>RedRock</span>
-              </div>
-              <div className="v">
-                {fulfDist.status === 'loading' ? '…' : fmtInt(fulfDist.kpis?.redRockOrders ?? 0)}
-              </div>
-              <div className="s">
-                {fulfDist.status === 'ready' && fulfDist.kpis?.totalOrders > 0
-                  ? `${fulfDist.kpis.redRockPct.toFixed(1)}% do total · ${fmtCurrency(fulfDist.kpis.redRockFulfillmentUsd, cur, 0)} em frete`
-                  : '—'}
-              </div>
-            </div>
-            <div className="mini-kpi" style={{
-              borderColor: 'rgba(91,200,255,0.4)',
-              background: 'linear-gradient(180deg, rgba(91,200,255,0.07), rgba(91,200,255,0.02))',
-              boxShadow: '0 0 24px -8px rgba(91,200,255,0.35), inset 0 1px 0 rgba(255,255,255,0.04)',
-            }}>
-              <div className="l" style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                <span style={{
-                  display: 'inline-block', width: 8, height: 8, borderRadius: '50%',
-                  background: '#5BC8FF',
-                  boxShadow: '0 0 8px rgba(91,200,255,0.7)',
-                }}/>
-                <span style={{ color: '#7cd0ff' }}>ShipOffers</span>
-              </div>
-              <div className="v">
-                {fulfDist.status === 'loading' ? '…' : fmtInt(fulfDist.kpis?.shipOffersOrders ?? 0)}
-              </div>
-              <div className="s">
-                {fulfDist.status === 'ready' && fulfDist.kpis?.totalOrders > 0
-                  ? `${fulfDist.kpis.shipOffersPct.toFixed(1)}% do total · ${fmtCurrency(fulfDist.kpis.shipOffersFulfillmentUsd, cur, 0)} em frete`
-                  : '—'}
-              </div>
-            </div>
+            {(fulfDist.bySupplier || []).map((s) => {
+              const m = supMeta(s.supplier);
+              return (
+                <div key={s.supplier} className="mini-kpi" style={{
+                  borderColor: m.glow,
+                  background: `linear-gradient(180deg, ${m.chipBg}, transparent)`,
+                  boxShadow: `0 0 24px -8px ${m.glow}, inset 0 1px 0 rgba(255,255,255,0.04)`,
+                }}>
+                  <div className="l" style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                    <span style={{
+                      display: 'inline-block', width: 8, height: 8, borderRadius: '50%',
+                      background: m.solid, boxShadow: `0 0 8px ${m.glow}`,
+                    }}/>
+                    <span style={{ color: m.text }}>{m.label}</span>
+                  </div>
+                  <div className="v">{fulfDist.status === 'loading' ? '…' : fmtInt(s.orderCount)}</div>
+                  <div className="s">
+                    {fulfDist.kpis?.totalOrders > 0
+                      ? `${s.pct.toFixed(1)}% do total · ${fmtCurrency(s.fulfillmentUsd, cur, 0)} em frete`
+                      : '—'}
+                  </div>
+                </div>
+              );
+            })}
           </div>
 
           {/* Barra horizontal segmentada — split visual RedRock vs ShipOffers */}
@@ -4026,25 +4026,22 @@ function CostsPage({ filters }) {
                 <div className="panel-title">
                   <span className="panel-eyebrow">DISTRIBUIÇÃO POR FORNECEDOR</span>
                   <div className="panel-metric" style={{ display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap' }}>
-                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
-                      <span style={{
-                        display: 'inline-block', width: 10, height: 10, borderRadius: '50%',
-                        background: '#ff5a5a',
-                        boxShadow: '0 0 10px rgba(255,90,90,0.7), 0 0 0 2px rgba(255,90,90,0.15)',
-                      }}/>
-                      <span style={{ color: '#ff8a8a' }}>{fulfDist.kpis.redRockPct.toFixed(1)}%</span>
-                      <span style={{ color: 'var(--fg3)', fontFamily: 'var(--f-mono)', fontSize: 13, fontWeight: 500, letterSpacing: '0.04em' }}>RedRock</span>
-                    </span>
-                    <span style={{ color: 'var(--fg5)', fontSize: 14 }}>·</span>
-                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
-                      <span style={{
-                        display: 'inline-block', width: 10, height: 10, borderRadius: '50%',
-                        background: '#5BC8FF',
-                        boxShadow: '0 0 10px rgba(91,200,255,0.7), 0 0 0 2px rgba(91,200,255,0.15)',
-                      }}/>
-                      <span style={{ color: '#7cd0ff' }}>{fulfDist.kpis.shipOffersPct.toFixed(1)}%</span>
-                      <span style={{ color: 'var(--fg3)', fontFamily: 'var(--f-mono)', fontSize: 13, fontWeight: 500, letterSpacing: '0.04em' }}>ShipOffers</span>
-                    </span>
+                    {(fulfDist.bySupplier || []).filter((s) => s.orderCount > 0).map((s, i) => {
+                      const m = supMeta(s.supplier);
+                      return (
+                        <span key={s.supplier} style={{ display: 'inline-flex', alignItems: 'center', gap: 14 }}>
+                          {i > 0 && <span style={{ color: 'var(--fg5)', fontSize: 14 }}>·</span>}
+                          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
+                            <span style={{
+                              display: 'inline-block', width: 10, height: 10, borderRadius: '50%',
+                              background: m.solid, boxShadow: `0 0 10px ${m.glow}, 0 0 0 2px ${m.chipBg}`,
+                            }}/>
+                            <span style={{ color: m.text }}>{s.pct.toFixed(1)}%</span>
+                            <span style={{ color: 'var(--fg3)', fontFamily: 'var(--f-mono)', fontSize: 13, fontWeight: 500, letterSpacing: '0.04em' }}>{m.label}</span>
+                          </span>
+                        </span>
+                      );
+                    })}
                   </div>
                 </div>
               </div>
@@ -4060,44 +4057,30 @@ function CostsPage({ filters }) {
                 boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.06), inset 0 -1px 2px rgba(0,0,0,0.4)',
                 border: '1px solid rgba(255,255,255,0.05)',
               }}>
-                <div style={{
-                  width: `${fulfDist.kpis.redRockPct}%`,
-                  background: 'linear-gradient(180deg, #ff7373 0%, #ff5a5a 50%, #e83838 100%)',
-                  display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  fontSize: 11, fontWeight: 600, color: '#fff',
-                  letterSpacing: '0.04em',
-                  textShadow: '0 1px 2px rgba(0,0,0,0.4)',
-                  position: 'relative',
-                  boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.25), 0 0 14px rgba(255,90,90,0.45)',
-                }}>
-                  {/* Sheen overlay no topo */}
-                  <span style={{
-                    position: 'absolute', inset: 0,
-                    background: 'linear-gradient(180deg, rgba(255,255,255,0.18), transparent 45%)',
-                    pointerEvents: 'none',
-                  }}/>
-                  <span style={{ position: 'relative', zIndex: 1 }}>
-                    {fulfDist.kpis.redRockPct >= 6 ? `RedRock · ${fmtInt(fulfDist.kpis.redRockOrders)}` : ''}
-                  </span>
-                </div>
-                <div style={{
-                  width: `${fulfDist.kpis.shipOffersPct}%`,
-                  background: 'linear-gradient(180deg, #7cd0ff 0%, #5BC8FF 50%, #2a9cd6 100%)',
-                  display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  fontSize: 11, fontWeight: 600, color: '#0a1820',
-                  letterSpacing: '0.04em',
-                  position: 'relative',
-                  boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.35), 0 0 14px rgba(91,200,255,0.45)',
-                }}>
-                  <span style={{
-                    position: 'absolute', inset: 0,
-                    background: 'linear-gradient(180deg, rgba(255,255,255,0.22), transparent 45%)',
-                    pointerEvents: 'none',
-                  }}/>
-                  <span style={{ position: 'relative', zIndex: 1 }}>
-                    {fulfDist.kpis.shipOffersPct >= 6 ? `ShipOffers · ${fmtInt(fulfDist.kpis.shipOffersOrders)}` : ''}
-                  </span>
-                </div>
+                {(fulfDist.bySupplier || []).filter((s) => s.orderCount > 0).map((s) => {
+                  const m = supMeta(s.supplier);
+                  return (
+                    <div key={s.supplier} style={{
+                      width: `${s.pct}%`,
+                      background: m.grad,
+                      display: 'flex', alignItems: 'center', justifyContent: 'center',
+                      fontSize: 11, fontWeight: 600, color: m.darkText ? '#0a1820' : '#fff',
+                      letterSpacing: '0.04em',
+                      textShadow: m.darkText ? 'none' : '0 1px 2px rgba(0,0,0,0.4)',
+                      position: 'relative',
+                      boxShadow: `inset 0 1px 0 rgba(255,255,255,0.3), 0 0 14px ${m.glow}`,
+                    }}>
+                      <span style={{
+                        position: 'absolute', inset: 0,
+                        background: 'linear-gradient(180deg, rgba(255,255,255,0.2), transparent 45%)',
+                        pointerEvents: 'none',
+                      }}/>
+                      <span style={{ position: 'relative', zIndex: 1 }}>
+                        {s.pct >= 6 ? `${m.label} · ${fmtInt(s.orderCount)}` : ''}
+                      </span>
+                    </div>
+                  );
+                })}
               </div>
             </div>
           )}
@@ -4112,45 +4095,33 @@ function CostsPage({ filters }) {
                     {fulfDist.daily.length} {fulfDist.daily.length === 1 ? 'dia' : 'dias'} no intervalo
                   </div>
                 </div>
-                <div className="panel-legend" style={{ display: 'flex', gap: 14 }}>
-                  <span style={{
-                    display: 'inline-flex', alignItems: 'center', gap: 6,
-                    fontFamily: 'var(--f-mono)', fontSize: 11,
-                    letterSpacing: '0.05em',
-                    color: 'var(--fg3)',
-                  }}>
-                    <span style={{
-                      display: 'inline-block', width: 9, height: 9, borderRadius: '50%',
-                      background: '#ff5a5a',
-                      boxShadow: '0 0 8px rgba(255,90,90,0.8), 0 0 0 2px rgba(255,90,90,0.15)',
-                    }}/>
-                    RedRock
-                  </span>
-                  <span style={{
-                    display: 'inline-flex', alignItems: 'center', gap: 6,
-                    fontFamily: 'var(--f-mono)', fontSize: 11,
-                    letterSpacing: '0.05em',
-                    color: 'var(--fg3)',
-                  }}>
-                    <span style={{
-                      display: 'inline-block', width: 9, height: 9, borderRadius: '50%',
-                      background: '#5BC8FF',
-                      boxShadow: '0 0 8px rgba(91,200,255,0.8), 0 0 0 2px rgba(91,200,255,0.15)',
-                    }}/>
-                    ShipOffers
-                  </span>
+                <div className="panel-legend" style={{ display: 'flex', gap: 14, flexWrap: 'wrap' }}>
+                  {(fulfDist.bySupplier || []).filter((s) => s.orderCount > 0).map((s) => {
+                    const m = supMeta(s.supplier);
+                    return (
+                      <span key={s.supplier} style={{
+                        display: 'inline-flex', alignItems: 'center', gap: 6,
+                        fontFamily: 'var(--f-mono)', fontSize: 11, letterSpacing: '0.05em', color: 'var(--fg3)',
+                      }}>
+                        <span style={{
+                          display: 'inline-block', width: 9, height: 9, borderRadius: '50%',
+                          background: m.solid, boxShadow: `0 0 8px ${m.glow}, 0 0 0 2px ${m.chipBg}`,
+                        }}/>
+                        {m.label}
+                      </span>
+                    );
+                  })}
                 </div>
               </div>
               <NSTimeSeries height={240} format="int"
-                data={(fulfDist.daily || []).map((d) => ({
-                  date: d.date,
-                  red: d.redRockOrders ?? 0,
-                  ship: d.shipOffersOrders ?? 0,
-                }))}
-                series={[
-                  { key: 'ship', label: 'ShipOffers', color: '#5BC8FF' },
-                  { key: 'red', label: 'RedRock', color: '#FF6B6B' },
-                ]}/>
+                data={(fulfDist.daily || []).map((d) => {
+                  const row = { date: d.date };
+                  (fulfDist.bySupplier || []).forEach((s) => { row[s.supplier] = (d.counts || {})[s.supplier] || 0; });
+                  return row;
+                })}
+                series={(fulfDist.bySupplier || []).filter((s) => s.orderCount > 0).map((s) => ({
+                  key: s.supplier, label: supMeta(s.supplier).label, color: supMeta(s.supplier).solid,
+                }))}/>
             </div>
           )}
         </>
@@ -4336,8 +4307,9 @@ function CostsPage({ filters }) {
                           minWidth: 120,
                         }}
                       >
-                        <option value="shipoffers">ShipOffers</option>
-                        <option value="redrock">RedRock</option>
+                        {SUPPLIER_OPTIONS.map((s) => (
+                          <option key={s} value={s}>{supMeta(s).label}</option>
+                        ))}
                       </select>
                     </td>
                     <td className="cell-mono" style={{ color: 'var(--fg4)' }}>{fmtDateShort(f.updatedAt)}</td>
@@ -4374,14 +4346,11 @@ function CostsPage({ filters }) {
               {state.data.fulfillment.map((r) => {
                 const key = rateKey(r);
                 const dirty = rateDirty(key, r.priceUsd);
-                const supLabel = r.supplier === 'redrock' ? 'RedRock' : 'ShipOffers';
+                const rm = supMeta(r.supplier);
                 return (
                   <tr key={key}>
-                    <td className="cell-mono" style={{
-                      fontSize: 11,
-                      color: r.supplier === 'redrock' ? 'var(--glow-violet)' : 'var(--glow-cyan)',
-                    }}>
-                      {supLabel}
+                    <td className="cell-mono" style={{ fontSize: 11, color: rm.text }}>
+                      {rm.label}
                     </td>
                     <td style={{ fontSize: 12, color: r.family === '_default' ? 'var(--fg5)' : 'var(--fg2)' }}>
                       {r.family === '_default' ? '(padrão)' : r.family}
@@ -4596,21 +4565,22 @@ function CostsPage({ filters }) {
                                 minWidth: 120,
                               }}
                             >
-                              <option value="inherit">Herda família ({p.familyDefault || 'shipoffers'})</option>
-                              <option value="redrock">RedRock</option>
-                              <option value="shipoffers">ShipOffers</option>
+                              <option value="inherit">Herda família ({supMeta(p.familyDefault || 'shipoffers').label})</option>
+                              {SUPPLIER_OPTIONS.map((s) => (
+                                <option key={s} value={s}>{supMeta(s).label}</option>
+                              ))}
                             </select>
                             <span style={{
                               fontSize: 10,
                               padding: '2px 6px',
                               borderRadius: 4,
-                              background: eff === 'redrock' ? 'rgba(255,138,138,0.18)' : 'rgba(124,208,255,0.18)',
-                              color: eff === 'redrock' ? '#ff8a8a' : '#7cd0ff',
+                              background: supMeta(eff).chipBg,
+                              color: supMeta(eff).text,
                               fontWeight: 600,
                               minWidth: 70,
                               textAlign: 'center',
                             }}>
-                              {eff === 'redrock' ? 'RedRock' : 'ShipOffers'}
+                              {supMeta(eff).label}
                             </span>
                           </div>
                         </td>

@@ -270,16 +270,18 @@ export interface FulfillmentOverviewResponse {
     redRockFulfillmentUsd: number;
     shipOffersFulfillmentUsd: number;
   };
+  // Genérico: TODOS os fornecedores presentes (redrock/shipoffers/fullstack/…),
+  // ordenado por orderCount desc. Os campos redRock*/shipOffers* acima ficam
+  // por retrocompat, mas a UI itera bySupplier pra suportar N fornecedores.
   bySupplier: Array<{
-    supplier: 'redrock' | 'shipoffers';
+    supplier: string;
     orderCount: number;
     fulfillmentUsd: number;
     pct: number;
   }>;
   daily: Array<{
-    date: string;             // YYYY-MM-DD (UTC)
-    redRockOrders: number;
-    shipOffersOrders: number;
+    date: string;                    // YYYY-MM-DD (UTC)
+    counts: Record<string, number>;  // supplier → nº de pedidos naquele dia
   }>;
 }
 
@@ -2214,51 +2216,49 @@ export async function getFulfillmentOverview(
   const familyDefault = new Map<string, string>();
   for (const f of familyCosts) familyDefault.set(f.family, f.fulfillmentSupplier);
 
+  // Resolve o supplier CRU (string): override do SKU → default da família →
+  // 'shipoffers'. NÃO coage pra binário — fullstack (e futuros) aparecem.
   const resolveSupplierLocal = (
     family: string | null,
     productOverride: string | null,
-  ): 'redrock' | 'shipoffers' => {
-    const raw = productOverride
-      ?? (family ? familyDefault.get(family) : null)
-      ?? 'shipoffers';
-    return raw === 'redrock' ? 'redrock' : 'shipoffers';
-  };
+  ): string =>
+    productOverride ?? (family ? familyDefault.get(family) : null) ?? 'shipoffers';
 
-  let redRockOrders = 0;
-  let shipOffersOrders = 0;
-  let redRockUsd = 0;
-  let shipOffersUsd = 0;
-  // Bucket por dia (UTC date key, idem ao costs-overview).
-  const dailyMap = new Map<string, { redRockOrders: number; shipOffersOrders: number }>();
+  // Agregação genérica por supplier + por dia.
+  const agg = new Map<string, { orders: number; usd: number }>();
+  const dailyMap = new Map<string, Map<string, number>>();
 
   for (const o of orders) {
-    const supplier = resolveSupplierLocal(
-      o.product.family,
-      o.product.fulfillmentSupplier,
-    );
+    const supplier = resolveSupplierLocal(o.product.family, o.product.fulfillmentSupplier);
     const usd = Number(o.fulfillmentUsd);
+    const a = agg.get(supplier) ?? { orders: 0, usd: 0 };
+    a.orders++;
+    a.usd += usd;
+    agg.set(supplier, a);
+
     const dayKey = o.orderedAt.toISOString().slice(0, 10);
     let day = dailyMap.get(dayKey);
     if (!day) {
-      day = { redRockOrders: 0, shipOffersOrders: 0 };
+      day = new Map();
       dailyMap.set(dayKey, day);
     }
-    if (supplier === 'redrock') {
-      redRockOrders++;
-      redRockUsd += usd;
-      day.redRockOrders++;
-    } else {
-      shipOffersOrders++;
-      shipOffersUsd += usd;
-      day.shipOffersOrders++;
-    }
+    day.set(supplier, (day.get(supplier) ?? 0) + 1);
   }
 
-  const total = redRockOrders + shipOffersOrders;
+  const total = Array.from(agg.values()).reduce((s, a) => s + a.orders, 0);
   const pct = (n: number) => (total > 0 ? (n / total) * 100 : 0);
+
+  const bySupplier = Array.from(agg.entries())
+    .map(([supplier, a]) => ({ supplier, orderCount: a.orders, fulfillmentUsd: a.usd, pct: pct(a.orders) }))
+    .sort((x, y) => y.orderCount - x.orderCount);
+
   const daily = Array.from(dailyMap.entries())
     .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))
-    .map(([date, d]) => ({ date, ...d }));
+    .map(([date, counts]) => ({ date, counts: Object.fromEntries(counts) }));
+
+  // KPIs redRock/shipOffers por retrocompat (a UI usa bySupplier).
+  const rr = agg.get('redrock') ?? { orders: 0, usd: 0 };
+  const so = agg.get('shipoffers') ?? { orders: 0, usd: 0 };
 
   return {
     range: {
@@ -2267,27 +2267,14 @@ export async function getFulfillmentOverview(
     },
     kpis: {
       totalOrders: total,
-      redRockOrders,
-      shipOffersOrders,
-      redRockPct: pct(redRockOrders),
-      shipOffersPct: pct(shipOffersOrders),
-      redRockFulfillmentUsd: redRockUsd,
-      shipOffersFulfillmentUsd: shipOffersUsd,
+      redRockOrders: rr.orders,
+      shipOffersOrders: so.orders,
+      redRockPct: pct(rr.orders),
+      shipOffersPct: pct(so.orders),
+      redRockFulfillmentUsd: rr.usd,
+      shipOffersFulfillmentUsd: so.usd,
     },
-    bySupplier: [
-      {
-        supplier: 'redrock',
-        orderCount: redRockOrders,
-        fulfillmentUsd: redRockUsd,
-        pct: pct(redRockOrders),
-      },
-      {
-        supplier: 'shipoffers',
-        orderCount: shipOffersOrders,
-        fulfillmentUsd: shipOffersUsd,
-        pct: pct(shipOffersOrders),
-      },
-    ],
+    bySupplier,
     daily,
   };
 }
