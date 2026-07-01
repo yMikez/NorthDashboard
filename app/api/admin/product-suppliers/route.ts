@@ -17,9 +17,12 @@ import { logger } from '@/lib/logger';
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
+type Supplier = 'redrock' | 'shipoffers' | 'fullstack';
+const VALID_SUPPLIERS: readonly Supplier[] = ['redrock', 'shipoffers', 'fullstack'];
+
 interface PatchUpdate {
   productId: string;
-  supplier: 'redrock' | 'shipoffers' | null;
+  supplier: Supplier | null;
 }
 
 function authed(req: Request): boolean {
@@ -120,9 +123,9 @@ export async function PATCH(req: Request) {
     if (!u.productId || typeof u.productId !== 'string') {
       return NextResponse.json({ error: 'invalid productId' }, { status: 400 });
     }
-    if (u.supplier !== null && u.supplier !== 'redrock' && u.supplier !== 'shipoffers') {
+    if (u.supplier !== null && !VALID_SUPPLIERS.includes(u.supplier)) {
       return NextResponse.json(
-        { error: `invalid supplier "${u.supplier}" (use redrock | shipoffers | null)` },
+        { error: `invalid supplier "${u.supplier}" (use ${VALID_SUPPLIERS.join(' | ')} | null)` },
         { status: 400 },
       );
     }

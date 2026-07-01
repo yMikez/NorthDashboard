@@ -33,13 +33,21 @@ export interface ProductClassification {
 const CB_SKU_RE =
   /^(?<family>[A-Za-z]+)-(?<bottles>\d+)(?:e(?<bonus>\d+))?-(?<type>FE|UP\d+|DW\d+|DS\d*|RC)(?:-(?<variant>[A-Za-z0-9]+))?$/i;
 
-// DigiStore name pattern. Accepts type variants like "UP1-V1" or "UP1-vsnova"
-// e a forma de recovery "RC - Glyco Pulse (6 + 2 Bottles)" onde "+ 2" é
-// bonus. Family character class agora aceita hífen (Flex-ImmuneGuard), "+"
-// (combos "DS3 - FlexGuard + ImmuneGuard (1+1 Bottles)") e dígitos no meio
-// (caso futuro). Type group também genérico.
+// DigiStore name pattern. O vendor usa DOIS formatos:
+//   antigo: "M3 - NeuroMind Pro (6 Bottles)"          (TYPE - Family (N Bottles))
+//   novo:   "M1 Cognizil 2 Bottles"                   (TYPE Family N Bottles, SEM hífen/parênteses)
+//           "DS1a Cognizil 3 Bottles $120"            (+ sufixo de preço)
+//           "DS3 FlexGuard + ImmuneGuard (1 + 1 Bottles)"
+//           "DW1 - V1 Thermo Burn Pro (3 Bottles)"    (prefixo de variante "V1" na frente da família)
+// Por isso:
+//   - separador é " - " OU só espaço: (?:\s*-\s*|\s+)
+//   - prefixo de variante "V\d+ " opcional é descartado (fica na família senão)
+//   - parênteses dos potes são opcionais: \(? ... \)?
+//   - sufixo de preço "$120"/"$49.50" opcional no fim
+//   - tipo DS aceita sufixo de letra (DS1a/DS1b/DS1c)
+// Family character class aceita hífen (Flex-ImmuneGuard), "+" (combos) e dígitos.
 const D24_NAME_RE =
-  /^(?<typeFull>M\d+|UP\d+(?:-[A-Za-z0-9]+)?|DW\d+(?:-[A-Za-z0-9]+)?|DS\d*|RC)\s*-\s*(?<family>[A-Za-z][A-Za-z0-9 \-+]+?)\s*\((?<bottles>\d+)(?:\s*\+\s*(?<bonus>\d+))?\s*Bottles?\)$/i;
+  /^(?<typeFull>M\d+|UP\d+(?:-[A-Za-z0-9]+)?|DW\d+(?:-[A-Za-z0-9]+)?|DS\d*[a-z]?|RC)(?:\s*-\s*|\s+)(?:V\d+\s+)?(?<family>[A-Za-z][A-Za-z0-9 \-+]*?)\s*\(?\s*(?<bottles>\d+)\s*(?:\+\s*(?<bonus>\d+)\s*)?Bottles?\)?(?:\s*\$[\d.,]+)?$/i;
 
 // BuyGoods classifier — convenção do vendor:
 //
@@ -100,6 +108,12 @@ const FAMILY_NORMALIZATIONS: Array<[RegExp, string]> = [
   [/^neuropulsepro$/i, 'NeuroPulsePro'],
   [/^neuro\s*pulse$/i, 'NeuroPulsePro'],
   [/^neuropulse$/i, 'NeuroPulsePro'],
+  // DigestFlow: vendor escreve "Digest Flow" (D24) e "DigestFlow" (BG) —
+  // unifica na grafia canônica.
+  [/^digest\s*flow$/i, 'DigestFlow'],
+  // ProstaFlow: unifica "ProstaFlow"/"Prostaflow". (NÃO afeta o combo
+  // "GlycoPulse + ProstaFlow", que não casa o ^...$ inteiro.)
+  [/^prosta\s*flow$/i, 'ProstaFlow'],
 ];
 
 export function normalizeFamily(raw: string): string {
@@ -133,8 +147,9 @@ function classifyType(typeCode: string): { type: ProductType; step: number } {
   if (dwMatch) {
     return { type: 'DOWNSELL', step: parseInt(dwMatch[1], 10) + 1 };
   }
-  // Legacy 'DS' (downsell sem número) — mantém step=2 como antes.
-  if (/^DS\d*$/.test(code)) {
+  // 'DS' (downsell) — sem número, com número, ou com sufixo de letra
+  // (DS1a/DS1b/DS1c, variantes de preço do MESMO downsell). Todos → step 2.
+  if (/^DS\d*[A-Z]?$/.test(code)) {
     return { type: 'DOWNSELL', step: 2 };
   }
   throw new Error(`classifyProduct: unknown type code "${typeCode}"`);

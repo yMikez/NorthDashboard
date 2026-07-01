@@ -226,6 +226,56 @@ describe('classifyProduct (DigiStore name patterns)', () => {
     expect(r.bottles).toBe(1);
     expect(r.bonusBottles).toBe(1);
   });
+
+  // ── Formato NOVO do Digistore: sem " - ", potes sem parênteses, $preço,
+  //    prefixo de variante "V1", tipo DS com letra (DS1a). Antes vazava o
+  //    prefixo do tipo pra dentro da família ("M1 Cognizil", "V1 Thermo...").
+  it('novo: "M1 Cognizil 2 Bottles" (sem hífen/parênteses) → Cognizil FE', () => {
+    const r = classifyProduct('705232', 'M1 Cognizil 2 Bottles');
+    expect(r.family).toBe('Cognizil');
+    expect(r.type).toBe('FRONTEND');
+    expect(r.bottles).toBe(2);
+  });
+
+  it('novo: FE de Cognizil consolidam na mesma família', () => {
+    const m1 = classifyProduct('705232', 'M1 Cognizil 2 Bottles');
+    const m2 = classifyProduct('705238', 'M2 Cognizil 3 Bottles');
+    expect(m1.family).toBe('Cognizil');
+    expect(m2.family).toBe('Cognizil');
+  });
+
+  it('novo: "DS1a Cognizil 3 Bottles $120" (sufixo $preço + DS com letra) → Cognizil DOWNSELL', () => {
+    const r = classifyProduct('705244', 'DS1a Cognizil 3 Bottles $120');
+    expect(r.family).toBe('Cognizil');
+    expect(r.type).toBe('DOWNSELL');
+    expect(r.bottles).toBe(3);
+  });
+
+  it('novo: "DS3 FlexGuard + ImmuneGuard (1 + 1 Bottles)" (combo sem hífen) → FlexImmuneGuard', () => {
+    const r = classifyProduct('705246', 'DS3 FlexGuard + ImmuneGuard (1 + 1 Bottles)');
+    expect(r.family).toBe('FlexImmuneGuard');
+    expect(r.type).toBe('DOWNSELL');
+    expect(r.bottles).toBe(1);
+    expect(r.bonusBottles).toBe(1);
+  });
+
+  it('prefixo de variante "V1" é removido da família', () => {
+    const r = classifyProduct('690816', 'DW1 - V1 Thermo Burn Pro (3 Bottles)');
+    expect(r.family).toBe('ThermoBurnPro');
+    expect(r.type).toBe('DOWNSELL');
+    expect(r.bottles).toBe(3);
+  });
+
+  it('"Digest Flow" (D24) normaliza pra DigestFlow (unifica com BG)', () => {
+    const r = classifyProduct('690817', 'DW2 - Digest Flow (3 Bottles)');
+    expect(r.family).toBe('DigestFlow');
+    expect(r.type).toBe('DOWNSELL');
+  });
+
+  it('"ProstaFlow" normaliza consistente', () => {
+    expect(classifyProduct('691995', 'DW2 - ProstaFlow (3 Bottles)').family).toBe('ProstaFlow');
+    expect(normalizeFamily('Prostaflow')).toBe('ProstaFlow');
+  });
 });
 
 describe('classifyProduct (cross-sell & unknown)', () => {

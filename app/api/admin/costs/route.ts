@@ -79,7 +79,7 @@ export async function POST(req: Request) {
   }
   const updated = { families: 0, fulfillment: 0 };
   try {
-    const VALID_SUPPLIERS = new Set(['redrock', 'shipoffers']);
+    const VALID_SUPPLIERS = new Set(['redrock', 'shipoffers', 'fullstack']);
     for (const f of body.families ?? []) {
       if (!f.family || !Number.isFinite(f.unitCostUsd) || f.unitCostUsd < 0) continue;
       const supplier = f.fulfillmentSupplier && VALID_SUPPLIERS.has(f.fulfillmentSupplier)
