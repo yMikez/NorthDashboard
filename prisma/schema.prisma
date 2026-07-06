@@ -785,3 +785,30 @@ model FunnelPageState {
   @@unique([platformSlug, productKey])
   @@index([reportedAt])
 }
+
+// Venda recuperada pela Tauk Solutions (serviço de recuperação por
+// telefone/SMS com checkout próprio). Feed via webhook deles → n8n →
+// /api/ingest/tauk. Fica FORA da tabela Order de propósito: o payload não
+// tem produto/ID de transação e as vendas podem também transitar pela
+// plataforma principal — modelo separado evita dupla contagem nas métricas
+// de receita. Aba própria "Tauk" lê daqui.
+model TaukSale {
+  id                String   @id @default(cuid())
+  // Chave de dedup: email|purchase-date normalizados (payload não tem ID).
+  // Reenvio do mesmo evento faz upsert, não duplica.
+  externalKey       String   @unique
+  email             String?
+  firstName         String?
+  lastName          String?
+  phone             String?
+  address           String?
+  amountUsd         Decimal  @db.Decimal(12, 2)
+  fulfillmentStatus String?
+  purchasedAt       DateTime
+  receivedAt        DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+  raw               Json?
+
+  @@index([purchasedAt])
+  @@index([email])
+}

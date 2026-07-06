@@ -8,6 +8,7 @@ const ROUTES = {
   'leaderboard':    { title: 'Ranking',     em: 'de afiliados', crumbs: ['Afiliados', 'Ranking'] },
   'all-affiliates': { title: 'Diretório',   em: 'de afiliados', crumbs: ['Afiliados', 'Todos'] },
   'recovery':       { title: 'Recuperação', em: 'de vendas',   crumbs: ['Afiliados', 'Recuperação'] },
+  'tauk':           { title: 'Tauk',        em: 'Solutions',   crumbs: ['Afiliados', 'Tauk'] },
   'products':       { title: 'Produtos',     em: '',            crumbs: ['Catálogo', 'Produtos'] },
   'transactions':   { title: 'Transações',  em: 'do ledger',   crumbs: ['Catálogo', 'Transações'] },
   'platforms':      { title: 'Plataformas', em: 'conectadas',  crumbs: ['Sistema', 'Plataformas'] },
@@ -215,6 +216,7 @@ function App({ user }) {
           {hashState.route === 'leaderboard'    && <LeaderboardPage filters={filters} onOpenAffiliate={setDrawerAff}/>}
           {hashState.route === 'all-affiliates' && <AllAffiliatesPage filters={filters} onOpenAffiliate={setDrawerAff}/>}
           {hashState.route === 'recovery'       && <RecoveryPage filters={filters}/>}
+          {hashState.route === 'tauk'           && <TaukPage filters={filters}/>}
           {hashState.route === 'products'       && <ProductsPage filters={filters}/>}
           {hashState.route === 'transactions'   && <TransactionsPage filters={filters}/>}
           {hashState.route === 'platforms'      && <IntegrationsPage filters={filters}/>}

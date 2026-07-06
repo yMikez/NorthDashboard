@@ -2822,6 +2822,8 @@ const TAB_CATALOG = [
   { group: 'Análise',   id: 'insights',       label: 'Insights' },
   { group: 'Afiliados', id: 'leaderboard',    label: 'Ranking' },
   { group: 'Afiliados', id: 'all-affiliates', label: 'Todos os afiliados' },
+  { group: 'Afiliados', id: 'recovery',       label: 'Recuperação' },
+  { group: 'Afiliados', id: 'tauk',           label: 'Tauk' },
   { group: 'Afiliados', id: 'networks',       label: 'Networks' },
   { group: 'Catálogo',  id: 'products',       label: 'Produtos' },
   { group: 'Catálogo',  id: 'transactions',   label: 'Transações' },
@@ -7612,10 +7614,178 @@ function RecoveryPage({ filters }) {
   );
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Tauk Solutions — vendas recuperadas pelo serviço (telefone/SMS, checkout
+// próprio). Feed: webhook Tauk → n8n → /api/ingest/tauk → TaukSale (fora da
+// tabela Order de propósito — sem produto/ID e risco de dupla contagem).
+// ─────────────────────────────────────────────────────────────────────────────
+
+function taukStatusStyle(status) {
+  const s = String(status || '').toUpperCase();
+  if (s === 'HOLD') return { bg: 'rgba(255,180,0,0.14)', fg: '#ffd166', border: 'rgba(255,180,0,0.4)' };
+  if (s === 'SHIPPED' || s === 'FULFILLED' || s === 'DELIVERED') {
+    return { bg: 'rgba(58,214,140,0.14)', fg: 'var(--success)', border: 'rgba(58,214,140,0.4)' };
+  }
+  if (s === 'CANCELED' || s === 'CANCELLED' || s === 'REFUNDED') {
+    return { bg: 'rgba(255,90,90,0.14)', fg: '#ff8a8a', border: 'rgba(255,90,90,0.4)' };
+  }
+  return { bg: 'rgba(91,200,255,0.12)', fg: 'var(--glow-cyan)', border: 'rgba(91,200,255,0.35)' };
+}
+
+function TaukStatusBadge({ status }) {
+  const st = taukStatusStyle(status);
+  return (
+    <span style={{
+      fontFamily: 'var(--f-mono)', fontSize: 9.5, fontWeight: 600, letterSpacing: '0.06em',
+      textTransform: 'uppercase', padding: '2px 8px', borderRadius: 'var(--r-full)',
+      background: st.bg, color: st.fg, border: `1px solid ${st.border}`, whiteSpace: 'nowrap',
+    }}>
+      {String(status || '—').toUpperCase()}
+    </span>
+  );
+}
+
+// Data/hora BRT curta pra tabela de vendas recentes.
+function fmtTaukWhen(iso) {
+  try {
+    return new Date(iso).toLocaleString('pt-BR', {
+      timeZone: 'America/Sao_Paulo', day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit',
+    });
+  } catch (e) { return iso; }
+}
+
+function TaukPage({ filters }) {
+  const [data, setData] = useState({ status: 'loading', m: null, err: null });
+  const [refresh, setRefresh] = useState(0);
+
+  useEffect(() => {
+    let cancelled = false;
+    setData((d) => ({ ...d, status: 'loading' }));
+    window.NSApi.fetchTauk(filters)
+      .then((m) => { if (!cancelled) setData({ status: 'ready', m, err: null }); })
+      .catch((err) => { if (!cancelled) setData({ status: 'error', m: null, err: err.message || 'erro' }); });
+    return () => { cancelled = true; };
+  }, [filters.dateRange.start.getTime(), filters.dateRange.end.getTime(), refresh]);
+
+  const m = data.m;
+
+  return (
+    <div className="page-in">
+      <div className="page-head">
+        <div className="lead">
+          <span className="eyebrow">AFILIADOS · TAUK SOLUTIONS</span>
+          <h2>Tauk <em>· recuperação</em></h2>
+          <span className="sub">Vendas recuperadas pela Tauk (telefone/SMS) reportadas via webhook. Respeita o filtro de período.</span>
+        </div>
+        <div className="page-head-actions">
+          <button className="btn btn-ghost" onClick={() => setRefresh((n) => n + 1)}><Icon name="refresh" size={12}/> Recarregar</button>
+        </div>
+      </div>
+
+      {data.status === 'error' && <div className="panel" style={{ color: 'var(--danger)', marginBottom: 12 }}>Erro: {data.err}</div>}
+
+      {data.status === 'loading' && !m && (
+        <>
+          <SkelMiniKpis n={4}/>
+          <div style={{ marginTop: 12 }}><SkelChartPanel i={1}/></div>
+          <div style={{ marginTop: 12 }}><SkelTablePanel rows={6} cols={5} i={2}/></div>
+        </>
+      )}
+
+      {m && (
+        <>
+          <div className="grid-2" style={{ gridTemplateColumns: 'repeat(4,1fr)', marginBottom: 12 }}>
+            <CopyKpi label="VENDAS RECUPERADAS" value={fmtInt(m.kpis.sales)}/>
+            <CopyKpi label="RECEITA" value={fmtCurrency(m.kpis.grossUsd, 'USD', 2)} tone="ok"/>
+            <CopyKpi label="TICKET MÉDIO" value={fmtCurrency(m.kpis.aovUsd, 'USD', 2)}/>
+            <CopyKpi label="EM HOLD (não enviadas)" value={fmtInt(m.kpis.holdCount)} tone={m.kpis.holdCount > 0 ? 'danger' : undefined}/>
+          </div>
+
+          {m.daily.length > 0 && (
+            <div className="panel" style={{ marginBottom: 12 }}>
+              <div className="panel-head">
+                <div className="panel-title">
+                  <span className="panel-eyebrow">RECEITA RECUPERADA · POR DIA</span>
+                  <div className="panel-metric" style={{ fontSize: 14, color: 'var(--fg3)' }}>
+                    {m.daily.length} {m.daily.length === 1 ? 'dia' : 'dias'} com venda no período
+                  </div>
+                </div>
+              </div>
+              <NSTimeSeries height={220} currency="USD"
+                data={m.daily.map((d) => ({ date: d.date, receita: d.grossUsd }))}
+                series={[{ key: 'receita', label: 'Receita', color: '#5BC8FF' }]}/>
+            </div>
+          )}
+
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 2fr', gap: 12, alignItems: 'start' }}>
+            <div className="panel" style={{ padding: 0 }}>
+              <div className="panel-head" style={{ padding: '12px 14px 0' }}>
+                <div className="panel-title">Por status de fulfillment</div>
+              </div>
+              <div className="tbl-wrap" style={{ margin: 0, padding: '0 4px' }}>
+                <table className="tbl">
+                  <thead><tr><th>Status</th><th className="num">Vendas</th><th className="num">Receita</th></tr></thead>
+                  <tbody>
+                    {m.byStatus.length === 0 && (
+                      <tr><td colSpan={3} style={{ textAlign: 'center', padding: 16, opacity: 0.6 }}>Sem vendas no período.</td></tr>
+                    )}
+                    {m.byStatus.map((s) => (
+                      <tr key={s.status}>
+                        <td><TaukStatusBadge status={s.status}/></td>
+                        <td className="num">{fmtInt(s.sales)}</td>
+                        <td className="num">{fmtCurrency(s.grossUsd, 'USD', 2)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            <div className="panel" style={{ padding: 0 }}>
+              <div className="panel-head" style={{ padding: '12px 14px 0' }}>
+                <div className="panel-title">Vendas recentes <span style={{ color: 'var(--fg5)', fontSize: 10, marginLeft: 6 }}>últimas {m.recent.length} do período · horário BRT</span></div>
+              </div>
+              <div className="tbl-wrap" style={{ margin: 0, padding: '0 4px', maxHeight: 420, overflowY: 'auto' }}>
+                <table className="tbl">
+                  <thead><tr><th>Quando</th><th>Cliente</th><th>Contato</th><th className="num">Valor</th><th>Status</th></tr></thead>
+                  <tbody>
+                    {m.recent.length === 0 && (
+                      <tr><td colSpan={5} style={{ textAlign: 'center', padding: 16, opacity: 0.6 }}>
+                        Nenhuma venda da Tauk no período. Assim que o webhook deles disparar, aparece aqui.
+                      </td></tr>
+                    )}
+                    {m.recent.map((r) => (
+                      <tr key={r.id}>
+                        <td className="cell-mono" style={{ fontSize: 11 }}>{fmtTaukWhen(r.purchasedAt)}</td>
+                        <td>{r.name}</td>
+                        <td className="cell-mono" style={{ fontSize: 10.5, color: 'var(--fg4)' }}>
+                          {r.email || '—'}{r.phone ? <span style={{ color: 'var(--fg5)' }}> · {r.phone}</span> : null}
+                        </td>
+                        <td className="num" style={{ color: 'var(--glow-cyan)' }}>{fmtCurrency(r.amountUsd, 'USD', 2)}</td>
+                        <td><TaukStatusBadge status={r.fulfillmentStatus}/></td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+
+          <div style={{ marginTop: 10, fontFamily: 'var(--f-mono)', fontSize: 10, color: 'var(--fg5)', lineHeight: 1.6 }}>
+            Fonte: webhook da Tauk Solutions (via n8n). Números FORA das métricas de receita das plataformas —
+            sem produto/ID de transação no feed, uma venda recuperada pode também transitar pela plataforma
+            principal; manter separado evita dupla contagem. Horários convertidos de Eastern (EUA) pra UTC/BRT.
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
 Object.assign(window, {
   FunnelPage, LeaderboardPage, AffiliateDrawer, AllAffiliatesPage,
   ProductsPage, TransactionsPage, IntegrationsPage, FXPage, UsersPage,
   HealthPage, CostsPage, InsightsPage, NetworksPage,
   PartnerShell, ChatPage, ChatWidget,
-  CopyOptimizerPage, RecoveryPage,
+  CopyOptimizerPage, RecoveryPage, TaukPage,
 });

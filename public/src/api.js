@@ -825,6 +825,14 @@ function fetchRecovery(filters) {
   });
   return coGet(`/api/metrics/recovery?${qs}`);
 }
+// Tauk Solutions (recuperação por telefone/SMS) — aba própria.
+function fetchTauk(filters) {
+  const qs = new URLSearchParams({
+    start_date: toISODate(filters.dateRange.start),
+    end_date: toISODate(filters.dateRange.end),
+  });
+  return coGet(`/api/metrics/tauk?${qs}`);
+}
 function fetchRecoveryAffiliates() { return coGet('/api/admin/recovery-affiliates'); }
 function addRecoveryAffiliate(body) { return coSend('/api/admin/recovery-affiliates', 'POST', body); }
 function deleteRecoveryAffiliate(id) {
@@ -863,6 +871,7 @@ window.NSApi = _wrapMutations({
   deleteCopyRule,
   applyCopyRulesToAll,
   fetchRecovery,
+  fetchTauk,
   fetchRecoveryAffiliates,
   addRecoveryAffiliate,
   deleteRecoveryAffiliate,

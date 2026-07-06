@@ -20,6 +20,7 @@ function Sidebar({ active, onNav, user }) {
         { id: 'leaderboard', label: 'Ranking', icon: 'trophy' },
         { id: 'all-affiliates', label: 'Todos os afiliados', icon: 'users' },
         { id: 'recovery', label: 'Recuperação', icon: 'refresh' },
+        { id: 'tauk', label: 'Tauk', icon: 'target' },
         { id: 'networks', label: 'Networks', icon: 'layers' },
       ]
     },
