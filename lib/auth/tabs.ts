@@ -14,6 +14,8 @@ export type TabId =
   | 'all-affiliates'
   | 'recovery'
   | 'tauk'
+  | 'sms'
+  | 'email'
   | 'products'
   | 'transactions'
   | 'platforms'
@@ -24,7 +26,7 @@ export type TabId =
 export interface TabSpec {
   id: TabId;
   label: string;
-  group: 'Análise' | 'Afiliados' | 'Catálogo' | 'Sistema';
+  group: 'Análise' | 'Afiliados' | 'Captação' | 'Catálogo' | 'Sistema';
 }
 
 export const AVAILABLE_TABS: TabSpec[] = [
@@ -34,9 +36,13 @@ export const AVAILABLE_TABS: TabSpec[] = [
   { id: 'custos',         label: 'Custos',              group: 'Análise' },
   { id: 'leaderboard',    label: 'Ranking',             group: 'Afiliados' },
   { id: 'all-affiliates', label: 'Todos os afiliados',  group: 'Afiliados' },
-  { id: 'recovery',       label: 'Recuperação',         group: 'Afiliados' },
-  { id: 'tauk',           label: 'Tauk',                group: 'Afiliados' },
   { id: 'networks',       label: 'Networks',            group: 'Afiliados' },
+  // Captação: fontes novas de receita (recuperação/SMS/email). sms/email são
+  // placeholders "em breve" — a tab já existe pra permissão ficar pronta.
+  { id: 'recovery',       label: 'Recuperação',         group: 'Captação' },
+  { id: 'tauk',           label: 'Tauk',                group: 'Captação' },
+  { id: 'sms',            label: 'SMS',                 group: 'Captação' },
+  { id: 'email',          label: 'Email',               group: 'Captação' },
   { id: 'products',       label: 'Produtos',            group: 'Catálogo' },
   { id: 'transactions',   label: 'Transações',          group: 'Catálogo' },
   { id: 'platforms',      label: 'Plataformas',         group: 'Sistema' },

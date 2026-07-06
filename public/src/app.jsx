@@ -7,8 +7,10 @@ const ROUTES = {
   'custos':         { title: 'Custos',      em: 'e lucro',     crumbs: ['Análise', 'Custos'] },
   'leaderboard':    { title: 'Ranking',     em: 'de afiliados', crumbs: ['Afiliados', 'Ranking'] },
   'all-affiliates': { title: 'Diretório',   em: 'de afiliados', crumbs: ['Afiliados', 'Todos'] },
-  'recovery':       { title: 'Recuperação', em: 'de vendas',   crumbs: ['Afiliados', 'Recuperação'] },
-  'tauk':           { title: 'Tauk',        em: 'Solutions',   crumbs: ['Afiliados', 'Tauk'] },
+  'recovery':       { title: 'Recuperação', em: 'de vendas',   crumbs: ['Captação', 'Recuperação'] },
+  'tauk':           { title: 'Tauk',        em: 'Solutions',   crumbs: ['Captação', 'Tauk'] },
+  'sms':            { title: 'SMS',         em: 'marketing',   crumbs: ['Captação', 'SMS'] },
+  'email':          { title: 'Email',       em: 'marketing',   crumbs: ['Captação', 'Email'] },
   'products':       { title: 'Produtos',     em: '',            crumbs: ['Catálogo', 'Produtos'] },
   'transactions':   { title: 'Transações',  em: 'do ledger',   crumbs: ['Catálogo', 'Transações'] },
   'platforms':      { title: 'Plataformas', em: 'conectadas',  crumbs: ['Sistema', 'Plataformas'] },
@@ -217,6 +219,8 @@ function App({ user }) {
           {hashState.route === 'all-affiliates' && <AllAffiliatesPage filters={filters} onOpenAffiliate={setDrawerAff}/>}
           {hashState.route === 'recovery'       && <RecoveryPage filters={filters}/>}
           {hashState.route === 'tauk'           && <TaukPage filters={filters}/>}
+          {hashState.route === 'sms'            && <ComingSoonPage channel="sms"/>}
+          {hashState.route === 'email'          && <ComingSoonPage channel="email"/>}
           {hashState.route === 'products'       && <ProductsPage filters={filters}/>}
           {hashState.route === 'transactions'   && <TransactionsPage filters={filters}/>}
           {hashState.route === 'platforms'      && <IntegrationsPage filters={filters}/>}

@@ -2822,16 +2822,18 @@ const TAB_CATALOG = [
   { group: 'Análise',   id: 'insights',       label: 'Insights' },
   { group: 'Afiliados', id: 'leaderboard',    label: 'Ranking' },
   { group: 'Afiliados', id: 'all-affiliates', label: 'Todos os afiliados' },
-  { group: 'Afiliados', id: 'recovery',       label: 'Recuperação' },
-  { group: 'Afiliados', id: 'tauk',           label: 'Tauk' },
   { group: 'Afiliados', id: 'networks',       label: 'Networks' },
+  { group: 'Captação',  id: 'recovery',       label: 'Recuperação' },
+  { group: 'Captação',  id: 'tauk',           label: 'Tauk' },
+  { group: 'Captação',  id: 'sms',            label: 'SMS' },
+  { group: 'Captação',  id: 'email',          label: 'Email' },
   { group: 'Catálogo',  id: 'products',       label: 'Produtos' },
   { group: 'Catálogo',  id: 'transactions',   label: 'Transações' },
   { group: 'Sistema',   id: 'platforms',      label: 'Plataformas' },
   { group: 'Sistema',   id: 'costs',          label: 'Fulfillment' },
   { group: 'Sistema',   id: 'health',         label: 'Saúde do dado' },
 ];
-const TAB_GROUPS = ['Análise', 'Afiliados', 'Catálogo', 'Sistema'];
+const TAB_GROUPS = ['Análise', 'Afiliados', 'Captação', 'Catálogo', 'Sistema'];
 
 function UsersPage({ currentUser }) {
   const [state, setState] = useState({ status: 'loading', users: [], pagination: null, error: null });
@@ -7782,10 +7784,171 @@ function TaukPage({ filters }) {
   );
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Captação · SMS / Email — placeholder "em breve" divertido. Sem backend:
+// quando a fonte for integrada, troca esta página pela página real (mesma
+// tab/rota, permissões já prontas).
+// ─────────────────────────────────────────────────────────────────────────────
+
+const COMING_SOON_META = {
+  sms: {
+    icon: 'message-square',
+    accent: '#5BC8FF',
+    title: 'SMS',
+    tagline: 'Mensagens curtas, receita comprida.',
+    emoji: '📲',
+    jokes: [
+      'Digitando' ,
+    ],
+    steps: [
+      { done: true,  label: 'Ideia aprovada (na reunião do café ☕)' },
+      { done: true,  label: 'Aba criada no dashboard — você está literalmente dentro dela' },
+      { done: false, label: 'Integração com a plataforma de disparo' },
+      { done: false, label: 'Primeiro disparo · primeiros números pingando aqui' },
+    ],
+    footer: 'Quando o canal ligar, esta aba vira KPIs de verdade — vendas, receita e conversão por campanha, igual às abas Recuperação e Tauk.',
+  },
+  email: {
+    icon: 'mail',
+    accent: '#9b7bff',
+    title: 'Email',
+    tagline: 'O canal mais antigo da internet — e ainda um dos que mais pagam.',
+    emoji: '📬',
+    jokes: [
+      'Aquecendo o domínio',
+    ],
+    steps: [
+      { done: true,  label: 'Ideia aprovada (ninguém votou contra 🤝)' },
+      { done: true,  label: 'Aba criada no dashboard — reservada e esperando' },
+      { done: false, label: 'Aquecimento de domínio + integração da ferramenta de envio' },
+      { done: false, label: 'Primeira campanha · open rate estreando aqui' },
+    ],
+    footer: 'Quando o canal ligar, esta aba vira KPIs de verdade — receita por campanha, cliques e conversão, igual às abas Recuperação e Tauk.',
+  },
+};
+
+function ComingSoonPage({ channel }) {
+  const meta = COMING_SOON_META[channel] || COMING_SOON_META.sms;
+  const [dots, setDots] = useState(1);
+  useEffect(() => {
+    const t = setInterval(() => setDots((d) => (d % 3) + 1), 600);
+    return () => clearInterval(t);
+  }, []);
+
+  return (
+    <div className="page-in">
+      <style>{`
+        @keyframes nsCsFloat { 0%,100% { transform: translateY(0); } 50% { transform: translateY(-10px); } }
+        @keyframes nsCsRing { 0% { transform: scale(0.9); opacity: 0.55; } 100% { transform: scale(1.9); opacity: 0; } }
+        @media (prefers-reduced-motion: reduce) {
+          .ns-cs-float, .ns-cs-ring { animation: none !important; }
+        }
+      `}</style>
+
+      <div className="page-head">
+        <div className="lead">
+          <span className="eyebrow" style={{ color: meta.accent }}>CAPTAÇÃO · {meta.title.toUpperCase()}</span>
+          <h2>{meta.title} <em>marketing</em></h2>
+          <span className="sub">{meta.tagline}</span>
+        </div>
+      </div>
+
+      <div className="panel anim-in" style={{
+        display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center',
+        padding: '56px 24px 44px', overflow: 'hidden', position: 'relative',
+      }}>
+        {/* glow de fundo */}
+        <div style={{
+          position: 'absolute', top: -120, left: '50%', transform: 'translateX(-50%)',
+          width: 420, height: 300, borderRadius: '50%', filter: 'blur(80px)',
+          background: `${meta.accent}22`, pointerEvents: 'none',
+        }}/>
+
+        {/* ícone flutuante com anéis pulsando */}
+        <div style={{ position: 'relative', width: 110, height: 110, marginBottom: 22 }}>
+          <div className="ns-cs-ring" style={{
+            position: 'absolute', inset: 0, borderRadius: '50%',
+            border: `1.5px solid ${meta.accent}`, animation: 'nsCsRing 2.4s ease-out infinite',
+          }}/>
+          <div className="ns-cs-ring" style={{
+            position: 'absolute', inset: 0, borderRadius: '50%',
+            border: `1.5px solid ${meta.accent}`, animation: 'nsCsRing 2.4s ease-out 1.2s infinite',
+          }}/>
+          <div className="ns-cs-float" style={{
+            position: 'absolute', inset: 10, borderRadius: '50%',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            background: `linear-gradient(160deg, ${meta.accent}2e, ${meta.accent}10)`,
+            border: `1px solid ${meta.accent}55`,
+            boxShadow: `0 0 34px -6px ${meta.accent}80`,
+            animation: 'nsCsFloat 3.2s ease-in-out infinite',
+            fontSize: 38,
+          }}>
+            {meta.emoji}
+          </div>
+        </div>
+
+        <span style={{
+          fontFamily: 'var(--f-mono)', fontSize: 10.5, fontWeight: 700, letterSpacing: '0.18em',
+          padding: '4px 14px', borderRadius: 'var(--r-full)', marginBottom: 14,
+          background: `${meta.accent}1c`, color: meta.accent, border: `1px solid ${meta.accent}50`,
+        }}>
+          EM BREVE
+        </span>
+
+        <div style={{ fontFamily: 'var(--f-display)', fontSize: 30, color: 'var(--fg1)', letterSpacing: '-0.01em', marginBottom: 6 }}>
+          {meta.title} está chegando
+        </div>
+        <div style={{ fontFamily: 'var(--f-mono)', fontSize: 12.5, color: meta.accent, marginBottom: 30 }}>
+          {meta.jokes[0]}{'.'.repeat(dots)}
+        </div>
+
+        {/* mini-roadmap */}
+        <div style={{ display: 'grid', gap: 10, textAlign: 'left', minWidth: 300, maxWidth: 460, width: '100%', marginBottom: 28 }}>
+          {meta.steps.map((s, i) => (
+            <div key={i} className="anim-in" style={{
+              display: 'flex', alignItems: 'center', gap: 10, '--i': i + 1,
+              padding: '9px 13px', borderRadius: 9,
+              background: s.done ? `${meta.accent}0e` : 'rgba(255,255,255,0.025)',
+              border: `1px solid ${s.done ? `${meta.accent}40` : 'var(--border-soft)'}`,
+              opacity: s.done ? 1 : 0.75,
+            }}>
+              <span style={{
+                width: 20, height: 20, borderRadius: '50%', flexShrink: 0,
+                display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                fontSize: 11, fontWeight: 700,
+                background: s.done ? `${meta.accent}28` : 'rgba(255,255,255,0.05)',
+                color: s.done ? meta.accent : 'var(--fg5)',
+                border: `1px solid ${s.done ? `${meta.accent}60` : 'var(--border-soft)'}`,
+              }}>
+                {s.done ? '✓' : i + 1}
+              </span>
+              <span style={{ fontSize: 12.5, color: s.done ? 'var(--fg2)' : 'var(--fg4)' }}>{s.label}</span>
+            </div>
+          ))}
+        </div>
+
+        {/* barra de progresso com shimmer (reusa .skel) */}
+        <div style={{ width: '100%', maxWidth: 460, marginBottom: 12 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', fontFamily: 'var(--f-mono)', fontSize: 10, color: 'var(--fg5)', marginBottom: 6 }}>
+            <span>construção do canal</span><span style={{ color: meta.accent }}>~50%</span>
+          </div>
+          <div style={{ height: 8, borderRadius: 4, background: 'rgba(255,255,255,0.05)', overflow: 'hidden' }}>
+            <div className="skel" style={{ width: '50%', height: '100%', borderRadius: 4, background: `${meta.accent}55` }}/>
+          </div>
+        </div>
+
+        <div style={{ fontFamily: 'var(--f-mono)', fontSize: 10.5, color: 'var(--fg5)', maxWidth: 480, lineHeight: 1.7, marginTop: 10 }}>
+          {meta.footer}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 Object.assign(window, {
   FunnelPage, LeaderboardPage, AffiliateDrawer, AllAffiliatesPage,
   ProductsPage, TransactionsPage, IntegrationsPage, FXPage, UsersPage,
   HealthPage, CostsPage, InsightsPage, NetworksPage,
   PartnerShell, ChatPage, ChatWidget,
-  CopyOptimizerPage, RecoveryPage, TaukPage,
+  CopyOptimizerPage, RecoveryPage, TaukPage, ComingSoonPage,
 });

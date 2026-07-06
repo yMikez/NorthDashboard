@@ -19,9 +19,16 @@ function Sidebar({ active, onNav, user }) {
       items: [
         { id: 'leaderboard', label: 'Ranking', icon: 'trophy' },
         { id: 'all-affiliates', label: 'Todos os afiliados', icon: 'users' },
+        { id: 'networks', label: 'Networks', icon: 'layers' },
+      ]
+    },
+    {
+      label: 'Captação',
+      items: [
         { id: 'recovery', label: 'Recuperação', icon: 'refresh' },
         { id: 'tauk', label: 'Tauk', icon: 'target' },
-        { id: 'networks', label: 'Networks', icon: 'layers' },
+        { id: 'sms', label: 'SMS', icon: 'message-square' },
+        { id: 'email', label: 'Email', icon: 'mail' },
       ]
     },
     {
