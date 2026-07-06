@@ -7696,10 +7696,12 @@ function TaukPage({ filters }) {
 
       {m && (
         <>
-          <div className="grid-2" style={{ gridTemplateColumns: 'repeat(4,1fr)', marginBottom: 12 }}>
+          <div className="grid-2" style={{ gridTemplateColumns: 'repeat(3,1fr)', marginBottom: 12 }}>
             <CopyKpi label="VENDAS RECUPERADAS" value={fmtInt(m.kpis.sales)}/>
-            <CopyKpi label="RECEITA" value={fmtCurrency(m.kpis.grossUsd, 'USD', 2)} tone="ok"/>
+            <CopyKpi label="RECEITA" value={fmtCurrency(m.kpis.grossUsd, 'USD', 2)}/>
             <CopyKpi label="TICKET MÉDIO" value={fmtCurrency(m.kpis.aovUsd, 'USD', 2)}/>
+            <CopyKpi label={`COMISSÃO TAUK (${Math.round((m.kpis.commissionPct ?? 0.35) * 100)}%)`} value={fmtCurrency(m.kpis.commissionUsd ?? 0, 'USD', 2)} tone="danger"/>
+            <CopyKpi label="LÍQUIDO (pós-comissão)" value={fmtCurrency(m.kpis.netUsd ?? 0, 'USD', 2)} tone="ok"/>
             <CopyKpi label="EM HOLD (não enviadas)" value={fmtInt(m.kpis.holdCount)} tone={m.kpis.holdCount > 0 ? 'danger' : undefined}/>
           </div>
 
@@ -7774,9 +7776,11 @@ function TaukPage({ filters }) {
           </div>
 
           <div style={{ marginTop: 10, fontFamily: 'var(--f-mono)', fontSize: 10, color: 'var(--fg5)', lineHeight: 1.6 }}>
-            Fonte: webhook da Tauk Solutions (via n8n). Números FORA das métricas de receita das plataformas —
-            sem produto/ID de transação no feed, uma venda recuperada pode também transitar pela plataforma
-            principal; manter separado evita dupla contagem. Horários convertidos de Eastern (EUA) pra UTC/BRT.
+            Fonte: webhook da Tauk Solutions (via n8n). Comissão = receita × {Math.round((m.kpis.commissionPct ?? 0.35) * 100)}%
+            sobre cada venda recuperada (acordo comercial); líquido = receita − comissão. Números FORA das métricas
+            de receita das plataformas — sem produto/ID de transação no feed, uma venda recuperada pode também
+            transitar pela plataforma principal; manter separado evita dupla contagem. Horários convertidos de
+            Eastern (EUA) pra UTC/BRT.
           </div>
         </>
       )}

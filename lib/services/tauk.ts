@@ -10,12 +10,25 @@ export interface TaukFilters {
   endDate: Date;
 }
 
+// Comissão da Tauk sobre CADA venda recuperada (acordo comercial: 35%).
+// Computada on-the-fly (não vira payout) — muda via env TAUK_COMMISSION_PCT
+// (fração, ex "0.35") + restart, sem deploy. Se um dia precisar de histórico
+// de taxa (vendas antigas na taxa antiga), seguir o modelo RecoveryRatePeriod.
+const TAUK_COMMISSION_PCT = (() => {
+  const v = Number(process.env.TAUK_COMMISSION_PCT ?? '0.35');
+  return Number.isFinite(v) && v >= 0 && v <= 1 ? v : 0.35;
+})();
+
 export interface TaukResponse {
   range: { start: string; end: string };
   kpis: {
     sales: number;
     grossUsd: number;
     aovUsd: number;
+    // Comissão da Tauk (fração em commissionPct) e líquido pós-comissão.
+    commissionPct: number;
+    commissionUsd: number;
+    netUsd: number;
     // Vendas ainda em HOLD (não enviadas) — sinal de fila de fulfillment.
     holdCount: number;
   };
@@ -87,6 +100,9 @@ export async function getTauk(filters: TaukFilters): Promise<TaukResponse> {
       sales: rows.length,
       grossUsd: round2(gross),
       aovUsd: rows.length > 0 ? round2(gross / rows.length) : 0,
+      commissionPct: TAUK_COMMISSION_PCT,
+      commissionUsd: round2(gross * TAUK_COMMISSION_PCT),
+      netUsd: round2(gross * (1 - TAUK_COMMISSION_PCT)),
       holdCount,
     },
     daily: Array.from(byDay.entries())
