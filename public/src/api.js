@@ -833,6 +833,17 @@ function fetchTauk(filters) {
   });
   return coGet(`/api/metrics/tauk?${qs}`);
 }
+// SMS health (Mautic → n8n → Twilio) — aba própria. `extra` leva os
+// filtros locais da tela: { brand, campaign } (slug da campanha).
+function fetchSms(filters, extra = {}) {
+  const qs = new URLSearchParams({
+    start_date: toISODate(filters.dateRange.start),
+    end_date: toISODate(filters.dateRange.end),
+  });
+  if (extra.brand) qs.set('brand', extra.brand);
+  if (extra.campaign) qs.set('campaign', extra.campaign);
+  return coGet(`/api/metrics/sms?${qs}`);
+}
 function fetchRecoveryAffiliates() { return coGet('/api/admin/recovery-affiliates'); }
 function addRecoveryAffiliate(body) { return coSend('/api/admin/recovery-affiliates', 'POST', body); }
 function deleteRecoveryAffiliate(id) {
@@ -872,6 +883,7 @@ window.NSApi = _wrapMutations({
   applyCopyRulesToAll,
   fetchRecovery,
   fetchTauk,
+  fetchSms,
   fetchRecoveryAffiliates,
   addRecoveryAffiliate,
   deleteRecoveryAffiliate,

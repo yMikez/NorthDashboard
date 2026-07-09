@@ -7789,9 +7789,456 @@ function TaukPage({ filters }) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Captação · SMS / Email — placeholder "em breve" divertido. Sem backend:
+// Captação · SMS — saúde da stack Mautic → n8n → Twilio (4 subcontas).
+// Observabilidade pura: disparo/pausa é no Mautic. Dados: /api/metrics/sms
+// (eventos via /api/ingest/sms-events). 4 blocos: KPIs, saúde por número,
+// tabela de campanhas (catálogo Mautic × telemetria) e feed de diagnóstico.
+// ─────────────────────────────────────────────────────────────────────────────
+
+const SMS_HEALTH_META = {
+  green:  { label: 'SAUDÁVEL',    fg: 'var(--success)', bg: 'rgba(58,214,140,0.14)',  border: 'rgba(58,214,140,0.45)' },
+  yellow: { label: 'ATENÇÃO',     fg: '#ffd166',        bg: 'rgba(255,180,0,0.14)',   border: 'rgba(255,180,0,0.45)' },
+  red:    { label: 'CRÍTICO',     fg: '#ff8a8a',        bg: 'rgba(255,90,90,0.16)',   border: 'rgba(255,90,90,0.5)' },
+  idle:   { label: 'SEM TRÁFEGO', fg: 'var(--fg5)',     bg: 'rgba(255,255,255,0.04)', border: 'var(--border-soft)' },
+};
+
+function SmsHealthBadge({ level, big }) {
+  const meta = SMS_HEALTH_META[level] || SMS_HEALTH_META.idle;
+  return (
+    <span style={{
+      fontFamily: 'var(--f-mono)', fontWeight: 700, letterSpacing: '0.08em', whiteSpace: 'nowrap',
+      fontSize: big ? 11 : 9.5, padding: big ? '4px 12px' : '2px 8px', borderRadius: 'var(--r-full)',
+      background: meta.bg, color: meta.fg, border: `1px solid ${meta.border}`,
+      display: 'inline-flex', alignItems: 'center', gap: 6,
+    }}>
+      <span style={{ width: big ? 8 : 6, height: big ? 8 : 6, borderRadius: '50%', background: meta.fg }}/>
+      {meta.label}
+    </span>
+  );
+}
+
+// Chip do feed de diagnóstico: sent=neutro, delivered=verde,
+// undelivered/failed=vermelho, stop=laranja, skipped=cinza.
+const SMS_TYPE_META = {
+  sent:        { label: 'ENVIADO',    fg: 'var(--glow-cyan)', bg: 'rgba(91,200,255,0.12)',  border: 'rgba(91,200,255,0.35)' },
+  delivered:   { label: 'ENTREGUE',   fg: 'var(--success)',   bg: 'rgba(58,214,140,0.14)',  border: 'rgba(58,214,140,0.4)' },
+  undelivered: { label: 'NÃO ENTREGUE', fg: '#ff8a8a',        bg: 'rgba(255,90,90,0.14)',   border: 'rgba(255,90,90,0.4)' },
+  failed:      { label: 'FALHOU',     fg: '#ff8a8a',          bg: 'rgba(255,90,90,0.14)',   border: 'rgba(255,90,90,0.4)' },
+  stop:        { label: 'STOP',       fg: '#ffb86b',          bg: 'rgba(255,150,60,0.14)',  border: 'rgba(255,150,60,0.4)' },
+  skipped:     { label: 'DESCARTADO', fg: 'var(--fg4)',       bg: 'rgba(255,255,255,0.05)', border: 'var(--border-soft)' },
+};
+
+function SmsTypeChip({ type }) {
+  const meta = SMS_TYPE_META[type] || { label: String(type || '—').toUpperCase(), fg: 'var(--fg4)', bg: 'rgba(255,255,255,0.05)', border: 'var(--border-soft)' };
+  return (
+    <span style={{
+      fontFamily: 'var(--f-mono)', fontSize: 9, fontWeight: 600, letterSpacing: '0.06em',
+      padding: '2px 8px', borderRadius: 'var(--r-full)', whiteSpace: 'nowrap',
+      background: meta.bg, color: meta.fg, border: `1px solid ${meta.border}`,
+    }}>
+      {meta.label}
+    </span>
+  );
+}
+
+function SmsCampaignStatusBadge({ row }) {
+  if (row.orphan) {
+    return <span style={{ fontFamily: 'var(--f-mono)', fontSize: 9, color: '#ffd166', border: '1px solid rgba(255,180,0,0.4)', background: 'rgba(255,180,0,0.1)', padding: '2px 8px', borderRadius: 'var(--r-full)', whiteSpace: 'nowrap' }}>NÃO ENCONTRADA NO MAUTIC</span>;
+  }
+  const map = {
+    active:   { label: 'ATIVA',     fg: 'var(--success)', bg: 'rgba(58,214,140,0.14)', border: 'rgba(58,214,140,0.4)' },
+    paused:   { label: 'PAUSADA',   fg: '#ffd166',        bg: 'rgba(255,180,0,0.12)',  border: 'rgba(255,180,0,0.4)' },
+    archived: { label: 'ARQUIVADA', fg: 'var(--fg5)',     bg: 'rgba(255,255,255,0.04)', border: 'var(--border-soft)' },
+  };
+  const meta = map[row.status] || map.archived;
+  return (
+    <span style={{ fontFamily: 'var(--f-mono)', fontSize: 9, fontWeight: 600, color: meta.fg, background: meta.bg, border: `1px solid ${meta.border}`, padding: '2px 8px', borderRadius: 'var(--r-full)', whiteSpace: 'nowrap' }}>
+      {meta.label}
+    </span>
+  );
+}
+
+// Data/hora BRT curta pro feed e pra tabela de campanhas.
+function fmtSmsWhen(iso) {
+  if (!iso) return '—';
+  try {
+    return new Date(iso).toLocaleString('pt-BR', {
+      timeZone: 'America/Sao_Paulo', day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit',
+    });
+  } catch (e) { return iso; }
+}
+
+// Card de saúde de um número ATIVO (bloco B — o coração da tela).
+function SmsNumberCard({ n }) {
+  const meta = SMS_HEALTH_META[n.health] || SMS_HEALTH_META.idle;
+  const spark = (n.daily || []).filter((d) => d.deliveryRate != null).map((d) => d.deliveryRate);
+  return (
+    <div className="panel" style={{ padding: '14px 16px', borderColor: n.health === 'red' ? 'rgba(255,90,90,0.5)' : undefined }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 10 }}>
+        <div>
+          <div style={{ fontFamily: 'var(--f-display)', fontSize: 17, color: 'var(--fg1)' }}>
+            {n.brand || (n.subIndex != null ? `Sub #${n.subIndex}` : '—')}
+          </div>
+          <div style={{ fontFamily: 'var(--f-mono)', fontSize: 10.5, color: 'var(--fg5)', marginTop: 2 }}>
+            {n.numberMasked || 'número não cadastrado'}{n.subIndex != null ? ` · sub ${n.subIndex}` : ''}
+          </div>
+        </div>
+        <SmsHealthBadge level={n.health} big/>
+      </div>
+
+      <div style={{ display: 'flex', alignItems: 'flex-end', gap: 12, marginTop: 12 }}>
+        <div>
+          <div className="eyebrow" style={{ fontSize: 8.5 }}>TAXA DE ENTREGA</div>
+          <div style={{ fontFamily: 'var(--f-display)', fontSize: 26, fontWeight: 600, color: meta.fg }}>
+            {n.deliveryRate != null ? fmtPct(n.deliveryRate) : '—'}
+          </div>
+        </div>
+        <div style={{ flex: 1, display: 'flex', justifyContent: 'flex-end' }}>
+          <Sparkline data={spark} width={140} height={34} color={n.health === 'red' ? '#ff8a8a' : n.health === 'yellow' ? '#ffd166' : '#5BC8FF'}/>
+        </div>
+      </div>
+
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 8, marginTop: 12 }}>
+        <div>
+          <div className="eyebrow" style={{ fontSize: 8.5 }}>ENVIADOS</div>
+          <div style={{ fontFamily: 'var(--f-mono)', fontSize: 14, color: 'var(--fg2)' }}>{fmtInt(n.sent)}</div>
+        </div>
+        <div>
+          <div className="eyebrow" style={{ fontSize: 8.5 }}>30007 (OPERADORA)</div>
+          <div style={{ fontFamily: 'var(--f-mono)', fontSize: 14, color: n.filtered30007 > 0 ? 'var(--danger)' : 'var(--fg2)', fontWeight: n.filtered30007 > 0 ? 700 : 400 }}>
+            {fmtInt(n.filtered30007)}
+            {n.filtered30007Last24h > 0 && <span style={{ fontSize: 9.5, marginLeft: 4, color: 'var(--danger)' }}>({n.filtered30007Last24h} em 24h)</span>}
+          </div>
+        </div>
+        <div>
+          <div className="eyebrow" style={{ fontSize: 8.5 }}>STOPS</div>
+          <div style={{ fontFamily: 'var(--f-mono)', fontSize: 14, color: 'var(--fg2)' }}>
+            {fmtInt(n.stops)}
+            <span style={{ fontSize: 9.5, marginLeft: 4, color: 'var(--fg5)' }}>{n.stopRate != null ? fmtPct(n.stopRate) : ''}</span>
+          </div>
+        </div>
+        <div>
+          <div className="eyebrow" style={{ fontSize: 8.5 }}>PENDENTES &gt;1H</div>
+          <div style={{ fontFamily: 'var(--f-mono)', fontSize: 14, color: n.pending > 0 ? '#ffd166' : 'var(--fg2)' }}>{fmtInt(n.pending)}</div>
+        </div>
+      </div>
+
+      {n.health === 'red' && (
+        <div style={{
+          marginTop: 12, padding: '9px 12px', borderRadius: 8, fontSize: 11.5, lineHeight: 1.5,
+          background: 'rgba(255,90,90,0.12)', border: '1px solid rgba(255,90,90,0.45)', color: '#ff8a8a',
+        }}>
+          <b>Pausar envios desta marca e acionar o parceiro de SMS.</b>
+          {n.healthReasons.length > 0 && <span style={{ color: 'var(--fg3)' }}> Motivo: {n.healthReasons.join(' · ')}.</span>}
+        </div>
+      )}
+      {n.health === 'yellow' && n.healthReasons.length > 0 && (
+        <div style={{ marginTop: 10, fontFamily: 'var(--f-mono)', fontSize: 10, color: '#ffd166' }}>
+          {n.healthReasons.join(' · ')}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function SmsPage({ filters }) {
+  const [data, setData] = useState({ status: 'loading', m: null, err: null });
+  const [refresh, setRefresh] = useState(0);
+  const [brand, setBrand] = useState('');
+  const [campaign, setCampaign] = useState('');
+  // Opções dos selects vêm dos próprios dados; memorizadas do último load
+  // SEM o respectivo filtro (senão filtrar por uma marca faria as outras
+  // sumirem do dropdown).
+  const [brandOpts, setBrandOpts] = useState([]);
+  const [campOpts, setCampOpts] = useState([]);
+  const [feedOpen, setFeedOpen] = useState(false);
+  const [feedType, setFeedType] = useState('');
+  const [expanded, setExpanded] = useState(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    setData((d) => ({ ...d, status: 'loading' }));
+    window.NSApi.fetchSms(filters, { brand: brand || null, campaign: campaign || null })
+      .then((m) => {
+        if (cancelled) return;
+        setData({ status: 'ready', m, err: null });
+        if (!brand) {
+          setBrandOpts(Array.from(new Set((m.numbers || []).filter((n) => n.brand && (n.sent > 0 || n.role === 'active')).map((n) => n.brand))));
+        }
+        if (!campaign) {
+          setCampOpts((m.campaigns || []).filter((c) => c.slug).map((c) => ({ slug: c.slug, name: c.name || c.slug })));
+        }
+      })
+      // Erro preserva o `m` anterior: com o auto-refresh de 60s, um blip
+      // transiente não pode apagar a tela — mostra o banner de erro em cima
+      // dos dados que já estavam visíveis.
+      .catch((err) => { if (!cancelled) setData((d) => ({ status: 'error', m: d.m, err: err.message || 'erro' })); });
+    return () => { cancelled = true; };
+  }, [filters.dateRange.start.getTime(), filters.dateRange.end.getTime(), brand, campaign, refresh]);
+
+  // Feed "tempo real": refresh de 60s da tela inteira (o cache server-side
+  // de 30s segura o custo; o payload é o mesmo endpoint).
+  useEffect(() => {
+    const t = setInterval(() => setRefresh((n) => n + 1), 60_000);
+    return () => clearInterval(t);
+  }, []);
+
+  const m = data.m;
+  const selStyle = {
+    background: 'rgba(255,255,255,0.04)', color: 'var(--fg2)', border: '1px solid var(--border-soft)',
+    borderRadius: 8, padding: '5px 8px', fontSize: 11, fontFamily: 'var(--f-mono)',
+  };
+
+  const actives = m ? m.numbers.filter((n) => n.role === 'active' || n.sent > 0 || n.stops > 0) : [];
+  const reserves = m ? m.numbers.filter((n) => !actives.includes(n)) : [];
+  const feedRows = m ? (feedType ? m.feed.filter((f) => f.type === feedType) : m.feed) : [];
+  const topReason = m && m.kpis.skippedByReason.length > 0 ? m.kpis.skippedByReason[0] : null;
+
+  return (
+    <div className="page-in">
+      <div className="page-head">
+        <div className="lead">
+          <span className="eyebrow">CAPTAÇÃO · SMS</span>
+          <h2>SMS <em>· saúde da operação</em></h2>
+          <span className="sub">Telemetria da stack Mautic → n8n → Twilio (envios, entregas, STOPs, filtragem de operadora). Observabilidade — disparo e pausa continuam no Mautic.</span>
+        </div>
+        <div className="page-head-actions" style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+          <select value={brand} onChange={(e) => setBrand(e.target.value)} style={selStyle}>
+            <option value="">Todas as marcas</option>
+            {brandOpts.map((b) => <option key={b} value={b}>{b}</option>)}
+          </select>
+          <select value={campaign} onChange={(e) => setCampaign(e.target.value)} style={{ ...selStyle, maxWidth: 220 }}>
+            <option value="">Todas as campanhas</option>
+            {campOpts.map((c) => <option key={c.slug} value={c.slug}>{c.name}</option>)}
+          </select>
+          <button className="btn btn-ghost" onClick={() => setRefresh((n) => n + 1)}><Icon name="refresh" size={12}/> Recarregar</button>
+        </div>
+      </div>
+
+      {data.status === 'error' && <div className="panel" style={{ color: 'var(--danger)', marginBottom: 12 }}>Erro: {data.err}</div>}
+
+      {data.status === 'loading' && !m && (
+        <>
+          <SkelMiniKpis n={4}/>
+          <div style={{ marginTop: 12 }}><SkelChartPanel i={1}/></div>
+          <div style={{ marginTop: 12 }}><SkelTablePanel rows={6} cols={8} i={2}/></div>
+        </>
+      )}
+
+      {m && (
+        <>
+          {/* Alertas transversais */}
+          {m.alerts.redNumbers.length > 0 && (
+            <div className="panel" style={{
+              marginBottom: 12, padding: '12px 16px', display: 'flex', alignItems: 'center', gap: 10,
+              background: 'rgba(255,90,90,0.1)', border: '1px solid rgba(255,90,90,0.5)',
+            }}>
+              <Icon name="alert-triangle" size={16}/>
+              <div style={{ fontSize: 12.5, color: '#ff8a8a' }}>
+                <b>{m.alerts.redNumbers.join(', ')} em estado crítico.</b>{' '}
+                <span style={{ color: 'var(--fg3)' }}>Pausar envios desta marca e acionar o parceiro de SMS.</span>
+              </div>
+            </div>
+          )}
+          {m.alerts.callbacksSuspect && (
+            <div style={{
+              marginBottom: 12, padding: '8px 14px', borderRadius: 9, fontSize: 11.5,
+              background: 'rgba(255,180,0,0.08)', border: '1px solid rgba(255,180,0,0.35)', color: '#ffd166',
+            }}>
+              {fmtPct(m.alerts.recentPendingRatio)} dos envios recentes seguem sem status final há mais de 1h — os callbacks do Twilio podem estar fora do ar.
+              {m.kpis.pending > 0 ? ` ${fmtInt(m.kpis.pending)} pendentes no período.` : ''}
+            </div>
+          )}
+
+          {/* Bloco A — KPIs do período */}
+          <div className="grid-2" style={{ gridTemplateColumns: 'repeat(4,1fr)', marginBottom: 12 }}>
+            <CopyKpi label="ENVIADOS" value={fmtInt(m.kpis.sent)}
+              sub={m.kpis.pending > 0 ? `${fmtInt(m.kpis.pending)} pendentes >1h` : undefined}/>
+            <CopyKpi label="TAXA DE ENTREGA" value={m.kpis.deliveryRate != null ? fmtPct(m.kpis.deliveryRate) : '—'}
+              tone={m.kpis.deliveryRate != null ? (m.kpis.deliveryRate >= 0.95 ? 'ok' : m.kpis.deliveryRate < 0.90 ? 'danger' : undefined) : undefined}
+              sub={m.kpis.deliveryRateDeltaPp != null
+                ? `${m.kpis.deliveryRateDeltaPp >= 0 ? '+' : ''}${m.kpis.deliveryRateDeltaPp}pp vs período anterior`
+                : `${fmtInt(m.kpis.finals)} status finais no denominador`}/>
+            <CopyKpi label="STOPS" value={fmtInt(m.kpis.stops)}
+              tone={m.kpis.stopRate != null && m.kpis.stopRate > 0.02 ? 'danger' : undefined}
+              sub={m.kpis.stopRate != null ? `taxa ${fmtPct(m.kpis.stopRate)} dos enviados` : undefined}/>
+            <CopyKpi label="DESCARTADOS (GATEWAY)" value={fmtInt(m.kpis.skipped)}
+              sub={topReason ? `${topReason.reason} (${topReason.count})` : 'nenhum descarte no período'}/>
+          </div>
+
+          {/* Bloco B — saúde por número */}
+          <div style={{ display: 'grid', gridTemplateColumns: `repeat(${Math.min(actives.length, 2) || 1},1fr)`, gap: 12, marginBottom: 12 }}>
+            {actives.map((n) => <SmsNumberCard key={`${n.subIndex}-${n.brand}`} n={n}/>)}
+            {actives.length === 0 && (
+              <div className="panel" style={{ padding: 20, color: 'var(--fg5)', fontSize: 12 }}>
+                Nenhum número ativo com tráfego no período. Assim que o n8n reportar eventos, os cards de saúde aparecem aqui.
+              </div>
+            )}
+          </div>
+          {reserves.length > 0 && (
+            <div style={{ display: 'grid', gridTemplateColumns: `repeat(${reserves.length},1fr)`, gap: 12, marginBottom: 12 }}>
+              {reserves.map((n) => (
+                <div key={`r-${n.subIndex}`} className="panel" style={{ padding: '10px 14px', opacity: 0.55 }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <div>
+                      <div style={{ fontFamily: 'var(--f-display)', fontSize: 14, color: 'var(--fg3)' }}>
+                        {n.brand || `Sub #${n.subIndex}`}
+                      </div>
+                      <div style={{ fontFamily: 'var(--f-mono)', fontSize: 9.5, color: 'var(--fg5)' }}>Reserva — sem tráfego</div>
+                    </div>
+                    <SmsHealthBadge level="idle"/>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* Bloco C — tabela de campanhas */}
+          <div className="panel" style={{ padding: 0, marginBottom: 12 }}>
+            <div className="panel-head" style={{ padding: '12px 14px 0' }}>
+              <div className="panel-title">
+                Campanhas <span style={{ color: 'var(--fg5)', fontSize: 10, marginLeft: 6 }}>catálogo Mautic (snapshot horário) × telemetria · clique pra expandir</span>
+              </div>
+            </div>
+            <div className="tbl-wrap" style={{ margin: 0, padding: '0 4px' }}>
+              <table className="tbl">
+                <thead>
+                  <tr>
+                    <th>Campanha</th><th>Status Mautic</th><th>Marca</th>
+                    <th className="num">Enviados</th><th className="num">Entrega %</th>
+                    <th className="num">STOPs</th><th className="num">Descartados</th><th>Último envio</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {m.campaigns.length === 0 && (
+                    <tr><td colSpan={8} style={{ textAlign: 'center', padding: 16, opacity: 0.6 }}>
+                      Nenhuma campanha ainda — o snapshot do catálogo do Mautic chega de hora em hora.
+                    </td></tr>
+                  )}
+                  {m.campaigns.map((c) => {
+                    const key = c.slug || `mautic-${c.mauticId}`;
+                    const isOpen = expanded === key;
+                    return (
+                      <React.Fragment key={key}>
+                        <tr onClick={() => setExpanded(isOpen ? null : key)} style={{ cursor: 'pointer' }}>
+                          <td>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                              <span style={{ color: 'var(--fg2)' }}>{c.name || c.slug}</span>
+                              {!c.slug && (
+                                <span style={{ fontFamily: 'var(--f-mono)', fontSize: 8.5, color: 'var(--fg5)', border: '1px solid var(--border-soft)', padding: '1px 6px', borderRadius: 'var(--r-full)', whiteSpace: 'nowrap' }}>
+                                  SEM TELEMETRIA
+                                </span>
+                              )}
+                            </div>
+                            {c.slug && <div style={{ fontFamily: 'var(--f-mono)', fontSize: 9, color: 'var(--fg5)', marginTop: 1 }}>{c.slug}</div>}
+                          </td>
+                          <td><SmsCampaignStatusBadge row={c}/></td>
+                          <td style={{ fontSize: 11, color: 'var(--fg3)' }}>{c.brand || '—'}</td>
+                          <td className="num">{fmtInt(c.sent)}</td>
+                          <td className="num" style={{ color: c.deliveryRate != null && c.deliveryRate < 0.9 ? 'var(--danger)' : undefined }}>
+                            {c.deliveryRate != null ? fmtPct(c.deliveryRate) : '—'}
+                          </td>
+                          <td className="num">{fmtInt(c.stops)}</td>
+                          <td className="num" style={{ color: c.skipped > 0 ? '#ffd166' : undefined }}>{fmtInt(c.skipped)}</td>
+                          <td className="cell-mono" style={{ fontSize: 10.5 }}>{fmtSmsWhen(c.lastSentAt)}</td>
+                        </tr>
+                        {isOpen && (
+                          <tr>
+                            <td colSpan={8} style={{ background: 'rgba(255,255,255,0.02)', padding: '10px 16px' }}>
+                              <div style={{ display: 'grid', gridTemplateColumns: '1fr 2fr', gap: 16, alignItems: 'start' }}>
+                                <div>
+                                  <div className="eyebrow" style={{ fontSize: 8.5, marginBottom: 6 }}>DESCARTES POR MOTIVO</div>
+                                  {c.skippedByReason.length === 0 && <div style={{ fontSize: 11, color: 'var(--fg5)' }}>Nenhum descarte no período.</div>}
+                                  {c.skippedByReason.map((r) => (
+                                    <div key={r.reason} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, color: 'var(--fg3)', padding: '2px 0' }}>
+                                      <span style={{ marginRight: 12 }}>{r.reason}</span>
+                                      <span className="cell-mono" style={{ color: '#ffd166' }}>{fmtInt(r.count)}</span>
+                                    </div>
+                                  ))}
+                                </div>
+                                <div>
+                                  <div className="eyebrow" style={{ fontSize: 8.5, marginBottom: 6 }}>ENVIOS POR DIA</div>
+                                  {c.dailySent.length > 0
+                                    ? <NSTimeSeries height={120} format="int" data={c.dailySent.map((d) => ({ date: d.date, enviados: d.sent }))}
+                                        series={[{ key: 'enviados', label: 'Enviados', color: '#5BC8FF' }]}/>
+                                    : <div style={{ fontSize: 11, color: 'var(--fg5)' }}>Sem envios no período.</div>}
+                                </div>
+                              </div>
+                            </td>
+                          </tr>
+                        )}
+                      </React.Fragment>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          {/* Bloco D — feed de diagnóstico (colapsável) */}
+          <div className="panel" style={{ padding: 0, marginBottom: 12 }}>
+            <div
+              className="panel-head"
+              style={{ padding: '12px 14px', cursor: 'pointer', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}
+              onClick={() => setFeedOpen((v) => !v)}
+            >
+              <div className="panel-title">
+                Feed de diagnóstico
+                <span style={{ color: 'var(--fg5)', fontSize: 10, marginLeft: 6 }}>últimos {m.feed.length} eventos · refresh 60s · horário BRT</span>
+              </div>
+              <Icon name={feedOpen ? 'chevron-down' : 'chevron-right'} size={14}/>
+            </div>
+            {feedOpen && (
+              <>
+                <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', padding: '0 14px 10px' }}>
+                  <button className={`chip ${feedType === '' ? 'is-active' : ''}`} onClick={() => setFeedType('')}>Todos</button>
+                  {Object.keys(SMS_TYPE_META).map((t) => (
+                    <button key={t} className={`chip ${feedType === t ? 'is-active' : ''}`} onClick={() => setFeedType(t)}>
+                      {SMS_TYPE_META[t].label.toLowerCase()}
+                    </button>
+                  ))}
+                </div>
+                <div className="tbl-wrap" style={{ margin: 0, padding: '0 4px', maxHeight: 380, overflowY: 'auto' }}>
+                  <table className="tbl">
+                    <thead><tr><th>Quando</th><th>Evento</th><th>Marca</th><th>Campanha</th><th>Destino</th><th>Detalhe</th></tr></thead>
+                    <tbody>
+                      {feedRows.length === 0 && (
+                        <tr><td colSpan={6} style={{ textAlign: 'center', padding: 16, opacity: 0.6 }}>Nenhum evento no período{feedType ? ' pra esse tipo' : ''}.</td></tr>
+                      )}
+                      {feedRows.map((f) => (
+                        <tr key={f.id}>
+                          <td className="cell-mono" style={{ fontSize: 10.5 }}>{fmtSmsWhen(f.occurredAt)}</td>
+                          <td><SmsTypeChip type={f.type}/></td>
+                          <td style={{ fontSize: 11, color: 'var(--fg3)' }}>{f.brand || '—'}</td>
+                          <td className="cell-mono" style={{ fontSize: 10, color: 'var(--fg4)' }}>{f.campaign || '—'}</td>
+                          <td className="cell-mono" style={{ fontSize: 10.5 }}>{f.toMasked || '—'}</td>
+                          <td style={{ fontSize: 10.5, color: f.type === 'undelivered' || f.type === 'failed' ? '#ff8a8a' : 'var(--fg4)' }}>{f.detail || '—'}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </>
+            )}
+          </div>
+
+          <div style={{ fontFamily: 'var(--f-mono)', fontSize: 10, color: 'var(--fg5)', lineHeight: 1.6 }}>
+            Taxa de entrega = entregues ÷ status finais (delivered+undelivered+failed) — callbacks podem atrasar,
+            então o denominador NÃO são os enviados. Pendentes = enviados há mais de 1h sem status final (sinal de
+            callback quebrado). 30007 = filtragem de operadora — se recorrente, pausar a marca e acionar o parceiro.
+            Semáforo: 🟢 entrega ≥95% e STOP &lt;1% · 🟡 entrega 90–95% ou STOP 1–2% ou qualquer 30007 em 24h ·
+            🔴 entrega &lt;90% ou STOP &gt;2% ou ≥5× 30007 em 24h. Números de leads sempre mascarados.
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Captação · Email — placeholder "em breve" divertido. Sem backend:
 // quando a fonte for integrada, troca esta página pela página real (mesma
-// tab/rota, permissões já prontas).
+// tab/rota, permissões já prontas). (SMS já virou página real — SmsPage.)
 // ─────────────────────────────────────────────────────────────────────────────
 
 const COMING_SOON_META = {
@@ -7954,5 +8401,5 @@ Object.assign(window, {
   ProductsPage, TransactionsPage, IntegrationsPage, FXPage, UsersPage,
   HealthPage, CostsPage, InsightsPage, NetworksPage,
   PartnerShell, ChatPage, ChatWidget,
-  CopyOptimizerPage, RecoveryPage, TaukPage, ComingSoonPage,
+  CopyOptimizerPage, RecoveryPage, TaukPage, SmsPage, ComingSoonPage,
 });

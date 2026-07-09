@@ -786,6 +786,90 @@ model FunnelPageState {
   @@index([reportedAt])
 }
 
+// ═══════════════════════════════════════════════════════════════════
+// SMS Health — telemetria da stack Mautic → n8n (gateway) → Twilio.
+// O n8n manda eventos via POST /api/ingest/sms-events (mesmo shared
+// secret dos demais ingests). Aba "SMS" lê daqui. Observabilidade
+// apenas — disparo/pausa de campanha continua no Mautic.
+// ═══════════════════════════════════════════════════════════════════
+
+// Evento de telemetria de SMS (append-only, exceto dedup por sid).
+// eventType: 'sms_sent' | 'sms_skipped' | 'sms_status' | 'sms_stop'.
+// (campaign_catalog NÃO vira SmsEvent — vira upsert em SmsCampaign.)
+//
+// Dedup (retry do n8n/Twilio não pode duplicar métrica):
+//   sms_sent   → upsert por (eventType, messageSid)
+//   sms_status → upsert por (eventType, messageSid) — 1 status FINAL por
+//                sid; se chegar outro final pro mesmo sid, sobrescreve.
+//   sms_skipped/sms_stop → sem chave natural; duplicata rara é aceitável.
+// Postgres trata NULLs como distintos no unique, então linhas sem sid
+// (skipped/stop) não colidem entre si.
+model SmsEvent {
+  id        BigInt @id @default(autoincrement())
+  eventType String
+
+  messageSid String?
+  campaign   String?
+  // Marca/subconta Twilio (mapa fixo em lib/connectors/sms/config.ts).
+  // Em sms_stop vêm vazios do gateway — o ingest enriquece via número
+  // (config) ou via último sms_status daquele from_number.
+  brand    String?
+  subIndex Int?
+
+  // sms_status: 'delivered' | 'undelivered' | 'failed' (finais; os
+  // intermediários são filtrados na origem). errorCode 30007 = filtragem
+  // de operadora — o sinal mais importante da tela.
+  status    String?
+  errorCode Int?
+  // sms_skipped: motivo em texto livre do gateway (mobile inválido,
+  // marca não cadastrada, quiet hours, ...).
+  reason String?
+
+  // fromNumber/toNumber dependem do tipo: em sent/status `to` é o lead;
+  // em sms_stop `from` é o lead e `to` é o NOSSO número (identifica a
+  // subconta). Nunca expor completos no front — mascarar.
+  fromNumber String?
+  toNumber   String?
+
+  occurredAt DateTime
+  receivedAt DateTime @default(now())
+  raw        Json?
+
+  @@unique([eventType, messageSid])
+  @@index([eventType, occurredAt])
+  @@index([campaign, occurredAt])
+  @@index([brand, occurredAt])
+  // Atribuição de STOP: "última campanha que mandou pra este número".
+  @@index([toNumber, occurredAt])
+}
+
+// Snapshot horário do catálogo de campanhas do Mautic (event_type
+// campaign_catalog). Upsert por mauticId; campanha ausente do snapshot
+// novo é marcada archived=true (pausada/deletada no Mautic).
+// Vínculo com SmsEvent: slug entre colchetes no name do Mautic
+// ("Reposição NeuroMind [neuromind-reposicao-01]") == SmsEvent.campaign.
+// Campanha sem slug no nome fica com slug NULL (badge "sem telemetria").
+model SmsCampaign {
+  mauticId Int     @id
+  name     String
+  slug     String?
+
+  isPublished Boolean @default(true)
+  archived    Boolean @default(false)
+  category    String?
+
+  // Timestamps DO MAUTIC (created/modified do payload), não nossos.
+  mauticCreatedAt  DateTime?
+  mauticModifiedAt DateTime?
+
+  firstSyncedAt DateTime @default(now())
+  lastSyncedAt  DateTime
+  raw           Json?
+
+  @@index([slug])
+  @@index([archived, isPublished])
+}
+
 // Venda recuperada pela Tauk Solutions (serviço de recuperação por
 // telefone/SMS com checkout próprio). Feed via webhook deles → n8n →
 // /api/ingest/tauk. Fica FORA da tabela Order de propósito: o payload não

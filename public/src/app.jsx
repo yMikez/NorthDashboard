@@ -219,7 +219,7 @@ function App({ user }) {
           {hashState.route === 'all-affiliates' && <AllAffiliatesPage filters={filters} onOpenAffiliate={setDrawerAff}/>}
           {hashState.route === 'recovery'       && <RecoveryPage filters={filters}/>}
           {hashState.route === 'tauk'           && <TaukPage filters={filters}/>}
-          {hashState.route === 'sms'            && <ComingSoonPage channel="sms"/>}
+          {hashState.route === 'sms'            && <SmsPage filters={filters}/>}
           {hashState.route === 'email'          && <ComingSoonPage channel="email"/>}
           {hashState.route === 'products'       && <ProductsPage filters={filters}/>}
           {hashState.route === 'transactions'   && <TransactionsPage filters={filters}/>}
