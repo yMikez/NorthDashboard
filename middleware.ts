@@ -36,7 +36,7 @@ const PUBLIC_PREFIXES = [
 const PUBLIC_FILE_RE = /\.(?:svg|png|jpg|jpeg|gif|ico|css|js|woff2?|ttf|map|html)$/i;
 
 // Rotas que o SPA reconhece. Refresh em qualquer uma delas faz rewrite
-// pra /index.html. Mantenha em sync com ROUTES no public/index.html.
+// pra /index.html. Mantenha em sync com ROUTES no public/src/app.jsx.
 // Rotas desconhecidas continuam dando 404 (sinaliza erro real).
 const SPA_ROUTES = new Set([
   '/',
@@ -53,6 +53,11 @@ const SPA_ROUTES = new Set([
   '/insights',
   '/custos',
   '/users',
+  '/recovery',
+  '/tauk',
+  '/sms',
+  '/email',
+  '/copy-optimizer',
   // /chat foi MIGRADO pra Next.js native route (app/chat/page.tsx)
   // com TS + Tailwind + shadcn. Não rewriter — deixa o Next.js servir.
   '/network',          // partner shell base
