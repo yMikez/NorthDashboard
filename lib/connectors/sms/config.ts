@@ -24,6 +24,12 @@ export const SMS_SUBACCOUNTS: SmsSubaccount[] = [
   { subIndex: 3, brand: null, role: 'reserve', number: null },
 ];
 
+// utm_source que marca venda vinda dos disparos de SMS. Os links das
+// mensagens (Mautic) carregam ?utm_source=smsbrdcst; a Digistore devolve
+// os UTMs no IPN e o conector grava em Order.trafficSource. A aba SMS
+// agrega a receita dessas vendas (comparação case-insensitive).
+export const SMS_UTM_SOURCE = 'smsbrdcst';
+
 export function subaccountByNumber(number: string | null | undefined): SmsSubaccount | null {
   if (!number) return null;
   return SMS_SUBACCOUNTS.find((s) => s.number === number) ?? null;

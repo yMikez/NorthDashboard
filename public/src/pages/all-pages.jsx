@@ -8066,6 +8066,47 @@ function SmsPage({ filters }) {
               sub={topReason ? `${topReason.reason} (${topReason.count})` : 'nenhum descarte no período'}/>
           </div>
 
+          {/* Receita atribuída aos disparos (utm_source do checkout Digistore) */}
+          <div className="panel" style={{ marginBottom: 12 }}>
+            <div className="panel-head">
+              <div className="panel-title">
+                <span className="panel-eyebrow">RECEITA DOS DISPAROS · utm_source={m.sales.utmSource}</span>
+                <div className="panel-metric" style={{ fontSize: 14, color: 'var(--fg3)' }}>
+                  vendas aprovadas com o UTM dos SMS no checkout
+                  {brand ? ' · este painel não segue o filtro de marca (a venda não carrega marca)' : ''}
+                </div>
+              </div>
+            </div>
+            <div className="grid-2" style={{ gridTemplateColumns: 'repeat(3,1fr)', marginBottom: m.sales.daily.length > 0 ? 12 : 0 }}>
+              <CopyKpi label="VENDAS ATRIBUÍDAS" value={fmtInt(m.sales.sales)}/>
+              <CopyKpi label="RECEITA" value={fmtCurrency(m.sales.grossUsd, 'USD', 2)} tone={m.sales.grossUsd > 0 ? 'ok' : undefined}/>
+              <CopyKpi label="TICKET MÉDIO" value={m.sales.aovUsd != null ? fmtCurrency(m.sales.aovUsd, 'USD', 2) : '—'}/>
+            </div>
+            {m.sales.daily.length > 0 && (
+              <NSTimeSeries height={160} currency="USD"
+                data={m.sales.daily.map((d) => ({ date: d.date, receita: d.grossUsd }))}
+                series={[{ key: 'receita', label: 'Receita', color: '#3ad68c' }]}/>
+            )}
+            {m.sales.byCampaign.length > 0 && (
+              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 10 }}>
+                {m.sales.byCampaign.map((c) => (
+                  <span key={c.campaignKey} style={{
+                    fontFamily: 'var(--f-mono)', fontSize: 10, padding: '3px 10px', borderRadius: 'var(--r-full)',
+                    background: 'rgba(58,214,140,0.1)', border: '1px solid rgba(58,214,140,0.35)', color: 'var(--fg3)',
+                  }}>
+                    {c.campaignKey} · {fmtInt(c.sales)} {c.sales === 1 ? 'venda' : 'vendas'} · <span style={{ color: 'var(--success)' }}>{fmtCurrency(c.grossUsd, 'USD', 0)}</span>
+                  </span>
+                ))}
+              </div>
+            )}
+            {m.sales.sales === 0 && (
+              <div style={{ fontSize: 11, color: 'var(--fg5)', marginTop: 8 }}>
+                Nenhuma venda com utm_source={m.sales.utmSource} no período. Confira se os links dos SMS levam
+                ?utm_source={m.sales.utmSource} até o checkout — a Digistore devolve os UTMs no IPN.
+              </div>
+            )}
+          </div>
+
           {/* Bloco B — saúde por número */}
           <div style={{ display: 'grid', gridTemplateColumns: `repeat(${Math.min(actives.length, 2) || 1},1fr)`, gap: 12, marginBottom: 12 }}>
             {actives.map((n) => <SmsNumberCard key={`${n.subIndex}-${n.brand}`} n={n}/>)}

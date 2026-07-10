@@ -16,7 +16,7 @@
 // - 30007 = filtragem de operadora — o número mais importante da tela.
 
 import { db } from '../db';
-import { SMS_SUBACCOUNTS } from '../connectors/sms/config';
+import { SMS_SUBACCOUNTS, SMS_UTM_SOURCE } from '../connectors/sms/config';
 
 export interface SmsFilters {
   startDate: Date;
@@ -133,6 +133,25 @@ export interface SmsCampaignRowOut {
   orphan: boolean;
 }
 
+// Venda atribuída aos disparos (Order com trafficSource = SMS_UTM_SOURCE).
+export interface SmsSaleRow {
+  grossUsd: number;
+  campaignKey: string | null;
+  productName: string | null;
+  orderedAt: Date;
+}
+
+export interface SmsSalesBlock {
+  // utm_source usado na atribuição (config), ecoado pra UI exibir.
+  utmSource: string;
+  sales: number;
+  grossUsd: number;
+  aovUsd: number | null;
+  daily: Array<{ date: string; sales: number; grossUsd: number }>;
+  byCampaign: Array<{ campaignKey: string; sales: number; grossUsd: number }>;
+  recent: Array<{ orderedAt: string; productName: string | null; grossUsd: number; campaignKey: string | null }>;
+}
+
 export interface SmsResponse {
   range: { start: string; end: string };
   filters: { brand: string | null; campaign: string | null };
@@ -154,6 +173,11 @@ export interface SmsResponse {
   };
   numbers: SmsNumberCard[];
   campaigns: SmsCampaignRowOut[];
+  // Receita dos disparos: vendas APROVADAS cujo utm_source do checkout é o
+  // da config (Digistore devolve UTMs no IPN → Order.trafficSource).
+  // Segue o filtro de campanha (via campaignKey=utm_campaign); NÃO segue o
+  // filtro de marca — a Order não carrega marca de SMS.
+  sales: SmsSalesBlock;
   feed: Array<{
     id: string;
     type: string; // sent | delivered | undelivered | failed | stop | skipped
@@ -257,7 +281,46 @@ interface CardAcc {
   finalsByDay: Map<string, number>;
 }
 
-export function reduceSms(input: SmsReduceInput): Omit<SmsResponse, 'feed'> {
+// Agregação das vendas atribuídas aos disparos (pura, testável).
+export function reduceSmsSales(rows: SmsSaleRow[]): Omit<SmsSalesBlock, 'utmSource'> {
+  let gross = 0;
+  const byDay = new Map<string, { sales: number; gross: number }>();
+  const byCamp = new Map<string, { sales: number; gross: number }>();
+  for (const r of rows) {
+    gross += r.grossUsd;
+    const day = brtDay(r.orderedAt);
+    const d = byDay.get(day) ?? { sales: 0, gross: 0 };
+    d.sales++;
+    d.gross += r.grossUsd;
+    byDay.set(day, d);
+    if (r.campaignKey) {
+      const c = byCamp.get(r.campaignKey) ?? { sales: 0, gross: 0 };
+      c.sales++;
+      c.gross += r.grossUsd;
+      byCamp.set(r.campaignKey, c);
+    }
+  }
+  const round2 = (n: number) => Math.round(n * 100) / 100;
+  return {
+    sales: rows.length,
+    grossUsd: round2(gross),
+    aovUsd: rows.length > 0 ? round2(gross / rows.length) : null,
+    daily: Array.from(byDay.entries())
+      .sort(([a], [b]) => (a < b ? -1 : 1))
+      .map(([date, d]) => ({ date, sales: d.sales, grossUsd: round2(d.gross) })),
+    byCampaign: Array.from(byCamp.entries())
+      .sort(([, a], [, b]) => b.gross - a.gross)
+      .map(([campaignKey, c]) => ({ campaignKey, sales: c.sales, grossUsd: round2(c.gross) })),
+    recent: rows.slice(0, 10).map((r) => ({
+      orderedAt: r.orderedAt.toISOString(),
+      productName: r.productName,
+      grossUsd: round2(r.grossUsd),
+      campaignKey: r.campaignKey,
+    })),
+  };
+}
+
+export function reduceSms(input: SmsReduceInput): Omit<SmsResponse, 'feed' | 'sales'> {
   const { startDate, endDate, now, brandFilter, campaignFilter } = input;
 
   // Cards fixos da config + dinâmicos pra tráfego fora do mapa (marca nova
@@ -602,7 +665,7 @@ export async function getSms(filters: SmsFilters): Promise<SmsResponse> {
   const rangeExtended = { gte: startDate, lte: new Date(endDate.getTime() + 48 * HOUR_MS) };
   const durationMs = endDate.getTime() - startDate.getTime();
 
-  const [sent, statuses, skipped, stops, prevStatusGroups, errors24h, campaignsCatalog, feedRows] = await Promise.all([
+  const [sent, statuses, skipped, stops, prevStatusGroups, errors24h, campaignsCatalog, feedRows, saleRows] = await Promise.all([
     db.smsEvent.findMany({
       where: { eventType: 'sms_sent', occurredAt: range, ...brandWhere, ...campaignWhere },
       select: { messageSid: true, campaign: true, brand: true, subIndex: true, occurredAt: true },
@@ -654,6 +717,25 @@ export async function getSms(filters: SmsFilters): Promise<SmsResponse> {
         campaign: true, brand: true, toNumber: true, fromNumber: true, occurredAt: true,
       },
     }),
+    // Vendas atribuídas aos disparos: utm_source do checkout (Digistore
+    // devolve no IPN → Order.trafficSource). APPROVED only — refund muda o
+    // status e a venda sai da soma. Filtro de campanha via campaignKey
+    // (= utm_campaign do link); filtro de marca não se aplica (sem sinal).
+    db.order.findMany({
+      where: {
+        trafficSource: { equals: SMS_UTM_SOURCE, mode: 'insensitive' },
+        status: 'APPROVED',
+        orderedAt: { gte: startDate, lte: endDate },
+        ...(campaign ? { campaignKey: { equals: campaign, mode: 'insensitive' } } : {}),
+      },
+      orderBy: { orderedAt: 'desc' },
+      select: {
+        grossAmountUsd: true,
+        campaignKey: true,
+        orderedAt: true,
+        product: { select: { name: true } },
+      },
+    }),
   ]);
 
   const prevStatusCounts = { delivered: 0, undelivered: 0, failed: 0 };
@@ -697,5 +779,17 @@ export async function getSms(filters: SmsFilters): Promise<SmsResponse> {
     };
   });
 
-  return { ...reduced, feed };
+  const sales: SmsSalesBlock = {
+    utmSource: SMS_UTM_SOURCE,
+    ...reduceSmsSales(
+      saleRows.map((r) => ({
+        grossUsd: Number(r.grossAmountUsd),
+        campaignKey: r.campaignKey,
+        productName: r.product?.name ?? null,
+        orderedAt: r.orderedAt,
+      })),
+    ),
+  };
+
+  return { ...reduced, sales, feed };
 }

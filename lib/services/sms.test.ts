@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
-  smsHealth, maskPhone, reduceSms,
-  type SmsReduceInput, type SmsSentRow, type SmsStatusRow,
+  smsHealth, maskPhone, reduceSms, reduceSmsSales,
+  type SmsReduceInput, type SmsSentRow, type SmsStatusRow, type SmsSaleRow,
 } from './sms';
 
 const start = new Date('2026-07-01T03:00:00.000Z');
@@ -266,6 +266,33 @@ describe('reduceSms', () => {
     }));
     expect(r.alerts.recentPendingRatio).toBeCloseTo(2 / 6, 4);
     expect(r.alerts.callbacksSuspect).toBe(true);
+  });
+
+  it('vendas dos disparos: totais, AOV, série diária BRT e quebra por campanha', () => {
+    const rows: SmsSaleRow[] = [
+      // 2026-07-08T01:00Z = 2026-07-07 22:00 BRT → dia 07 em BRT
+      { grossUsd: 100, campaignKey: 'neuromind-reposicao-01', productName: 'NeuroMind 6', orderedAt: new Date('2026-07-08T01:00:00Z') },
+      { grossUsd: 50, campaignKey: 'neuromind-reposicao-01', productName: 'NeuroMind 3', orderedAt: new Date('2026-07-08T15:00:00Z') },
+      { grossUsd: 70, campaignKey: null, productName: null, orderedAt: new Date('2026-07-08T16:00:00Z') },
+    ];
+    const r = reduceSmsSales(rows);
+    expect(r.sales).toBe(3);
+    expect(r.grossUsd).toBe(220);
+    expect(r.aovUsd).toBeCloseTo(73.33, 2);
+    expect(r.daily).toEqual([
+      { date: '2026-07-07', sales: 1, grossUsd: 100 },
+      { date: '2026-07-08', sales: 2, grossUsd: 120 },
+    ]);
+    expect(r.byCampaign).toEqual([{ campaignKey: 'neuromind-reposicao-01', sales: 2, grossUsd: 150 }]);
+    expect(r.recent.length).toBe(3);
+  });
+
+  it('vendas dos disparos: vazio não explode (AOV null)', () => {
+    const r = reduceSmsSales([]);
+    expect(r.sales).toBe(0);
+    expect(r.grossUsd).toBe(0);
+    expect(r.aovUsd).toBeNull();
+    expect(r.daily).toEqual([]);
   });
 
   it('amostra <5 envios recentes não dispara alerta de callback', () => {

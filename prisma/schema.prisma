@@ -280,6 +280,9 @@ model Order {
   @@index([status, orderedAt])
   @@index([productType, status, orderedAt])
   @@index([country, orderedAt])
+  // Atribuição por fonte (utm_source → trafficSource): a aba SMS filtra
+  // vendas com trafficSource='smsbrdcst' por período.
+  @@index([trafficSource, orderedAt])
   @@index([funnelSessionId])
   @@index([parentExternalId])
   @@index([vendorAccount, orderedAt])

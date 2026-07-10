@@ -71,8 +71,13 @@ export function parseDigistoreIngest(payload: DigistorePayload): NormalizedOrder
     funnelStep: upsellNo,
     clickId: payload.click_id || null,
     trackingId: payload.trackingkey || payload.custom || null,
-    campaignKey: payload.campaignkey || null,
-    trafficSource: null,
+    // campaignkey é o campo nativo da Digistore; utm_campaign é o fallback
+    // dos links com UTMs (ex.: disparos de SMS via Mautic).
+    campaignKey: payload.campaignkey || payload.utm_campaign || null,
+    // utm_source do link de checkout — atribuição de FONTE da venda.
+    // 'smsbrdcst' marca vendas vindas dos disparos de SMS (aba SMS lê
+    // por Order.trafficSource; ver SMS_UTM_SOURCE em connectors/sms/config).
+    trafficSource: payload.utm_source || null,
     deviceType: null,
     browser: null,
 

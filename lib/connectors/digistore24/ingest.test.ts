@@ -164,3 +164,23 @@ describe('deriveBaseOrderId', () => {
     expect(fe).toBe('C74PNZH5');
   });
 });
+
+describe('parseDigistoreIngest — atribuição UTM (disparos de SMS)', () => {
+  it('utm_source vira trafficSource (ex.: smsbrdcst)', () => {
+    const n = parseDigistoreIngest({ ...payment, utm_source: 'smsbrdcst' });
+    expect(n.trafficSource).toBe('smsbrdcst');
+  });
+
+  it('utm_source vazio/ausente vira null (payload real manda "")', () => {
+    expect(parseDigistoreIngest({ ...payment, utm_source: '' }).trafficSource).toBeNull();
+    const noUtm = { ...payment } as Record<string, string>;
+    delete noUtm.utm_source;
+    expect(parseDigistoreIngest(noUtm).trafficSource).toBeNull();
+  });
+
+  it('campaignkey nativo tem precedência; utm_campaign é fallback', () => {
+    expect(parseDigistoreIngest({ ...payment, campaignkey: 'nativa', utm_campaign: 'utm' }).campaignKey).toBe('nativa');
+    expect(parseDigistoreIngest({ ...payment, campaignkey: '', utm_campaign: 'neuromind-reposicao-01' }).campaignKey).toBe('neuromind-reposicao-01');
+    expect(parseDigistoreIngest({ ...payment, campaignkey: '', utm_campaign: '' }).campaignKey).toBeNull();
+  });
+});
