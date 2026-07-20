@@ -24,6 +24,12 @@ const DAY_MS = 86_400_000;
 // 2 = terça. Editável aqui; se um fornecedor mudar de ciclo, vira mapa.
 const INVOICE_CYCLE_DOW = 2;
 
+// Referência operacional do usuário: as invoices semanais dos fornecedores
+// giram em torno de ~10% do faturamento. Usada como régua de sanidade nos
+// ciclos de fatura — desvio grande pra CIMA = gross caindo ou custo
+// inflado; pra BAIXO = provável furo de contagem/custo (ver saúde).
+export const INVOICE_PCT_BENCHMARK = 0.10;
+
 const DEFAULT_SUPPLIER = 'shipoffers';
 // Plataformas cuja sessão agrupa por funnelSessionId (ver sessionFulfillment).
 const SESSION_GROUPED = new Set(['buygoods']);
@@ -96,6 +102,23 @@ export interface FulfillmentForecast {
     accruedUsd: number;
     projectedUsd: number;
   }>;
+  // Últimos ciclos de fatura (qua→ter BRT) vs faturamento — régua dos ~10%.
+  invoiceCycles: InvoiceCycle[];
+  invoiceBenchmarkPct: number;
+}
+
+export interface InvoiceCycle {
+  // Dia BRT do fechamento (terça) que encerra o ciclo. O ciclo cobre os 7
+  // dias que terminam NESSA terça (qua anterior → ter).
+  closesOn: string;
+  partial: boolean; // ciclo corrente ainda aberto
+  grossUsd: number;
+  fulfillmentUsd: number;
+  cogsUsd: number;
+  totalUsd: number;
+  // total (pote+frete) ÷ gross e frete ÷ gross — comparar com o benchmark.
+  totalPctOfGross: number | null;
+  fulfillmentPctOfGross: number | null;
 }
 
 export interface FulfillmentResponse {
@@ -254,6 +277,48 @@ export function reduceFulfillment(
   };
 }
 
+function addDaysBrt(day: string, days: number): string {
+  return new Date(new Date(`${day}T00:00:00Z`).getTime() + days * DAY_MS).toISOString().slice(0, 10);
+}
+
+// Agrupa orders por CICLO DE FATURA (qua→ter BRT, fechando terça) e compara
+// custo vs faturamento — régua dos ~10% do usuário. Puro, testável.
+export function reduceInvoiceCycles(
+  rows: FulfillmentOrderRow[],
+  now: Date,
+  count: number,
+): InvoiceCycle[] {
+  const today = brtDay(now);
+  const acc = new Map<string, { gross: number; fulfill: number; cogs: number }>();
+  for (const r of rows) {
+    const day = brtDay(r.orderedAt);
+    // Fecha na próxima terça >= day (terça fecha no próprio dia).
+    const dow = new Date(`${day}T00:00:00Z`).getUTCDay();
+    const closesOn = addDaysBrt(day, (INVOICE_CYCLE_DOW - dow + 7) % 7);
+    const c = acc.get(closesOn) ?? { gross: 0, fulfill: 0, cogs: 0 };
+    c.gross += r.grossUsd;
+    c.fulfill += r.fulfillmentUsd;
+    c.cogs += r.cogsUsd;
+    acc.set(closesOn, c);
+  }
+  return Array.from(acc.entries())
+    .sort(([a], [b]) => (a > b ? -1 : 1))
+    .slice(0, count)
+    .map(([closesOn, c]) => {
+      const total = c.fulfill + c.cogs;
+      return {
+        closesOn,
+        partial: closesOn >= today,
+        grossUsd: round2(c.gross),
+        fulfillmentUsd: round2(c.fulfill),
+        cogsUsd: round2(c.cogs),
+        totalUsd: round2(total),
+        totalPctOfGross: c.gross > 0 ? Math.round((total / c.gross) * 10000) / 10000 : null,
+        fulfillmentPctOfGross: c.gross > 0 ? Math.round((c.fulfill / c.gross) * 10000) / 10000 : null,
+      };
+    });
+}
+
 // Projeções a partir das orders dos últimos ~35 dias (janela now-relative).
 export function computeForecast(windowRows: FulfillmentOrderRow[], now: Date): FulfillmentForecast {
   const today = brtDay(now);
@@ -348,7 +413,26 @@ export function computeForecast(windowRows: FulfillmentOrderRow[], now: Date): F
       daysInMonth,
     },
     nextInvoice,
+    // 4 ciclos (incl. o corrente parcial) cabem na janela de 35d.
+    invoiceCycles: reduceInvoiceCycles(windowRows, now, 4),
+    invoiceBenchmarkPct: INVOICE_PCT_BENCHMARK,
   };
+}
+
+// Comparação estendida de ciclos de fatura (mais história que o forecast).
+// Consumida pelo endpoint admin /api/admin/fulfillment-check.
+export async function getInvoiceCycles(cycles = 8): Promise<InvoiceCycle[]> {
+  const now = new Date();
+  const windowStart = new Date(now.getTime() - (cycles + 1) * 7 * DAY_MS);
+  const [orders, familyCosts] = await Promise.all([
+    db.order.findMany({
+      where: { status: 'APPROVED', orderedAt: { gte: windowStart, lte: now } },
+      select: ORDER_SELECT,
+    }),
+    db.productFamilyCost.findMany({ select: { family: true, fulfillmentSupplier: true } }),
+  ]);
+  const familySupplier = new Map(familyCosts.map((f) => [f.family, f.fulfillmentSupplier]));
+  return reduceInvoiceCycles(orders.map((o) => toRow(o, familySupplier)), now, cycles);
 }
 
 // ── Serviço ─────────────────────────────────────────────────────────────────

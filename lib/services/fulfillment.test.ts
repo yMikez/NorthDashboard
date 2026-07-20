@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import {
-  reduceFulfillment, computeForecast, sessionKeyFor,
+  reduceFulfillment, computeForecast, sessionKeyFor, reduceInvoiceCycles,
   type FulfillmentOrderRow,
 } from './fulfillment';
 
@@ -138,6 +138,22 @@ describe('computeForecast', () => {
     const so = f.nextInvoice.find((i) => i.supplier === 'shipoffers')!;
     expect(so.accruedUsd).toBe(7);  // só o dia 14 está dentro do ciclo
     expect(so.projectedUsd).toBe(49); // 7 + 7/dia × 6 dias
+  });
+
+  it('ciclos de fatura: qua→ter fechando terça, % custo/gross, parcial marcado', () => {
+    // now = quarta 15/07 → ciclo corrente fecha ter 21/07 (parcial);
+    // anterior fechou ter 14/07 (completo).
+    const rows = [
+      dayRow('2026-07-15', { fulfillmentUsd: 10, cogsUsd: 20, grossUsd: 300 }),  // ciclo 21/07
+      dayRow('2026-07-14', { fulfillmentUsd: 8, cogsUsd: 12, grossUsd: 200 }),   // fecha 14/07 (terça = próprio dia)
+      dayRow('2026-07-08', { fulfillmentUsd: 5, cogsUsd: 5, grossUsd: 100 }),    // qua 08/07 → fecha 14/07
+    ];
+    const cycles = reduceInvoiceCycles(rows, now, 4);
+    expect(cycles.length).toBe(2);
+    expect(cycles[0]).toMatchObject({ closesOn: '2026-07-21', partial: true, totalUsd: 30, grossUsd: 300, totalPctOfGross: 0.1 });
+    expect(cycles[1]).toMatchObject({ closesOn: '2026-07-14', partial: false, totalUsd: 30, grossUsd: 300 });
+    expect(cycles[1].totalPctOfGross).toBe(0.1);
+    expect(cycles[1].fulfillmentPctOfGross).toBeCloseTo(13 / 300, 4);
   });
 
   it('tendência = avg7d vs avg30d em %', () => {

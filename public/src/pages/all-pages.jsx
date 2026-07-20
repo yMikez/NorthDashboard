@@ -4199,6 +4199,50 @@ function CostsPage({ filters }) {
               })}
             </div>
           )}
+          {/* Régua de sanidade: custo do ciclo vs faturamento — referência
+              operacional de ~10% do gross por invoice semanal */}
+          {(fm.forecast.invoiceCycles || []).length > 0 && (() => {
+            const bench = (fm.forecast.invoiceBenchmarkPct ?? 0.10) * 100;
+            return (
+              <div style={{ marginTop: 12 }}>
+                <div className="eyebrow" style={{ fontSize: 8.5, marginBottom: 6 }}>
+                  CICLOS DE FATURA (QUA→TER) · CUSTO VS FATURAMENTO · REFERÊNCIA ~{bench.toFixed(0)}%
+                </div>
+                <div className="tbl-wrap" style={{ margin: 0 }}>
+                  <table className="tbl">
+                    <thead>
+                      <tr><th>Fecha em</th><th className="num">Gross</th><th className="num">Frete</th><th className="num">COGS</th><th className="num">Total</th><th className="num">% do gross</th></tr>
+                    </thead>
+                    <tbody>
+                      {fm.forecast.invoiceCycles.map((c) => {
+                        const pct = c.totalPctOfGross != null ? c.totalPctOfGross * 100 : null;
+                        const dev = pct != null ? Math.abs(pct - bench) : null;
+                        const color = dev == null ? 'var(--fg5)' : dev <= 2 ? 'var(--success)' : dev <= 4 ? '#ffd166' : '#ff8a8a';
+                        return (
+                          <tr key={c.closesOn}>
+                            <td className="cell-mono" style={{ fontSize: 11 }}>
+                              {fmtDateShort(c.closesOn)}{c.partial ? <span style={{ color: 'var(--fg5)', marginLeft: 6, fontSize: 9.5 }}>em aberto</span> : ''}
+                            </td>
+                            <td className="num">{fmtCurrency(c.grossUsd, cur, 0)}</td>
+                            <td className="num">{fmtCurrency(c.fulfillmentUsd, cur, 0)}</td>
+                            <td className="num">{fmtCurrency(c.cogsUsd, cur, 0)}</td>
+                            <td className="num">{fmtCurrency(c.totalUsd, cur, 0)}</td>
+                            <td className="num" style={{ color, fontWeight: 600 }}>
+                              {pct != null ? `${pct.toFixed(1)}%` : '—'}
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+                <div style={{ fontFamily: 'var(--f-mono)', fontSize: 9.5, color: 'var(--fg5)', marginTop: 4 }}>
+                  % = (COGS + frete) ÷ gross do ciclo. Muito ABAIXO de ~{bench.toFixed(0)}% = provável furo de contagem/custo
+                  (ver saúde no topo); muito ACIMA = custo inflado ou faturamento caindo.
+                </div>
+              </div>
+            );
+          })()}
           <div style={{ fontFamily: 'var(--f-mono)', fontSize: 10, color: 'var(--fg5)', marginTop: 10, lineHeight: 1.6 }}>
             Projeções no ritmo dos últimos 7 dias BRT completos, independentes do período selecionado (respeitam os
             filtros de plataforma/família). Fatura fecha toda terça (ciclo configurável no código). Premissa: venda
