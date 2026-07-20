@@ -29,11 +29,14 @@ export async function backfillCogs(): Promise<CogsBackfillStats> {
     sessionsRebalanced: 0,
   };
 
-  // Pass 1 — per-order COGS (each order's own bottles × per-bottle cost).
+  // Pass 1 — per-order COGS (each order's own bottles × per-bottle cost) +
+  // refresh do snapshot bottlesShipped (reclassificação de catálogo só
+  // chega ao histórico por aqui — o ingest congela o valor da época).
   const orders = await db.order.findMany({
     select: {
       id: true,
       cogsUsd: true,
+      bottlesShipped: true,
       product: {
         select: { family: true, bottles: true, bonusBottles: true },
       },
@@ -42,8 +45,16 @@ export async function backfillCogs(): Promise<CogsBackfillStats> {
   stats.scanned = orders.length;
 
   for (const o of orders) {
+    const totalBottles = (o.product.bottles ?? 0) + (o.product.bonusBottles ?? 0);
+    const bottlesChanged = o.bottlesShipped !== totalBottles;
+
+    // Sem família não tem custo unitário — mas o snapshot de POTES ainda
+    // atualiza (volume enviado não depende de custo cadastrado).
     if (!o.product.family) {
       stats.skippedNoFamily++;
+      if (bottlesChanged) {
+        await db.order.update({ where: { id: o.id }, data: { bottlesShipped: totalBottles } });
+      }
       continue;
     }
     const cogs = await calcCogs(
@@ -52,10 +63,13 @@ export async function backfillCogs(): Promise<CogsBackfillStats> {
       o.product.bonusBottles,
     );
     const currentCogs = o.cogsUsd ? Number(o.cogsUsd) : null;
-    if (currentCogs === cogs.cogsUsd) continue;
+    if (currentCogs === cogs.cogsUsd && !bottlesChanged) continue;
     await db.order.update({
       where: { id: o.id },
-      data: { cogsUsd: new Prisma.Decimal(cogs.cogsUsd) },
+      data: {
+        cogsUsd: new Prisma.Decimal(cogs.cogsUsd),
+        bottlesShipped: totalBottles,
+      },
     });
     stats.cogsUpdated++;
   }

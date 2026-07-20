@@ -285,6 +285,28 @@ async function fetchCostsOverview(filters) {
  * entre RedRock e ShipOffers. Resolve supplier on-the-fly (Product override
  * → família default → 'shipoffers'). Respeita filtros globais.
  */
+// Aba Fulfillment reformulada: enviado/gasto/mix/projeções num payload só.
+async function fetchFulfillment(filters) {
+  const params = {
+    start_date: toISODate(filters.dateRange.start),
+    end_date: toISODate(filters.dateRange.end),
+    platforms: setToCSV(filters.platforms),
+    countries: setToCSV(filters.countries),
+    families: setToCSV(filters.families),
+  };
+  return fetchJSON('/api/metrics/fulfillment', params);
+}
+
+// Saúde do custo (sem filtros de dimensão de propósito — problemas de
+// cadastro não podem ser escondidos por filtro).
+async function fetchFulfillmentHealth(filters) {
+  const params = {
+    start_date: toISODate(filters.dateRange.start),
+    end_date: toISODate(filters.dateRange.end),
+  };
+  return fetchJSON('/api/metrics/fulfillment-health', params);
+}
+
 async function fetchFulfillmentOverview(filters) {
   const params = {
     start_date: toISODate(filters.dateRange.start),
@@ -908,6 +930,8 @@ window.NSApi = _wrapMutations({
   fetchOrderDetail,
   fetchCosts,
   fetchCostsOverview,
+  fetchFulfillment,
+  fetchFulfillmentHealth,
   fetchFulfillmentOverview,
   adminListProductSuppliers,
   adminUpdateProductSuppliers,

@@ -3599,7 +3599,13 @@ function CostsPage({ filters }) {
   const [draftFamilies, setDraftFamilies] = useState({});  // { [family]: unitCost string }
   const [draftSuppliers, setDraftSuppliers] = useState({}); // { [family]: 'redrock'|'shipoffers' }
   const [draftRates, setDraftRates] = useState({});         // { ['supplier|family|bottlesMax']: price string }
-  const [fulfillmentKpi, setFulfillmentKpi] = useState({ status: 'loading', value: 0, gross: 0, daily: [] });
+  // Payload principal da aba reformulada: enviado / gasto / mix / projeções.
+  const [fulf, setFulf] = useState({ status: 'loading', m: null, err: null });
+  // Saúde do custo (cobertura + problemas de cadastro). Sem filtros de dimensão.
+  const [health, setHealth] = useState({ status: 'loading', h: null });
+  // Cadastro (custos/tarifas/fornecedores) colapsado por padrão — a tela
+  // agora é primeiro leitura (enviado/gasto/problemas), edição por último.
+  const [showConfig, setShowConfig] = useState(false);
   // Distribuição RedRock vs ShipOffers (kpis + série diária). Respeita filtros.
   const [fulfDist, setFulfDist] = useState({ status: 'loading', kpis: null, bySupplier: [], daily: [] });
   // Cadastro de SKUs: lista de Products com supplier resolvido + drafts de
@@ -3610,31 +3616,30 @@ function CostsPage({ filters }) {
   const [supplierFilters, setSupplierFilters] = useState({ platform: '', family: '', search: '' });
   const cur = filters?.currency || 'USD';
 
-  // Fulfillment total + série diária via /api/metrics/costs-overview —
-  // query DIRETA no Order (soma Order.fulfillmentUsd snapshotado por
-  // pedido). Mesma fonte do dashboard /custos, então os números batem.
-  // Antes usava /overview (materialized view) que podia estar defasada
-  // → mostrava $0 enquanto o dado real existia.
+  // Payload principal — /api/metrics/fulfillment (Orders APROVADAS com
+  // snapshot bottlesShipped/cogsUsd/fulfillmentUsd; pacote = sessão).
   useEffect(() => {
     if (!filters) return;
     let cancelled = false;
-    setFulfillmentKpi((s) => ({ ...s, status: 'loading' }));
-    window.NSApi.fetchCostsOverview(filters)
-      .then((data) => {
-        if (cancelled) return;
-        setFulfillmentKpi({
-          status: 'ready',
-          value: data.kpis?.fulfillmentUsd ?? 0,
-          gross: data.kpis?.grossUsd ?? 0,
-          daily: Array.isArray(data.daily) ? data.daily : [],
-        });
-      })
-      .catch(() => { if (!cancelled) setFulfillmentKpi({ status: 'error', value: 0, gross: 0, daily: [] }); });
+    setFulf((s) => ({ ...s, status: 'loading' }));
+    window.NSApi.fetchFulfillment(filters)
+      .then((m) => { if (!cancelled) setFulf({ status: 'ready', m, err: null }); })
+      .catch((err) => { if (!cancelled) setFulf((s) => ({ status: 'error', m: s.m, err: err.message || 'erro' })); });
     return () => { cancelled = true; };
   }, [filters?.dateRange.start.getTime(), filters?.dateRange.end.getTime(),
       filters && Array.from(filters.platforms).join(','),
       filters && Array.from(filters.countries).join(','),
       filters && Array.from(filters.families).join(',')]);
+
+  // Saúde do custo — só período (problemas de cadastro não são filtráveis).
+  useEffect(() => {
+    if (!filters) return;
+    let cancelled = false;
+    window.NSApi.fetchFulfillmentHealth(filters)
+      .then((h) => { if (!cancelled) setHealth({ status: 'ready', h }); })
+      .catch(() => { if (!cancelled) setHealth({ status: 'error', h: null }); });
+    return () => { cancelled = true; };
+  }, [filters?.dateRange.start.getTime(), filters?.dateRange.end.getTime()]);
 
   // Distribuição RedRock vs ShipOffers — usa filtros globais. Pegamos
   // kpis (contagens + %) e a série diária pro line chart de comparação.
@@ -3659,36 +3664,13 @@ function CostsPage({ filters }) {
       filters && Array.from(filters.countries).join(','),
       filters && Array.from(filters.families).join(',')]);
 
-  const fulfillmentBuckets = (fulfillmentKpi.daily || []).map((b) => ({
-    date: b.date,
-    fulfillment: b.fulfillmentUsd ?? 0,
-  }));
-  const fulfillmentDays = fulfillmentBuckets.length;
-  const fulfillmentAvgDay = fulfillmentDays > 0
-    ? fulfillmentKpi.value / fulfillmentDays
-    : 0;
-  const fulfillmentPeakDay = fulfillmentBuckets.reduce(
-    (mx, b) => (b.fulfillment > mx.fulfillment ? b : mx),
-    { fulfillment: 0, date: null },
-  );
-
-  // Estimativa pro próximo invoice da transportadora (toda terça-feira).
-  // Calcula quantos dias até a próxima terça e usa a média diária do
-  // período pra projetar o volume parcial até lá.
-  function nextTuesdayInvoiceEstimate() {
-    if (fulfillmentKpi.status !== 'ready' || !filters) return null;
-    const days = Math.max(1, Math.ceil((filters.dateRange.end - filters.dateRange.start) / 86400000));
-    const dailyAvg = fulfillmentKpi.value / days;
-    const today = new Date();
-    const dow = today.getDay(); // 0=Sun, 2=Tue
-    let daysToTue = (2 - dow + 7) % 7;
-    if (daysToTue === 0) daysToTue = 7; // se hoje é terça, próxima é semana q vem
-    // Quantos dias da semana atual JÁ passaram desde a terça anterior.
-    const daysSinceLastTue = 7 - daysToTue;
-    const estimate = dailyAvg * daysSinceLastTue;
-    return { dailyAvg, daysToTue, daysSinceLastTue, estimate };
-  }
-  const tueEst = nextTuesdayInvoiceEstimate();
+  // m = payload principal; fk = kpis. Deltas vs período anterior em %.
+  const fm = fulf.m;
+  const pctDelta = (curV, prevV) => (prevV > 0 ? ((curV - prevV) / prevV) * 100 : null);
+  const deltaStr = (curV, prevV) => {
+    const p = pctDelta(curV, prevV);
+    return p == null ? null : `${p >= 0 ? '+' : ''}${p.toFixed(1)}% vs período anterior`;
+  };
   // Token persisted in sessionStorage so the user only enters it once per
   // browser session. NOT localStorage — we don't want the secret to leak
   // beyond this tab's lifetime.
@@ -3966,7 +3948,8 @@ function CostsPage({ filters }) {
           <span className="eyebrow">SISTEMA · FULFILLMENT</span>
           <h2>Fulfillment <em>e custo de envio</em></h2>
           <span className="sub">
-            Editar aqui altera os snapshots de orders FUTUROS · "Recalcular" reescreve histórico
+            Quanto sai, quanto custa e onde o cálculo está furado · premissa: venda aprovada = enviado ·
+            edição de custos no cadastro (fim da página)
           </span>
         </div>
         <div className="page-head-actions">
@@ -3985,6 +3968,244 @@ function CostsPage({ filters }) {
           </button>
         </div>
       </div>
+
+      {/* Saúde do custo — cobertura + furos de cadastro (a métrica de
+          confiança da aba: sem ela os números abaixo podem estar mentindo) */}
+      {health.status === 'ready' && health.h && health.h.kpis.approvedOrders > 0 && (() => {
+        const cov = health.h.kpis.coveragePct ?? 100;
+        const blocking = health.h.issues.filter((i) => i.blocking);
+        const info = health.h.issues.filter((i) => !i.blocking);
+        const tone = cov >= 100 ? ['rgba(58,214,140', 'var(--success)'] : cov >= 95 ? ['rgba(255,180,0', '#ffd166'] : ['rgba(255,90,90', '#ff8a8a'];
+        return (
+          <div className="panel" style={{ marginBottom: 14, border: `1px solid ${tone[0]},0.45)`, background: `${tone[0]},0.06)` }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+              <div style={{ fontFamily: 'var(--f-display)', fontSize: 22, fontWeight: 600, color: tone[1] }}>
+                {cov.toFixed(1).replace(/\.0$/, '')}%
+              </div>
+              <div style={{ flex: 1, minWidth: 240 }}>
+                <div style={{ fontSize: 12, color: 'var(--fg1)' }}>
+                  dos {fmtInt(health.h.kpis.approvedOrders)} pedidos aprovados do período têm custo 100% resolvido
+                  (potes + custo da família + tarifa de frete).
+                </div>
+                {cov < 100 && (
+                  <div style={{ fontSize: 11, color: 'var(--fg4)', marginTop: 2 }}>
+                    O gasto abaixo está SUBESTIMADO — os pedidos furados entram como $0. Corrija no cadastro (fim da página) ou no catálogo.
+                  </div>
+                )}
+              </div>
+            </div>
+            {(blocking.length > 0 || info.length > 0) && (
+              <div style={{ display: 'grid', gap: 6, marginTop: 10 }}>
+                {blocking.map((i) => (
+                  <div key={i.type} style={{ fontSize: 11.5, color: 'var(--fg2)' }}>
+                    <span style={{ color: tone[1], fontWeight: 600 }}>{fmtInt(i.orders)} {i.orders === 1 ? 'pedido' : 'pedidos'}</span>
+                    {' · '}{i.label}
+                    {i.skus.length > 0 && (
+                      <span style={{ color: 'var(--fg5)', fontFamily: 'var(--f-mono)', fontSize: 10 }}>
+                        {' — '}{i.skus.slice(0, 3).map((s) => `${s.name} (${s.platform})`).join(' · ')}{i.skus.length > 3 ? ` +${i.skus.length - 3}` : ''}
+                      </span>
+                    )}
+                  </div>
+                ))}
+                {info.map((i) => (
+                  <div key={i.type} style={{ fontSize: 11, color: 'var(--fg4)' }}>
+                    ⓘ {i.label} — {fmtInt(i.orders)} {i.orders === 1 ? 'pedido' : 'pedidos'} no período
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        );
+      })()}
+
+      {fulf.status === 'error' && (
+        <div className="panel" style={{ color: 'var(--danger)', marginBottom: 14 }}>Erro ao carregar fulfillment: {fulf.err}</div>
+      )}
+      {fulf.status === 'loading' && !fm && <SkelMiniKpis n={5}/>}
+
+      {/* Bloco A — KPIs do período: enviado + gasto com delta */}
+      {fm && (
+        <div className="mini-kpis" style={{ marginBottom: 14 }}>
+          <div className="mini-kpi">
+            <div className="l">Potes enviados</div>
+            <div className="v">{fmtInt(fm.kpis.bottles)}</div>
+            <div className="s">{deltaStr(fm.kpis.bottles, fm.kpis.prev.bottles) ?? `${fmtInt(fm.kpis.orders)} pedidos aprovados`}</div>
+          </div>
+          <div className="mini-kpi">
+            <div className="l">Pacotes (envios)</div>
+            <div className="v">{fmtInt(fm.kpis.packages)}</div>
+            <div className="s">{fm.kpis.packages > 0 ? `média ${(fm.kpis.bottles / fm.kpis.packages).toFixed(1)} potes/pacote` : '—'}</div>
+          </div>
+          <div className="mini-kpi">
+            <div className="l">Frete no período</div>
+            <div className="v">{fmtCurrency(fm.kpis.fulfillmentUsd, cur, 0)}</div>
+            <div className="s">
+              {fm.kpis.costPerPackageUsd != null ? `${fmtCurrency(fm.kpis.costPerPackageUsd, cur, 2)}/pacote` : '—'}
+              {deltaStr(fm.kpis.fulfillmentUsd, fm.kpis.prev.fulfillmentUsd) ? ` · ${deltaStr(fm.kpis.fulfillmentUsd, fm.kpis.prev.fulfillmentUsd)}` : ''}
+            </div>
+          </div>
+          <div className="mini-kpi">
+            <div className="l">COGS (potes)</div>
+            <div className="v">{fmtCurrency(fm.kpis.cogsUsd, cur, 0)}</div>
+            <div className="s">{deltaStr(fm.kpis.cogsUsd, fm.kpis.prev.cogsUsd) ?? '—'}</div>
+          </div>
+          <div className="mini-kpi">
+            <div className="l">Mercadoria total</div>
+            <div className="v">{fmtCurrency(fm.kpis.totalUsd, cur, 0)}</div>
+            <div className="s">
+              {fm.kpis.costPerBottleUsd != null ? `${fmtCurrency(fm.kpis.costPerBottleUsd, cur, 2)}/pote` : '—'}
+              {fm.kpis.fulfillmentPctOfGross != null ? ` · frete = ${(fm.kpis.fulfillmentPctOfGross * 100).toFixed(1)}% do gross` : ''}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Bloco ENVIADO — volume diário + mix de brackets */}
+      {fm && fm.daily.length > 0 && (
+        <div className="panel" style={{ marginBottom: 14 }}>
+          <div className="panel-head">
+            <div className="panel-title">
+              <span className="panel-eyebrow">ENVIADO · POTES E PACOTES POR DIA</span>
+              <div className="panel-metric">
+                {fmtInt(fm.kpis.bottles)} potes
+                <span className="panel-sub" style={{ marginLeft: 8 }}>em {fmtInt(fm.kpis.packages)} pacotes no período</span>
+              </div>
+            </div>
+          </div>
+          <NSTimeSeries height={220} format="int"
+            data={fm.daily.map((d) => ({ date: d.date, potes: d.bottles, pacotes: d.packages }))}
+            series={[
+              { key: 'potes', label: 'Potes', color: '#5BC8FF' },
+              { key: 'pacotes', label: 'Pacotes', color: '#9b7bff' },
+            ]}/>
+          {fm.bracketMix.length > 0 && (
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 12 }}>
+              {fm.bracketMix.map((b) => (
+                <span key={b.bracket} style={{
+                  fontFamily: 'var(--f-mono)', fontSize: 10.5, padding: '4px 12px', borderRadius: 'var(--r-full)',
+                  background: 'rgba(91,200,255,0.08)', border: '1px solid rgba(91,200,255,0.3)', color: 'var(--fg3)',
+                }}>
+                  {b.bracket === 'sem potes' ? 'sem potes' : `${b.bracket} ${b.bracket === '1' ? 'pote' : 'potes'}`}
+                  {' · '}<span style={{ color: 'var(--fg1)' }}>{fmtInt(b.packages)}</span> pacotes
+                  {' · '}<span style={{ color: 'var(--glow-cyan)' }}>{b.pctPackages.toFixed(1)}%</span>
+                </span>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Bloco ENVIADO — por família */}
+      {fm && fm.byFamily.length > 0 && (
+        <div className="panel" style={{ marginBottom: 14, padding: 0 }}>
+          <div className="panel-head" style={{ padding: '12px 14px 0' }}>
+            <div className="panel-title">Por família <span style={{ color: 'var(--fg5)', fontSize: 10, marginLeft: 6 }}>volume e custo no período</span></div>
+          </div>
+          <div className="tbl-wrap" style={{ margin: 0, padding: '0 4px' }}>
+            <table className="tbl">
+              <thead>
+                <tr><th>Família</th><th className="num">Pedidos</th><th className="num">Potes</th><th className="num">Frete</th><th className="num">COGS</th><th className="num">Custo/pote</th></tr>
+              </thead>
+              <tbody>
+                {fm.byFamily.map((f) => (
+                  <tr key={f.family}>
+                    <td>
+                      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                        <span style={{ width: 6, height: 6, borderRadius: '50%', background: familyAccent(f.family) }}/>
+                        {f.family}
+                      </span>
+                    </td>
+                    <td className="num">{fmtInt(f.orders)}</td>
+                    <td className="num">{fmtInt(f.bottles)}</td>
+                    <td className="num">{fmtCurrency(f.fulfillmentUsd, cur, 0)}</td>
+                    <td className="num">{fmtCurrency(f.cogsUsd, cur, 0)}</td>
+                    <td className="num" style={{ color: 'var(--glow-cyan)' }}>{f.costPerBottleUsd != null ? fmtCurrency(f.costPerBottleUsd, cur, 2) : '—'}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {/* Bloco GASTO — frete + COGS por dia */}
+      {fm && fm.daily.length > 0 && (
+        <div className="panel" style={{ marginBottom: 14 }}>
+          <div className="panel-head">
+            <div className="panel-title">
+              <span className="panel-eyebrow">GASTO · FRETE + COGS POR DIA</span>
+              <div className="panel-metric">
+                {fmtCurrency(fm.kpis.totalUsd, cur, 0)}
+                <span className="panel-sub" style={{ marginLeft: 8 }}>
+                  {fmtCurrency(fm.kpis.fulfillmentUsd, cur, 0)} frete + {fmtCurrency(fm.kpis.cogsUsd, cur, 0)} COGS
+                </span>
+              </div>
+            </div>
+          </div>
+          <NSTimeSeries height={220} currency={cur}
+            data={fm.daily.map((d) => ({ date: d.date, frete: d.fulfillmentUsd, cogs: d.cogsUsd }))}
+            series={[
+              { key: 'frete', label: 'Frete', color: '#5BC8FF' },
+              { key: 'cogs', label: 'COGS', color: '#ffb86b' },
+            ]}/>
+        </div>
+      )}
+
+      {/* Bloco PREVISIBILIDADE — ritmo, projeção do mês e próxima fatura */}
+      {fm && fm.forecast && (
+        <div className="panel" style={{ marginBottom: 14 }}>
+          <div className="panel-head">
+            <div className="panel-title">
+              <span className="panel-eyebrow">PREVISIBILIDADE · NO RITMO DOS ÚLTIMOS 7 DIAS</span>
+              <div className="panel-metric" style={{ fontSize: 14, color: 'var(--fg3)' }}>
+                ~{fmtCurrency(fm.forecast.avg7d.totalPerDay, cur, 0)}/dia · ~{fm.forecast.avg7d.bottlesPerDay} potes/dia
+              </div>
+            </div>
+          </div>
+          <div className="mini-kpis" style={{ marginBottom: 10 }}>
+            <div className="mini-kpi">
+              <div className="l">Projeção do mês ({fm.forecast.month.label})</div>
+              <div className="v">{fmtCurrency(fm.forecast.month.projectedUsd, cur, 0)}</div>
+              <div className="s">realizado {fmtCurrency(fm.forecast.month.actualUsd, cur, 0)} em {fm.forecast.month.daysElapsed}/{fm.forecast.month.daysInMonth} dias</div>
+            </div>
+            <div className="mini-kpi">
+              <div className="l">Potes no mês (projeção)</div>
+              <div className="v">{fmtInt(fm.forecast.month.projectedBottles)}</div>
+              <div className="s">{fmtInt(fm.forecast.month.actualBottles)} já enviados</div>
+            </div>
+            <div className="mini-kpi" style={fm.forecast.trendPct != null && Math.abs(fm.forecast.trendPct) >= 20 ? { borderColor: 'rgba(255,180,0,0.35)' } : undefined}>
+              <div className="l">Tendência (7d vs 30d)</div>
+              <div className="v" style={{ color: fm.forecast.trendPct == null ? 'var(--fg3)' : fm.forecast.trendPct > 0 ? '#ffd166' : 'var(--success)' }}>
+                {fm.forecast.trendPct == null ? '—' : `${fm.forecast.trendPct >= 0 ? '+' : ''}${fm.forecast.trendPct.toFixed(1)}%`}
+              </div>
+              <div className="s">gasto/dia: {fmtCurrency(fm.forecast.avg7d.totalPerDay, cur, 0)} vs {fmtCurrency(fm.forecast.avg30d.totalPerDay, cur, 0)}</div>
+            </div>
+          </div>
+          {fm.forecast.nextInvoice.length > 0 && (
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+              {fm.forecast.nextInvoice.map((inv) => {
+                const meta = supMeta(inv.supplier);
+                return (
+                  <span key={inv.supplier} style={{
+                    fontFamily: 'var(--f-mono)', fontSize: 10.5, padding: '5px 12px', borderRadius: 'var(--r-full)',
+                    background: meta.chipBg, border: `1px solid ${meta.glow}`, color: 'var(--fg3)',
+                  }}>
+                    <span style={{ color: meta.text, fontWeight: 600 }}>{meta.label}</span>
+                    {' · fatura acumulada '}<span style={{ color: 'var(--fg1)' }}>{fmtCurrency(inv.accruedUsd, cur, 0)}</span>
+                    {' · projeção '}<span style={{ color: '#ffd166' }}>{fmtCurrency(inv.projectedUsd, cur, 0)}</span>
+                    {` · fecha em ${inv.daysToNext}d`}
+                  </span>
+                );
+              })}
+            </div>
+          )}
+          <div style={{ fontFamily: 'var(--f-mono)', fontSize: 10, color: 'var(--fg5)', marginTop: 10, lineHeight: 1.6 }}>
+            Projeções no ritmo dos últimos 7 dias BRT completos, independentes do período selecionado (respeitam os
+            filtros de plataforma/família). Fatura fecha toda terça (ciclo configurável no código). Premissa: venda
+            aprovada = enviado; refund não devolve o custo.
+          </div>
+        </div>
+      )}
 
       {/* Distribuição RedRock vs ShipOffers — cards + stacked bar + daily chart */}
       {filters && (
@@ -4131,74 +4352,25 @@ function CostsPage({ filters }) {
         </>
       )}
 
-      {/* KPIs de fulfillment no período */}
-      {filters && (
-        <div className="mini-kpis" style={{ marginBottom: 14 }}>
-          <div className="mini-kpi">
-            <div className="l">Fulfillment no período</div>
-            <div className="v">
-              {fulfillmentKpi.status === 'loading' ? '…' : fmtCurrency(fulfillmentKpi.value, cur, 0)}
-            </div>
-            <div className="s">
-              {fulfillmentKpi.gross > 0
-                ? `${((fulfillmentKpi.value / fulfillmentKpi.gross) * 100).toFixed(1)}% do gross`
-                : (fulfillmentKpi.status === 'ready' ? 'sem vendas no período' : '—')}
-            </div>
+      {/* Cadastro de custos — colapsado por padrão (a tela agora é
+          primeiro leitura; edição continua toda aqui embaixo) */}
+      <div className="panel" style={{ padding: 0, marginBottom: 14 }}>
+        <div
+          className="panel-head"
+          style={{ padding: '12px 14px', cursor: 'pointer', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}
+          onClick={() => setShowConfig((v) => !v)}
+        >
+          <div className="panel-title">
+            Cadastro de custos
+            <span style={{ color: 'var(--fg5)', fontSize: 10, marginLeft: 6 }}>
+              custo por pote · tarifas de frete por bracket · fornecedor por família e SKU
+            </span>
           </div>
-          <div className="mini-kpi">
-            <div className="l">Média por dia</div>
-            <div className="v">
-              {fulfillmentKpi.status === 'loading' ? '…' : fmtCurrency(fulfillmentAvgDay, cur, 0)}
-            </div>
-            <div className="s">
-              {fulfillmentDays > 0 ? `${fulfillmentDays} ${fulfillmentDays === 1 ? 'dia' : 'dias'} no intervalo` : '—'}
-            </div>
-          </div>
-          <div className="mini-kpi">
-            <div className="l">Pico diário</div>
-            <div className="v">
-              {fulfillmentKpi.status === 'loading' ? '…' : fmtCurrency(fulfillmentPeakDay.fulfillment, cur, 0)}
-            </div>
-            <div className="s">
-              {fulfillmentPeakDay.date
-                ? fmtDateShort(fulfillmentPeakDay.date)
-                : 'sem dados'}
-            </div>
-          </div>
-          {tueEst && (
-            <div className="mini-kpi" style={{ borderColor: 'rgba(255,180,0,0.3)' }}>
-              <div className="l">Estimativa pra próxima fatura</div>
-              <div className="v" style={{ color: 'var(--warning)' }}>{fmtCurrency(tueEst.estimate, cur, 0)}</div>
-              <div className="s">
-                {tueEst.daysSinceLastTue} {tueEst.daysSinceLastTue === 1 ? 'dia' : 'dias'} desde a última terça · faltam {tueEst.daysToTue} pra próxima · ~{fmtCurrency(tueEst.dailyAvg, cur, 0)}/dia médio
-              </div>
-            </div>
-          )}
+          <Icon name={showConfig ? 'chevron-down' : 'chevron-right'} size={14}/>
         </div>
-      )}
+      </div>
 
-      {/* Série diária de frete — gasto exato por dia (snapshot por pedido) */}
-      {filters && fulfillmentBuckets.length > 0 && (
-        <div className="panel" style={{ marginBottom: 14 }}>
-          <div className="panel-head">
-            <div className="panel-title">
-              <span className="panel-eyebrow">FRETE · GASTO DIÁRIO</span>
-              <div className="panel-metric">
-                {fmtCurrency(fulfillmentKpi.value, cur, 0)}
-                <span className="panel-sub" style={{ marginLeft: 8 }}>
-                  total no intervalo · {fmtDateShort(filters.dateRange.start)} → {fmtDateShort(filters.dateRange.end)}
-                </span>
-              </div>
-            </div>
-            <div className="panel-legend">
-              <span className="legend-dot cyan"><span/>USD / dia</span>
-            </div>
-          </div>
-          <NSTimeSeries data={fulfillmentBuckets} height={220} currency={cur}
-            series={[{ key: 'fulfillment', label: 'Frete', color: '#5BC8FF' }]}/>
-        </div>
-      )}
-
+      {showConfig && (<>
       {/* Token gate */}
       {!token && (
         <div className="panel" style={{ marginBottom: 14, background: 'rgba(255,180,0,0.06)', borderColor: 'rgba(255,180,0,0.4)' }}>
@@ -4629,6 +4801,7 @@ function CostsPage({ filters }) {
           Token autenticado nesta sessão · <button onClick={() => setToken('')} style={{ background: 'none', border: 0, color: 'var(--glow-cyan)', cursor: 'pointer', textDecoration: 'underline', font: 'inherit' }}>esquecer</button>
         </div>
       )}
+      </>)}
     </div>
   );
 }

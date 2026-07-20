@@ -277,6 +277,8 @@ export async function upsertOrder(normalized: NormalizedOrder): Promise<UpsertOr
 
     cogsUsd: new Prisma.Decimal(cogs.cogsUsd),
     fulfillmentUsd: new Prisma.Decimal(cogs.fulfillmentUsd),
+    // Snapshot de volume: potes que esta order despacha (ver schema).
+    bottlesShipped: cogs.totalBottles,
   };
 
   const existing = await db.order.findUnique({

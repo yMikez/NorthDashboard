@@ -259,6 +259,12 @@ model Order {
   // they actually had. Computed via lib/services/cogs.ts.
   cogsUsd        Decimal? @db.Decimal(10, 2)
   fulfillmentUsd Decimal? @db.Decimal(10, 2)
+  // Potes desta order (bottles + bonusBottles do Product NO MOMENTO do
+  // ingest). Snapshot de propósito: reclassificar o produto depois não
+  // reescreve o histórico de volume enviado. Base do "quanto está sendo
+  // enviado" da aba Fulfillment. Null = pré-feature; 0 = SKU sem contagem
+  // de potes no catálogo (aparece no painel de saúde do custo).
+  bottlesShipped Int?
 
   platform          Platform           @relation(fields: [platformId], references: [id])
   product           Product            @relation(fields: [productId], references: [id])
