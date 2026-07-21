@@ -3884,7 +3884,11 @@ export async function getOrders(
         product: { select: { externalId: true, name: true, productType: true } },
         affiliate: { select: { externalId: true, nickname: true } },
       },
-      orderBy: { orderedAt: 'desc' },
+      // Desempate por id: sem ele a ordem de linhas com o MESMO orderedAt
+      // não é determinística entre queries — e o export CSV pagina por
+      // OFFSET em queries independentes (duplicaria/pularia linhas na
+      // borda da página). Mesmo padrão das demais queries do arquivo.
+      orderBy: [{ orderedAt: 'desc' }, { id: 'desc' }],
       take: limit,
       skip: offset,
     }),

@@ -364,7 +364,17 @@ function LeaderboardPage({ filters, onOpenAffiliate }) {
           <span className="sub">Volume vs. risco · linhas marcadas precisam de atenção</span>
         </div>
         <div className="page-head-actions">
-          <button className="btn btn-ghost"><Icon name="download" size={12}/> Exportar CSV</button>
+          <button className="btn btn-ghost" onClick={() => downloadCsv(
+            `ranking-afiliados_${isoDateOnly(filters.dateRange.start)}_${isoDateOnly(filters.dateRange.end)}.csv`,
+            ['#', 'Afiliado', 'Afiliado ID', 'Plataforma', 'Pedidos aprovados', 'Receita USD', 'AOV global USD',
+             'Aprovação %', 'Reembolso %', 'Chargeback %', 'CPA pago USD', 'CPA por venda USD', 'Margem USD',
+             'Lucro direto USD', 'Lucro atribuído USD', 'País principal'],
+            rows.map((r, i) => [
+              i + 1, r.nickname || r.externalId, r.externalId, r.platformSlug, r.orders, r.revenue, aovOf(r),
+              r.approvalRate * 100, r.refundRate * 100, r.cbRate * 100, r.cpa, r.cpaPerFe, r.netMargin,
+              r.estimatedProfit, r.attributedProfit, r.topCountry,
+            ]),
+          )}><Icon name="download" size={12}/> Exportar CSV</button>
         </div>
       </div>
 
@@ -832,7 +842,7 @@ function AllAffiliatesPage({ filters, onOpenAffiliate }) {
         <div className="lead">
           <span className="eyebrow">AFILIADOS · DIRETÓRIO</span>
           <h2>Todos os <em>afiliados</em></h2>
-          <span className="sub">{rows.length} no total · pesquisável · pronto pra exportar</span>
+          <span className="sub">{rows.length} no total · pesquisável · exporta o que está filtrado</span>
         </div>
         <div className="page-head-actions">
           <div className="select-btn" style={{ padding: '0 10px', width: 260 }}>
@@ -842,7 +852,19 @@ function AllAffiliatesPage({ filters, onOpenAffiliate }) {
               style={{ background: 'transparent', border: 0, color: 'var(--fg1)', outline: 'none', flex: 1, fontFamily: 'var(--f-body)', fontSize: 12 }}
             />
           </div>
-          <button className="btn btn-ghost"><Icon name="download" size={12}/> Exportar CSV</button>
+          <button className="btn btn-ghost" onClick={() => downloadCsv(
+            `afiliados_${isoDateOnly(filters.dateRange.start)}_${isoDateOnly(filters.dateRange.end)}.csv`,
+            ['Afiliado', 'Afiliado ID', 'Plataforma', 'CPA por venda USD', 'Receita período USD',
+             'Pedidos período', 'AOV global USD', 'Reembolso %', '1ª venda', 'Última venda'],
+            rows.map((r) => [
+              r.nickname || r.externalId, r.externalId, r.platformSlug,
+              (r.cpaPerFe || 0) > 0 ? r.cpaPerFe : null, r.revenue, r.orders,
+              aovOf(r) > 0 ? aovOf(r) : null,
+              r.allOrders ? r.refundRate * 100 : null,
+              r.firstSeenAt ? fmtDateShort(r.firstSeenAt) : null,
+              r.lastOrderAt ? fmtDateShort(r.lastOrderAt) : null,
+            ]),
+          )}><Icon name="download" size={12}/> Exportar CSV</button>
         </div>
       </div>
 
@@ -1978,8 +2000,14 @@ function TransactionsPage({ filters }) {
             <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Buscar por ID de pedido ou afiliado..."
               style={{ background: 'transparent', border: 0, color: 'var(--fg1)', outline: 'none', flex: 1, fontFamily: 'var(--f-mono)', fontSize: 12 }}/>
           </div>
-          <button className="btn btn-ghost"><Icon name="download" size={12}/> CSV</button>
-          <button className="btn btn-ghost"><Icon name="download" size={12}/> XLSX</button>
+          {/* Download navegando direto pro endpoint (sessão no cookie): o
+              servidor exporta TODAS as linhas do filtro atual, não só as
+              500 da tela. XLSX removido — era um botão morto; CSV com BOM
+              abre no Excel do mesmo jeito. */}
+          <button className="btn btn-ghost" title="Exporta todas as transações do filtro atual (não só as 500 visíveis)"
+            onClick={() => { window.location.href = window.NSApi.ordersExportUrl(filters, { status: statusFilter, productType: typeFilter, search: debouncedQuery }); }}>
+            <Icon name="download" size={12}/> Exportar CSV
+          </button>
         </div>
       </div>
 

@@ -87,6 +87,30 @@ async function fetchOverview(filters) {
  *
  * Response: { orders, statusCounts, total, limit, offset }.
  */
+// URL do download CSV das transações (mesmos filtros do fetchOrders, sem
+// paginação — o servidor exporta TODAS as linhas do filtro). Navegação
+// direta (href) em vez de fetch: o browser cuida do download e a sessão
+// vai no cookie.
+function ordersExportUrl(filters, options = {}) {
+  const qs = new URLSearchParams();
+  const params = {
+    start_date: toISODate(filters.dateRange.start),
+    end_date: toISODate(filters.dateRange.end),
+    platforms: setToCSV(filters.platforms),
+    countries: setToCSV(filters.countries),
+    products: setToCSV(filters.funnels),
+    families: setToCSV(filters.families),
+    stages: setToCSV(filters.stages),
+    status: options.status && options.status !== 'all' ? options.status : null,
+    product_type: options.productType && options.productType !== 'all' ? options.productType : null,
+    search: options.search || null,
+  };
+  for (const [k, v] of Object.entries(params)) {
+    if (v !== null && v !== undefined && v !== '') qs.set(k, v);
+  }
+  return `/api/metrics/orders-export?${qs}`;
+}
+
 async function fetchOrders(filters, options = {}) {
   const params = {
     start_date: toISODate(filters.dateRange.start),
@@ -917,6 +941,7 @@ window.NSApi = _wrapMutations({
   fetchCopyAutotuneLogs,
   fetchOverview,
   fetchOrders,
+  ordersExportUrl,
   fetchAffiliates,
   fetchAffiliateDetail,
   fetchPlatforms,

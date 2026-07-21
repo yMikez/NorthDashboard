@@ -298,6 +298,35 @@ function Sparkline({ data, width = 80, height = 26, color = '#5BC8FF', fill = tr
   );
 }
 
+// ---------- export CSV ----------
+// Convenções pt-BR (iguais ao lib/shared/csv.ts do servidor — mudou lá,
+// mude aqui): separador ';', decimal ',', BOM UTF-8 → abre direto no
+// Excel pt-BR e no Sheets. Strings com guarda contra formula injection.
+function csvCellFmt(v) {
+  if (v == null) return '';
+  if (typeof v === 'number') {
+    if (!Number.isFinite(v)) return '';
+    return Number.isInteger(v) ? String(v) : v.toFixed(2).replace('.', ',');
+  }
+  let s = String(v);
+  if (/^[=+\-@]/.test(s)) s = "'" + s;
+  if (/[";\n\r]/.test(s)) s = '"' + s.replace(/"/g, '""') + '"';
+  return s;
+}
+function downloadCsv(filename, headers, rows) {
+  const lines = [headers.map(csvCellFmt).join(';')];
+  for (const r of rows) lines.push(r.map(csvCellFmt).join(';'));
+  const blob = new Blob(['﻿' + lines.join('\r\n') + '\r\n'], { type: 'text/csv;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  setTimeout(() => URL.revokeObjectURL(url), 5000);
+}
+
 // ---------- FX layers ----------
 // .ns-scan (linhas digitais via repeating-linear-gradient) removida —
 // textura agressiva demais segundo feedback. Mantemos só o gradient orb
@@ -315,5 +344,6 @@ Object.assign(window, {
   fmtCurrency, fmtK, fmtInt, fmtPct, fmtDateShort, fmtDateLong, fmtDateTime,
   initials, avatarColor, rangeForPreset, previousRange, isoDateOnly, dayIndexFromDate,
   applyFilters, aggregateKPIs, bucketByDay,
+  downloadCsv,
   Icon, Sparkline, FXLayers,
 });
