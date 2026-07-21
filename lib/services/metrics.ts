@@ -3123,25 +3123,17 @@ export async function getAffiliatesLegacy(
     // (cpa=0) e refunds (cpa zerado pelo IPN) puxam pra baixo.
     feApprovedCount: number;       // total FE+APPROVED (qualquer cpa)
     feCpaPaidCount: number;        // só FE+APPROVED com cpa > 0
-    cpaCounts: Map<number, number>; // distinct cpa value -> count, p/ mode
+    // Último CPA observado (FE+APPROVED+cpa>0 mais recente) + timestamp.
+    // Fonte de verdade = lista de transações: quando chega venda com valor
+    // novo (CPA renegociado), a lista de afiliados atualiza NA HORA — o
+    // MODE antigo ficava preso no valor velho até virar minoria na janela.
+    latestCpa: number;
+    latestCpaAt: number;
     net: number;
     cogs: number;
     fulfillment: number;
     byCountry: Map<string, number>;
     sparkline: number[];
-  }
-
-  function modeOf(counts: Map<number, number>): number {
-    // Tie-break: valor MAIOR ganha (proxy de "tier mais alto" se
-    // afiliado tem 2 CPAs com volumes equivalentes).
-    let modeVal = 0, modeCount = 0;
-    for (const [v, c] of counts) {
-      if (c > modeCount || (c === modeCount && v > modeVal)) {
-        modeCount = c;
-        modeVal = v;
-      }
-    }
-    return modeVal;
   }
 
   const SPARK_DAYS = 30;
@@ -3178,7 +3170,8 @@ export async function getAffiliatesLegacy(
           cpa: 0,
           feApprovedCount: 0,
           feCpaPaidCount: 0,
-          cpaCounts: new Map(),
+          latestCpa: 0,
+          latestCpaAt: 0,
           net: 0,
           cogs: 0,
           fulfillment: 0,
@@ -3195,18 +3188,19 @@ export async function getAffiliatesLegacy(
       if (o.status === 'APPROVED') {
         a.revenue += toNumber(o.grossAmountUsd);
         a.orders++;
-        // Captura CPA negociado: só FE+APPROVED+cpa>0.
-        // Cada valor distinto de cpaPaidUsd vira um bucket no
-        // cpaCounts → mode disso = CPA real do afiliado.
+        // Captura CPA negociado: só FE+APPROVED+cpa>0 — e vale o ÚLTIMO
+        // valor observado nas transações (CPA renegociado atualiza na
+        // hora, em vez de esperar o valor novo virar maioria como no MODE).
         if (o.productType === 'FRONTEND') {
           a.feApprovedCount++;
           const cpaVal = toNumber(o.cpaPaidUsd);
           if (cpaVal > 0) {
             a.feCpaPaidCount++;
-            // Round to 2 decimals pra agrupar valores quase iguais
-            // (ex: $220.00 e $220 do Decimal vs Number).
-            const key = Math.round(cpaVal * 100) / 100;
-            a.cpaCounts.set(key, (a.cpaCounts.get(key) ?? 0) + 1);
+            if (t >= a.latestCpaAt) {
+              a.latestCpaAt = t;
+              // Round to 2 decimals (ex: $220.00 do Decimal vs Number).
+              a.latestCpa = Math.round(cpaVal * 100) / 100;
+            }
           }
         }
       } else if (o.status === 'REFUNDED') {
@@ -3270,12 +3264,13 @@ export async function getAffiliatesLegacy(
       refundRate: allOrders ? round4(refunds / denom) : 0,
       cbRate: allOrders ? round4(chargebacks / denom) : 0,
       cpa: round2(a?.cpa ?? 0),
-      // CPA negociado do afiliado descoberto via MODE de cpaPaidUsd
-      // em FE+APPROVED+cpa>0. Imune a refund (status filter) e a
-      // sales sem CPA contratado (cpa=0 filter). Ver modeOf() acima.
+      // CPA negociado = ÚLTIMO cpaPaidUsd observado em FE+APPROVED+cpa>0
+      // (fonte: lista de transações). Imune a refund (status filter) e a
+      // sales sem CPA contratado (cpa=0 filter); renegociação atualiza
+      // na primeira venda com o valor novo.
       feApprovedCount: a?.feApprovedCount ?? 0,
       feCpaPaidCount: a?.feCpaPaidCount ?? 0,
-      cpaPerFe: a ? round2(modeOf(a.cpaCounts)) : 0,
+      cpaPerFe: a ? round2(a.latestCpa) : 0,
       // Mantido pra retrocompat: ainda mean/count, deflaciona com
       // sales cpa=0 mas algumas views podem querer essa lente.
       cpaPerFeApproved: (a?.feApprovedCount ?? 0) > 0
@@ -3392,7 +3387,7 @@ export async function getAffiliatesSql(
   }
   const sessWhere = Prisma.join(sessConds, ' AND ');
 
-  const [aggRows, sparkRows, countryRows, cpaModeRows, attRows, ltvByAff, affiliatesAll] =
+  const [aggRows, sparkRows, countryRows, cpaLatestRows, attRows, ltvByAff, affiliatesAll] =
     await Promise.all([
       // (A) Agregados diretos por afiliado, janelas período+prev via FILTER.
       db.$queryRaw<Array<{
@@ -3454,16 +3449,19 @@ export async function getAffiliatesSql(
         GROUP BY 1, 2
         ORDER BY cnt DESC, country ASC
       `),
-      // (D) Buckets de CPA (FE+APPROVED+cpa>0) → modeOf em JS, mesmo
-      // tie-break da legacy (não usar mode() WITHIN GROUP do Postgres).
-      db.$queryRaw<Array<{ affiliate_id: string; cpa_val: Prisma.Decimal; cnt: bigint }>>(Prisma.sql`
-        SELECT o."affiliateId" AS affiliate_id, ROUND(o."cpaPaidUsd", 2) AS cpa_val, COUNT(*)::bigint AS cnt
+      // (D) Último CPA observado por afiliado (FE+APPROVED+cpa>0 mais
+      // recente) — fonte de verdade = transações; CPA renegociado atualiza
+      // na primeira venda com o valor novo (antes era MODE, que ficava
+      // preso no valor velho até virar minoria na janela).
+      db.$queryRaw<Array<{ affiliate_id: string; cpa_val: Prisma.Decimal }>>(Prisma.sql`
+        SELECT DISTINCT ON (o."affiliateId")
+          o."affiliateId" AS affiliate_id, ROUND(o."cpaPaidUsd", 2) AS cpa_val
         FROM "Order" o
         JOIN "Platform" pl ON o."platformId" = pl.id
         JOIN "Product" pr ON o."productId" = pr.id
         WHERE ${directWhere} AND ${inPeriod}
           AND o."status" = 'APPROVED' AND o."productType" = 'FRONTEND' AND o."cpaPaidUsd" > 0
-        GROUP BY 1, 2
+        ORDER BY o."affiliateId", o."orderedAt" DESC, o.id DESC
       `),
       // (E) Session attribution: sessão inteira creditada ao afiliado da FE
       // mais cedo (DISTINCT ON com desempate por id — determinístico).
@@ -3539,24 +3537,9 @@ export async function getAffiliatesSql(
     if (!topCountryById.has(r.affiliate_id)) topCountryById.set(r.affiliate_id, r.country);
   }
 
-  const cpaCountsById = new Map<string, Map<number, number>>();
-  for (const r of cpaModeRows) {
-    let m = cpaCountsById.get(r.affiliate_id);
-    if (!m) { m = new Map(); cpaCountsById.set(r.affiliate_id, m); }
-    const key = Math.round(toNumber(r.cpa_val) * 100) / 100;
-    m.set(key, (m.get(key) ?? 0) + Number(r.cnt));
-  }
-
-  // Mesmo tie-break da legacy: empate de contagem → valor MAIOR ganha.
-  function modeOf(counts: Map<number, number>): number {
-    let modeVal = 0, modeCount = 0;
-    for (const [v, c] of counts) {
-      if (c > modeCount || (c === modeCount && v > modeVal)) {
-        modeCount = c;
-        modeVal = v;
-      }
-    }
-    return modeVal;
+  const latestCpaById = new Map<string, number>();
+  for (const r of cpaLatestRows) {
+    latestCpaById.set(r.affiliate_id, Math.round(toNumber(r.cpa_val) * 100) / 100);
   }
 
   const ltvMap = new Map<string, { revenue: number; orders: number }>();
@@ -3611,7 +3594,7 @@ export async function getAffiliatesSql(
     const attCogs = att ? toNumber(att.cogs) : 0;
     const attFulfillment = att ? toNumber(att.fulfillment) : 0;
     const attRevenue = att ? toNumber(att.revenue) : 0;
-    const cpaCounts = hasPeriod ? cpaCountsById.get(aff.id) : undefined;
+    const latestCpa = hasPeriod ? latestCpaById.get(aff.id) : undefined;
 
     return {
       externalId: aff.externalId,
@@ -3628,7 +3611,7 @@ export async function getAffiliatesSql(
       cpa: round2(cpa),
       feApprovedCount,
       feCpaPaidCount: a ? Number(a.fe_cpa_paid_count) : 0,
-      cpaPerFe: cpaCounts ? round2(modeOf(cpaCounts)) : 0,
+      cpaPerFe: latestCpa != null ? round2(latestCpa) : 0,
       cpaPerFeApproved: feApprovedCount > 0 ? round2(cpa / feApprovedCount) : 0,
       netMargin: round2(net - cpa),
       cogs: round2(cogs),

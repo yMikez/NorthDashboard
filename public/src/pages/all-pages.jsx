@@ -883,7 +883,7 @@ function AllAffiliatesPage({ filters, onOpenAffiliate }) {
             <thead>
               <tr>
                 <th>Afiliado</th><th>Plataforma</th>
-                <th className="num" title="CPA fixo negociado — valor que o afiliado recebe em cada venda FE aprovada (MODE de cpaPaidUsd das vendas FE+APPROVED+CPA>0 no período)">CPA por venda</th>
+                <th className="num" title="CPA fixo negociado — ÚLTIMO valor pago por venda FE aprovada no período (fonte: lista de transações; renegociação atualiza na primeira venda com o valor novo)">CPA por venda</th>
                 <th className="num">Receita · período</th><th className="num">Pedidos · período</th>
                 <th className="num">AOV · período</th>
                 <th className="num">Reembolso</th>
