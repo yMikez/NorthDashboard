@@ -42,8 +42,16 @@ export async function POST(req: Request) {
     select: { id: true },
   });
 
-  // Botão de teste do painel JVZoo (ou ping manual): registra e responde OK.
+  // Botão de teste do painel JVZoo (ou ping manual): registra, MATERIALIZA
+  // a plataforma no dashboard (card em Plataformas + filtros — feedback
+  // imediato de "conectado", sem esperar a 1ª venda real) e responde OK.
+  // Sem criar pedido: só o registro da Platform.
   if (action === 'test' || action === 'connection_test') {
+    await db.platform.upsert({
+      where: { slug: 'jvzoo' },
+      create: { slug: 'jvzoo', displayName: 'JVZoo' },
+      update: {},
+    });
     await db.ingestLog.update({
       where: { id: log.id },
       data: { processedOk: true, processedAt: new Date() },
