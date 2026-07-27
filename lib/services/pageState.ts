@@ -7,7 +7,7 @@ import { db } from '../db';
 
 // Plataformas conhecidas — valida o beacon (open endpoint) sem travar a
 // adição de novas no futuro (é só editar aqui).
-const KNOWN_PLATFORMS = new Set(['clickbank', 'digistore24', 'buygoods', 'cartpanda']);
+const KNOWN_PLATFORMS = new Set(['clickbank', 'digistore24', 'buygoods', 'cartpanda', 'jvzoo']);
 
 const MAX_PLATFORM = 32;
 const MAX_PRODUCT = 64;

@@ -235,6 +235,14 @@ function classifyCartpanda(sku: string, name?: string | null): ProductClassifica
   return { family, type, funnelStep, variant: null, bottles, bonusBottles };
 }
 
+// Plataformas cujo PAPEL no funil (productType/funnelStep) vem do CONNECTOR,
+// nunca do nome do produto: Cartpanda (up_sell_id) e JVZoo (prekey). O nome
+// nesses casos não anota o papel ("Hawaiian Harmony 6 Bottles" é o MESMO em
+// FE e upsell), então o classificador só é autoritativo pra FAMÍLIA/potes.
+// Consumido por upsertOrder e classifyExistingProducts — mudou aqui, vale
+// pros dois.
+export const CONNECTOR_ROLE_PLATFORMS = new Set(['cartpanda', 'jvzoo']);
+
 export function classifyProduct(
   sku: string,
   name?: string | null,

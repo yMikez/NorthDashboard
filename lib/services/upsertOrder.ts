@@ -2,7 +2,7 @@ import type { OrderStatus, ProductType } from '@prisma/client';
 import { Prisma } from '@prisma/client';
 import { db } from '../db';
 import type { NormalizedOrder } from '../shared/types';
-import { classifyProduct } from './productClassification';
+import { classifyProduct, CONNECTOR_ROLE_PLATFORMS } from './productClassification';
 import { calcCogs } from './cogs';
 import { rebalanceSessionFulfillment } from './sessionFulfillment';
 import { accrueCommissionForOrder } from './networkAccrual';
@@ -64,11 +64,12 @@ export async function upsertOrder(normalized: NormalizedOrder): Promise<UpsertOr
     normalized.productName || normalized.productExternalId,
     normalized.platformSlug,
   );
-  // Cartpanda: o papel (productType) do catálogo vem do connector (up_sell_id),
-  // não do classificador de nome — o classifyCartpanda só derivou a família.
+  // Cartpanda/JVZoo: o papel (productType) do catálogo vem do connector
+  // (up_sell_id / prekey), não do classificador de nome — o nome não anota o
+  // papel nessas plataformas e o classificador leria todo upsell como FE.
   // Demais plataformas: o classificador é autoritativo quando reconhece a família.
   const catalogType: ProductType =
-    normalized.platformSlug === 'cartpanda'
+    CONNECTOR_ROLE_PLATFORMS.has(normalized.platformSlug)
       ? (normalized.productType as ProductType)
       : classified.family !== null
         ? classified.type
@@ -211,10 +212,10 @@ export async function upsertOrder(normalized: NormalizedOrder): Promise<UpsertOr
   // need the periodic backfill to land correctly. Only override when the
   // classifier has both family AND a derived step.
   //
-  // EXCEÇÃO Cartpanda: o product_name NÃO carrega anotação de funil (ao
+  // EXCEÇÃO Cartpanda/JVZoo: o product_name NÃO carrega anotação de funil (ao
   // contrário de CB/D24/BG), então o classificador leria todo upsell como FE.
-  // Aqui o role/step vem do upsell_no do postback (confiável) — nunca do nome.
-  const trustParserRole = normalized.platformSlug === 'cartpanda';
+  // Aqui o role/step vem do connector (up_sell_id / prekey) — nunca do nome.
+  const trustParserRole = CONNECTOR_ROLE_PLATFORMS.has(normalized.platformSlug);
   const finalFunnelStep =
     !trustParserRole && classified.family != null && classified.funnelStep != null
       ? classified.funnelStep

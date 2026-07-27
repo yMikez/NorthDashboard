@@ -12,7 +12,7 @@
 
 import type { ProductType } from '@prisma/client';
 import { db } from '../db';
-import { classifyProduct } from './productClassification';
+import { classifyProduct, CONNECTOR_ROLE_PLATFORMS } from './productClassification';
 
 export interface BackfillStats {
   scanned: number;
@@ -62,12 +62,12 @@ export async function classifyExistingProducts(): Promise<BackfillStats> {
       if (!p.family) stats.unrecognized.push(p.externalId);
       continue;
     }
-    // Cartpanda: o PAPEL (productType/funnelStep) é do connector (up_sell_id),
-    // não do nome. O classifyCartpanda só dá a família (limpa). Então aqui
-    // atualizamos família/potes mas NUNCA o productType, e NÃO reconciliamos
-    // Order.productType/funnelStep — senão "Upsell 0X" (que o nome não anota
-    // como upgrade) seria reescrito pra FRONTEND e o funil quebraria.
-    const isCartpanda = p.platform?.slug === 'cartpanda';
+    // Cartpanda/JVZoo: o PAPEL (productType/funnelStep) é do connector
+    // (up_sell_id / prekey), não do nome. O classificador só dá a família.
+    // Então aqui atualizamos família/potes mas NUNCA o productType, e NÃO
+    // reconciliamos Order.productType/funnelStep — senão upsell (que o nome
+    // não anota como upgrade) seria reescrito pra FRONTEND e o funil quebraria.
+    const isCartpanda = CONNECTOR_ROLE_PLATFORMS.has(p.platform?.slug ?? '');
 
     const productTypeChanged = !isCartpanda && p.productType !== c.type;
     await db.product.update({

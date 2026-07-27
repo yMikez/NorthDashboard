@@ -98,6 +98,27 @@ describe('parseJvzooIngest — variações', () => {
     expect(n.parentExternalId).toBe('NSGOG44I8PJN0F8AR');
   });
 
+  it('rebill (BILL): NÃO vira upsell e ancora em si mesmo (remessa própria)', () => {
+    const n = parseJvzooIngest({
+      ...sale,
+      transaction_type: 'BILL',
+      transaction_id: 'REBILL456',
+      prekey: 'WR-NSGOG44I8PJN0F8AR', // prekey da compra ORIGINAL
+    });
+    expect(n.status).toBe('APPROVED');
+    expect(n.productType).toBe('FRONTEND');
+    // Sessão isolada: rebalance de frete não funde com o pacote original.
+    expect(n.parentExternalId).toBe('REBILL456');
+    expect(n.funnelSessionId).toBe('REBILL456');
+    expect(n.eventType).toBe('bill');
+  });
+
+  it('transaction_type ausente → eventType "unknown" (não string vazia)', () => {
+    const n = parseJvzooIngest({ ...sale, transaction_type: '' });
+    expect(n.eventType).toBe('unknown');
+    expect(n.status).toBe('PENDING');
+  });
+
   it('RFND → REFUNDED; CGBK → CHARGEBACK; INSF/CANCEL-REBILL → CANCELED', () => {
     expect(parseJvzooIngest({ ...sale, transaction_type: 'RFND' }).status).toBe('REFUNDED');
     expect(parseJvzooIngest({ ...sale, transaction_type: 'CGBK' }).status).toBe('CHARGEBACK');

@@ -74,7 +74,7 @@ export function systemPrompt(currentDate: Date, knowledgeBlock = ''): string {
 - CPA negociado = mode (valor mais frequente) de cpaPaidUsd em FE+APPROVED+cpa>0 do afiliado
 - Refunds e CBs zeram o cpaPaidUsd no IPN; sempre filtrar por APPROVED quando relevante
 - Famílias: NeuroMindPro, GlycoPulse, ThermoBurnPro, MaxVitalize, FlexImmuneGuard, NightCalm
-- Plataformas: clickbank (CB), digistore24 (D24), buygoods (BG), cartpanda (CP). Slugs exatos pros filtros: "clickbank", "digistore24", "buygoods", "cartpanda". Quando o usuário citar BuyGoods/BG, filtre platforms:["buygoods"]; Cartpanda/CP → platforms:["cartpanda"].
+- Plataformas: clickbank (CB), digistore24 (D24), buygoods (BG), cartpanda (CP), jvzoo (JVZ). Slugs exatos pros filtros: "clickbank", "digistore24", "buygoods", "cartpanda", "jvzoo". Quando o usuário citar BuyGoods/BG, filtre platforms:["buygoods"]; Cartpanda/CP → platforms:["cartpanda"]; JVZoo/JVZ → platforms:["jvzoo"].
 - Janela default sem filtro explícito: últimos 30 dias
 
 # Tools disponíveis

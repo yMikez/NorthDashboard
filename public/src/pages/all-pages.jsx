@@ -1165,7 +1165,7 @@ function beaconScriptFor(product) {
     '<script>',
     '(function () {',
     '  "use strict";',
-    '  var PLATFORM = "EDITE_AQUI"; // clickbank | digistore24 | buygoods | cartpanda',
+    '  var PLATFORM = "EDITE_AQUI"; // clickbank | digistore24 | buygoods | cartpanda | jvzoo',
     '  var PRODUCT  = ' + prod + '; // gerado pelo dashboard — NÃO altere',
     '  var ENDPOINT = "' + endpoint + '";',
     '',
@@ -2464,7 +2464,7 @@ function IntegrationsPage({ filters }) {
   const cur = filters.currency || 'USD';
   const platforms = state.data?.platforms || [];
 
-  const PLATFORM_SHORT = { digistore24: 'D24', clickbank: 'CB', buygoods: 'BG' };
+  const PLATFORM_SHORT = { digistore24: 'D24', clickbank: 'CB', buygoods: 'BG', cartpanda: 'CP', jvzoo: 'JVZ' };
   const comingSoon = [
     { slug: 'maxweb', displayName: 'MaxWeb', short: 'MW', desc: 'Connector pendente · credenciais não configuradas' },
     { slug: 'stickyio', displayName: 'Sticky.io', short: 'SK', desc: 'Connector em desenvolvimento' },
@@ -4727,8 +4727,10 @@ function CostsPage({ filters }) {
             >
               <option value="">Todas plataformas</option>
               <option value="buygoods">BuyGoods</option>
+              <option value="cartpanda">Cartpanda</option>
               <option value="clickbank">ClickBank</option>
               <option value="digistore24">Digistore24</option>
+              <option value="jvzoo">JVZoo</option>
             </select>
             <input
               type="text"
@@ -6149,7 +6151,7 @@ function AttachAffiliateModal({ networkId, onClose, onSaved }) {
             <div style={{ display: 'grid', gap: 6 }}>
               <span style={{ fontFamily: 'var(--f-mono)', fontSize: 10, letterSpacing: '0.12em', color: 'var(--fg4)' }}>PLATAFORMA</span>
               <div className="seg" style={{ width: 'fit-content' }}>
-                {[['clickbank', 'ClickBank'], ['digistore24', 'Digistore24']].map(([k, l]) => (
+                {[['clickbank', 'ClickBank'], ['digistore24', 'Digistore24'], ['buygoods', 'BuyGoods'], ['cartpanda', 'Cartpanda'], ['jvzoo', 'JVZoo']].map(([k, l]) => (
                   <button key={k} className={platformSlug === k ? 'is-active' : ''} onClick={() => setPlatformSlug(k)}>{l}</button>
                 ))}
               </div>
@@ -7710,6 +7712,7 @@ function RecoveryManage({ affs, onChanged }) {
             <option value="clickbank">ClickBank</option>
             <option value="buygoods">BuyGoods</option>
             <option value="cartpanda">Cartpanda</option>
+            <option value="jvzoo">JVZoo</option>
           </select>
         </label>
         <label style={coFieldLabel}><span>Comissão %</span><input type="number" min={0} max={100} value={pct} onChange={(e) => setPct(e.target.value)} style={{ ...coInputStyle, width: 100 }}/></label>

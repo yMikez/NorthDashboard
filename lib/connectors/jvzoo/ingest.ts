@@ -127,9 +127,19 @@ export function parseJvzooIngest(payload: JvzooPayload): NormalizedOrder {
   const transactionId = required(payload, 'transaction_id');
   const transactionType = (payload.transaction_type ?? '').toUpperCase();
 
+  // REBILL (BILL/UNCANCEL-REBILL): pagamento recorrente da MESMA compra —
+  // chega com transaction_id NOVO e o prekey da compra ORIGINAL. Não é
+  // upsell, e cada rebill despacha a PRÓPRIA remessa: ancorar na sessão
+  // original faria o rebalance fundir FE + N rebills num pacote só
+  // (bracket de 18 potes em vez de 3 remessas de 6) e reescrever o frete
+  // histórico da FE a cada mês. Rebill ancora em si mesmo.
+  const isRebill = transactionType === 'BILL' || transactionType === 'UNCANCEL-REBILL';
+
   // prekey "WR-<receipt>": na FE aponta pro próprio id (ver header).
-  const prekeyBase = (payload.prekey ?? '').replace(/^WR-/, '') || transactionId;
-  const productType: NormalizedProductType = prekeyBase !== transactionId ? 'UPSELL' : 'FRONTEND';
+  const prekeyBase = isRebill
+    ? transactionId
+    : (payload.prekey ?? '').replace(/^WR-/, '') || transactionId;
+  const productType: NormalizedProductType = !isRebill && prekeyBase !== transactionId ? 'UPSELL' : 'FRONTEND';
 
   const gross = decimal(payload.total);
   const tax = decimal(payload.tax_total);
@@ -160,7 +170,7 @@ export function parseJvzooIngest(payload: JvzooPayload): NormalizedOrder {
     customerLanguage: null,
 
     status: mapStatus(transactionType),
-    eventType: transactionType.toLowerCase(),
+    eventType: transactionType.toLowerCase() || 'unknown',
     billingType: mapBillingType(payload.product_type),
     paySequenceNo: null,
     numberOfInstallments: null,
