@@ -30,6 +30,9 @@ const PLATFORM_DISPLAY_NAMES: Record<string, string> = {
   digistore24: 'Digistore24',
   buygoods: 'BuyGoods',
   cartpanda: 'Cartpanda',
+  // Sessão via anchor: parentExternalId = prekey (receipt da FE) — não
+  // entra em SESSION_GROUPED_PLATFORMS.
+  jvzoo: 'JVZoo',
 };
 
 // Plataformas cuja sessão de funil é agrupada por funnelSessionId (não pelo

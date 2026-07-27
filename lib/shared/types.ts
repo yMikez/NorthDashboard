@@ -1,4 +1,4 @@
-export type PlatformSlug = 'clickbank' | 'digistore24' | 'buygoods' | 'cartpanda';
+export type PlatformSlug = 'clickbank' | 'digistore24' | 'buygoods' | 'cartpanda' | 'jvzoo';
 
 export type NormalizedProductType = 'FRONTEND' | 'UPSELL' | 'DOWNSELL' | 'BUMP';
 
