@@ -978,6 +978,7 @@ function ProductsPage({ filters }) {
   // for the grid view since FamilyGrid uses /families aggregates.
   const productsState = useProductsData(filters, selectedFamily !== null);
   const pageStates = usePageStates();
+  const callCenter = useCallCenter();
   const cur = filters.currency || 'USD';
 
   if (selectedFamily) {
@@ -1001,7 +1002,210 @@ function ProductsPage({ filters }) {
       cur={cur}
       onPick={setSelectedFamily}
       pageStates={pageStates}
+      callCenter={callCenter}
     />
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Monitor de call center — contador de vendas/dia dos produtos AINDA SEM
+// call center. Média 3d ≥30/dia → conectar Tauk; ≥100/dia → integrar
+// SalesBound (cross-sell). Watchlist editável (admin). Produto integrado =
+// remover da lista.
+// ─────────────────────────────────────────────────────────────────────────────
+
+function useCallCenter() {
+  const [state, setState] = useState({ status: 'loading', data: null });
+  const [refresh, setRefresh] = useState(0);
+  useEffect(() => {
+    let cancelled = false;
+    window.NSApi.fetchCallCenter()
+      .then((d) => { if (!cancelled) setState({ status: 'ready', data: d }); })
+      .catch(() => { if (!cancelled) setState((s) => ({ status: 'error', data: s.data })); });
+    return () => { cancelled = true; };
+  }, [refresh]);
+  return { ...state, reload: () => setRefresh((n) => n + 1) };
+}
+
+const CC_LEVEL_META = {
+  salesbound: { label: 'INTEGRAR SALESBOUND', chip: 'SALESBOUND ≥100/d', fg: '#fda4af', bg: 'rgba(244,63,94,0.14)', border: 'rgba(244,63,94,0.45)' },
+  tauk:       { label: 'CONECTAR TAUK',       chip: 'TAUK ≥30/d',        fg: '#ffd166', bg: 'rgba(255,180,0,0.14)', border: 'rgba(255,180,0,0.45)' },
+  ok:         { label: 'OK',                  chip: 'OK',                fg: 'var(--success)', bg: 'rgba(58,214,140,0.10)', border: 'rgba(58,214,140,0.35)' },
+};
+
+function CallCenterMonitor({ cc }) {
+  const [open, setOpen] = useState(false);
+  const [plat, setPlat] = useState('buygoods');
+  const [fam, setFam] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState(null);
+
+  const d = cc.data;
+  if (!d || !d.rows) return null;
+  const alerts = d.alerts || [];
+
+  function removeWatch(row) {
+    if (busy) return;
+    // Linha de wildcard compartilha o watch da plataforma INTEIRA — apagar
+    // uma família apagaria o monitor todo; confirma antes.
+    if (row.wildcard && !window.confirm(
+      `Esta linha vem do monitor de TODA a plataforma ${row.platformSlug}. Remover apaga o monitoramento da plataforma inteira. Continuar?`,
+    )) return;
+    setBusy(true);
+    setErr(null);
+    window.NSApi.deleteCallCenterWatch(row.watchId)
+      .then(() => cc.reload())
+      .catch((e) => setErr(e.message || 'erro'))
+      .finally(() => setBusy(false));
+  }
+  function addWatch() {
+    if (busy) return;
+    setBusy(true);
+    setErr(null);
+    window.NSApi.addCallCenterWatch({ platformSlug: plat, family: fam.trim() || null })
+      .then(() => { setFam(''); cc.reload(); })
+      .catch((e) => setErr(e.message || 'erro'))
+      .finally(() => setBusy(false));
+  }
+
+  const selStyle = {
+    background: 'rgba(255,255,255,0.04)', color: 'var(--fg2)', border: '1px solid var(--border-soft)',
+    borderRadius: 8, padding: '5px 8px', fontSize: 11, fontFamily: 'var(--f-mono)',
+  };
+
+  return (
+    <>
+      {/* Alerta: produto cruzou limiar de call center */}
+      {alerts.length > 0 && (
+        <div className="panel" style={{ marginBottom: 14, padding: '12px 16px', background: 'rgba(255,180,0,0.06)', border: '1px solid rgba(255,180,0,0.4)' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+            <Icon name="bell" size={14}/>
+            <span style={{ fontFamily: 'var(--f-mono)', fontSize: 10.5, fontWeight: 700, letterSpacing: '0.1em', color: '#ffd166' }}>
+              CALL CENTER · {alerts.length} {alerts.length === 1 ? 'PRODUTO CRUZOU' : 'PRODUTOS CRUZARAM'} O LIMIAR
+            </span>
+          </div>
+          <div style={{ display: 'grid', gap: 6 }}>
+            {alerts.map((r) => {
+              const meta = CC_LEVEL_META[r.level];
+              const pb = platBadge(r.platformSlug);
+              return (
+                <div key={`${r.watchId}:${r.family}`} style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', fontSize: 12.5 }}>
+                  <span className={`plat ${pb.cls}`}>{pb.short}</span>
+                  <span style={{ color: 'var(--fg1)', fontWeight: 600 }}>{r.family}</span>
+                  <span style={{ fontFamily: 'var(--f-mono)', fontSize: 11, color: 'var(--fg3)' }}>
+                    {r.avg3d} vendas/dia (média 3d) · ontem {fmtInt(r.yesterday)} · hoje {fmtInt(r.today)}
+                  </span>
+                  <span style={{
+                    fontFamily: 'var(--f-mono)', fontSize: 9.5, fontWeight: 700, letterSpacing: '0.06em',
+                    padding: '2px 10px', borderRadius: 'var(--r-full)',
+                    background: meta.bg, color: meta.fg, border: `1px solid ${meta.border}`,
+                  }}>
+                    → {meta.label}
+                  </span>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* Painel colapsável com o contador de todos os vigiados */}
+      <div className="panel" style={{ padding: 0, marginBottom: 14 }}>
+        <div
+          className="panel-head"
+          style={{ padding: '12px 14px', cursor: 'pointer', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}
+          onClick={() => setOpen((v) => !v)}
+        >
+          <div className="panel-title">
+            Monitor de call center
+            <span style={{ color: 'var(--fg5)', fontSize: 10, marginLeft: 6 }}>
+              vendas/dia dos produtos sem call center · Tauk ≥{d.thresholds.tauk}/d · SalesBound ≥{d.thresholds.salesbound}/d
+            </span>
+          </div>
+          <Icon name={open ? 'chevron-down' : 'chevron-right'} size={14}/>
+        </div>
+        {open && (
+          <>
+            <div className="tbl-wrap" style={{ margin: 0, padding: '0 4px' }}>
+              <table className="tbl">
+                <thead>
+                  <tr>
+                    <th>Produto</th><th>Plataforma</th>
+                    <th className="num">Hoje</th><th className="num">Ontem</th>
+                    <th className="num" title="Média dos últimos 3 dias BRT completos — é o que dispara o alerta">Média 3d</th>
+                    <th className="num">Média 7d</th><th className="num">Pico 7d</th>
+                    <th>Status</th><th></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {d.rows.length === 0 && (
+                    <tr><td colSpan={9} style={{ textAlign: 'center', padding: 16, opacity: 0.6 }}>Nenhum produto monitorado.</td></tr>
+                  )}
+                  {d.rows.map((r) => {
+                    const meta = CC_LEVEL_META[r.level];
+                    const pb = platBadge(r.platformSlug);
+                    return (
+                      <tr key={`${r.watchId}:${r.family}`} style={r.level !== 'ok' ? { background: `${meta.bg.replace('0.14', '0.05')}` } : undefined}>
+                        <td>
+                          {r.family}
+                          {r.dormant && <span style={{ fontFamily: 'var(--f-mono)', fontSize: 8.5, color: 'var(--fg5)', marginLeft: 6 }}>SEM VENDAS NA JANELA</span>}
+                        </td>
+                        <td><span className={`plat ${pb.cls}`}>{pb.short}</span></td>
+                        <td className="num">{fmtInt(r.today)}</td>
+                        <td className="num">{fmtInt(r.yesterday)}</td>
+                        <td className="num" style={{ fontWeight: 700, color: r.level !== 'ok' ? meta.fg : undefined }}>{r.avg3d}</td>
+                        <td className="num">{r.avg7d}</td>
+                        <td className="num">{fmtInt(r.peak7d)}</td>
+                        <td>
+                          <span style={{
+                            fontFamily: 'var(--f-mono)', fontSize: 9, fontWeight: 600, letterSpacing: '0.06em',
+                            padding: '2px 8px', borderRadius: 'var(--r-full)', whiteSpace: 'nowrap',
+                            background: meta.bg, color: meta.fg, border: `1px solid ${meta.border}`,
+                          }}>
+                            {meta.chip}
+                          </span>
+                        </td>
+                        <td>
+                          <button
+                            className="btn btn-ghost"
+                            style={{ padding: '2px 8px', fontSize: 10 }}
+                            title={`Remover monitoramento${r.wildcard ? ' (remove o monitor da plataforma INTEIRA)' : ''} — use quando o produto for integrado`}
+                            onClick={() => removeWatch(r)}
+                            disabled={busy}
+                          >×</button>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+            <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap', padding: '10px 14px' }}>
+              <select value={plat} onChange={(e) => setPlat(e.target.value)} style={selStyle}>
+                <option value="buygoods">BuyGoods</option>
+                <option value="cartpanda">Cartpanda</option>
+                <option value="clickbank">ClickBank</option>
+                <option value="digistore24">Digistore24</option>
+                <option value="jvzoo">JVZoo</option>
+              </select>
+              <input
+                value={fam}
+                onChange={(e) => setFam(e.target.value)}
+                placeholder="Família (vazio = TODAS da plataforma)"
+                style={{ ...selStyle, width: 260 }}
+              />
+              <button className="btn btn-ghost" onClick={addWatch} disabled={busy}>
+                <Icon name="plus" size={12}/> Monitorar
+              </button>
+              {err && <span style={{ color: 'var(--danger)', fontSize: 11 }}>{err}</span>}
+              <span style={{ fontFamily: 'var(--f-mono)', fontSize: 9.5, color: 'var(--fg5)', marginLeft: 'auto' }}>
+                integrou o call center? remove da lista · match tolera espaços/maiúsculas
+              </span>
+            </div>
+          </>
+        )}
+      </div>
+    </>
   );
 }
 
@@ -1265,7 +1469,7 @@ function CopyBeaconChip({ product, accent, label = 'Script', block = false }) {
   );
 }
 
-function FamilyGrid({ state, cur, onPick, pageStates }) {
+function FamilyGrid({ state, cur, onPick, pageStates, callCenter }) {
   const families = state.data?.families || [];
   const allStates = pageStates || [];
   return (
@@ -1277,6 +1481,8 @@ function FamilyGrid({ state, cur, onPick, pageStates }) {
           <span className="sub">{families.length} famílias no catálogo · clica em uma pra ver as variantes</span>
         </div>
       </div>
+
+      {callCenter && <CallCenterMonitor cc={callCenter}/>}
 
       {allStates.length > 0 && (
         <div className="panel" style={{ marginBottom: 14 }}>

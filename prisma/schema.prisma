@@ -879,6 +879,27 @@ model SmsCampaign {
   @@index([archived, isPublished])
 }
 
+// Watchlist do monitor de call center (aba Produtos). Produtos AINDA NÃO
+// integrados com os call centers: quando o volume de vendas/dia cruza os
+// limiares (lib/services/callCenter.ts: ≥30/dia → conectar Tauk;
+// ≥100/dia → integrar SalesBound cross-sell), a aba Produtos alerta.
+// Produto integrado = remover o watch. Match de família por igualdade
+// NORMALIZADA (minúsculas, sem espaços/pontuação) — "RetraBurn" casa
+// "Retra Burn"; watch de família que ainda nem vendeu fica dormente e
+// casa sozinho quando o produto nascer no catálogo.
+model CallCenterWatch {
+  id           String  @id @default(cuid())
+  platformSlug String
+  // NULL = TODAS as famílias da plataforma (ex.: JVZoo inteira).
+  family       String?
+  enabled      Boolean @default(true)
+  note         String?
+  createdAt    DateTime @default(now())
+
+  @@unique([platformSlug, family])
+  @@index([enabled])
+}
+
 // Venda recuperada pela Tauk Solutions (serviço de recuperação por
 // telefone/SMS com checkout próprio). Feed via webhook deles → n8n →
 // /api/ingest/tauk. Fica FORA da tabela Order de propósito: o payload não

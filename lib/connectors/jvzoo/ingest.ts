@@ -123,6 +123,16 @@ function parseOtherParams(raw: string | undefined): URLSearchParams {
   }
 }
 
+// Dois formatos entram aqui, unificados por fallback (dedup por
+// transaction_id torna entrega dupla inofensiva):
+//   IPN/webhook (rico): total, transactionPayouts, prekey, date,
+//     customer_first/last_name, delivery_country enum...
+//   POSTBACK S2S (magro): transaction_amount, affiliate_amount (CPA flat),
+//     customer_name único, customer_country, SEM prekey (cada transação é
+//     a própria sessão — upsell não é detectável) e SEM date (usa o relógio
+//     do recebimento — o postback dispara na hora da compra).
+//   Fee da plataforma não vem no postback → fees=0; o card "Taxas pagas"
+//   usa o Platform.feeRatePct editável (como nas outras plataformas).
 export function parseJvzooIngest(payload: JvzooPayload): NormalizedOrder {
   const transactionId = required(payload, 'transaction_id');
   const transactionType = (payload.transaction_type ?? '').toUpperCase();
@@ -141,12 +151,21 @@ export function parseJvzooIngest(payload: JvzooPayload): NormalizedOrder {
     : (payload.prekey ?? '').replace(/^WR-/, '') || transactionId;
   const productType: NormalizedProductType = !isRebill && prekeyBase !== transactionId ? 'UPSELL' : 'FRONTEND';
 
-  const gross = decimal(payload.total);
+  const gross = decimal(payload.total ?? payload.transaction_amount);
   const tax = decimal(payload.tax_total);
-  const { affiliateUsd, platformFeeUsd } = parsePayouts(payload.transactionPayouts);
+  // IPN: rachos do transactionPayouts. Postback: affiliate_amount flat.
+  const payouts = payload.transactionPayouts
+    ? parsePayouts(payload.transactionPayouts)
+    : { affiliateUsd: decimal(payload.affiliate_amount), platformFeeUsd: 0 };
+  const { affiliateUsd, platformFeeUsd } = payouts;
 
   const other = parseOtherParams(payload.other_params);
-  const countryRaw = payload.delivery_country ?? '';
+  const countryRaw = payload.delivery_country ?? payload.customer_country ?? '';
+
+  // Postback manda customer_name único — split primeira palavra/resto.
+  const nameParts = (payload.customer_name ?? '').trim().split(/\s+/);
+  const firstNameFallback = nameParts[0] || null;
+  const lastNameFallback = nameParts.length > 1 ? nameParts.slice(1).join(' ') : null;
 
   return {
     platformSlug: 'jvzoo',
@@ -165,8 +184,8 @@ export function parseJvzooIngest(payload: JvzooPayload): NormalizedOrder {
     // Sem buyer id no payload — email é o identificador estável.
     customerExternalId: payload.customer_email || null,
     customerEmail: payload.customer_email || null,
-    customerFirstName: payload.customer_first_name || null,
-    customerLastName: payload.customer_last_name || null,
+    customerFirstName: payload.customer_first_name || firstNameFallback,
+    customerLastName: payload.customer_last_name || lastNameFallback,
     customerLanguage: null,
 
     status: mapStatus(transactionType),
@@ -175,8 +194,9 @@ export function parseJvzooIngest(payload: JvzooPayload): NormalizedOrder {
     paySequenceNo: null,
     numberOfInstallments: null,
 
-    currencyOriginal: 'USD',
+    currencyOriginal: (payload.currency || 'USD').toUpperCase(),
     grossAmountOrig: gross,
+    // JVZoo liquida em USD; se um dia vier currency ≠ USD, tratar FX aqui.
     grossAmountUsd: gross,
     taxAmount: tax,
     fees: platformFeeUsd,
@@ -184,18 +204,22 @@ export function parseJvzooIngest(payload: JvzooPayload): NormalizedOrder {
     cpaPaidUsd: affiliateUsd,
 
     paymentMethod: payload.payment_method || null,
-    country: countryRaw ? (COUNTRY_ISO2[countryRaw] ?? countryRaw) : null,
+    // IPN manda enum verboso (UNITED_STATES); postback pode mandar ISO2 já.
+    country: countryRaw
+      ? (countryRaw.length === 2 ? countryRaw.toUpperCase() : COUNTRY_ISO2[countryRaw] ?? countryRaw)
+      : null,
     state: payload.delivery_region || null,
     city: payload.delivery_city || null,
 
     funnelSessionId: prekeyBase,
     funnelStep: null,
-    clickId: other.get('vtid') || null,
+    clickId: other.get('vtid') || payload.gclid || null,
     trackingId: other.get('tid') || payload.tid || null,
-    campaignKey: other.get('utm_campaign') || null,
+    campaignKey: other.get('utm_campaign') || payload.utm_campaign || null,
     // utm_source no link (quando o tráfego marca) — mesma atribuição de
-    // fonte usada na Digistore (ex.: smsbrdcst na aba SMS).
-    trafficSource: other.get('utm_source') || null,
+    // fonte usada na Digistore (ex.: smsbrdcst na aba SMS). No postback os
+    // UTMs vêm como params de topo.
+    trafficSource: other.get('utm_source') || payload.utm_source || null,
     deviceType: null,
     browser: null,
 

@@ -890,6 +890,14 @@ function fetchSms(filters, extra = {}) {
   if (extra.campaign) qs.set('campaign', extra.campaign);
   return coGet(`/api/metrics/sms?${qs}`);
 }
+// Monitor de call center (aba Produtos): vendas/dia dos produtos vigiados
+// + watchlist admin (adicionar/remover produto do monitoramento).
+function fetchCallCenter() { return coGet('/api/metrics/callcenter'); }
+function addCallCenterWatch(body) { return coSend('/api/admin/callcenter-watches', 'POST', body); }
+function deleteCallCenterWatch(id) {
+  return fetch(`/api/admin/callcenter-watches/${encodeURIComponent(id)}`, { method: 'DELETE', headers: { Accept: 'application/json' } })
+    .then(async (r) => { if (!r.ok) { const e = await r.json().catch(() => ({})); throw new Error(e.error || `HTTP ${r.status}`); } return r.json(); });
+}
 function fetchRecoveryAffiliates() { return coGet('/api/admin/recovery-affiliates'); }
 function addRecoveryAffiliate(body) { return coSend('/api/admin/recovery-affiliates', 'POST', body); }
 function deleteRecoveryAffiliate(id) {
@@ -930,6 +938,9 @@ window.NSApi = _wrapMutations({
   fetchRecovery,
   fetchTauk,
   fetchSms,
+  fetchCallCenter,
+  addCallCenterWatch,
+  deleteCallCenterWatch,
   fetchRecoveryAffiliates,
   addRecoveryAffiliate,
   deleteRecoveryAffiliate,

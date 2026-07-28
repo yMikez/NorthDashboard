@@ -137,6 +137,46 @@ describe('parseJvzooIngest — variações', () => {
     expect(parseJvzooIngest({ ...sale, delivery_country: 'ELBONIA' }).country).toBe('ELBONIA');
   });
 
+  it('POSTBACK S2S (formato magro): amounts/CPA flat, nome único, sem prekey/date', () => {
+    const before = Date.now();
+    const n = parseJvzooIngest({
+      currency: 'USD',
+      transaction_id: 'PB123',
+      transaction_amount: '294.00',
+      transaction_type: 'SALE',
+      product_id: '446191',
+      product_name: 'Hawaiian Harmony 6 Bottles',
+      customer_email: 'buyer@example.com',
+      customer_name: 'Test da Silva Buyer',
+      customer_country: 'US',
+      vendor_id: '3586537',
+      payment_method: 'WHOP',
+      affiliate_id: '3552225',
+      affiliate_amount: '230.00',
+      commission_type: 'CPA',
+      tid: 'ekmwpdty_3092_90872502',
+      utm_source: 'smsbrdcst',
+      utm_campaign: 'neuro-01',
+      gclid: 'gclid123',
+      random: '999',
+    });
+    expect(n.externalId).toBe('PB123');
+    expect(n.grossAmountUsd).toBe(294);
+    expect(n.cpaPaidUsd).toBe(230);
+    expect(n.fees).toBe(0); // fee da plataforma não vem no postback
+    expect(n.netAmountUsd).toBe(64); // 294 − 0 − 0 − 230
+    expect(n.customerFirstName).toBe('Test');
+    expect(n.customerLastName).toBe('da Silva Buyer');
+    expect(n.country).toBe('US');
+    expect(n.productType).toBe('FRONTEND'); // sem prekey — cada tx é a própria sessão
+    expect(n.parentExternalId).toBe('PB123');
+    expect(n.trafficSource).toBe('smsbrdcst');
+    expect(n.campaignKey).toBe('neuro-01');
+    expect(n.trackingId).toBe('ekmwpdty_3092_90872502');
+    expect(n.clickId).toBe('gclid123');
+    expect(n.orderedAt.getTime()).toBeGreaterThanOrEqual(before); // sem date → agora
+  });
+
   it('sem transaction_id → erro (campo obrigatório)', () => {
     const p = { ...sale } as Record<string, string>;
     delete p.transaction_id;
