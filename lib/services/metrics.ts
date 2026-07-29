@@ -375,6 +375,10 @@ export interface AffiliatesResponse {
     netAovUsd: number;
     netAfterCpaUsd: number | null;
     cpaStatus: string | null;
+    // Refund&CB efetivamente usado (override do afiliado ?? default da
+    // plataforma) + o override cru (null = herdando).
+    refundCbPctUsed: number;
+    refundCbPctOverride: number | null;
     netMargin: number;
     cogs: number;
     fulfillment: number;
@@ -3047,6 +3051,7 @@ export async function getAffiliatesLegacy(
         lastOrderAt: true,
         platform: { select: { slug: true } },
         id: true,
+        refundCbPctOverride: true,
       },
     }),
   ]);
@@ -3300,7 +3305,10 @@ export async function getAffiliatesLegacy(
       // fatores da plataforma/global → NET AOV → NET AFTER CPA → status.
       ...(() => {
         const aovGlobal = (att?.sessions ?? 0) > 0 ? (att!.revenue) / (att!.sessions) : 0;
-        const pp = pm.byPlatform.get(aff.platform.slug) ?? { feePct: 0, refundCbPct: 0 };
+        const ppBase = pm.byPlatform.get(aff.platform.slug) ?? { feePct: 0, refundCbPct: 0 };
+        // Override por afiliado > default da plataforma (decisão do usuário).
+        const ovr = aff.refundCbPctOverride != null ? Number(aff.refundCbPctOverride) : null;
+        const pp = { feePct: ppBase.feePct, refundCbPct: ovr ?? ppBase.refundCbPct };
         const nAov = netAovUsd(aovGlobal, { ...pp, opexPct: pm.opexPct });
         const cpaVal = a ? round2(a.latestCpa) : 0;
         const nAfter = cpaVal > 0 ? round2(nAov - cpaVal) : null;
@@ -3308,6 +3316,8 @@ export async function getAffiliatesLegacy(
           netAovUsd: nAov,
           netAfterCpaUsd: nAfter,
           cpaStatus: nAfter != null ? cpaStatus(nAfter, pm.thresholds) : null,
+          refundCbPctUsed: pp.refundCbPct,
+          refundCbPctOverride: ovr,
         };
       })(),
       // Mantido pra retrocompat: ainda mean/count, deflaciona com
@@ -3555,6 +3565,7 @@ export async function getAffiliatesSql(
           lastOrderAt: true,
           platform: { select: { slug: true } },
           id: true,
+          refundCbPctOverride: true,
         },
       }),
     ]);
@@ -3657,7 +3668,10 @@ export async function getAffiliatesSql(
       ...(() => {
         const sessions = att ? Number(att.sessions) : 0;
         const aovGlobal = sessions > 0 ? attRevenue / sessions : 0;
-        const pp = pm.byPlatform.get(aff.platform.slug) ?? { feePct: 0, refundCbPct: 0 };
+        const ppBase = pm.byPlatform.get(aff.platform.slug) ?? { feePct: 0, refundCbPct: 0 };
+        // Override por afiliado > default da plataforma (decisão do usuário).
+        const ovr = aff.refundCbPctOverride != null ? Number(aff.refundCbPctOverride) : null;
+        const pp = { feePct: ppBase.feePct, refundCbPct: ovr ?? ppBase.refundCbPct };
         const nAov = netAovUsd(aovGlobal, { ...pp, opexPct: pm.opexPct });
         const cpaVal = latestCpa != null ? round2(latestCpa) : 0;
         const nAfter = cpaVal > 0 ? round2(nAov - cpaVal) : null;
@@ -3665,6 +3679,8 @@ export async function getAffiliatesSql(
           netAovUsd: nAov,
           netAfterCpaUsd: nAfter,
           cpaStatus: nAfter != null ? cpaStatus(nAfter, pm.thresholds) : null,
+          refundCbPctUsed: pp.refundCbPct,
+          refundCbPctOverride: ovr,
         };
       })(),
       cpaPerFeApproved: feApprovedCount > 0 ? round2(cpa / feApprovedCount) : 0,

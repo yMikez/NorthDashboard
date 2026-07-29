@@ -896,6 +896,16 @@ function fetchCallCenter() { return coGet('/api/metrics/callcenter'); }
 // Config do modelo de lucro CPA (opex% + régua do status). Admin.
 function fetchProfitConfig() { return coGet('/api/admin/profit-config'); }
 function patchProfitConfig(body) { return coSend('/api/admin/profit-config', 'PATCH', body); }
+// Lucro FRONT (funil, modelo CPA) × BACK (recuperação/Tauk/SMS...).
+function fetchProfitSplit(filters) {
+  const qs = new URLSearchParams({
+    start_date: toISODate(filters.dateRange.start),
+    end_date: toISODate(filters.dateRange.end),
+  });
+  return coGet(`/api/metrics/profit-split?${qs}`);
+}
+// Override de refund&cb% por afiliado (null = herda da plataforma).
+function patchAffiliateRefundOverride(body) { return coSend('/api/admin/affiliates/refund-override', 'PATCH', body); }
 function addCallCenterWatch(body) { return coSend('/api/admin/callcenter-watches', 'POST', body); }
 function deleteCallCenterWatch(id) {
   return fetch(`/api/admin/callcenter-watches/${encodeURIComponent(id)}`, { method: 'DELETE', headers: { Accept: 'application/json' } })
@@ -946,6 +956,8 @@ window.NSApi = _wrapMutations({
   deleteCallCenterWatch,
   fetchProfitConfig,
   patchProfitConfig,
+  fetchProfitSplit,
+  patchAffiliateRefundOverride,
   fetchRecoveryAffiliates,
   addRecoveryAffiliate,
   deleteRecoveryAffiliate,

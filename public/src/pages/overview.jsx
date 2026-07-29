@@ -123,6 +123,66 @@ const PLATFORM_VARIANTS = {
   clickbank: { short: 'CB', className: 'plat-cb' },
 };
 
+// Painel Lucro FRONT × BACK (modelo planilha CPA). Front = funil aprovado
+// SEM fontes de back; back = recuperação + Tauk + SMS (+ SalesBound/email
+// futuros). Total = soma. Endpoint próprio: não depende do /overview.
+function ProfitSplitPanel({ filters, cur }) {
+  const [ps, setPs] = useState({ status: 'loading', d: null });
+  useEffect(() => {
+    let cancelled = false;
+    window.NSApi.fetchProfitSplit(filters)
+      .then((d) => { if (!cancelled) setPs({ status: 'ready', d }); })
+      .catch(() => { if (!cancelled) setPs((s) => ({ status: 'error', d: s.d })); });
+    return () => { cancelled = true; };
+  }, [filters.dateRange.start.getTime(), filters.dateRange.end.getTime()]);
+  const d = ps.d;
+  if (!d) return null;
+  return (
+    <div className="panel" style={{ marginBottom: 14 }}>
+      <div className="panel-head">
+        <div className="panel-title">
+          <span className="panel-eyebrow">LUCRO · FRONT × BACK (MODELO CPA)</span>
+          <div className="panel-metric">
+            {fmtCurrency(d.totalUsd, cur, 0)}
+            <span className="panel-sub" style={{ marginLeft: 8 }}>total = front + back · opex {d.opexPct}% · refund&cb/taxa por plataforma</span>
+          </div>
+        </div>
+      </div>
+      <div className="mini-kpis">
+        <div className="mini-kpi">
+          <div className="l">Lucro FRONT (funil)</div>
+          <div className="v" style={{ color: d.front.profitUsd >= 0 ? 'var(--success)' : '#ff8a8a' }}>{fmtCurrency(d.front.profitUsd, cur, 0)}</div>
+          <div className="s">{fmtCurrency(d.front.grossUsd, cur, 0)} gross × modelo − {fmtCurrency(d.front.cpaUsd, cur, 0)} CPA · {fmtInt(d.front.orders)} pedidos</div>
+        </div>
+        <div className="mini-kpi">
+          <div className="l">Lucro BACK (retenção)</div>
+          <div className="v" style={{ color: 'var(--glow-cyan)' }}>{fmtCurrency(d.back.profitUsd, cur, 0)}</div>
+          <div className="s">recuperação + Tauk + SMS · líquido de comissões</div>
+        </div>
+        <div className="mini-kpi">
+          <div className="l">Total da operação</div>
+          <div className="v">{fmtCurrency(d.totalUsd, cur, 0)}</div>
+          <div className="s">front {d.totalUsd !== 0 ? Math.round((d.front.profitUsd / d.totalUsd) * 100) : 0}% · back {d.totalUsd !== 0 ? Math.round((d.back.profitUsd / d.totalUsd) * 100) : 0}%</div>
+        </div>
+      </div>
+      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 10 }}>
+        {d.back.sources.map((s) => (
+          <span key={s.key} style={{
+            fontFamily: 'var(--f-mono)', fontSize: 10, padding: '4px 12px', borderRadius: 'var(--r-full)',
+            background: s.available ? 'rgba(91,200,255,0.08)' : 'rgba(255,255,255,0.03)',
+            border: `1px solid ${s.available ? 'rgba(91,200,255,0.3)' : 'var(--border-soft)'}`,
+            color: s.available ? 'var(--fg3)' : 'var(--fg5)', opacity: s.available ? 1 : 0.7,
+          }}>
+            {s.label}{s.available
+              ? <> · <span style={{ color: 'var(--fg1)' }}>{fmtCurrency(s.grossUsd, cur, 0)}</span> → <span style={{ color: 'var(--success)' }}>{fmtCurrency(s.netUsd, cur, 0)}</span></>
+              : ' · em breve'}
+          </span>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 function OverviewPage({ filters, setFilters }) {
   const [state, setState] = useStateApp({ status: 'loading', data: null, error: null });
   const [metric, setMetric] = useState('gross');
@@ -313,6 +373,8 @@ function OverviewPage({ filters, setFilters }) {
             state: KPI_THRESHOLDS.estimatedMarginPct.state(kpis.estimatedMarginPct),
           } : null}/>
       </div>
+
+      <ProfitSplitPanel filters={filters} cur={cur}/>
 
       <div className="panel" style={{ marginBottom: 14 }}>
         <div className="panel-head">

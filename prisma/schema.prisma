@@ -105,6 +105,11 @@ model Affiliate {
   firstSeenAt DateTime
   lastOrderAt DateTime?
 
+  // Override MANUAL da taxa de refund&cb do modelo CPA pra ESTE afiliado
+  // (percentual, 15.00 = 15%). NULL = herda o refundCbPct da plataforma
+  // (default global). Editável na aba Afiliados (admin).
+  refundCbPctOverride Decimal? @db.Decimal(5, 2)
+
   platform    Platform            @relation(fields: [platformId], references: [id])
   orders      Order[]
   // Network attachment is 1:1 — an affiliate belongs to at most one

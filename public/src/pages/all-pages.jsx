@@ -582,7 +582,25 @@ function LeaderboardPage({ filters, onOpenAffiliate }) {
                     <td className="num cell-mono" style={{ fontWeight: 700, color: r.netAfterCpaUsd == null ? 'var(--fg5)' : r.netAfterCpaUsd < 0 ? '#ff8a8a' : r.cpaStatus === 'saudavel' ? 'var(--success)' : '#ffd166' }}>
                       {r.netAfterCpaUsd != null ? fmtCurrency(r.netAfterCpaUsd, cur, 0) : '—'}
                     </td>
-                    <td><CpaStatusChip status={r.cpaStatus}/></td>
+                    <td>
+                      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                        <CpaStatusChip status={r.cpaStatus}/>
+                        <button
+                          className="btn btn-ghost" style={{ padding: '1px 6px', fontSize: 9 }}
+                          title={`Refund&CB usado: ${r.refundCbPctUsed}% ${r.refundCbPctOverride != null ? '(override deste afiliado)' : '(default da plataforma)'} — clique pra editar só deste afiliado`}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            const v = window.prompt('Refund&CB % deste afiliado (vazio = voltar a herdar da plataforma):', r.refundCbPctOverride != null ? String(r.refundCbPctOverride) : '');
+                            if (v === null) return;
+                            window.NSApi.patchAffiliateRefundOverride({
+                              platformSlug: r.platformSlug,
+                              externalId: r.externalId,
+                              refundCbPct: v.trim() === '' ? null : Number(v.replace(',', '.')),
+                            }).then(() => window.location.reload()).catch((err) => window.alert(err.message));
+                          }}
+                        >%</button>
+                      </span>
+                    </td>
                     <td className="num cell-mono" style={{ color: r.netMargin > 0 ? 'var(--success)' : 'var(--danger)' }}>{fmtCurrency(r.netMargin, cur, 0)}</td>
                     <td className="num cell-mono" style={{ color: (r.estimatedProfit ?? 0) > 0 ? 'var(--success)' : 'var(--danger)', opacity: 0.75 }}>
                       {r.estimatedProfit != null ? fmtCurrency(r.estimatedProfit, cur, 0) : '—'}
