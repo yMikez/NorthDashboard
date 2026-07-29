@@ -776,11 +776,11 @@ async function aiSendMessage({ conversationId, message }, callbacks) {
   }
 }
 
-async function adminPatchPlatformFees(slug, { feeRatePct, allowancePct }) {
+async function adminPatchPlatformFees(slug, { feeRatePct, allowancePct, refundCbPct }) {
   const res = await fetch(`/api/admin/platforms/${encodeURIComponent(slug)}/fees`, {
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ feeRatePct, allowancePct }),
+    body: JSON.stringify({ feeRatePct, allowancePct, refundCbPct }),
   });
   if (!res.ok) {
     const err = await res.json().catch(() => ({}));

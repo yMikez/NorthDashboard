@@ -2854,8 +2854,11 @@ function IntegrationsPage({ filters }) {
                         displayName: p.displayName,
                         feeRatePct: p.feeRatePct ?? '',
                         allowancePct: p.allowancePct ?? '',
+                        refundCbPct: p.refundCbPct ?? '',
+                        observedRefundCbPct: p.observedRefundCbPct,
+                        observedRefundSample: p.observedRefundSample,
                       })}
-                      title="Atualizar taxas + allowance"
+                      title="Atualizar taxas + allowance + refund&cb do modelo CPA"
                     >
                       <Icon name="pencil" size={10}/> Editar
                     </button>
@@ -2912,6 +2915,9 @@ function IntegrationsPage({ filters }) {
                       displayName: p.displayName,
                       feeRatePct: '',
                       allowancePct: '',
+                      refundCbPct: p.refundCbPct ?? '',
+                      observedRefundCbPct: p.observedRefundCbPct,
+                      observedRefundSample: p.observedRefundSample,
                     })}
                   >
                     <Icon name="plus" size={11}/> Cadastrar taxas e allowance
@@ -2986,6 +2992,7 @@ function FeesRow({ label, value, cur, color, prefix, bold, title }) {
 function PlatformFeesModal({ platform, onCancel, onSaved }) {
   const [feeRate, setFeeRate] = useState(String(platform.feeRatePct ?? ''));
   const [allowance, setAllowance] = useState(String(platform.allowancePct ?? ''));
+  const [refundCb, setRefundCb] = useState(String(platform.refundCbPct ?? ''));
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState(null);
 
@@ -2993,17 +3000,22 @@ function PlatformFeesModal({ platform, onCancel, onSaved }) {
     setError(null);
     const fee = feeRate.trim() === '' ? null : Number(feeRate.replace(',', '.'));
     const alw = allowance.trim() === '' ? null : Number(allowance.replace(',', '.'));
+    const rcb = refundCb.trim() === '' ? null : Number(refundCb.replace(',', '.'));
     if (fee != null && (!Number.isFinite(fee) || fee < 0 || fee > 100)) {
       setError('Taxa deve estar entre 0 e 100'); return;
     }
     if (alw != null && (!Number.isFinite(alw) || alw < 0 || alw > 100)) {
       setError('Allowance deve estar entre 0 e 100'); return;
     }
+    if (rcb != null && (!Number.isFinite(rcb) || rcb < 0 || rcb > 100)) {
+      setError('Refund & CB deve estar entre 0 e 100'); return;
+    }
     setSaving(true);
     try {
       await window.NSApi.adminPatchPlatformFees(platform.slug, {
         feeRatePct: fee,
         allowancePct: alw,
+        refundCbPct: rcb,
       });
       // Limpa flag de "stale" pra evitar popup imediato após salvar.
       try { localStorage.removeItem('ns-fees-prompt-dismissed-until'); } catch {}
@@ -3048,7 +3060,7 @@ function PlatformFeesModal({ platform, onCancel, onSaved }) {
             autoFocus
           />
         </label>
-        <label style={{ display: 'block', marginBottom: 18 }}>
+        <label style={{ display: 'block', marginBottom: 14 }}>
           <span style={{ fontSize: 11, color: 'var(--fg3)', display: 'block', marginBottom: 4 }}>
             Allowance médio (%)
           </span>
@@ -3058,6 +3070,22 @@ function PlatformFeesModal({ platform, onCancel, onSaved }) {
             placeholder="ex: 2.37"
             style={feesInputStyle}
           />
+        </label>
+        <label style={{ display: 'block', marginBottom: 18 }}>
+          <span style={{ fontSize: 11, color: 'var(--fg3)', display: 'block', marginBottom: 4 }}>
+            Refund & chargeback (%) · modelo CPA
+          </span>
+          <input
+            type="text" inputMode="decimal" value={refundCb}
+            onChange={(e) => setRefundCb(e.target.value)}
+            placeholder="ex: 15"
+            style={feesInputStyle}
+          />
+          <span style={{ display: 'block', fontSize: 10, color: 'var(--fg5)', marginTop: 4, fontFamily: 'var(--f-mono)' }}>
+            {platform.observedRefundCbPct != null && platform.observedRefundSample > 0
+              ? `observada (coorte madura 60–150d): ${platform.observedRefundCbPct.toFixed(1)}% em ${fmtInt(platform.observedRefundSample)} pedidos — use pra calibrar`
+              : 'sem coorte madura ainda (plataforma nova) — mantenha a estimativa manual'}
+          </span>
         </label>
 
         {error && (
