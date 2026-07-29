@@ -384,10 +384,90 @@ function ProfitConfigPanel() {
   );
 }
 
+// Modal de override do refund&cb% de UM afiliado (modelo CPA). Vazio ou
+// "Voltar a herdar" → null (usa o default da plataforma).
+function AffiliateRefundModal({ aff, onCancel, onSaved }) {
+  const [value, setValue] = useState(aff.refundCbPctOverride != null ? String(aff.refundCbPctOverride) : '');
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState(null);
+
+  function submit(v) {
+    setError(null);
+    let parsed = null;
+    if (v != null) {
+      parsed = Number(String(v).replace(',', '.'));
+      if (!Number.isFinite(parsed) || parsed < 0 || parsed > 100) {
+        setError('Valor deve estar entre 0 e 100'); return;
+      }
+    }
+    setSaving(true);
+    window.NSApi.patchAffiliateRefundOverride({
+      platformSlug: aff.platformSlug,
+      externalId: aff.externalId,
+      refundCbPct: parsed,
+    })
+      .then(onSaved)
+      .catch((err) => { setError(err.message); setSaving(false); });
+  }
+
+  const platformDefault = aff.refundCbPctOverride != null
+    ? null // usado ≠ default quando tem override; não sabemos o default aqui
+    : aff.refundCbPctUsed;
+
+  return (
+    <div onClick={onCancel} style={{
+      position: 'fixed', inset: 0, zIndex: 100, background: 'rgba(3,6,23,0.7)',
+      backdropFilter: 'blur(8px)', display: 'grid', placeItems: 'center',
+    }}>
+      <div onClick={(e) => e.stopPropagation()} className="panel" style={{ width: 380, padding: 22 }}>
+        <div className="eyebrow" style={{ fontSize: 10, color: 'var(--glow-cyan)', marginBottom: 4 }}>
+          REFUND & CHARGEBACK · MODELO CPA
+        </div>
+        <h3 style={{ margin: '0 0 4px', fontSize: 18 }}>{aff.nickname || aff.externalId}</h3>
+        <p style={{ fontSize: 11, color: 'var(--fg4)', marginBottom: 16 }}>
+          Taxa usada no NET AOV <b>só deste afiliado</b>. Em uso agora:{' '}
+          <b style={{ color: 'var(--fg2)' }}>{aff.refundCbPctUsed}%</b>{' '}
+          ({aff.refundCbPctOverride != null ? 'override' : 'default da plataforma'}).
+          {platformDefault != null ? '' : ' Salvar vazio ou "Voltar a herdar" retorna ao default da plataforma.'}
+        </p>
+        <label style={{ display: 'block', marginBottom: 16 }}>
+          <span style={{ fontSize: 11, color: 'var(--fg3)', display: 'block', marginBottom: 4 }}>
+            Refund & chargeback (%)
+          </span>
+          <input
+            type="text" inputMode="decimal" value={value} autoFocus
+            onChange={(e) => setValue(e.target.value)}
+            onKeyDown={(e) => { if (e.key === 'Enter') submit(value.trim() === '' ? null : value); }}
+            placeholder="ex: 12.5 · vazio = herdar da plataforma"
+            style={feesInputStyle}
+          />
+        </label>
+        {error && <div style={{ color: 'var(--danger)', fontSize: 11, marginBottom: 10 }}>{error}</div>}
+        <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8 }}>
+          <button className="btn btn-ghost" disabled={saving || aff.refundCbPctOverride == null}
+            onClick={() => submit(null)} title="Remove o override — volta ao default da plataforma">
+            Voltar a herdar
+          </button>
+          <span style={{ display: 'flex', gap: 8 }}>
+            <button className="btn btn-ghost" onClick={onCancel} disabled={saving}>Cancelar</button>
+            <button className="btn btn-primary" disabled={saving}
+              onClick={() => submit(value.trim() === '' ? null : value)}>
+              {saving ? 'Salvando…' : 'Salvar'}
+            </button>
+          </span>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function LeaderboardPage({ filters, onOpenAffiliate }) {
   const [sortBy, setSortBy] = useState('revenue');
   const [minOrders, setMinOrders] = useState(1);
   const [state, setLbState] = useState({ status: 'loading', data: null, error: null });
+  // Modal de override do refund&cb% por afiliado (substitui o prompt nativo).
+  const [refundModal, setRefundModal] = useState(null);
+  const [refreshTick, setRefreshTick] = useState(0);
 
   useEffect(() => {
     let cancelled = false;
@@ -400,7 +480,7 @@ function LeaderboardPage({ filters, onOpenAffiliate }) {
         setLbState({ status: 'error', data: null, error: err.message });
       });
     return () => { cancelled = true; };
-  }, [filters.dateRange.start.getTime(), filters.dateRange.end.getTime(),
+  }, [refreshTick, filters.dateRange.start.getTime(), filters.dateRange.end.getTime(),
       Array.from(filters.platforms).join(','), Array.from(filters.countries).join(','),
       Array.from(filters.funnels).join(','),
       Array.from(filters.families).join(',')]);
@@ -456,6 +536,14 @@ function LeaderboardPage({ filters, onOpenAffiliate }) {
       </div>
 
       <ProfitConfigPanel/>
+
+      {refundModal && (
+        <AffiliateRefundModal
+          aff={refundModal}
+          onCancel={() => setRefundModal(null)}
+          onSaved={() => { setRefundModal(null); setRefreshTick((n) => n + 1); }}
+        />
+      )}
 
       <div className="mini-kpis">
         <div className="mini-kpi">
@@ -574,7 +662,12 @@ function LeaderboardPage({ filters, onOpenAffiliate }) {
                         <div className={`ratebar ${apClass === 'val-ok' ? 'ok' : apClass === 'val-warn' ? 'warn' : 'bad'}`} style={{ width: 48 }}><span style={{ width: `${r.approvalRate * 100}%` }}/></div>
                       </div>
                     </td>
-                    <td className={`num cell-mono ${rfClass}`}>{(r.refundRate * 100).toFixed(1)}%</td>
+                    <td className="num cell-mono"
+                      title={`Taxa do MODELO CPA usada no NET AOV: ${r.refundCbPctUsed}% (${r.refundCbPctOverride != null ? 'override deste afiliado' : 'default da plataforma'}). Observada no período: ${(r.refundRate * 100).toFixed(1)}%.`}>
+                      {r.refundCbPctUsed}%
+                      {r.refundCbPctOverride != null && <span style={{ fontSize: 8, color: 'var(--glow-cyan)', marginLeft: 3 }}>ovr</span>}
+                      <span className={rfClass} style={{ fontSize: 9, marginLeft: 5, opacity: 0.75 }}>obs {(r.refundRate * 100).toFixed(1)}%</span>
+                    </td>
                     <td className={`num cell-mono ${cbClass}`}>{(r.cbRate * 100).toFixed(2)}%</td>
                     <td className="num cell-mono">{fmtCurrency(r.cpa, cur, 0)}</td>
                     <td className="num cell-mono">{r.netAovUsd > 0 ? fmtCurrency(r.netAovUsd, cur, 0) : '—'}</td>
@@ -588,16 +681,7 @@ function LeaderboardPage({ filters, onOpenAffiliate }) {
                         <button
                           className="btn btn-ghost" style={{ padding: '1px 6px', fontSize: 9 }}
                           title={`Refund&CB usado: ${r.refundCbPctUsed}% ${r.refundCbPctOverride != null ? '(override deste afiliado)' : '(default da plataforma)'} — clique pra editar só deste afiliado`}
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            const v = window.prompt('Refund&CB % deste afiliado (vazio = voltar a herdar da plataforma):', r.refundCbPctOverride != null ? String(r.refundCbPctOverride) : '');
-                            if (v === null) return;
-                            window.NSApi.patchAffiliateRefundOverride({
-                              platformSlug: r.platformSlug,
-                              externalId: r.externalId,
-                              refundCbPct: v.trim() === '' ? null : Number(v.replace(',', '.')),
-                            }).then(() => window.location.reload()).catch((err) => window.alert(err.message));
-                          }}
+                          onClick={(e) => { e.stopPropagation(); setRefundModal(r); }}
                         >%</button>
                       </span>
                     </td>
