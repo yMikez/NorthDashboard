@@ -6,6 +6,7 @@ import {
   queryDailyMetrics,
   type DailyMetricsRow,
 } from './dailyMetrics';
+import { getProfitModelInputs, getObservedRefundCbPct, netAovUsd, cpaStatus } from './profitModel';
 
 export interface MetricsFilters {
   startDate: Date;
@@ -186,6 +187,11 @@ export interface PlatformsResponse {
     topProduct: { externalId: string; name: string; revenue: number; orders: number } | null;
     feeRatePct: number | null;
     allowancePct: number | null;
+    // Modelo CPA: refund&cb manual (%) + observada em coorte madura
+    // (vendas de 60-150d atrás) com o tamanho da amostra, pra calibrar.
+    refundCbPct: number | null;
+    observedRefundCbPct: number | null;
+    observedRefundSample: number;
     feesUpdatedAt: string | null;
     taxesPaid: number | null;
     allowanceReserved: number | null;
@@ -360,8 +366,15 @@ export interface AffiliatesResponse {
     cpa: number;
     feApprovedCount: number;       // FE+APPROVED no período (qualquer cpa)
     feCpaPaidCount: number;        // FE+APPROVED+cpa>0 (sales que pagaram CPA)
-    cpaPerFe: number;              // CPA negociado (mode dos cpa>0)
+    cpaPerFe: number;              // CPA negociado (último valor observado)
     cpaPerFeApproved: number;      // mean ponderada (deflaciona com cpa=0)
+    // Modelo de lucro estilo planilha CPA (lib/services/profitModel.ts):
+    // netAovUsd = AOV atribuído × (1 − refund&cb% − fee% − opex%);
+    // netAfterCpaUsd = netAovUsd − cpaPerFe (null sem CPA detectado);
+    // cpaStatus: 'saudavel' | 'atencao' | 'renegociar' | null.
+    netAovUsd: number;
+    netAfterCpaUsd: number | null;
+    cpaStatus: string | null;
     netMargin: number;
     cogs: number;
     fulfillment: number;
@@ -1957,6 +1970,9 @@ export async function getProductsSql(
 export async function getPlatforms(
   filters: MetricsFilters,
 ): Promise<PlatformsResponse> {
+  // Taxa de refund observada (coorte madura, now-relative — independe do
+  // período da tela) pra calibrar o refundCbPct manual do modelo CPA.
+  const observedRefund = await getObservedRefundCbPct();
   // When the user filters by platform, drop the others from the page entirely
   // (cards for unfiltered platforms would just show zeros and add noise).
   const where: Prisma.OrderWhereInput = {
@@ -1991,6 +2007,7 @@ export async function getPlatforms(
         lastSyncAt: true,
         feeRatePct: true,
         allowancePct: true,
+        refundCbPct: true,
         feesUpdatedAt: true,
       },
     }),
@@ -2023,6 +2040,7 @@ export async function getPlatforms(
     lastSyncAt: string | null;
     feeRatePct: number | null;
     allowancePct: number | null;
+    refundCbPct: number | null;
     feesUpdatedAt: string | null;
     revenue: number;
     orders: number;
@@ -2051,6 +2069,8 @@ export async function getPlatforms(
       lastSyncAt: p.lastSyncAt?.toISOString() ?? null,
       feeRatePct: p.feeRatePct ? toNumber(p.feeRatePct) : null,
       allowancePct: p.allowancePct ? toNumber(p.allowancePct) : null,
+      // Refund&CB manual do modelo CPA + observada (coorte madura) pra calibrar.
+      refundCbPct: p.refundCbPct ? toNumber(p.refundCbPct) : null,
       feesUpdatedAt: p.feesUpdatedAt?.toISOString() ?? null,
       revenue: 0,
       orders: 0,
@@ -2150,6 +2170,9 @@ export async function getPlatforms(
           topProduct,
           feeRatePct: p.feeRatePct,
           allowancePct: p.allowancePct,
+          refundCbPct: p.refundCbPct,
+          observedRefundCbPct: observedRefund.get(p.slug)?.pct ?? null,
+          observedRefundSample: observedRefund.get(p.slug)?.sample ?? 0,
           feesUpdatedAt: p.feesUpdatedAt,
           taxesPaid,
           allowanceReserved,
@@ -3222,6 +3245,8 @@ export async function getAffiliatesLegacy(
     }
   }
 
+  const pm = await getProfitModelInputs();
+
   const totalRevenue = Array.from(inPeriod.values()).reduce((s, a) => s + a.revenue, 0);
   const sortedByRev = Array.from(inPeriod.values()).sort((a, b) => b.revenue - a.revenue);
   const top5Revenue = sortedByRev.slice(0, 5).reduce((s, a) => s + a.revenue, 0);
@@ -3271,6 +3296,20 @@ export async function getAffiliatesLegacy(
       feApprovedCount: a?.feApprovedCount ?? 0,
       feCpaPaidCount: a?.feCpaPaidCount ?? 0,
       cpaPerFe: a ? round2(a.latestCpa) : 0,
+      // Modelo planilha CPA: AOV atribuído (sessão FE+UPs+DWs ÷ FEs) ×
+      // fatores da plataforma/global → NET AOV → NET AFTER CPA → status.
+      ...(() => {
+        const aovGlobal = (att?.sessions ?? 0) > 0 ? (att!.revenue) / (att!.sessions) : 0;
+        const pp = pm.byPlatform.get(aff.platform.slug) ?? { feePct: 0, refundCbPct: 0 };
+        const nAov = netAovUsd(aovGlobal, { ...pp, opexPct: pm.opexPct });
+        const cpaVal = a ? round2(a.latestCpa) : 0;
+        const nAfter = cpaVal > 0 ? round2(nAov - cpaVal) : null;
+        return {
+          netAovUsd: nAov,
+          netAfterCpaUsd: nAfter,
+          cpaStatus: nAfter != null ? cpaStatus(nAfter, pm.thresholds) : null,
+        };
+      })(),
       // Mantido pra retrocompat: ainda mean/count, deflaciona com
       // sales cpa=0 mas algumas views podem querer essa lente.
       cpaPerFeApproved: (a?.feApprovedCount ?? 0) > 0
@@ -3569,6 +3608,8 @@ export async function getAffiliatesSql(
       newAff++;
     }
   }
+  const pm = await getProfitModelInputs();
+
   revenues.sort((a, b) => b - a);
   const top5Revenue = revenues.slice(0, 5).reduce((s, v) => s + v, 0);
   const concentration = totalRevenue > 0 ? top5Revenue / totalRevenue : 0;
@@ -3612,6 +3653,20 @@ export async function getAffiliatesSql(
       feApprovedCount,
       feCpaPaidCount: a ? Number(a.fe_cpa_paid_count) : 0,
       cpaPerFe: latestCpa != null ? round2(latestCpa) : 0,
+      // Modelo planilha CPA — mesmas contas da legacy (paridade).
+      ...(() => {
+        const sessions = att ? Number(att.sessions) : 0;
+        const aovGlobal = sessions > 0 ? attRevenue / sessions : 0;
+        const pp = pm.byPlatform.get(aff.platform.slug) ?? { feePct: 0, refundCbPct: 0 };
+        const nAov = netAovUsd(aovGlobal, { ...pp, opexPct: pm.opexPct });
+        const cpaVal = latestCpa != null ? round2(latestCpa) : 0;
+        const nAfter = cpaVal > 0 ? round2(nAov - cpaVal) : null;
+        return {
+          netAovUsd: nAov,
+          netAfterCpaUsd: nAfter,
+          cpaStatus: nAfter != null ? cpaStatus(nAfter, pm.thresholds) : null,
+        };
+      })(),
       cpaPerFeApproved: feApprovedCount > 0 ? round2(cpa / feApprovedCount) : 0,
       netMargin: round2(net - cpa),
       cogs: round2(cogs),

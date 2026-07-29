@@ -216,7 +216,8 @@ function App({ user }) {
           {hashState.route === 'overview'       && <OverviewPage filters={filters} setFilters={setFilters}/>}
           {hashState.route === 'funnel'         && <FunnelPage filters={filters}/>}
           {hashState.route === 'leaderboard'    && <LeaderboardPage filters={filters} onOpenAffiliate={setDrawerAff}/>}
-          {hashState.route === 'all-affiliates' && <AllAffiliatesPage filters={filters} onOpenAffiliate={setDrawerAff}/>}
+          {/* Fundida com o Ranking (modelo planilha CPA) — rota antiga rende a mesma página. */}
+          {hashState.route === 'all-affiliates' && <LeaderboardPage filters={filters} onOpenAffiliate={setDrawerAff}/>}
           {hashState.route === 'recovery'       && <RecoveryPage filters={filters}/>}
           {hashState.route === 'tauk'           && <TaukPage filters={filters}/>}
           {hashState.route === 'sms'            && <SmsPage filters={filters}/>}

@@ -307,6 +307,83 @@ function FunnelPage({ filters }) {
 }
 
 // ---------- AFFILIATE LEADERBOARD ----------
+// Chip do status do modelo CPA (planilha): saudável / atenção / renegociar.
+function CpaStatusChip({ status }) {
+  if (!status) return <span style={{ color: 'var(--fg5)', fontSize: 10 }}>—</span>;
+  const meta = {
+    saudavel:   { label: 'SAUDÁVEL',   fg: 'var(--success)', bg: 'rgba(58,214,140,0.12)', border: 'rgba(58,214,140,0.4)' },
+    atencao:    { label: 'ATENÇÃO',    fg: '#ffd166',        bg: 'rgba(255,180,0,0.12)',  border: 'rgba(255,180,0,0.4)' },
+    renegociar: { label: 'RENEGOCIAR', fg: '#ff8a8a',        bg: 'rgba(255,90,90,0.14)',  border: 'rgba(255,90,90,0.45)' },
+  }[status] || { label: String(status).toUpperCase(), fg: 'var(--fg4)', bg: 'rgba(255,255,255,0.05)', border: 'var(--border-soft)' };
+  return (
+    <span style={{
+      fontFamily: 'var(--f-mono)', fontSize: 9, fontWeight: 700, letterSpacing: '0.06em',
+      padding: '2px 8px', borderRadius: 'var(--r-full)', whiteSpace: 'nowrap',
+      background: meta.bg, color: meta.fg, border: `1px solid ${meta.border}`,
+    }}>
+      {meta.label}
+    </span>
+  );
+}
+
+// Painel admin da config do modelo CPA (opex% global + régua do status).
+// Refund&CB% por plataforma é editado na página Plataformas.
+function ProfitConfigPanel() {
+  const [open, setOpen] = useState(false);
+  const [cfg, setCfg] = useState(null);
+  const [draft, setDraft] = useState({});
+  const [msg, setMsg] = useState(null);
+  useEffect(() => {
+    if (!open || cfg) return;
+    window.NSApi.fetchProfitConfig().then((d) => setCfg(d.config)).catch((e) => setMsg(e.message));
+  }, [open]);
+  function save() {
+    const body = {};
+    for (const k of ['opexPct', 'healthyMinUsd', 'attentionMinUsd']) {
+      if (draft[k] !== undefined && draft[k] !== '') body[k] = Number(draft[k]);
+    }
+    if (Object.keys(body).length === 0) return;
+    window.NSApi.patchProfitConfig(body)
+      .then((d) => { setCfg(d.config); setDraft({}); setMsg('Salvo. Recarrega a lista pra recalcular.'); })
+      .catch((e) => setMsg(e.message));
+  }
+  const inStyle = {
+    background: 'rgba(91,200,255,0.06)', border: '1px solid var(--border)', borderRadius: 4,
+    padding: '4px 8px', color: 'var(--fg1)', fontFamily: 'var(--f-mono)', fontSize: 12, width: 90, textAlign: 'right',
+  };
+  return (
+    <div className="panel" style={{ padding: 0, marginBottom: 12 }}>
+      <div className="panel-head" style={{ padding: '10px 14px', cursor: 'pointer', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }} onClick={() => setOpen((v) => !v)}>
+        <div className="panel-title">
+          Config do modelo CPA
+          <span style={{ color: 'var(--fg5)', fontSize: 10, marginLeft: 6 }}>
+            custos operacionais % (global) · régua do status · refund&cb% por plataforma fica em Plataformas
+          </span>
+        </div>
+        <Icon name={open ? 'chevron-down' : 'chevron-right'} size={14}/>
+      </div>
+      {open && (
+        <div style={{ display: 'flex', gap: 14, alignItems: 'end', flexWrap: 'wrap', padding: '4px 14px 12px' }}>
+          <label style={{ display: 'grid', gap: 4, fontFamily: 'var(--f-mono)', fontSize: 10, color: 'var(--fg4)' }}>
+            <span>CUSTOS OPERACIONAIS %</span>
+            <input style={inStyle} value={draft.opexPct ?? cfg?.opexPct ?? ''} onChange={(e) => setDraft((d) => ({ ...d, opexPct: e.target.value }))}/>
+          </label>
+          <label style={{ display: 'grid', gap: 4, fontFamily: 'var(--f-mono)', fontSize: 10, color: 'var(--fg4)' }}>
+            <span>SAUDÁVEL ≥ (USD)</span>
+            <input style={inStyle} value={draft.healthyMinUsd ?? cfg?.healthyMinUsd ?? ''} onChange={(e) => setDraft((d) => ({ ...d, healthyMinUsd: e.target.value }))}/>
+          </label>
+          <label style={{ display: 'grid', gap: 4, fontFamily: 'var(--f-mono)', fontSize: 10, color: 'var(--fg4)' }}>
+            <span>ATENÇÃO ≥ (USD)</span>
+            <input style={inStyle} value={draft.attentionMinUsd ?? cfg?.attentionMinUsd ?? ''} onChange={(e) => setDraft((d) => ({ ...d, attentionMinUsd: e.target.value }))}/>
+          </label>
+          <button className="btn btn-primary" onClick={save}>Salvar</button>
+          {msg && <span style={{ fontSize: 11, color: 'var(--fg4)' }}>{msg}</span>}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function LeaderboardPage({ filters, onOpenAffiliate }) {
   const [sortBy, setSortBy] = useState('revenue');
   const [minOrders, setMinOrders] = useState(1);
@@ -359,9 +436,9 @@ function LeaderboardPage({ filters, onOpenAffiliate }) {
     <div className="page-in">
       <div className="page-head">
         <div className="lead">
-          <span className="eyebrow">AFILIADOS · RANKING</span>
+          <span className="eyebrow">AFILIADOS</span>
           <h2>Quem está <em>puxando o resultado</em>.</h2>
-          <span className="sub">Volume vs. risco · linhas marcadas precisam de atenção</span>
+          <span className="sub">Ranking + diretório fundidos · modelo da planilha CPA: NET AOV → Net after CPA → status de renegociação</span>
         </div>
         <div className="page-head-actions">
           <button className="btn btn-ghost" onClick={() => downloadCsv(
@@ -377,6 +454,8 @@ function LeaderboardPage({ filters, onOpenAffiliate }) {
           )}><Icon name="download" size={12}/> Exportar CSV</button>
         </div>
       </div>
+
+      <ProfitConfigPanel/>
 
       <div className="mini-kpis">
         <div className="mini-kpi">
@@ -442,6 +521,10 @@ function LeaderboardPage({ filters, onOpenAffiliate }) {
                 <th className="num">Reembolso</th>
                 <th className="num">Chargeback</th>
                 <th className="num">CPA pago</th>
+                <th className="num" title="NET AOV = AOV global × (1 − refund&cb% da plataforma − taxa real da plataforma − custos operacionais %). Modelo da planilha CPA — % editáveis em Plataformas e no painel de config acima.">NET AOV</th>
+                <th className="num" title="CPA por venda FE — último valor observado nas transações">CPA/venda</th>
+                <th className="num" title="NET AFTER CPA = NET AOV − CPA por venda. Quanto sobra por pedido depois de pagar o afiliado.">Net after CPA</th>
+                <th title="≥ limiar saudável → SAUDÁVEL · ≥ limiar atenção → ATENÇÃO · abaixo → RENEGOCIAR (régua editável no painel de config)">Status CPA</th>
                 <th className="num">Margem</th>
                 <th className="num" title="Lucro contando só pedidos onde este afiliado está no affiliateId (sem upsells)">Lucro direto</th>
                 <th className="num" title="Lucro contando o funil COMPLETO da sessão trazida por este afiliado (FE + UPs + DWs + bumps)">Lucro atribuído</th>
@@ -452,7 +535,7 @@ function LeaderboardPage({ filters, onOpenAffiliate }) {
             <tbody>
               {state.status === 'loading' && <SkelTableRows rows={10} cols={9}/>}
               {state.status === 'ready' && rows.length === 0 && (
-                <tr><td colSpan={15} style={{ textAlign: 'center', padding: 24, opacity: 0.6 }}>
+                <tr><td colSpan={20} style={{ textAlign: 'center', padding: 24, opacity: 0.6 }}>
                   Nenhum afiliado com pelo menos {minOrders} pedido{minOrders > 1 ? 's' : ''} no período
                 </td></tr>
               )}
@@ -494,6 +577,12 @@ function LeaderboardPage({ filters, onOpenAffiliate }) {
                     <td className={`num cell-mono ${rfClass}`}>{(r.refundRate * 100).toFixed(1)}%</td>
                     <td className={`num cell-mono ${cbClass}`}>{(r.cbRate * 100).toFixed(2)}%</td>
                     <td className="num cell-mono">{fmtCurrency(r.cpa, cur, 0)}</td>
+                    <td className="num cell-mono">{r.netAovUsd > 0 ? fmtCurrency(r.netAovUsd, cur, 0) : '—'}</td>
+                    <td className="num cell-mono">{(r.cpaPerFe || 0) > 0 ? fmtCurrency(r.cpaPerFe, cur, 0) : '—'}</td>
+                    <td className="num cell-mono" style={{ fontWeight: 700, color: r.netAfterCpaUsd == null ? 'var(--fg5)' : r.netAfterCpaUsd < 0 ? '#ff8a8a' : r.cpaStatus === 'saudavel' ? 'var(--success)' : '#ffd166' }}>
+                      {r.netAfterCpaUsd != null ? fmtCurrency(r.netAfterCpaUsd, cur, 0) : '—'}
+                    </td>
+                    <td><CpaStatusChip status={r.cpaStatus}/></td>
                     <td className="num cell-mono" style={{ color: r.netMargin > 0 ? 'var(--success)' : 'var(--danger)' }}>{fmtCurrency(r.netMargin, cur, 0)}</td>
                     <td className="num cell-mono" style={{ color: (r.estimatedProfit ?? 0) > 0 ? 'var(--success)' : 'var(--danger)', opacity: 0.75 }}>
                       {r.estimatedProfit != null ? fmtCurrency(r.estimatedProfit, cur, 0) : '—'}

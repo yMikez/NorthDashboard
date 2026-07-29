@@ -18,6 +18,8 @@ export const dynamic = 'force-dynamic';
 interface Body {
   feeRatePct?: number | null;
   allowancePct?: number | null;
+  // Refund+chargeback manual do modelo CPA (percentual 0-100).
+  refundCbPct?: number | null;
 }
 
 function validPct(v: unknown): v is number {
@@ -62,6 +64,17 @@ export async function PATCH(
     }
     data.allowancePct = new Prisma.Decimal(body.allowancePct.toFixed(2));
   }
+  if (body.refundCbPct === null) {
+    data.refundCbPct = null;
+  } else if (body.refundCbPct !== undefined) {
+    if (!validPct(body.refundCbPct)) {
+      return NextResponse.json(
+        { error: 'refundCbPct deve estar entre 0 e 100' },
+        { status: 400 },
+      );
+    }
+    data.refundCbPct = new Prisma.Decimal(body.refundCbPct.toFixed(2));
+  }
   if (Object.keys(data).length === 0) {
     return NextResponse.json({ error: 'nada pra atualizar' }, { status: 400 });
   }
@@ -76,6 +89,7 @@ export async function PATCH(
         displayName: true,
         feeRatePct: true,
         allowancePct: true,
+        refundCbPct: true,
         feesUpdatedAt: true,
       },
     });
@@ -87,6 +101,7 @@ export async function PATCH(
         displayName: updated.displayName,
         feeRatePct: updated.feeRatePct ? Number(updated.feeRatePct) : null,
         allowancePct: updated.allowancePct ? Number(updated.allowancePct) : null,
+        refundCbPct: updated.refundCbPct ? Number(updated.refundCbPct) : null,
         feesUpdatedAt: updated.feesUpdatedAt?.toISOString() ?? null,
       },
     });

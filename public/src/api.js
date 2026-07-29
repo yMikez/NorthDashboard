@@ -893,6 +893,9 @@ function fetchSms(filters, extra = {}) {
 // Monitor de call center (aba Produtos): vendas/dia dos produtos vigiados
 // + watchlist admin (adicionar/remover produto do monitoramento).
 function fetchCallCenter() { return coGet('/api/metrics/callcenter'); }
+// Config do modelo de lucro CPA (opex% + régua do status). Admin.
+function fetchProfitConfig() { return coGet('/api/admin/profit-config'); }
+function patchProfitConfig(body) { return coSend('/api/admin/profit-config', 'PATCH', body); }
 function addCallCenterWatch(body) { return coSend('/api/admin/callcenter-watches', 'POST', body); }
 function deleteCallCenterWatch(id) {
   return fetch(`/api/admin/callcenter-watches/${encodeURIComponent(id)}`, { method: 'DELETE', headers: { Accept: 'application/json' } })
@@ -941,6 +944,8 @@ window.NSApi = _wrapMutations({
   fetchCallCenter,
   addCallCenterWatch,
   deleteCallCenterWatch,
+  fetchProfitConfig,
+  patchProfitConfig,
   fetchRecoveryAffiliates,
   addRecoveryAffiliate,
   deleteRecoveryAffiliate,

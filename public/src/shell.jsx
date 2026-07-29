@@ -17,8 +17,9 @@ function Sidebar({ active, onNav, user }) {
     {
       label: 'Afiliados',
       items: [
-        { id: 'leaderboard', label: 'Ranking', icon: 'trophy' },
-        { id: 'all-affiliates', label: 'Todos os afiliados', icon: 'users' },
+        // Ranking + Diretório fundidos numa aba só (modelo planilha CPA).
+        // 'all-affiliates' continua rota válida (redireciona pra mesma página).
+        { id: 'leaderboard', label: 'Afiliados', icon: 'trophy' },
         { id: 'networks', label: 'Networks', icon: 'layers' },
       ]
     },

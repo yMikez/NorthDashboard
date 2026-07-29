@@ -27,6 +27,12 @@ model Platform {
   // Timestamp da última atualização dos % acima. Driva o popup de 7d
   // que solicita re-confirmação periódica dos valores.
   feesUpdatedAt   DateTime?
+  // Taxa MANUAL de refund+chargeback da plataforma (PERCENTUAL como os
+  // irmãos acima: 15.00 = 15%) usada no modelo de lucro estilo planilha
+  // CPA (NET AOV). Manual porque a taxa observada pelos eventos subestima
+  // até a coorte maturar (refund chega até 60-90d após a venda) — a UI
+  // mostra a observada por coorte madura ao lado, pra calibrar.
+  refundCbPct     Decimal? @db.Decimal(5, 2)
 
   orders     Order[]
   products   Product[]
@@ -877,6 +883,21 @@ model SmsCampaign {
 
   @@index([slug])
   @@index([archived, isPublished])
+}
+
+// Config global do modelo de lucro estilo planilha CPA (singleton,
+// id='global'). NET AOV = AOV × (1 − refundCbPct(plataforma) − fee real
+// da plataforma − opexPct); NET AFTER CPA = NET AOV − CPA; status pela
+// régua healthy/attention (editável na UI, decisão do usuário).
+model ProfitConfig {
+  id             String   @id @default("global")
+  // Custos operacionais em PERCENTUAL do gross (10.00 = 10%). Global.
+  opexPct        Decimal  @default(10) @db.Decimal(5, 2)
+  // NET AFTER CPA ≥ healthyMinUsd → SAUDÁVEL; ≥ attentionMinUsd → ATENÇÃO;
+  // abaixo → RENEGOCIAR. (Planilha: 10 e 0.)
+  healthyMinUsd  Decimal  @default(10) @db.Decimal(10, 2)
+  attentionMinUsd Decimal @default(0) @db.Decimal(10, 2)
+  updatedAt      DateTime @updatedAt
 }
 
 // Watchlist do monitor de call center (aba Produtos). Produtos AINDA NÃO
