@@ -16,7 +16,7 @@
 
 import { db } from '../db';
 
-const DEFAULT_SUPPLIER = 'shipoffers';
+import { DEFAULT_SUPPLIER } from './cogs';
 const PLACEHOLDER_SUPPLIERS = new Set(['fullstack']);
 
 export type FulfillmentIssueType =

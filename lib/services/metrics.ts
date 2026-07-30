@@ -7,6 +7,7 @@ import {
   type DailyMetricsRow,
 } from './dailyMetrics';
 import { getProfitModelInputs, getObservedRefundCbPct, netAovUsd, cpaStatus } from './profitModel';
+import { DEFAULT_SUPPLIER } from './cogs';
 
 export interface MetricsFilters {
   startDate: Date;
@@ -2250,7 +2251,7 @@ export async function getFulfillmentOverview(
     family: string | null,
     productOverride: string | null,
   ): string =>
-    productOverride ?? (family ? familyDefault.get(family) : null) ?? 'shipoffers';
+    productOverride ?? (family ? familyDefault.get(family) : null) ?? DEFAULT_SUPPLIER;
 
   // Agregação genérica por supplier + por dia.
   const agg = new Map<string, { orders: number; usd: number }>();

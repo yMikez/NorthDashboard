@@ -30,7 +30,7 @@ const INVOICE_CYCLE_DOW = 2;
 // inflado; pra BAIXO = provável furo de contagem/custo (ver saúde).
 export const INVOICE_PCT_BENCHMARK = 0.10;
 
-const DEFAULT_SUPPLIER = 'shipoffers';
+import { DEFAULT_SUPPLIER } from './cogs';
 // Plataformas cuja sessão agrupa por funnelSessionId (ver sessionFulfillment).
 const SESSION_GROUPED = new Set(['buygoods']);
 
