@@ -104,14 +104,19 @@ export async function rebalanceSessionFulfillment(
  * session in the database. Callers typically run this after backfillCogs
  * so cogsUsd is fresh on every order before fulfillment is consolidated.
  */
-export async function backfillSessionFulfillment(): Promise<{
+export async function backfillSessionFulfillment(sinceDays?: number): Promise<{
   sessionsScanned: number;
   ordersTouched: number;
 }> {
   // Distinct (platformId, sessionKey) — sessionKey = parentExternalId or
   // externalId. Build the unique set in JS since SQL DISTINCT on a COALESCE
   // expression is awkward via Prisma.
+  // sinceDays: só sessões com ALGUMA order na janela (o rebalance da sessão
+  // re-soma a sessão inteira mesmo assim — consistente).
   const orders = await db.order.findMany({
+    where: sinceDays != null
+      ? { orderedAt: { gte: new Date(Date.now() - sinceDays * 86_400_000) } }
+      : undefined,
     select: {
       platformId: true, parentExternalId: true, externalId: true, funnelSessionId: true,
       platform: { select: { slug: true } },

@@ -14,7 +14,10 @@
 
 import { db } from '../db';
 
-const DEFAULT_SUPPLIER = 'shipoffers';
+// TEMP (2026-07-30): ShipOffers PAUSADA — não envia nada por enquanto.
+// Tudo (incl. famílias sem cadastro) roteia pra RedRock. Quando a
+// ShipOffers voltar, reverter pra 'shipoffers' + rodar o cutover inverso.
+const DEFAULT_SUPPLIER = 'redrock';
 
 interface FamilyCost {
   unitCostUsd: number;

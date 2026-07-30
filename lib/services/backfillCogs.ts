@@ -20,7 +20,9 @@ export interface CogsBackfillStats {
   sessionsRebalanced: number;
 }
 
-export async function backfillCogs(): Promise<CogsBackfillStats> {
+// sinceDays: limita o recompute a orders de N dias pra cá (cutover de
+// fornecedor sem reescrever histórico antigo). undefined = tudo.
+export async function backfillCogs(sinceDays?: number): Promise<CogsBackfillStats> {
   invalidateCogsCache();
   const stats: CogsBackfillStats = {
     scanned: 0,
@@ -33,6 +35,9 @@ export async function backfillCogs(): Promise<CogsBackfillStats> {
   // refresh do snapshot bottlesShipped (reclassificação de catálogo só
   // chega ao histórico por aqui — o ingest congela o valor da época).
   const orders = await db.order.findMany({
+    where: sinceDays != null
+      ? { orderedAt: { gte: new Date(Date.now() - sinceDays * 86_400_000) } }
+      : undefined,
     select: {
       id: true,
       cogsUsd: true,
@@ -78,7 +83,7 @@ export async function backfillCogs(): Promise<CogsBackfillStats> {
   // real shipping cost (not N × per-item shipping). Assigns the bracket
   // for total session bottles to one designated primary order; zeros the
   // rest. See lib/services/sessionFulfillment.ts.
-  const fulfillStats = await backfillSessionFulfillment();
+  const fulfillStats = await backfillSessionFulfillment(sinceDays);
   stats.sessionsRebalanced = fulfillStats.sessionsScanned;
 
   return stats;
