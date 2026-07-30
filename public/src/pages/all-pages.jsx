@@ -489,13 +489,12 @@ function LeaderboardPage({ filters, onOpenAffiliate }) {
   const all = state.data?.affiliates || [];
   const summary = state.data?.summary || { activeNow: 0, activePrev: 0, concentration: 0, newAff: 0, churnedAff: 0 };
 
-  // AOV global = receita atribuída (funil completo das sessões trazidas
-  // pelo afiliado) / sessões trazidas. Captura quanto vale em média
-  // cada lead que ele entrega — diferente do AOV por pedido (que ignora
-  // upsells e bumps quando a plataforma atribui pra outro affiliateId).
+  // AOV padrão (fórmula do usuário): receita do funil COMPLETO atribuído
+  // (FE + UPs + DWs das sessões trazidas) ÷ número de FEs APROVADAS.
+  // Mesmo cálculo do NET AOV do modelo CPA no backend.
   function aovOf(a) {
-    if (!a || !a.attributedSessions) return 0;
-    return a.attributedRevenue / a.attributedSessions;
+    if (!a || !(a.feApprovedCount > 0)) return 0;
+    return a.attributedRevenue / a.feApprovedCount;
   }
 
   const rows = all.filter((a) => a.allOrders >= minOrders).sort((a, b) => {
@@ -604,7 +603,7 @@ function LeaderboardPage({ filters, onOpenAffiliate }) {
                 <th>Plataforma</th>
                 <th className="num">Pedidos</th>
                 <th className="num">Receita</th>
-                <th className="num" title="AOV global = receita do funil completo (FE+UPs+DWs+bumps das sessões trazidas) ÷ sessões. Mostra quanto vale em média cada lead.">AOV global</th>
+                <th className="num" title="AOV global = receita do funil completo atribuído (FE+UPs+DWs+bumps das sessões trazidas) ÷ número de FEs APROVADAS. Mesmo AOV que alimenta o NET AOV do modelo CPA.">AOV global</th>
                 <th>Aprovação</th>
                 <th className="num">Reembolso</th>
                 <th className="num">Chargeback</th>
@@ -649,10 +648,10 @@ function LeaderboardPage({ filters, onOpenAffiliate }) {
                     <td className="num cell-mono">{fmtInt(r.orders)}</td>
                     <td className="num cell-mono" style={{ color: 'var(--fg1)' }}>{fmtCurrency(r.revenue, cur, 0)}</td>
                     <td className="num cell-mono" style={{ color: 'var(--glow-cyan)' }}>
-                      {r.attributedSessions > 0 ? fmtCurrency(aovOf(r), cur, 0) : '—'}
-                      {r.attributedSessions > 0 && (
+                      {aovOf(r) > 0 ? fmtCurrency(aovOf(r), cur, 0) : '—'}
+                      {aovOf(r) > 0 && (
                         <span style={{ display: 'block', fontSize: 9, color: 'var(--fg5)', fontWeight: 400, marginTop: 1 }}>
-                          {r.attributedSessions} sess.
+                          {fmtInt(r.feApprovedCount)} FEs
                         </span>
                       )}
                     </td>

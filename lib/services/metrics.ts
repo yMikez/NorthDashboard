@@ -3304,7 +3304,9 @@ export async function getAffiliatesLegacy(
       // Modelo planilha CPA: AOV atribuído (sessão FE+UPs+DWs ÷ FEs) ×
       // fatores da plataforma/global → NET AOV → NET AFTER CPA → status.
       ...(() => {
-        const aovGlobal = (att?.sessions ?? 0) > 0 ? (att!.revenue) / (att!.sessions) : 0;
+        const feCount = a?.feApprovedCount ?? 0;
+        // AOV padrão do usuário: receita do funil atribuído ÷ FEs APROVADAS.
+        const aovGlobal = feCount > 0 ? (att?.revenue ?? 0) / feCount : 0;
         const ppBase = pm.byPlatform.get(aff.platform.slug) ?? { feePct: 0, refundCbPct: 0 };
         // Override por afiliado > default da plataforma (decisão do usuário).
         const ovr = aff.refundCbPctOverride != null ? Number(aff.refundCbPctOverride) : null;
@@ -3666,8 +3668,8 @@ export async function getAffiliatesSql(
       cpaPerFe: latestCpa != null ? round2(latestCpa) : 0,
       // Modelo planilha CPA — mesmas contas da legacy (paridade).
       ...(() => {
-        const sessions = att ? Number(att.sessions) : 0;
-        const aovGlobal = sessions > 0 ? attRevenue / sessions : 0;
+        // AOV padrão do usuário: receita do funil atribuído ÷ FEs APROVADAS.
+        const aovGlobal = feApprovedCount > 0 ? attRevenue / feApprovedCount : 0;
         const ppBase = pm.byPlatform.get(aff.platform.slug) ?? { feePct: 0, refundCbPct: 0 };
         // Override por afiliado > default da plataforma (decisão do usuário).
         const ovr = aff.refundCbPctOverride != null ? Number(aff.refundCbPctOverride) : null;
