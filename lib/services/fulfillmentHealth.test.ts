@@ -3,6 +3,7 @@ import {
   classifyFulfillmentHealth, resolveOrderSupplier,
   type HealthOrderRow, type HealthCatalogInput,
 } from './fulfillmentHealth';
+import { DEFAULT_SUPPLIER } from './cogs';
 
 const catalog = (over: Partial<HealthCatalogInput> = {}): HealthCatalogInput => ({
   familySupplier: new Map([
@@ -24,12 +25,13 @@ const row = (over: Partial<HealthOrderRow> = {}): HealthOrderRow => ({
 });
 
 describe('resolveOrderSupplier', () => {
-  it('override do SKU > default da família > shipoffers', () => {
+  it('override do SKU > default da família > DEFAULT_SUPPLIER', () => {
     const fs = catalog().familySupplier;
     expect(resolveOrderSupplier({ family: 'NeuroMindPro', supplierOverride: 'fullstack' }, fs)).toBe('fullstack');
     expect(resolveOrderSupplier({ family: 'NeuroMindPro', supplierOverride: null }, fs)).toBe('redrock');
-    expect(resolveOrderSupplier({ family: 'Desconhecida', supplierOverride: null }, fs)).toBe('shipoffers');
-    expect(resolveOrderSupplier({ family: null, supplierOverride: null }, fs)).toBe('shipoffers');
+    // Fallback = DEFAULT_SUPPLIER do cogs (TEMP 'redrock' — ShipOffers pausada).
+    expect(resolveOrderSupplier({ family: 'Desconhecida', supplierOverride: null }, fs)).toBe(DEFAULT_SUPPLIER);
+    expect(resolveOrderSupplier({ family: null, supplierOverride: null }, fs)).toBe(DEFAULT_SUPPLIER);
   });
 });
 
