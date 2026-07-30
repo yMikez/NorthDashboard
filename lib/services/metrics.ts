@@ -379,6 +379,7 @@ export interface AffiliatesResponse {
     // plataforma) + o override cru (null = herdando).
     refundCbPctUsed: number;
     refundCbPctOverride: number | null;
+    opexPctUsed: number;
     netMargin: number;
     cogs: number;
     fulfillment: number;
@@ -3306,7 +3307,7 @@ export async function getAffiliatesLegacy(
       ...(() => {
         const feCount = a?.feApprovedCount ?? 0;
         // AOV padrão do usuário: receita do funil atribuído ÷ FEs APROVADAS.
-        const aovGlobal = feCount > 0 ? (att?.revenue ?? 0) / feCount : 0;
+        const aovGlobal = feCount > 0 ? (a?.revenue ?? 0) / feCount : 0; // RECEITA da linha ÷ FEs (verificável a olho)
         const ppBase = pm.byPlatform.get(aff.platform.slug) ?? { feePct: 0, refundCbPct: 0 };
         // Override por afiliado > default da plataforma (decisão do usuário).
         const ovr = aff.refundCbPctOverride != null ? Number(aff.refundCbPctOverride) : null;
@@ -3320,6 +3321,7 @@ export async function getAffiliatesLegacy(
           cpaStatus: nAfter != null ? cpaStatus(nAfter, pm.thresholds) : null,
           refundCbPctUsed: pp.refundCbPct,
           refundCbPctOverride: ovr,
+          opexPctUsed: pm.opexPct,
         };
       })(),
       // Mantido pra retrocompat: ainda mean/count, deflaciona com
@@ -3669,7 +3671,7 @@ export async function getAffiliatesSql(
       // Modelo planilha CPA — mesmas contas da legacy (paridade).
       ...(() => {
         // AOV padrão do usuário: receita do funil atribuído ÷ FEs APROVADAS.
-        const aovGlobal = feApprovedCount > 0 ? attRevenue / feApprovedCount : 0;
+        const aovGlobal = feApprovedCount > 0 ? (a ? toNumber(a.revenue) : 0) / feApprovedCount : 0; // RECEITA da linha ÷ FEs
         const ppBase = pm.byPlatform.get(aff.platform.slug) ?? { feePct: 0, refundCbPct: 0 };
         // Override por afiliado > default da plataforma (decisão do usuário).
         const ovr = aff.refundCbPctOverride != null ? Number(aff.refundCbPctOverride) : null;
@@ -3683,6 +3685,7 @@ export async function getAffiliatesSql(
           cpaStatus: nAfter != null ? cpaStatus(nAfter, pm.thresholds) : null,
           refundCbPctUsed: pp.refundCbPct,
           refundCbPctOverride: ovr,
+          opexPctUsed: pm.opexPct,
         };
       })(),
       cpaPerFeApproved: feApprovedCount > 0 ? round2(cpa / feApprovedCount) : 0,

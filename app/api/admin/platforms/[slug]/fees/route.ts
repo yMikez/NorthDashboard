@@ -10,6 +10,7 @@ import { NextResponse } from 'next/server';
 import { Prisma } from '@prisma/client';
 import { db } from '@/lib/db';
 import { requireAdmin } from '@/lib/auth/guard';
+import { clearResponseCache } from '@/lib/cache/responseCache';
 import { logger } from '@/lib/logger';
 
 export const runtime = 'nodejs';
@@ -93,6 +94,9 @@ export async function PATCH(
         feesUpdatedAt: true,
       },
     });
+    // Sem isso, /api/metrics/affiliates cacheado servia refund% velho por
+    // 30s depois de editar a plataforma — a lista deve refletir NA HORA.
+    clearResponseCache();
     logger.info({ slug, by: auth.user.id, fees: data }, 'admin/platforms/fees updated');
     return NextResponse.json({
       ok: true,

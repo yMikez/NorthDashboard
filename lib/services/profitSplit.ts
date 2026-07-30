@@ -67,19 +67,23 @@ export async function getProfitSplit(filters: { startDate: Date; endDate: Date }
   const recoveryIds = recoveryAffs.map((r) => r.affiliateId);
   const recoveryPct = new Map(recoveryAffs.map((r) => [r.affiliateId, Number(r.commissionPct)]));
 
-  const backOrderWhere = {
-    OR: [
-      { trafficSource: { equals: SMS_UTM_SOURCE, mode: 'insensitive' as const } },
-      { productType: 'SMS_RECOVERY' as const },
-      ...(recoveryIds.length ? [{ affiliateId: { in: recoveryIds } }] : []),
-    ],
-  };
+  // CUIDADO com NOT em campo nullable: NOT { trafficSource: X } descarta
+  // linhas com trafficSource NULL (lógica de 3 valores do SQL) — foi o bug
+  // que deixou o front com ~4% do gross. Cada exclusão trata NULL
+  // explicitamente.
+  const frontExclusions = [
+    { OR: [{ trafficSource: null }, { NOT: { trafficSource: { equals: SMS_UTM_SOURCE, mode: 'insensitive' as const } } }] },
+    { NOT: { productType: 'SMS_RECOVERY' as const } },
+    ...(recoveryIds.length
+      ? [{ OR: [{ affiliateId: null }, { affiliateId: { notIn: recoveryIds } }] }]
+      : []),
+  ];
 
   const [frontByPlatform, frontCpa, smsAgg, recoveryOrders] = await Promise.all([
     // FRONT: aprovadas do período SEM as fontes de back.
     db.order.groupBy({
       by: ['platformId'],
-      where: { status: 'APPROVED', orderedAt: range, NOT: backOrderWhere },
+      where: { status: 'APPROVED', orderedAt: range, AND: frontExclusions },
       _sum: { grossAmountUsd: true, cpaPaidUsd: true },
       _count: { _all: true },
     }),

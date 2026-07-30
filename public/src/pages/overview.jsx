@@ -126,12 +126,12 @@ const PLATFORM_VARIANTS = {
 // Painel Lucro FRONT × BACK (modelo planilha CPA). Front = funil aprovado
 // SEM fontes de back; back = recuperação + Tauk + SMS (+ SalesBound/email
 // futuros). Total = soma. Endpoint próprio: não depende do /overview.
-function ProfitSplitPanel({ filters, cur }) {
+function ProfitSplitPanel({ filters, cur, onData }) {
   const [ps, setPs] = useState({ status: 'loading', d: null });
   useEffect(() => {
     let cancelled = false;
     window.NSApi.fetchProfitSplit(filters)
-      .then((d) => { if (!cancelled) setPs({ status: 'ready', d }); })
+      .then((d) => { if (!cancelled) { setPs({ status: 'ready', d }); if (onData) onData(d); } })
       .catch(() => { if (!cancelled) setPs((s) => ({ status: 'error', d: s.d })); });
     return () => { cancelled = true; };
   }, [filters.dateRange.start.getTime(), filters.dateRange.end.getTime()]);
@@ -193,6 +193,9 @@ function OverviewPage({ filters, setFilters }) {
   //    inclui orders que depois foram refundadas. Bate com o "Gross Sale Amount"
   //    do CB Reporting Dashboard.
   const [grossMode, setGrossMode] = useState('active');
+  // Payload do profit-split (modelo CPA) — alimentado pelo ProfitSplitPanel
+  // via onData; usado no card NET AFTER CPA.
+  const [split, setSplit] = useState(null);
 
   useEffectOv(() => {
     let cancelled = false;
@@ -360,21 +363,21 @@ function OverviewPage({ filters, setFilters }) {
             state: KPI_THRESHOLDS.cbRate.state(kpis.cbRate),
           }}
           onClick={() => window.NSNavigate('transactions', { status: 'chargeback' })}/>
-        <KpiCard label="LUCRO ESTIMADO" icon="target" index={7}
-          alert={kpis.estimatedProfit < 0}
-          countValue={kpis.estimatedProfit ?? kpis.netProfit} countFormat={(n) => fmtCurrency(n, cur, 0)}
-          cur={kpis.estimatedProfit ?? kpis.netProfit}
-          prev={prev.estimatedProfit ?? prev.netProfit}
-          hint={kpis.estimatedMarginPct != null
-            ? `margem ${kpis.estimatedMarginPct.toFixed(1)}%`
-            : 'inclui COGS + frete'}
-          threshold={kpis.estimatedMarginPct != null ? {
-            label: `margem ${kpis.estimatedMarginPct.toFixed(1)}%`,
-            state: KPI_THRESHOLDS.estimatedMarginPct.state(kpis.estimatedMarginPct),
-          } : null}/>
+        {/* Substitui o antigo "Lucro estimado" (net−cogs−frete) pelo NET
+            AFTER CPA do modelo CPA (front do profit-split), a pedido do
+            usuário — mesma régua da aba Afiliados/planilha. */}
+        <KpiCard label="NET AFTER CPA (MODELO)" icon="target" index={7}
+          alert={(split?.front?.profitUsd ?? 0) < 0}
+          countValue={split ? split.front.profitUsd : 0} countFormat={(n) => split ? fmtCurrency(n, cur, 0) : '…'}
+          cur={split ? split.front.profitUsd : 0}
+          prev={null}
+          hint={split
+            ? `front ${fmtCurrency(split.front.profitUsd, cur, 0)} + back ${fmtCurrency(split.back.profitUsd, cur, 0)} = ${fmtCurrency(split.totalUsd, cur, 0)}`
+            : 'carregando modelo CPA…'}
+          threshold={null}/>
       </div>
 
-      <ProfitSplitPanel filters={filters} cur={cur}/>
+      <ProfitSplitPanel filters={filters} cur={cur} onData={setSplit}/>
 
       <div className="panel" style={{ marginBottom: 14 }}>
         <div className="panel-head">

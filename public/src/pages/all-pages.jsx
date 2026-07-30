@@ -489,12 +489,12 @@ function LeaderboardPage({ filters, onOpenAffiliate }) {
   const all = state.data?.affiliates || [];
   const summary = state.data?.summary || { activeNow: 0, activePrev: 0, concentration: 0, newAff: 0, churnedAff: 0 };
 
-  // AOV padrão (fórmula do usuário): receita do funil COMPLETO atribuído
-  // (FE + UPs + DWs das sessões trazidas) ÷ número de FEs APROVADAS.
-  // Mesmo cálculo do NET AOV do modelo CPA no backend.
+  // AOV padrão (fórmula do usuário): RECEITA da linha ÷ FEs APROVADAS —
+  // verificável a olho, as duas são colunas da própria tabela. Mesmo
+  // cálculo do NET AOV do modelo CPA no backend.
   function aovOf(a) {
     if (!a || !(a.feApprovedCount > 0)) return 0;
-    return a.attributedRevenue / a.feApprovedCount;
+    return a.revenue / a.feApprovedCount;
   }
 
   const rows = all.filter((a) => a.allOrders >= minOrders).sort((a, b) => {
@@ -522,13 +522,13 @@ function LeaderboardPage({ filters, onOpenAffiliate }) {
         <div className="page-head-actions">
           <button className="btn btn-ghost" onClick={() => downloadCsv(
             `ranking-afiliados_${isoDateOnly(filters.dateRange.start)}_${isoDateOnly(filters.dateRange.end)}.csv`,
-            ['#', 'Afiliado', 'Afiliado ID', 'Plataforma', 'Pedidos aprovados', 'Receita USD', 'AOV global USD',
-             'Aprovação %', 'Reembolso %', 'Chargeback %', 'CPA pago USD', 'CPA por venda USD', 'Margem USD',
-             'Lucro direto USD', 'Lucro atribuído USD', 'País principal'],
+            ['#', 'Afiliado', 'Afiliado ID', 'Plataforma', 'Pedidos aprovados', 'Receita USD', 'FEs aprovadas',
+             'AOV global USD', 'Aprovação %', 'Refund&CB modelo %', 'CPA pago USD', 'Custos op %',
+             'NET AOV USD', 'CPA por venda USD', 'Net after CPA USD', 'Status CPA'],
             rows.map((r, i) => [
-              i + 1, r.nickname || r.externalId, r.externalId, r.platformSlug, r.orders, r.revenue, aovOf(r),
-              r.approvalRate * 100, r.refundRate * 100, r.cbRate * 100, r.cpa, r.cpaPerFe, r.netMargin,
-              r.estimatedProfit, r.attributedProfit, r.topCountry,
+              i + 1, r.nickname || r.externalId, r.externalId, r.platformSlug, r.orders, r.revenue, r.feApprovedCount,
+              aovOf(r), r.approvalRate * 100, r.refundCbPctUsed, r.cpa, r.opexPctUsed,
+              r.netAovUsd, r.cpaPerFe, r.netAfterCpaUsd, r.cpaStatus,
             ]),
           )}><Icon name="download" size={12}/> Exportar CSV</button>
         </div>
@@ -577,7 +577,7 @@ function LeaderboardPage({ filters, onOpenAffiliate }) {
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '4px 0 12px', flexWrap: 'wrap' }}>
         <span className="f-label">ORDENAR POR</span>
         <div className="seg">
-          {[['revenue','Receita'],['aov','AOV'],['attributedProfit','Lucro atribuído'],['profit','Lucro direto'],['orders','Pedidos'],['netMargin','Margem'],['approvalRate','Aprovação'],['refundRate','Reembolsos'],['chargebackRate','Chargebacks']].map(([k,l]) => (
+          {[['revenue','Receita'],['aov','AOV'],['orders','Pedidos'],['approvalRate','Aprovação'],['refundRate','Reembolsos'],['chargebackRate','Chargebacks']].map(([k,l]) => (
             <button key={k} className={sortBy === k ? 'is-active' : ''} onClick={() => setSortBy(k)}>{l}</button>
           ))}
         </div>
@@ -608,21 +608,17 @@ function LeaderboardPage({ filters, onOpenAffiliate }) {
                 <th className="num">Reembolso</th>
                 <th className="num">Chargeback</th>
                 <th className="num">CPA pago</th>
+                <th className="num" title="Custos operacionais % (global, modelo CPA) — editável no painel de config acima">Custos op.</th>
                 <th className="num" title="NET AOV = AOV global × (1 − refund&cb% da plataforma − taxa real da plataforma − custos operacionais %). Modelo da planilha CPA — % editáveis em Plataformas e no painel de config acima.">NET AOV</th>
                 <th className="num" title="CPA por venda FE — último valor observado nas transações">CPA/venda</th>
                 <th className="num" title="NET AFTER CPA = NET AOV − CPA por venda. Quanto sobra por pedido depois de pagar o afiliado.">Net after CPA</th>
                 <th title="≥ limiar saudável → SAUDÁVEL · ≥ limiar atenção → ATENÇÃO · abaixo → RENEGOCIAR (régua editável no painel de config)">Status CPA</th>
-                <th className="num">Margem</th>
-                <th className="num" title="Lucro contando só pedidos onde este afiliado está no affiliateId (sem upsells)">Lucro direto</th>
-                <th className="num" title="Lucro contando o funil COMPLETO da sessão trazida por este afiliado (FE + UPs + DWs + bumps)">Lucro atribuído</th>
-                <th>País principal</th>
-                <th>Tendência 30d</th>
               </tr>
             </thead>
             <tbody>
               {state.status === 'loading' && <SkelTableRows rows={10} cols={9}/>}
               {state.status === 'ready' && rows.length === 0 && (
-                <tr><td colSpan={20} style={{ textAlign: 'center', padding: 24, opacity: 0.6 }}>
+                <tr><td colSpan={15} style={{ textAlign: 'center', padding: 24, opacity: 0.6 }}>
                   Nenhum afiliado com pelo menos {minOrders} pedido{minOrders > 1 ? 's' : ''} no período
                 </td></tr>
               )}
@@ -669,6 +665,7 @@ function LeaderboardPage({ filters, onOpenAffiliate }) {
                     </td>
                     <td className={`num cell-mono ${cbClass}`}>{(r.cbRate * 100).toFixed(2)}%</td>
                     <td className="num cell-mono">{fmtCurrency(r.cpa, cur, 0)}</td>
+                    <td className="num cell-mono" style={{ color: 'var(--fg4)' }}>{r.opexPctUsed}%</td>
                     <td className="num cell-mono">{r.netAovUsd > 0 ? fmtCurrency(r.netAovUsd, cur, 0) : '—'}</td>
                     <td className="num cell-mono">{(r.cpaPerFe || 0) > 0 ? fmtCurrency(r.cpaPerFe, cur, 0) : '—'}</td>
                     <td className="num cell-mono" style={{ fontWeight: 700, color: r.netAfterCpaUsd == null ? 'var(--fg5)' : r.netAfterCpaUsd < 0 ? '#ff8a8a' : r.cpaStatus === 'saudavel' ? 'var(--success)' : '#ffd166' }}>
@@ -684,20 +681,6 @@ function LeaderboardPage({ filters, onOpenAffiliate }) {
                         >%</button>
                       </span>
                     </td>
-                    <td className="num cell-mono" style={{ color: r.netMargin > 0 ? 'var(--success)' : 'var(--danger)' }}>{fmtCurrency(r.netMargin, cur, 0)}</td>
-                    <td className="num cell-mono" style={{ color: (r.estimatedProfit ?? 0) > 0 ? 'var(--success)' : 'var(--danger)', opacity: 0.75 }}>
-                      {r.estimatedProfit != null ? fmtCurrency(r.estimatedProfit, cur, 0) : '—'}
-                    </td>
-                    <td className="num cell-mono" style={{ color: (r.attributedProfit ?? 0) > 0 ? 'var(--success)' : 'var(--danger)', fontWeight: 600 }}>
-                      {r.attributedProfit != null ? fmtCurrency(r.attributedProfit, cur, 0) : '—'}
-                      {r.attributedSessions > 0 && (
-                        <span style={{ display: 'block', fontSize: 9, color: 'var(--fg5)', fontWeight: 400, marginTop: 1 }}>
-                          {r.attributedSessions} sessões
-                        </span>
-                      )}
-                    </td>
-                    <td className="cell-mono">{r.topCountry || '—'}</td>
-                    <td><Sparkline data={r.sparkline && r.sparkline.length ? r.sparkline : [0,0]} width={80} height={18} fill={false}/></td>
                   </tr>
                 );
               })}
