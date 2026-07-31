@@ -66,8 +66,25 @@ function Sidebar({ active, onNav, user }) {
     : allGroups
         .map((g) => ({ ...g, items: g.items.filter((it) => allowed.has(it.id)) }))
         .filter((g) => g.items.length > 0);
+  // Colapso persistido — modo trilho de ícones (64px) com tooltip no title.
+  const [collapsed, setCollapsed] = useStateS(() => {
+    try { return localStorage.getItem('ns-side-collapsed') === '1'; } catch (e) { return false; }
+  });
+  function toggleCollapse() {
+    const next = !collapsed;
+    setCollapsed(next);
+    try { localStorage.setItem('ns-side-collapsed', next ? '1' : '0'); } catch (e) {}
+  }
   return (
-    <aside className="side">
+    <aside className={`side ${collapsed ? 'is-collapsed' : ''}`}>
+      <button
+        className="side-collapse"
+        onClick={toggleCollapse}
+        title={collapsed ? 'Expandir menu' : 'Recolher menu'}
+        aria-label="Recolher/expandir menu"
+      >
+        <Icon name={collapsed ? 'chevron-right' : 'chevron-down'} size={12} className="side-collapse-icon"/>
+      </button>
       <div className="side-logo">
         <img
           src="/assets/logo-mark-dark.svg"
@@ -93,9 +110,10 @@ function Sidebar({ active, onNav, user }) {
                 key={it.id}
                 className={`side-item ${active === it.id ? 'is-active' : ''}`}
                 onClick={() => onNav(it.id)}
+                title={collapsed ? it.label : undefined}
               >
                 <Icon name={it.icon} size={15} />
-                <span>{it.label}</span>
+                <span className="side-item-label">{it.label}</span>
                 {it.badge && <span className="cnt">{it.badge}</span>}
               </button>
             ))}

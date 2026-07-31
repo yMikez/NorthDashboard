@@ -1907,3 +1907,127 @@ body { overflow-x: hidden; }
   }
   .anim-in, .anim-in-soft { opacity: 1; transform: none; }
 }
+
+/* ============================================================
+   NORTH EDITORIAL — OVERRIDE LAYER (fase 2)
+   Re-estiliza as classes compartilhadas por cima do legado HUD.
+   Regras: superfície sólida + borda 1px nítida + raio 14-18 +
+   sombra discreta; hover de cartão sobe 2px e a borda vira tinta;
+   nada de gradiente ciano/navy em superfície de trabalho.
+   ============================================================ */
+
+/* ---------- Navbar (topo) — sólida, papel/petróleo ---------- */
+.top {
+  background: var(--bg);
+  border-bottom: 1px solid var(--border);
+}
+.top-h1 { color: var(--fg1); font-weight: 600; }
+.icon-btn, .theme-toggle {
+  background: var(--bg-raised);
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  box-shadow: var(--shadow-sm);
+  color: var(--fg3);
+}
+.icon-btn:hover {
+  background: var(--bg-raised);
+  color: var(--fg1);
+  border-color: var(--fg1);
+  transform: translateY(-1px);
+}
+
+/* ---------- Cartões (KPI, painéis, mini-kpis) ---------- */
+.kpi, .panel, .mini-kpi {
+  background: var(--bg-raised);
+  border: 1px solid var(--border);
+  border-radius: var(--r-lg);
+  box-shadow: var(--shadow-md);
+}
+.kpi { border-radius: var(--r-xl); }
+.kpi:hover {
+  border-color: var(--fg1);
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-lg);
+}
+.kpi.is-alert {
+  background: var(--bg-raised);
+  border-color: color-mix(in oklab, var(--danger) 45%, transparent);
+}
+/* Cantos HUD ("mira") — fora da linguagem editorial */
+.kpi .corner-tl, .kpi .corner-br { display: none; }
+.kpi-value, .mini-kpi .v, .panel-metric { font-family: var(--f-mono); }
+
+/* ---------- Botões ---------- */
+.btn {
+  border-radius: var(--r-md);
+  transition: all var(--dur-fast) var(--ease-smooth);
+}
+.btn-primary {
+  background: var(--fg1);
+  color: var(--bg);
+  border: 1px solid var(--fg1);
+  box-shadow: var(--shadow-sm);
+}
+.btn-primary:hover { opacity: .9; transform: translateY(-1px); }
+.btn-ghost {
+  background: var(--bg-raised);
+  border: 1px solid var(--border);
+  color: var(--fg2);
+}
+.btn-ghost:hover { border-color: var(--fg1); color: var(--fg1); transform: translateY(-1px); }
+
+/* ---------- Chips/pills ---------- */
+.chip, .date-chip {
+  background: var(--bg-raised);
+  border: 1px solid var(--border);
+  border-radius: var(--r-full);
+  color: var(--fg3);
+}
+.chip:hover, .date-chip:hover { border-color: var(--fg1); color: var(--fg1); }
+.chip.is-active, .date-chip.is-active {
+  background: color-mix(in oklab, var(--accent) 12%, transparent);
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+/* ---------- Tabelas — linhas de tinta, dados em mono ---------- */
+.tbl th {
+  color: var(--fg4);
+  border-bottom: 1px solid var(--border);
+}
+.tbl td { border-bottom: 1px solid var(--border-soft); }
+.tbl tbody tr:hover { background: color-mix(in oklab, var(--accent) 5%, transparent); }
+
+/* ---------- Inputs ---------- */
+input, select, textarea {
+  border-radius: var(--r-md);
+}
+input:focus, select:focus, textarea:focus {
+  outline: 2px solid var(--accent);
+  outline-offset: 0;
+}
+
+/* ---------- Sidebar colapsável (trilho de 64px) ---------- */
+.side { transition: none; }
+.side-collapse {
+  position: absolute; top: 14px; right: 10px; z-index: 3;
+  width: 22px; height: 22px;
+  display: grid; place-items: center;
+  background: rgba(91,200,255,0.08);
+  border: 1px solid rgba(91,200,255,0.20);
+  border-radius: var(--r-full);
+  color: #93A0B8; cursor: pointer;
+}
+.side-collapse:hover { color: #EDF1F8; border-color: rgba(91,200,255,0.45); }
+.side-collapse-icon { transform: rotate(180deg); }
+.side.is-collapsed .side-collapse-icon { transform: none; }
+.app:has(.side.is-collapsed) { grid-template-columns: 64px 1fr; }
+.side.is-collapsed { padding: 20px 8px 16px; }
+.side.is-collapsed .wm,
+.side.is-collapsed .side-item-label,
+.side.is-collapsed .side-group-label,
+.side.is-collapsed .side-item .cnt,
+.side.is-collapsed .side-foot { display: none; }
+.side.is-collapsed .side-logo { justify-content: center; padding-bottom: 12px; }
+.side.is-collapsed .side-item { justify-content: center; padding: 9px 0; }
+.side.is-collapsed::after { height: 40px; }

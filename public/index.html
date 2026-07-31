@@ -12,14 +12,15 @@
 <link rel="icon" href="/assets/logo-mark-dark.svg"/>
 <script>
   // Aplica o tema antes do React montar pra evitar flash do tema errado.
-  // Persistido em localStorage; default = dark (preserva identidade da marca).
+  // Persistido em localStorage; default = LIGHT (North Editorial: papel
+  // quente é o padrão; escuro é opt-in pelo toggle).
   (function() {
     try {
       var saved = localStorage.getItem('ns-theme');
-      var theme = saved === 'light' || saved === 'dark' ? saved : 'dark';
+      var theme = saved === 'light' || saved === 'dark' ? saved : 'light';
       document.documentElement.setAttribute('data-theme', theme);
     } catch (e) {
-      document.documentElement.setAttribute('data-theme', 'dark');
+      document.documentElement.setAttribute('data-theme', 'light');
     }
   })();
 </script>
