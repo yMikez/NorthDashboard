@@ -83,7 +83,7 @@ function Sidebar({ active, onNav, user }) {
         title={collapsed ? 'Expandir menu' : 'Recolher menu'}
         aria-label="Recolher/expandir menu"
       >
-        <Icon name={collapsed ? 'chevron-right' : 'chevron-down'} size={12} className="side-collapse-icon"/>
+        <Icon name="chevron-right" size={12} className="side-collapse-icon"/>
       </button>
       <div className="side-logo">
         <img
@@ -122,10 +122,12 @@ function Sidebar({ active, onNav, user }) {
       ))}
 
       <div className="side-foot">
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 6px', fontFamily: 'var(--f-mono)', fontSize: 10, color: 'var(--fg5)', letterSpacing: '0.1em' }}>
+        {/* Cores fixas: o rodapé vive na sidebar (cena escura nos 2 temas) —
+            tokens theme-aware ficariam ilegíveis no claro. */}
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 6px', fontFamily: 'var(--f-mono)', fontSize: 10, color: '#8E9BA0', letterSpacing: '0.1em' }}>
           <span>v2.4.1 · prod</span>
-          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, color: 'var(--success)' }}>
-            <span style={{ width: 6, height: 6, borderRadius: '50%', background: 'var(--success)', boxShadow: '0 0 6px var(--success)' }}/>
+          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, color: '#37D695' }}>
+            <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#37D695', boxShadow: '0 0 6px #37D695' }}/>
             LIVE
           </span>
         </div>
@@ -170,8 +172,7 @@ function UserChip({ user }) {
           position: 'absolute', bottom: 'calc(100% + 6px)', left: 0, right: 0,
           background: 'var(--bg-elev)', border: '1px solid var(--border)',
           borderRadius: 8, padding: 4, zIndex: 30,
-          boxShadow: '0 -10px 40px -10px rgba(91,200,255,0.25)', backdropFilter: 'blur(20px)',
-          WebkitBackdropFilter: 'blur(20px)',
+          boxShadow: 'var(--shadow-lg)',
         }}>
           <button
             onClick={logout}

@@ -52,7 +52,7 @@ function KpiCard({
   label, value, unit, icon, alert, hint, sparkData,
   cur, prev, directionPreference = 'higher',
   threshold, hideSparkline, onClick,
-  index, countValue, countFormat,
+  index, countValue, countFormat, money,
 }) {
   const { display, trend, good } = deltaFor(cur, prev, directionPreference);
   const colorClass = good === true ? 'good' : good === false ? 'bad' : 'flat';
@@ -80,7 +80,7 @@ function KpiCard({
         <span className="kpi-label">{label}</span>
         <span className="kpi-icon"><Icon name={icon} size={12}/></span>
       </div>
-      <div className="kpi-value">
+      <div className={`kpi-value${money ? ' is-money' : ''}`}>
         {valueNode}{unit && <span className="unit">{unit}</span>}
       </div>
       <div className="kpi-foot">
@@ -316,12 +316,12 @@ function OverviewPage({ filters, setFilters }) {
       </div>
 
       <div className="kpi-grid">
-        <KpiCard label="RECEITA BRUTA" icon="dollar" index={0}
+        <KpiCard label="RECEITA BRUTA" icon="dollar" index={0} money
           countValue={kpis.gross} countFormat={(n) => fmtCurrency(n, cur, 0)}
           cur={kpis.gross} prev={prev.gross}
           sparkData={sparkGross} hideSparkline={hideSpark}
           onClick={() => window.NSNavigate('transactions')}/>
-        <KpiCard label="RECEITA LÍQUIDA" icon="wallet" index={1}
+        <KpiCard label="RECEITA LÍQUIDA" icon="wallet" index={1} money
           countValue={kpis.net} countFormat={(n) => fmtCurrency(n, cur, 0)}
           cur={kpis.net} prev={prev.net}
           sparkData={sparkNet} hideSparkline={hideSpark}
@@ -331,7 +331,7 @@ function OverviewPage({ filters, setFilters }) {
           cur={kpis.approvedCount} prev={prev.approvedCount}
           sparkData={sparkOrders} hideSparkline={hideSpark}
           onClick={() => window.NSNavigate('transactions', { status: 'approved' })}/>
-        <KpiCard label="AOV" icon="trending-up" index={3}
+        <KpiCard label="AOV" icon="trending-up" index={3} money
           countValue={kpis.aov} countFormat={(n) => fmtCurrency(n, cur, 2)}
           cur={kpis.aov} prev={prev.aov}
           sparkData={sparkAov} hideSparkline={hideSpark}/>
@@ -366,7 +366,7 @@ function OverviewPage({ filters, setFilters }) {
         {/* Substitui o antigo "Lucro estimado" (net−cogs−frete) pelo NET
             AFTER CPA do modelo CPA (front do profit-split), a pedido do
             usuário — mesma régua da aba Afiliados/planilha. */}
-        <KpiCard label="NET AFTER CPA (MODELO)" icon="target" index={7}
+        <KpiCard label="NET AFTER CPA (MODELO)" icon="target" index={7} money
           alert={(split?.front?.profitUsd ?? 0) < 0}
           countValue={split ? split.front.profitUsd : 0} countFormat={(n) => split ? fmtCurrency(n, cur, 0) : '…'}
           cur={split ? split.front.profitUsd : 0}

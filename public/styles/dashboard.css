@@ -92,7 +92,7 @@ body { overflow-x: hidden; }
 }
 .side-logo .wm em {
   font-style: italic;
-  color: var(--glow-cyan);
+  color: #5BC8FF; /* ciano-gelo fixo — sidebar não acompanha o tema */
   font-weight: 500;
 }
 .side-group-label {
@@ -112,8 +112,8 @@ body { overflow-x: hidden; }
 .side-item:hover { background: rgba(91,200,255,0.05); color: var(--white); }
 .side-item.is-active {
   background: linear-gradient(90deg, rgba(91,200,255,0.14), transparent 80%);
-  color: var(--glow-cyan);
-  box-shadow: inset 2px 0 0 var(--glow-cyan);
+  color: #5BC8FF;
+  box-shadow: inset 2px 0 0 #5BC8FF;
 }
 .side-item svg { flex-shrink: 0; opacity: 0.85; }
 .side-item .cnt {
@@ -125,18 +125,18 @@ body { overflow-x: hidden; }
   padding-top: 2px;
 }
 .side-sub .side-item { padding: 6px 10px; font-size: 12px; color: var(--navy-400); }
-.side-sub .side-item.is-active { background: transparent; color: var(--glow-cyan); box-shadow: none; }
+.side-sub .side-item.is-active { background: transparent; color: #5BC8FF; box-shadow: none; }
 
 .side-foot {
   margin-top: auto; padding-top: 14px;
-  border-top: 1px solid var(--border-soft);
+  border-top: 1px solid rgba(91,200,255,0.12);
   display: flex; flex-direction: column; gap: 10px;
 }
 .user-chip {
   display: flex; align-items: center; gap: 10px;
   padding: 8px 10px; border-radius: 8px;
   background: rgba(91,200,255,0.04);
-  border: 1px solid var(--border-soft);
+  border: 1px solid rgba(91,200,255,0.12);
 }
 .user-chip .av {
   width: 30px; height: 30px; border-radius: 50%;
@@ -1090,29 +1090,9 @@ body { overflow-x: hidden; }
 [data-theme="light"] .ns-bg::after { opacity: 0.18; }
 [data-theme="light"] .ns-scan { opacity: 0; }
 
-[data-theme="light"] .side {
-  background: linear-gradient(180deg, rgba(255,255,255,0.78), rgba(244,246,251,0.92));
-  border-right-color: var(--border);
-  box-shadow: inset -1px 0 0 rgba(255,255,255,0.6);
-}
-[data-theme="light"] .side-logo .wm { color: var(--fg1); }
-[data-theme="light"] .side-group-label { color: var(--fg5); }
-[data-theme="light"] .side-item { color: var(--fg4); }
-[data-theme="light"] .side-item:hover {
-  background: rgba(91,200,255,0.10);
-  color: var(--fg1);
-}
-[data-theme="light"] .side-item.is-active {
-  background: linear-gradient(90deg, rgba(91,200,255,0.18), transparent 80%);
-  color: var(--navy-600);
-  box-shadow: inset 2px 0 0 var(--glow-cyan);
-}
-[data-theme="light"] .user-chip {
-  background: rgba(255,255,255,0.5);
-  border-color: var(--border);
-}
-[data-theme="light"] .user-chip .who .nm { color: var(--fg1); }
-[data-theme="light"] .user-chip .who .rl { color: var(--fg5); }
+/* Sidebar: cena petróleo FIXA nos dois temas (DESIGN-SYSTEM §7).
+   Os overrides claros que clareavam .side/.side-item/.user-chip foram
+   removidos — o menu lateral NUNCA muda com o tema. */
 
 /* .top/.icon-btn: bases agora 100% token-based (theme-aware) — sem
    override claro de superfície. */
@@ -1140,8 +1120,9 @@ body { overflow-x: hidden; }
 [data-theme="light"] .kpi-value { color: var(--fg1); }
 [data-theme="light"] .kpi-value .unit { color: var(--fg5); }
 [data-theme="light"] .kpi-icon {
-  background: rgba(91,200,255,0.14);
-  border-color: var(--border);
+  background: color-mix(in oklab, var(--accent) 10%, transparent);
+  border-color: color-mix(in oklab, var(--accent) 25%, transparent);
+  color: var(--accent);
 }
 [data-theme="light"] .delta.flat { color: var(--fg5); }
 
@@ -1284,9 +1265,9 @@ body { overflow-x: hidden; }
 .theme-toggle .knob svg { width: 12px; height: 12px; }
 
 /* ---------- Logo swap por tema + hover orb ---------- */
+/* Sidebar é sempre escura — a variante de logo pra fundo claro fica
+   permanentemente oculta (não acompanha o tema do app). */
 .logo-light { display: none; }
-[data-theme="light"] .logo-dark { display: none; }
-[data-theme="light"] .logo-light { display: inline-block; }
 
 /* Liquid-glass orb: hover lift + glow halo, idle SMIL anim já roda
    automática dentro do SVG (auroras + center pulse). */
@@ -1297,12 +1278,6 @@ body { overflow-x: hidden; }
 .side-logo:hover .logo-mark {
   transform: scale(1.08) rotate(-2deg);
   filter: drop-shadow(0 6px 18px rgba(91, 200, 255, 0.45));
-}
-[data-theme="light"] .logo-mark {
-  filter: drop-shadow(0 4px 12px rgba(30, 58, 138, 0.15));
-}
-[data-theme="light"] .side-logo:hover .logo-mark {
-  filter: drop-shadow(0 6px 18px rgba(91, 200, 255, 0.40));
 }
 
 /* ---------- Polish v3.3: weight calibration for Inter ---------- */
@@ -1410,14 +1385,6 @@ body { overflow-x: hidden; }
   z-index: 0;
 }
 .side > * { position: relative; z-index: 1; }
-[data-theme="light"] .side::before {
-  mix-blend-mode: normal;
-  opacity: 0.5;
-  background:
-    linear-gradient(180deg,
-      rgba(255,255,255,0.75) 0%,
-      transparent 100%);
-}
 
 /* .btn-primary: sheen removido (tinta sólida) — helpers mantidos. */
 .btn-primary {
@@ -1716,26 +1683,53 @@ input:focus, select:focus, textarea:focus {
 }
 
 /* ---------- Sidebar colapsável (trilho de 64px) ---------- */
-.side { transition: none; }
+.app { transition: grid-template-columns 240ms var(--ease-smooth); }
+.side { transition: padding 240ms var(--ease-smooth); }
 .side-collapse {
-  position: absolute; top: 14px; right: 10px; z-index: 3;
-  width: 22px; height: 22px;
+  position: absolute; top: 16px; right: 10px; z-index: 3;
+  width: 24px; height: 24px;
   display: grid; place-items: center;
   background: rgba(91,200,255,0.08);
   border: 1px solid rgba(91,200,255,0.20);
-  border-radius: var(--r-full);
-  color: #93A0B8; cursor: pointer;
+  border-radius: 8px;
+  color: #9FB3BE; cursor: pointer;
+  transition: all 150ms var(--ease-smooth);
 }
-.side-collapse:hover { color: #EDF1F8; border-color: rgba(91,200,255,0.45); }
-.side-collapse-icon { transform: rotate(180deg); }
+.side-collapse:hover {
+  color: #EDF1F8;
+  background: rgba(91,200,255,0.16);
+  border-color: rgba(91,200,255,0.45);
+}
+.side-collapse-icon { transform: rotate(180deg); transition: transform 240ms var(--ease-smooth); }
 .side.is-collapsed .side-collapse-icon { transform: none; }
 .app:has(.side.is-collapsed) { grid-template-columns: 64px 1fr; }
-.side.is-collapsed { padding: 20px 8px 16px; }
+.side.is-collapsed { padding: 14px 8px 16px; }
+/* Recolhido: botão sai do canto e vira o primeiro item do trilho, centrado. */
+.side.is-collapsed .side-collapse { position: static; margin: 0 auto 8px; }
 .side.is-collapsed .wm,
 .side.is-collapsed .side-item-label,
-.side.is-collapsed .side-group-label,
 .side.is-collapsed .side-item .cnt,
 .side.is-collapsed .side-foot { display: none; }
-.side.is-collapsed .side-logo { justify-content: center; padding-bottom: 12px; }
+/* Rótulos de grupo viram divisores finos — mantêm o ritmo das seções. */
+.side.is-collapsed .side-group-label {
+  height: 0; padding: 0; margin: 9px 14px;
+  border-top: 1px solid rgba(91,200,255,0.14);
+  overflow: hidden; color: transparent;
+}
+.side.is-collapsed .side-logo { justify-content: center; padding: 0 0 10px; }
 .side.is-collapsed .side-item { justify-content: center; padding: 9px 0; }
+.side.is-collapsed .side-item svg { opacity: 1; }
+.side.is-collapsed .side-sub { margin-left: 0; }
 .side.is-collapsed::after { height: 40px; }
+
+/* ---------- Ajustes finais North (fase 2.1) ---------- */
+/* Dinheiro nos KPIs grandes: §3 — valor monetário SEMPRE --money.
+   Fica no fim do arquivo pra vencer o override claro de .kpi-value. */
+.kpi-value.is-money { color: var(--money); }
+/* Card clicável: mata o anel de foco preto default do navegador;
+   foco por teclado ganha anel teal discreto. */
+.kpi.is-clickable:focus { outline: none; }
+.kpi.is-clickable:focus-visible {
+  outline: 2px solid var(--border-strong);
+  outline-offset: 2px;
+}
