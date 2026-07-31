@@ -1963,17 +1963,18 @@ input:focus, select:focus, textarea:focus {
   .top-actions { flex-shrink: 0; gap: 6px; }
   .top-actions .btn { padding-left: 9px; padding-right: 9px; }
 
-  /* Filtros: faixa horizontal de UMA linha com rolagem lateral
-     (padrão de app analytics) — em vez de 3 linhas empilhadas. */
-  .filters {
-    flex-wrap: nowrap;
-    overflow-x: auto;
-    scrollbar-width: none;
-    -webkit-overflow-scrolling: touch;
-    overscroll-behavior-x: contain;
+  /* Filtros: TODOS visíveis, compactos, em ~2 linhas. (A v1 usava faixa
+     com rolagem lateral de scrollbar oculta — Produto/Etapa/País ficavam
+     fora da tela e "sumiam"; discoverability ruim, revertido.) */
+  .filters { gap: 6px; }
+  .filters .chip,
+  .filters .select-btn,
+  .filters .date-chip {
+    min-height: 36px;
+    padding: 0 8px;
+    font-size: 11px;
   }
-  .filters::-webkit-scrollbar { display: none; }
-  .filters > * { flex-shrink: 0; }
+  .filters .select-btn .pill { font-size: 9px; padding: 1px 6px; }
 
   /* Dropdowns dos filtros viram BOTTOM SHEET: escapam do clipping do
      overflow-x da faixa (fixed não é clipado por overflow de ancestral
