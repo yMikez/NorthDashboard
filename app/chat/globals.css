@@ -18,39 +18,37 @@
 @layer base {
   :root,
   [data-theme='dark'] {
-    /* navy-950 (#030617) base background */
-    --background: 226 67% 5%;
+    /* petróleo profundo (#0D1215) base background */
+    --background: 203 24% 7%;
     /* white foreground */
     --foreground: 0 0% 100%;
-    /* navy-800 (#0F1F4D) elevated card */
-    --card: 224 67% 18%;
+    /* superfície raised (#161D21) elevated card */
+    --card: 202 20% 11%;
     --card-foreground: 0 0% 100%;
-    /* navy-900 (#060D25) popovers (mais escuro que card) */
-    --popover: 226 60% 9%;
+    /* popovers na mesma superfície raised (#161D21) */
+    --popover: 202 20% 11%;
     --popover-foreground: 0 0% 100%;
-    /* glow-cyan (#5BC8FF) — accent primário do brand */
-    --primary: 199 100% 68%;
-    --primary-foreground: 226 67% 5%;
-    /* navy-700 (#152A66) — bg de elementos secundários */
-    --secondary: 224 65% 24%;
-    --secondary-foreground: 220 50% 93%;
-    /* muted = navy-800 com menos lightness */
-    --muted: 224 50% 14%;
-    --muted-foreground: 222 33% 67%;
-    /* accent hover — tint navy sutil (era cyan 199 50% 16%, muito forte
-       como background de item selecionado). Agora puxa pra navy escuro
-       com leve hint cyan — destaque sem competir com o conteúdo. */
-    --accent: 222 35% 14%;
+    /* teal North (#3EB7D4) — accent primário do brand */
+    --primary: 192 64% 54%;
+    --primary-foreground: 203 24% 7%;
+    /* tinta petróleo (#182226) — bg de elementos secundários */
+    --secondary: 197 23% 12%;
+    --secondary-foreground: 0 0% 98%;
+    /* muted = raised com leve lift */
+    --muted: 202 20% 14%;
+    --muted-foreground: 180 7% 60%;
+    /* accent hover — tint petróleo sutil, destaque sem competir
+       com o conteúdo. */
+    --accent: 197 20% 14%;
     --accent-foreground: 0 0% 100%;
     /* danger (#EF4444) */
     --destructive: 0 84% 60%;
     --destructive-foreground: 0 0% 100%;
-    /* border — antes 199 100% 68% (cyan vibrante saturação 100% em todo
-       contorno, gerava sensação "HUD piscando"). Trocado por navy
-       acinzentado com leve frieza, fica como linha de divisão discreta. */
-    --border: 222 30% 22%;
-    --input: 224 50% 18%;
-    --ring: 199 100% 68%;
+    /* border — linha de divisão discreta em petróleo (≈ tinta clara
+       a 15% sobre o fundo). */
+    --border: 197 8% 20%;
+    --input: 202 18% 15%;
+    --ring: 192 64% 54%;
     /* semânticas — espelham --success/warning/danger do brand */
     --success: 158 80% 40%;
     --warning: 35 95% 50%;
@@ -59,26 +57,27 @@
   }
 
   [data-theme='light'] {
-    /* bg leve, fg navy escuro */
-    --background: 220 33% 97%;
-    --foreground: 226 60% 9%;
+    /* papel quente (#F5F3EC), tinta petróleo (#182226) */
+    --background: 47 31% 94%;
+    --foreground: 197 23% 12%;
     --card: 0 0% 100%;
-    --card-foreground: 226 60% 9%;
+    --card-foreground: 197 23% 12%;
     --popover: 0 0% 100%;
-    --popover-foreground: 226 60% 9%;
-    --primary: 199 100% 50%;
+    --popover-foreground: 197 23% 12%;
+    /* teal petróleo (#0E7C97) */
+    --primary: 192 83% 32%;
     --primary-foreground: 0 0% 100%;
-    --secondary: 220 30% 92%;
-    --secondary-foreground: 226 60% 9%;
-    --muted: 220 30% 95%;
-    --muted-foreground: 224 25% 40%;
-    --accent: 220 20% 92%;
-    --accent-foreground: 226 60% 9%;
+    --secondary: 49 26% 92%;
+    --secondary-foreground: 197 23% 12%;
+    --muted: 47 25% 94%;
+    --muted-foreground: 193 9% 41%;
+    --accent: 49 26% 92%;
+    --accent-foreground: 197 23% 12%;
     --destructive: 0 84% 50%;
     --destructive-foreground: 0 0% 100%;
-    --border: 224 20% 86%;
-    --input: 220 20% 92%;
-    --ring: 199 100% 50%;
+    --border: 50 7% 83%;
+    --input: 49 15% 90%;
+    --ring: 192 83% 32%;
     --success: 158 80% 35%;
     --warning: 35 90% 45%;
     --danger: 0 84% 50%;
@@ -120,20 +119,22 @@
     background: transparent;
   }
   [data-app-scope='chat'] *::-webkit-scrollbar-thumb {
-    background: rgba(91, 200, 255, 0.18);
+    background: rgba(62, 183, 212, 0.18);
     border-radius: 4px;
   }
   [data-app-scope='chat'] *::-webkit-scrollbar-thumb:hover {
-    background: rgba(91, 200, 255, 0.35);
+    background: rgba(62, 183, 212, 0.35);
   }
 
-  /* Panel glass — equivalente ao .lg-thin do design system, mais
-     leve. Usado em cards do chat (sidebar, topbar, blocks). */
+  /* Panel sólido (ex-glass) — usado em cards do chat (sidebar, topbar,
+     blocks). Sem backdrop-filter: North Editorial proíbe glassmorphism. */
   .glass {
-    background: var(--glass-tint-elev);
-    backdrop-filter: blur(var(--glass-blur-sm)) saturate(140%);
-    -webkit-backdrop-filter: blur(var(--glass-blur-sm)) saturate(140%);
-    border: 1px solid var(--border);
+    background: #161D21;
+    border: 1px solid rgba(236, 239, 234, 0.12);
+  }
+  [data-theme='light'] .glass {
+    background: #FFFFFF;
+    border-color: rgba(24, 34, 38, 0.14);
   }
 
   /* ============================================================
@@ -141,248 +142,134 @@
      Gradiente navy 3-stops, bordas cyan-soft, bubbles tonais.
      ============================================================ */
 
-  /* Container — gradiente navy do topo claro pro fundo escuro.
-     Mais escuro que o widget porque a tela inteira precisa de mais
-     profundidade pra os blobs animados (.ns-bg) brilharem por baixo. */
+  /* Container — petróleo profundo chapado (North Editorial, sem glow). */
   .nx-chat-bg {
     position: relative;
-    background:
-      radial-gradient(ellipse 80% 50% at 50% 0%, rgba(91, 200, 255, 0.06) 0%, transparent 60%),
-      linear-gradient(180deg, #0A1638 0%, #060D25 50%, #030617 100%);
+    background: #0D1215;
     overflow: hidden;
   }
   [data-theme='light'] .nx-chat-bg {
-    background:
-      radial-gradient(ellipse 80% 50% at 50% 0%, rgba(91, 200, 255, 0.10) 0%, transparent 60%),
-      linear-gradient(180deg, #F4F7FC 0%, #E7EEF8 50%, #D9E3F3 100%);
+    background: #F5F3EC;
   }
 
-  /* Blobs animados glow — mesmo efeito de .ns-bg do dashboard.css,
-     mas posicionados absoluto dentro do container do chat (não fixed)
-     pra não vazar pra outras rotas. Z-index 0 sob todo conteúdo. */
+  /* Blobs decorativos REMOVIDOS (North Editorial: nada de glow/aurora
+     em tela de trabalho). Classe mantida como no-op pros usos no JSX. */
   .nx-fx-blobs {
-    position: absolute;
-    inset: 0;
-    z-index: 0;
-    pointer-events: none;
-    overflow: hidden;
-  }
-  .nx-fx-blobs::before,
-  .nx-fx-blobs::after {
-    content: '';
-    position: absolute;
-    width: 800px;
-    height: 800px;
-    border-radius: 50%;
-    filter: blur(80px);
-    opacity: 0.22;
-    will-change: transform;
-  }
-  .nx-fx-blobs::before {
-    background: radial-gradient(circle, var(--glow-cyan), transparent 60%);
-    top: -240px;
-    left: -160px;
-    animation: nxDrift1 22s ease-in-out infinite;
-  }
-  .nx-fx-blobs::after {
-    background: radial-gradient(circle, var(--glow-violet), transparent 60%);
-    bottom: -280px;
-    right: -200px;
-    animation: nxDrift2 28s ease-in-out infinite;
-  }
-  @keyframes nxDrift1 {
-    0%, 100% { transform: translate(0, 0); }
-    50% { transform: translate(80px, 120px); }
-  }
-  @keyframes nxDrift2 {
-    0%, 100% { transform: translate(0, 0); }
-    50% { transform: translate(-100px, -80px); }
-  }
-  [data-theme='light'] .nx-fx-blobs::before,
-  [data-theme='light'] .nx-fx-blobs::after {
-    opacity: 0.18;
+    display: none;
   }
 
-  /* Strip cyan-tinted pra cabeçalhos do widget (TopBar, sidebar header).
-     Glass thin com tint cyan + bottom rim. */
+  /* Strip sólida pra cabeçalhos (TopBar, sidebar header). */
   .nx-strip-eyebrow {
     position: relative;
-    background:
-      linear-gradient(180deg, rgba(255, 255, 255, 0.04) 0%, transparent 100%),
-      rgba(91, 200, 255, 0.04);
-    backdrop-filter: blur(var(--glass-blur-sm)) saturate(140%);
-    -webkit-backdrop-filter: blur(var(--glass-blur-sm)) saturate(140%);
-    border-bottom: 1px solid var(--border-soft);
-    box-shadow:
-      inset 0 1px 0 rgba(255, 255, 255, 0.06),
-      inset 0 -1px 0 rgba(0, 0, 0, 0.18);
+    background: #161D21;
+    border-bottom: 1px solid rgba(236, 239, 234, 0.12);
+  }
+  [data-theme='light'] .nx-strip-eyebrow {
+    background: #EFEDE4;
+    border-bottom-color: rgba(24, 34, 38, 0.14);
   }
 
-  /* Strip cyan-tinted pra rodapé do widget (input area). */
+  /* Strip sólida pra rodapé do widget (input area). */
   .nx-strip-input {
     position: relative;
-    background:
-      linear-gradient(0deg, rgba(255, 255, 255, 0.03) 0%, transparent 100%),
-      rgba(91, 200, 255, 0.02);
-    backdrop-filter: blur(var(--glass-blur-sm)) saturate(140%);
-    -webkit-backdrop-filter: blur(var(--glass-blur-sm)) saturate(140%);
-    border-top: 1px solid var(--border-soft);
-    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
+    background: #161D21;
+    border-top: 1px solid rgba(236, 239, 234, 0.12);
+  }
+  [data-theme='light'] .nx-strip-input {
+    background: #EFEDE4;
+    border-top-color: rgba(24, 34, 38, 0.14);
   }
 
-  /* Panel de conversas — liquid glass com mais corpo. */
+  /* Panel de conversas — superfície sólida com borda nítida. */
   .nx-glass-panel {
     position: relative;
-    background:
-      linear-gradient(180deg, rgba(255, 255, 255, 0.06) 0%, rgba(255, 255, 255, 0.02) 60%, rgba(91, 200, 255, 0.02) 100%);
-    backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
-    -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
-    border-right: 1px solid var(--glass-border);
-    box-shadow:
-      inset 0 1px 0 var(--glass-inset-top),
-      inset -1px 0 0 rgba(91, 200, 255, 0.08),
-      0 14px 40px -10px rgba(0, 0, 0, 0.25);
-    isolation: isolate;
+    background: #161D21;
+    border-right: 1px solid rgba(236, 239, 234, 0.12);
   }
   [data-theme='light'] .nx-glass-panel {
-    background:
-      linear-gradient(180deg, rgba(255, 255, 255, 0.85) 0%, rgba(255, 255, 255, 0.55) 60%, rgba(91, 200, 255, 0.10) 100%);
+    background: #FFFFFF;
+    border-right-color: rgba(24, 34, 38, 0.14);
   }
 
-  /* Card glass — pra blocos (Summary, Table, Chart, Insights). */
+  /* Card sólido — pra blocos (Summary, Table, Chart, Insights). */
   .nx-glass-card {
     position: relative;
-    background: var(--glass-tint);
-    backdrop-filter: blur(var(--glass-blur-sm)) saturate(160%);
-    -webkit-backdrop-filter: blur(var(--glass-blur-sm)) saturate(160%);
-    border: 1px solid var(--glass-border);
-    border-top-color: var(--glass-border-top);
+    background: #161D21;
+    border: 1px solid rgba(236, 239, 234, 0.12);
     border-radius: var(--r-md);
-    box-shadow:
-      0 6px 18px -6px rgba(0, 0, 0, 0.30),
-      inset 0 1px 0 var(--glass-inset-top),
-      inset 0 -1px 0 var(--glass-inset-bot);
-    isolation: isolate;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.25);
     overflow: hidden;
   }
-  .nx-glass-card::before {
-    content: '';
-    position: absolute;
-    inset: 0;
-    pointer-events: none;
-    border-radius: inherit;
-    background: radial-gradient(ellipse 140% 60% at 50% -20%,
-      var(--glass-sheen-top) 0%,
-      var(--glass-sheen-mid) 18%,
-      rgba(255, 255, 255, 0.04) 34%,
-      transparent 50%);
-    mix-blend-mode: screen;
-    z-index: 0;
-  }
-  [data-theme='light'] .nx-glass-card::before {
-    mix-blend-mode: normal;
-    opacity: 0.55;
-  }
-  .nx-glass-card > * {
-    position: relative;
-    z-index: 1;
+  [data-theme='light'] .nx-glass-card {
+    background: #FFFFFF;
+    border-color: rgba(24, 34, 38, 0.14);
+    box-shadow: 0 1px 2px rgba(24, 34, 38, 0.06);
   }
 
-  /* Bolha user (alinhada à direita) — liquid cyan tint + sheen + glow. */
+  /* Bolha user (alinhada à direita) — tint teal chapado, sem glow. */
   .nx-bubble-user {
     position: relative;
-    background:
-      linear-gradient(180deg, rgba(91, 200, 255, 0.16) 0%, rgba(91, 200, 255, 0.08) 100%);
-    backdrop-filter: blur(8px) saturate(160%);
-    -webkit-backdrop-filter: blur(8px) saturate(160%);
-    border: 1px solid rgba(91, 200, 255, 0.28);
-    border-top-color: rgba(255, 255, 255, 0.30);
+    background: color-mix(in oklab, #3EB7D4 14%, transparent);
+    border: 1px solid rgba(62, 183, 212, 0.35);
     color: var(--fg1);
-    box-shadow:
-      0 4px 14px -4px rgba(91, 200, 255, 0.25),
-      inset 0 1px 0 rgba(255, 255, 255, 0.20),
-      inset 0 -1px 0 rgba(0, 0, 0, 0.10);
   }
 
-  /* Bolha assistant — vidro fino quase invisível, pra texto respirar. */
+  /* Bolha assistant — superfície sólida discreta, pra texto respirar. */
   .nx-bubble-assistant {
     position: relative;
-    background:
-      linear-gradient(180deg, rgba(255, 255, 255, 0.06) 0%, rgba(255, 255, 255, 0.02) 100%);
-    backdrop-filter: blur(8px) saturate(140%);
-    -webkit-backdrop-filter: blur(8px) saturate(140%);
-    border: 1px solid var(--glass-border);
-    border-top-color: var(--glass-border-top);
+    background: #161D21;
+    border: 1px solid rgba(236, 239, 234, 0.12);
     color: var(--fg1);
-    box-shadow:
-      0 4px 12px -4px rgba(0, 0, 0, 0.20),
-      inset 0 1px 0 rgba(255, 255, 255, 0.10);
   }
   [data-theme='light'] .nx-bubble-assistant {
-    background:
-      linear-gradient(180deg, rgba(255, 255, 255, 0.80) 0%, rgba(255, 255, 255, 0.55) 100%);
+    background: #FFFFFF;
+    border-color: rgba(24, 34, 38, 0.14);
   }
 
-  /* Textarea estilo widget: liquid glass com tint cyan + sheen. */
+  /* Textarea — fundo sólido, borda de tinta, foco teal. */
   .nx-input-field {
     position: relative;
-    background:
-      linear-gradient(180deg, rgba(255, 255, 255, 0.06) 0%, rgba(91, 200, 255, 0.04) 100%);
-    backdrop-filter: blur(10px) saturate(160%);
-    -webkit-backdrop-filter: blur(10px) saturate(160%);
-    border: 1px solid rgba(91, 200, 255, 0.22);
-    border-top-color: rgba(255, 255, 255, 0.25);
+    background: #161D21;
+    border: 1px solid rgba(236, 239, 234, 0.15);
     color: var(--fg1);
     font-family: var(--f-body);
-    box-shadow:
-      inset 0 1px 0 rgba(255, 255, 255, 0.15),
-      inset 0 -1px 0 rgba(0, 0, 0, 0.10),
-      0 4px 14px -4px rgba(0, 0, 0, 0.20);
-    transition: all var(--dur-base) var(--ease-smooth);
+    transition: border-color var(--dur-base) var(--ease-smooth),
+      box-shadow var(--dur-base) var(--ease-smooth);
   }
   .nx-input-field:focus,
   .nx-input-field:focus-within {
-    border-color: rgba(91, 200, 255, 0.50);
-    border-top-color: rgba(255, 255, 255, 0.40);
-    box-shadow:
-      0 0 0 3px rgba(91, 200, 255, 0.12),
-      0 6px 20px -4px rgba(91, 200, 255, 0.20),
-      inset 0 1px 0 rgba(255, 255, 255, 0.22),
-      inset 0 -1px 0 rgba(0, 0, 0, 0.10);
+    border-color: #3EB7D4;
+    outline: none;
+    box-shadow: 0 0 0 2px rgba(62, 183, 212, 0.22);
+  }
+  [data-theme='light'] .nx-input-field {
+    background: #FFFFFF;
+    border-color: rgba(24, 34, 38, 0.16);
+  }
+  [data-theme='light'] .nx-input-field:focus,
+  [data-theme='light'] .nx-input-field:focus-within {
+    border-color: #0E7C97;
+    box-shadow: 0 0 0 2px rgba(14, 124, 151, 0.18);
   }
 
-  /* Tool chip — liquid pill: pulsing cyan enquanto roda, verde quando done. */
+  /* Tool chip — pill chapada teal enquanto roda, verde quando done. */
   .nx-tool-chip {
     position: relative;
     font-family: var(--f-mono);
     font-size: 10px;
     padding: 2px 10px;
     border-radius: var(--r-full);
-    background:
-      linear-gradient(180deg, rgba(91, 200, 255, 0.20) 0%, rgba(91, 200, 255, 0.08) 100%);
-    backdrop-filter: blur(8px) saturate(160%);
-    -webkit-backdrop-filter: blur(8px) saturate(160%);
+    background: color-mix(in oklab, #3EB7D4 12%, transparent);
     color: var(--glow-cyan);
-    border: 1px solid rgba(91, 200, 255, 0.35);
-    border-top-color: rgba(255, 255, 255, 0.30);
+    border: 1px solid rgba(62, 183, 212, 0.35);
     display: inline-flex;
     align-items: center;
     gap: 6px;
-    box-shadow:
-      inset 0 1px 0 rgba(255, 255, 255, 0.25),
-      inset 0 -2px 6px -2px rgba(91, 200, 255, 0.40),
-      0 3px 10px -3px rgba(91, 200, 255, 0.30);
   }
   .nx-tool-chip.is-done {
-    background:
-      linear-gradient(180deg, rgba(16, 185, 129, 0.20) 0%, rgba(16, 185, 129, 0.08) 100%);
+    background: color-mix(in oklab, #37D695 12%, transparent);
     color: var(--success);
-    border-color: rgba(16, 185, 129, 0.35);
-    border-top-color: rgba(255, 255, 255, 0.25);
-    box-shadow:
-      inset 0 1px 0 rgba(255, 255, 255, 0.20),
-      inset 0 -2px 6px -2px rgba(16, 185, 129, 0.35),
-      0 3px 10px -3px rgba(16, 185, 129, 0.25);
+    border-color: rgba(55, 214, 149, 0.35);
   }
 
   /* Eyebrow mono uppercase com tracking — o "ANÁLISE COM IA" do widget. */
@@ -403,39 +290,19 @@
     color: var(--fg5);
   }
 
-  /* Send button estilo widget — liquid cyan glass com gradiente + glow. */
+  /* Send button — teal petróleo sólido, sombra discreta. */
   .nx-send-btn {
     position: relative;
-    background: linear-gradient(135deg, #5BC8FF 0%, #9B7BFF 100%);
-    color: #0A1638;
-    border: 1px solid rgba(91, 200, 255, 0.50);
-    border-top-color: rgba(255, 255, 255, 0.55);
-    box-shadow:
-      0 4px 12px -2px rgba(91, 200, 255, 0.45),
-      0 0 30px -8px rgba(91, 200, 255, 0.40),
-      inset 0 1px 0 rgba(255, 255, 255, 0.50),
-      inset 0 -1px 0 rgba(0, 0, 0, 0.12),
-      inset 0 -8px 12px -8px rgba(74, 144, 255, 0.40);
+    background: #0E7C97;
+    color: #fff;
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.25);
     transition: all var(--dur-fast) var(--ease-smooth);
-    isolation: isolate;
-    overflow: hidden;
-  }
-  .nx-send-btn::before {
-    content: '';
-    position: absolute;
-    inset: 0;
-    pointer-events: none;
-    background: radial-gradient(ellipse 100% 80% at 50% -30%, rgba(255, 255, 255, 0.55) 0%, transparent 60%);
-    mix-blend-mode: screen;
   }
   .nx-send-btn:hover:not(:disabled) {
     transform: translateY(-1px);
-    box-shadow:
-      0 6px 18px -2px rgba(91, 200, 255, 0.60),
-      0 0 40px -8px rgba(91, 200, 255, 0.55),
-      inset 0 1px 0 rgba(255, 255, 255, 0.60),
-      inset 0 -1px 0 rgba(0, 0, 0, 0.12),
-      inset 0 -8px 12px -8px rgba(74, 144, 255, 0.45);
+    background: #3EB7D4;
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.30);
   }
   .nx-send-btn:active:not(:disabled) {
     transform: translateY(0);
@@ -455,20 +322,19 @@
     border-radius: var(--r-sm);
     font-family: var(--f-mono);
     font-size: 0.85em;
-    background: rgba(91, 200, 255, 0.10);
+    background: rgba(62, 183, 212, 0.10);
     color: var(--glow-cyan);
     cursor: pointer;
     transition: background var(--dur-fast) var(--ease-smooth);
-    border: 1px solid rgba(91, 200, 255, 0.25);
+    border: 1px solid rgba(62, 183, 212, 0.25);
   }
   .entity-token:hover {
-    background: rgba(91, 200, 255, 0.20);
+    background: rgba(62, 183, 212, 0.20);
   }
 
-  /* Cyan glow hover pros itens primários do chat. */
+  /* Foco teal pros itens primários do chat (sem glow). */
   [data-app-scope='chat'] .nx-focus-glow:focus-visible {
     outline: 2px solid var(--glow-cyan);
     outline-offset: 2px;
-    box-shadow: var(--shadow-glow);
   }
 }

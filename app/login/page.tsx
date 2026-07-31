@@ -40,8 +40,9 @@ export default function LoginPage() {
       <main
         style={{
           minHeight: '100vh',
-          background: 'var(--bg)',
-          color: 'var(--fg1)',
+          // Cena noturna FIXA (não segue o tema) — gradiente petróleo North Editorial
+          background: 'linear-gradient(180deg, #0D1215 0%, #132630 60%, #0F2028 100%)',
+          color: '#ECEFEA',
           display: 'grid',
           placeItems: 'center',
           padding: 24,
@@ -50,20 +51,20 @@ export default function LoginPage() {
           overflow: 'hidden',
         }}
       >
-        {/* Aurora blobs por trás do card pra dar profundidade no liquid glass */}
+        {/* Auroras teal por trás do card pra dar profundidade na cena noturna */}
         <div aria-hidden style={{
           position: 'absolute', inset: 0, pointerEvents: 'none', zIndex: 0,
         }}>
           <div style={{
             position: 'absolute', top: '-15%', left: '-10%',
             width: 700, height: 700, borderRadius: '50%',
-            background: 'radial-gradient(circle, var(--glow-cyan), transparent 60%)',
+            background: 'radial-gradient(circle, #3EB7D4, transparent 60%)',
             filter: 'blur(80px)', opacity: 0.35,
           }}/>
           <div style={{
             position: 'absolute', bottom: '-20%', right: '-15%',
             width: 700, height: 700, borderRadius: '50%',
-            background: 'radial-gradient(circle, var(--glow-violet), transparent 60%)',
+            background: 'radial-gradient(circle, rgba(62,183,212,0.18), transparent 60%)',
             filter: 'blur(80px)', opacity: 0.30,
           }}/>
         </div>
@@ -82,7 +83,7 @@ export default function LoginPage() {
             <img src="/assets/logo-mark-dark.svg" alt="" width={36} height={36} className="logo-mark logo-dark" />
             <img src="/assets/logo-mark-light.svg" alt="" width={36} height={36} className="logo-mark logo-light" />
             <div style={{ fontFamily: 'var(--f-display, serif)', fontSize: 22, lineHeight: 1 }}>
-              north<em style={{ color: 'var(--glow-cyan)' }}>scale</em>
+              north<em style={{ color: '#3EB7D4' }}>scale</em>
             </div>
           </div>
 
@@ -91,14 +92,14 @@ export default function LoginPage() {
               fontFamily: 'var(--f-mono, ui-monospace, monospace)',
               fontSize: 10,
               letterSpacing: '0.15em',
-              color: 'var(--fg4)',
+              color: '#92A1A1',
               marginBottom: 6,
             }}
           >
             ENTRAR
           </div>
           <h1 style={{ margin: 0, fontSize: 22, fontWeight: 500, marginBottom: 20 }}>
-            Acessar o <em style={{ color: 'var(--glow-cyan)', fontStyle: 'normal' }}>dashboard</em>
+            Acessar o <em style={{ color: '#3EB7D4', fontStyle: 'normal' }}>dashboard</em>
           </h1>
 
           <form onSubmit={onSubmit} style={{ display: 'grid', gap: 14 }}>
@@ -160,7 +161,7 @@ export default function LoginPage() {
             style={{
               marginTop: 22,
               fontSize: 11,
-              color: 'var(--fg5)',
+              color: '#71807F',
               fontFamily: 'var(--f-mono, ui-monospace, monospace)',
               lineHeight: 1.5,
             }}
@@ -195,7 +196,7 @@ function Field({
           fontFamily: 'var(--f-mono, ui-monospace, monospace)',
           fontSize: 10,
           letterSpacing: '0.12em',
-          color: 'var(--fg4)',
+          color: '#92A1A1',
         }}
       >
         {label.toUpperCase()}
@@ -210,23 +211,21 @@ function Field({
         style={{
           padding: '10px 12px',
           fontSize: 13,
-          color: 'var(--fg1)',
-          background: 'var(--glass-tint)',
-          backdropFilter: 'blur(10px)',
-          WebkitBackdropFilter: 'blur(10px)',
-          border: '1px solid var(--glass-border)',
+          color: '#ECEFEA',
+          background: '#161D21',
+          border: '1px solid rgba(255,255,255,0.08)',
           borderRadius: 8,
           outline: 'none',
           fontFamily: 'inherit',
           transition: 'border-color 150ms, background 150ms',
         }}
         onFocus={(e) => {
-          e.currentTarget.style.borderColor = 'var(--glow-cyan)';
-          e.currentTarget.style.background = 'var(--glass-tint-elev)';
+          e.currentTarget.style.borderColor = '#3EB7D4';
+          e.currentTarget.style.background = '#1B252B';
         }}
         onBlur={(e) => {
-          e.currentTarget.style.borderColor = 'var(--glass-border)';
-          e.currentTarget.style.background = 'var(--glass-tint)';
+          e.currentTarget.style.borderColor = 'rgba(255,255,255,0.08)';
+          e.currentTarget.style.background = '#161D21';
         }}
       />
     </label>

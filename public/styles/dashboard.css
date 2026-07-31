@@ -155,9 +155,8 @@ body { overflow-x: hidden; }
 /* ---------- TOPBAR ---------- */
 .top {
   position: sticky; top: 0; z-index: 3;
-  background: rgba(3,6,23,0.8);
-  backdrop-filter: blur(14px);
-  border-bottom: 1px solid var(--border-soft);
+  background: var(--bg);
+  border-bottom: 1px solid var(--border);
   padding: 14px 28px;
   display: flex; align-items: center; gap: 12px;
   flex-wrap: wrap;
@@ -185,34 +184,28 @@ body { overflow-x: hidden; }
 .top-actions { display: flex; align-items: center; gap: 8px; }
 .icon-btn {
   position: relative; width: 32px; height: 32px;
-  background: linear-gradient(180deg, rgba(91,200,255,0.10) 0%, rgba(91,200,255,0.03) 100%);
-  border: 1px solid var(--border-soft);
-  border-top-color: rgba(255,255,255,0.12);
-  border-radius: 6px; color: var(--navy-200); cursor: pointer;
+  background: var(--bg-raised);
+  border: 1px solid var(--border);
+  border-radius: var(--r-md); color: var(--fg3); cursor: pointer;
   display: grid; place-items: center; transition: all 150ms var(--ease-smooth);
-  backdrop-filter: blur(8px) saturate(160%);
-  -webkit-backdrop-filter: blur(8px) saturate(160%);
-  box-shadow: inset 0 1px 0 rgba(255,255,255,0.12), inset 0 -1px 0 rgba(0,0,0,0.10);
+  box-shadow: var(--shadow-sm);
 }
 .icon-btn:hover {
-  color: var(--white);
-  border-color: var(--border-strong);
-  background: linear-gradient(180deg, rgba(91,200,255,0.18) 0%, rgba(91,200,255,0.08) 100%);
+  color: var(--fg1);
+  border-color: var(--fg1);
+  background: var(--bg-raised);
   transform: translateY(-1px);
-  box-shadow: inset 0 1px 0 rgba(255,255,255,0.18), 0 4px 12px -4px rgba(91,200,255,0.30);
 }
 .icon-btn .pip {
   position: absolute; top: 6px; right: 6px; width: 6px; height: 6px;
   border-radius: 50%; background: var(--glow-cyan);
-  box-shadow: 0 0 6px var(--glow-cyan);
 }
 
 /* ---------- FILTER BAR (below top) ---------- */
 .filters {
   position: sticky; top: 69px; z-index: 2;
-  background: rgba(3,6,23,0.72);
-  backdrop-filter: blur(10px);
-  border-bottom: 1px solid var(--border-soft);
+  background: var(--bg);
+  border-bottom: 1px solid var(--border);
   padding: 10px 28px;
   display: flex; align-items: center; gap: 8px;
   flex-wrap: wrap;
@@ -225,32 +218,25 @@ body { overflow-x: hidden; }
 .chip, .date-chip {
   display: inline-flex; align-items: center; gap: 6px;
   height: 28px; padding: 0 10px;
-  background: linear-gradient(180deg, rgba(91,200,255,0.08) 0%, rgba(91,200,255,0.03) 100%);
-  border: 1px solid var(--border-soft);
-  border-top-color: rgba(255,255,255,0.10);
+  background: var(--bg-raised);
+  border: 1px solid var(--border);
   border-radius: 6px;
   color: var(--navy-200);
   font-family: var(--f-body); font-size: 12px;
   cursor: pointer; transition: all 150ms var(--ease-smooth);
   letter-spacing: -0.002em;
   white-space: nowrap;
-  backdrop-filter: blur(8px) saturate(160%);
-  -webkit-backdrop-filter: blur(8px) saturate(160%);
-  box-shadow: inset 0 1px 0 rgba(255,255,255,0.10);
 }
 .chip:hover, .date-chip:hover {
-  border-color: var(--border-strong);
-  color: var(--white);
-  background: linear-gradient(180deg, rgba(91,200,255,0.14) 0%, rgba(91,200,255,0.06) 100%);
+  border-color: var(--fg1);
+  color: var(--fg1);
+  background: color-mix(in oklab, var(--accent) 6%, transparent);
   transform: translateY(-1px);
-  box-shadow: inset 0 1px 0 rgba(255,255,255,0.15), 0 4px 12px -4px rgba(91,200,255,0.25);
 }
 .chip.is-active, .date-chip.is-active {
-  background: linear-gradient(180deg, rgba(91,200,255,0.22) 0%, rgba(91,200,255,0.08) 100%);
-  border-color: var(--border-strong);
-  border-top-color: rgba(255,255,255,0.25);
-  color: var(--glow-cyan);
-  box-shadow: inset 0 1px 0 rgba(255,255,255,0.18), 0 0 16px -4px rgba(91,200,255,0.30);
+  background: color-mix(in oklab, var(--accent) 12%, transparent);
+  border-color: var(--accent);
+  color: var(--accent);
 }
 .chip .cnt { font-family: var(--f-mono); font-size: 10px; color: var(--navy-400); }
 .chip svg, .date-chip svg { opacity: 0.7; }
@@ -261,43 +247,32 @@ body { overflow-x: hidden; }
 .select-btn {
   display: inline-flex; align-items: center; gap: 8px;
   height: 28px; padding: 0 10px;
-  background: linear-gradient(180deg, rgba(91,200,255,0.08) 0%, rgba(91,200,255,0.03) 100%);
-  border: 1px solid var(--border-soft);
-  border-top-color: rgba(255,255,255,0.10);
+  background: var(--bg-raised);
+  border: 1px solid var(--border);
   border-radius: 6px; color: var(--navy-100);
   font-family: var(--f-body); font-size: 12px;
   cursor: pointer; transition: all 150ms var(--ease-smooth);
-  backdrop-filter: blur(8px) saturate(160%);
-  -webkit-backdrop-filter: blur(8px) saturate(160%);
-  box-shadow: inset 0 1px 0 rgba(255,255,255,0.10);
 }
 .select-btn:hover {
-  border-color: var(--border-strong);
-  color: var(--white);
-  background: linear-gradient(180deg, rgba(91,200,255,0.14) 0%, rgba(91,200,255,0.06) 100%);
+  border-color: var(--fg1);
+  color: var(--fg1);
+  background: color-mix(in oklab, var(--accent) 6%, transparent);
   transform: translateY(-1px);
-  box-shadow: inset 0 1px 0 rgba(255,255,255,0.15), 0 4px 12px -4px rgba(91,200,255,0.25);
 }
 .select-btn .pill {
   font-family: var(--f-mono); font-size: 10px;
-  color: var(--glow-cyan); letter-spacing: 0.05em;
-  background: linear-gradient(180deg, rgba(91,200,255,0.20) 0%, rgba(91,200,255,0.10) 100%);
-  border: 1px solid rgba(91,200,255,0.25);
-  border-top-color: rgba(255,255,255,0.30);
+  color: var(--accent); letter-spacing: 0.05em;
+  background: color-mix(in oklab, var(--accent) 12%, transparent);
+  border: 1px solid color-mix(in oklab, var(--accent) 35%, transparent);
   border-radius: 999px;
   padding: 2px 8px; margin-left: 2px;
-  box-shadow: inset 0 1px 0 rgba(255,255,255,0.18);
 }
 
 .seg {
   display: inline-flex; height: 28px;
-  border: 1px solid var(--border-soft);
-  border-top-color: rgba(255,255,255,0.10);
+  border: 1px solid var(--border);
   border-radius: 6px; overflow: hidden;
-  background: linear-gradient(180deg, rgba(91,200,255,0.06) 0%, rgba(91,200,255,0.02) 100%);
-  backdrop-filter: blur(8px) saturate(160%);
-  -webkit-backdrop-filter: blur(8px) saturate(160%);
-  box-shadow: inset 0 1px 0 rgba(255,255,255,0.08);
+  background: var(--bg-raised);
 }
 .seg button {
   background: transparent; border: 0; padding: 0 10px;
@@ -306,13 +281,12 @@ body { overflow-x: hidden; }
   transition: all 150ms var(--ease-smooth);
 }
 .seg button:hover {
-  color: var(--white);
-  background: rgba(91,200,255,0.06);
+  color: var(--fg1);
+  background: color-mix(in oklab, var(--accent) 6%, transparent);
 }
 .seg button.is-active {
-  background: linear-gradient(180deg, rgba(91,200,255,0.22) 0%, rgba(91,200,255,0.08) 100%);
-  color: var(--glow-cyan);
-  box-shadow: inset 0 1px 0 rgba(255,255,255,0.18), inset 0 -1px 0 rgba(0,0,0,0.10);
+  background: color-mix(in oklab, var(--accent) 12%, transparent);
+  color: var(--accent);
 }
 
 /* ---------- CONTENT ---------- */
@@ -351,40 +325,25 @@ body { overflow-x: hidden; }
   letter-spacing: -0.002em;
 }
 .btn-ghost {
-  background: linear-gradient(180deg, rgba(91,200,255,0.10) 0%, rgba(91,200,255,0.03) 100%);
-  color: var(--navy-200);
-  border-color: var(--border-soft);
-  border-top-color: rgba(255,255,255,0.12);
-  backdrop-filter: blur(10px) saturate(160%);
-  -webkit-backdrop-filter: blur(10px) saturate(160%);
-  box-shadow: inset 0 1px 0 rgba(255,255,255,0.12), inset 0 -1px 0 rgba(0,0,0,0.10);
+  background: var(--bg-raised);
+  color: var(--fg2);
+  border-color: var(--border);
 }
 .btn-ghost:hover {
-  color: var(--white);
-  border-color: var(--border-strong);
-  background: linear-gradient(180deg, rgba(91,200,255,0.18) 0%, rgba(91,200,255,0.08) 100%);
+  color: var(--fg1);
+  border-color: var(--fg1);
+  background: color-mix(in oklab, var(--accent) 6%, transparent);
   transform: translateY(-1px);
-  box-shadow: inset 0 1px 0 rgba(255,255,255,0.18), 0 4px 14px -4px rgba(91,200,255,0.30);
 }
 .btn-primary {
-  background: linear-gradient(135deg, var(--navy-500), var(--navy-700));
-  color: var(--white);
-  border-color: rgba(91,200,255,0.30);
-  border-top-color: rgba(255,255,255,0.30);
-  box-shadow:
-    inset 0 1px 0 rgba(255,255,255,0.30),
-    inset 0 -1px 0 rgba(0,0,0,0.15),
-    0 0 0 1px rgba(91,200,255,0.20),
-    0 6px 16px -6px rgba(30,58,138,0.50);
+  background: var(--fg1);
+  color: var(--bg);
+  border-color: var(--fg1);
+  box-shadow: var(--shadow-sm);
 }
 .btn-primary:hover {
-  border-color: var(--glow-cyan);
   transform: translateY(-1px);
-  box-shadow:
-    inset 0 1px 0 rgba(255,255,255,0.35),
-    inset 0 -1px 0 rgba(0,0,0,0.15),
-    0 0 0 1px var(--glow-cyan),
-    0 8px 22px -8px var(--glow-electric);
+  opacity: .9;
 }
 .btn svg { opacity: 0.8; }
 
@@ -398,14 +357,15 @@ body { overflow-x: hidden; }
 .kpi {
   position: relative;
   padding: 14px 16px 14px;
-  background: linear-gradient(135deg, rgba(15,31,77,0.45), rgba(6,13,37,0.55));
-  border: 1px solid var(--border-soft);
-  border-radius: 8px;
+  background: var(--bg-raised);
+  border: 1px solid var(--border);
+  border-radius: var(--r-xl);
+  box-shadow: var(--shadow-md);
   transition: all 200ms var(--ease-smooth);
   overflow: hidden;
 }
-.kpi:hover { border-color: var(--border); transform: translateY(-2px); box-shadow: 0 8px 22px -12px rgba(91,200,255,0.22); }
-.kpi.is-alert { border-color: rgba(239,68,68,0.35); background: linear-gradient(135deg, rgba(66,20,28,0.4), rgba(6,13,37,0.55)); }
+.kpi:hover { border-color: var(--fg1); transform: translateY(-2px); box-shadow: var(--shadow-lg); }
+.kpi.is-alert { border-color: color-mix(in oklab, var(--danger) 45%, transparent); background: var(--bg-raised); }
 .kpi .corner-tl, .kpi .corner-br {
   position: absolute; width: 10px; height: 10px; border-color: var(--border-strong);
   opacity: 0.5; pointer-events: none;
@@ -420,17 +380,15 @@ body { overflow-x: hidden; }
   color: var(--glow-cyan);
   display: inline-flex; align-items: center; gap: 8px;
 }
-/* HUD signal — cyan dot com glow antes do label, alinha com o
-   design system de referência (preview/metric-cards.html). */
+/* dot chapado antes do label — sem glow (North Editorial) */
 .kpi-label::before {
   content: '';
   width: 5px; height: 5px; border-radius: 50%;
   background: var(--glow-cyan);
-  box-shadow: 0 0 8px var(--glow-cyan);
   flex-shrink: 0;
 }
 .kpi.is-alert .kpi-label { color: var(--danger); }
-.kpi.is-alert .kpi-label::before { background: var(--danger); box-shadow: 0 0 8px var(--danger); }
+.kpi.is-alert .kpi-label::before { background: var(--danger); }
 .kpi-icon {
   width: 22px; height: 22px; border-radius: 5px;
   display: grid; place-items: center;
@@ -476,9 +434,9 @@ body { overflow-x: hidden; }
 /* KPI clicável (drill-down) */
 .kpi.is-clickable { cursor: pointer; user-select: none; }
 .kpi.is-clickable:hover {
-  border-color: var(--border-strong);
+  border-color: var(--fg1);
   transform: translateY(-2px);
-  box-shadow: 0 8px 24px -10px rgba(91, 200, 255, 0.30);
+  box-shadow: var(--shadow-lg);
 }
 .delta .vs { color: var(--navy-400); margin-left: 4px; letter-spacing: 0.05em; font-size: 10px; }
 
@@ -488,9 +446,10 @@ body { overflow-x: hidden; }
 /* ---------- PANELS ---------- */
 .panel {
   padding: 16px 18px;
-  background: linear-gradient(135deg, rgba(15,31,77,0.3), rgba(6,13,37,0.45));
-  border: 1px solid var(--border-soft);
-  border-radius: 10px;
+  background: var(--bg-raised);
+  border: 1px solid var(--border);
+  border-radius: var(--r-lg);
+  box-shadow: var(--shadow-md);
   position: relative;
 }
 .panel-head { display: flex; align-items: flex-start; justify-content: space-between; margin-bottom: 14px; gap: 12px; }
@@ -518,7 +477,7 @@ body { overflow-x: hidden; }
 .legend-dot span {
   width: 8px; height: 8px; border-radius: 50%;
 }
-.legend-dot.cyan span { background: var(--glow-cyan); box-shadow: 0 0 6px var(--glow-cyan); }
+.legend-dot.cyan span { background: var(--accent); }
 .legend-dot.violet span { background: var(--glow-violet); }
 .legend-dot.electric span { background: var(--glow-electric); }
 .legend-dot.dim span { background: var(--navy-500); }
@@ -549,7 +508,7 @@ body { overflow-x: hidden; }
 .chart-svg { width: 100%; height: 280px; display: block; }
 .chart-axis text { fill: var(--navy-400); font-family: var(--f-mono); font-size: 10px; letter-spacing: 0.05em; }
 .chart-grid line { stroke: rgba(91,200,255,0.07); stroke-dasharray: 2 4; }
-.chart-line { fill: none; stroke: var(--glow-cyan); stroke-width: 2; stroke-linejoin: round; stroke-linecap: round; filter: drop-shadow(0 0 4px rgba(91,200,255,0.4)); }
+.chart-line { fill: none; stroke: var(--glow-cyan); stroke-width: 2; stroke-linejoin: round; stroke-linecap: round; }
 .chart-line.prev { stroke: var(--navy-500); stroke-dasharray: 3 4; opacity: 0.8; }
 .chart-line.violet { stroke: var(--glow-violet); }
 .chart-line.electric { stroke: var(--glow-electric); }
@@ -571,9 +530,7 @@ body { overflow-x: hidden; }
   border-bottom: 1px solid var(--border);
   letter-spacing: 0.15em; text-transform: uppercase;
   font-weight: 500; white-space: nowrap;
-  background: linear-gradient(180deg, rgba(15,31,77,0.55) 0%, rgba(6,13,37,0.45) 100%);
-  backdrop-filter: blur(10px);
-  -webkit-backdrop-filter: blur(10px);
+  background: var(--bg-raised);
 }
 .tbl th.num, .tbl td.num { text-align: right; }
 .tbl td {
@@ -586,17 +543,17 @@ body { overflow-x: hidden; }
   transition: background 150ms var(--ease-smooth);
 }
 .tbl tbody tr:hover {
-  background: linear-gradient(90deg, rgba(91,200,255,0.06) 0%, rgba(91,200,255,0.02) 100%);
+  background: color-mix(in oklab, var(--accent) 5%, transparent);
   cursor: pointer;
 }
 .tbl tbody tr:hover td:first-child { box-shadow: inset 2px 0 0 var(--glow-cyan); }
 [data-theme="light"] .tbl th {
-  background: linear-gradient(180deg, rgba(255,255,255,0.85) 0%, rgba(244,246,251,0.65) 100%);
+  background: var(--bg-raised);
   color: var(--navy-600);
   border-bottom-color: var(--border);
 }
 [data-theme="light"] .tbl tbody tr:hover {
-  background: linear-gradient(90deg, rgba(91,200,255,0.10) 0%, rgba(91,200,255,0.04) 100%);
+  background: color-mix(in oklab, var(--accent) 5%, transparent);
 }
 
 .rank {
@@ -717,33 +674,29 @@ body { overflow-x: hidden; }
   font-family: var(--f-mono); font-size: 9.5px;
   letter-spacing: 0.1em; text-transform: uppercase;
   padding: 3px 7px; border-radius: 4px;
-  background: linear-gradient(180deg, rgba(91,200,255,0.18) 0%, rgba(91,200,255,0.08) 100%);
-  color: var(--glow-cyan);
-  border: 1px solid var(--border);
-  border-top-color: rgba(255,255,255,0.18);
-  backdrop-filter: blur(6px) saturate(160%);
-  -webkit-backdrop-filter: blur(6px) saturate(160%);
-  box-shadow: inset 0 1px 0 rgba(255,255,255,0.15), inset 0 -1px 0 rgba(0,0,0,0.10);
+  background: color-mix(in oklab, var(--accent) 12%, transparent);
+  color: var(--accent);
+  border: 1px solid color-mix(in oklab, var(--accent) 35%, transparent);
 }
 .badge.ok {
-  background: linear-gradient(180deg, rgba(16,185,129,0.22) 0%, rgba(16,185,129,0.08) 100%);
-  color: var(--success); border-color: rgba(16,185,129,0.35);
+  background: color-mix(in oklab, var(--success) 12%, transparent);
+  color: var(--success); border-color: color-mix(in oklab, var(--success) 35%, transparent);
 }
 .badge.warn {
-  background: linear-gradient(180deg, rgba(245,158,11,0.22) 0%, rgba(245,158,11,0.08) 100%);
-  color: var(--warning); border-color: rgba(245,158,11,0.35);
+  background: color-mix(in oklab, var(--warning) 12%, transparent);
+  color: var(--warning); border-color: color-mix(in oklab, var(--warning) 35%, transparent);
 }
 .badge.bad {
-  background: linear-gradient(180deg, rgba(239,68,68,0.22) 0%, rgba(239,68,68,0.08) 100%);
-  color: var(--danger); border-color: rgba(239,68,68,0.35);
+  background: color-mix(in oklab, var(--danger) 12%, transparent);
+  color: var(--danger); border-color: color-mix(in oklab, var(--danger) 35%, transparent);
 }
 .badge.neutral {
-  background: linear-gradient(180deg, rgba(140,161,200,0.18) 0%, rgba(140,161,200,0.06) 100%);
-  color: var(--navy-200); border-color: var(--border-soft);
+  background: color-mix(in oklab, var(--fg4) 12%, transparent);
+  color: var(--fg4); border-color: color-mix(in oklab, var(--fg4) 35%, transparent);
 }
 
 /* tiny rate bar */
-.ratebar { position: relative; height: 4px; width: 70px; background: rgba(91,200,255,0.08); border-radius: 999px; overflow: hidden; margin-top: 4px; }
+.ratebar { position: relative; height: 4px; width: 70px; background: color-mix(in oklab, var(--fg1) 8%, transparent); border-radius: 999px; overflow: hidden; margin-top: 4px; }
 .ratebar > span { display: block; height: 100%; border-radius: 999px; background: var(--glow-cyan); }
 .ratebar.ok > span { background: var(--success); }
 .ratebar.warn > span { background: var(--warning); }
@@ -800,9 +753,8 @@ body { overflow-x: hidden; }
 .hbar .bar-track .bar {
   position: absolute; left: 0; top: 6px; height: 8px;
   min-width: 1px; /* legibilidade pra países muito pequenos */
-  background: linear-gradient(90deg, var(--glow-cyan), rgba(91,200,255,0.3));
+  background: var(--accent);
   border-radius: 3px;
-  box-shadow: 0 0 8px rgba(91,200,255,0.2);
 }
 .hbar .bar-track .nm {
   position: relative; z-index: 1; color: var(--white);
@@ -819,8 +771,9 @@ body { overflow-x: hidden; }
 /* platform health card */
 .ph-card {
   padding: 14px; border-radius: 8px;
-  background: linear-gradient(135deg, rgba(15,31,77,0.35), rgba(6,13,37,0.5));
-  border: 1px solid var(--border-soft);
+  background: var(--bg-raised);
+  border: 1px solid var(--border);
+  box-shadow: var(--shadow-md);
   display: flex; flex-direction: column; gap: 10px;
 }
 .ph-head { display: flex; align-items: center; justify-content: space-between; }
@@ -828,8 +781,8 @@ body { overflow-x: hidden; }
 .ph-logo {
   width: 32px; height: 32px; border-radius: 6px;
   display: grid; place-items: center;
-  font-family: var(--f-display); color: var(--white); font-weight: 500;
-  background: linear-gradient(135deg, rgba(91,200,255,0.15), rgba(74,144,255,0.05));
+  font-family: var(--f-display); color: var(--accent); font-weight: 500;
+  background: color-mix(in oklab, var(--accent) 12%, transparent);
   border: 1px solid var(--border);
 }
 .ph-name .txt { display: flex; flex-direction: column; }
@@ -844,11 +797,11 @@ body { overflow-x: hidden; }
 }
 .ph-status .led { width: 8px; height: 8px; border-radius: 50%; }
 .ph-status.ok { color: var(--success); }
-.ph-status.ok .led { background: var(--success); box-shadow: 0 0 6px var(--success); }
+.ph-status.ok .led { background: var(--success); }
 .ph-status.warn { color: var(--warning); }
-.ph-status.warn .led { background: var(--warning); box-shadow: 0 0 6px var(--warning); }
+.ph-status.warn .led { background: var(--warning); }
 .ph-status.bad { color: var(--danger); }
-.ph-status.bad .led { background: var(--danger); box-shadow: 0 0 6px var(--danger); }
+.ph-status.bad .led { background: var(--danger); }
 
 /* ---------- FUNNEL ---------- */
 .funnel { display: flex; flex-direction: column; gap: 4px; }
@@ -865,16 +818,15 @@ body { overflow-x: hidden; }
   width: 22px; height: 22px; border-radius: 4px;
   display: grid; place-items: center;
   font-family: var(--f-mono); font-size: 10px; color: var(--glow-cyan);
-  background: rgba(91,200,255,0.08); border: 1px solid var(--border);
+  background: color-mix(in oklab, var(--accent) 8%, transparent); border: 1px solid var(--border);
   letter-spacing: 0.02em;
 }
 .funnel-bar-wrap { position: relative; height: 34px; }
 .funnel-bar {
   position: absolute; left: 50%; transform: translateX(-50%);
   height: 34px; border-radius: 4px;
-  background: linear-gradient(90deg, rgba(91,200,255,0.25), rgba(74,144,255,0.18));
+  background: color-mix(in oklab, var(--accent) 18%, transparent);
   border: 1px solid var(--border-strong);
-  box-shadow: 0 0 20px -8px rgba(91,200,255,0.4);
   display: grid; place-items: center;
   font-family: var(--f-mono); font-size: 11px; color: var(--white);
   letter-spacing: 0.05em;
@@ -898,12 +850,12 @@ body { overflow-x: hidden; }
 }
 .mini-kpi {
   padding: 12px 14px;
-  background: rgba(15,31,77,0.3);
-  border: 1px solid var(--border-soft);
+  background: var(--bg-raised);
+  border: 1px solid var(--border);
   border-radius: 8px;
   transition: transform 200ms var(--ease-smooth), border-color 200ms var(--ease-smooth), box-shadow 200ms var(--ease-smooth);
 }
-.mini-kpi:hover { transform: translateY(-2px); border-color: var(--border); box-shadow: 0 8px 22px -12px rgba(91,200,255,0.20); }
+.mini-kpi:hover { transform: translateY(-2px); border-color: var(--fg1); box-shadow: var(--shadow-lg); }
 .mini-kpi .l { font-family: var(--f-mono); font-size: 10px; letter-spacing: 0.18em; text-transform: uppercase; color: var(--glow-cyan); margin-bottom: 8px; }
 .mini-kpi .v { font-family: var(--f-display); font-size: 26px; font-weight: 600; color: var(--white); letter-spacing: -0.025em; line-height: 1; }
 .mini-kpi .s { font-family: var(--f-mono); font-size: 10px; color: var(--navy-300); letter-spacing: 0.03em; margin-top: 6px; }
@@ -912,26 +864,22 @@ body { overflow-x: hidden; }
 .prod-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
 .prod-card {
   padding: 14px;
-  background: linear-gradient(135deg, rgba(15,31,77,0.4), rgba(6,13,37,0.55));
-  border: 1px solid var(--border-soft);
+  background: var(--bg-raised);
+  border: 1px solid var(--border);
   border-radius: 10px;
+  box-shadow: var(--shadow-md);
   display: flex; flex-direction: column; gap: 10px;
   cursor: pointer; transition: all 200ms var(--ease-smooth);
   position: relative; overflow: hidden;
 }
-.prod-card:hover { border-color: var(--border); transform: translateY(-2px); box-shadow: 0 10px 30px -15px rgba(91,200,255,0.3); }
+.prod-card:hover { border-color: var(--fg1); transform: translateY(-2px); box-shadow: var(--shadow-lg); }
 .prod-thumb {
   height: 86px; border-radius: 6px;
-  background: linear-gradient(135deg, rgba(91,200,255,0.1), rgba(139,127,255,0.05));
+  background: color-mix(in oklab, var(--accent) 12%, transparent);
   border: 1px solid var(--border-soft);
   display: grid; place-items: center;
-  color: var(--glow-cyan);
+  color: var(--accent);
   position: relative;
-}
-.prod-thumb::after {
-  content: ''; position: absolute; inset: 0;
-  background: radial-gradient(circle at 30% 30%, rgba(91,200,255,0.15), transparent 60%);
-  pointer-events: none;
 }
 .prod-name { font-family: var(--f-display); font-size: 16px; color: var(--white); letter-spacing: -0.01em; }
 .prod-plat { display: flex; gap: 6px; align-items: center; margin-top: -4px; }
@@ -946,70 +894,51 @@ body { overflow-x: hidden; }
 /* (legado removido: country-class .flag — substituído por .fi do flag-icons,
    estilizado em .hbars .fi acima) */
 
-/* status pips em transactions — liquid glass com sheen + bevel */
+/* status pips em transactions — chip chapado North Editorial: fundo
+   color-mix 12%, texto na cor semântica, borda 35%. Tokens theme-aware. */
 .st {
   font-family: var(--f-mono); font-size: 9.5px;
   letter-spacing: 0.1em; text-transform: uppercase;
   padding: 3px 9px; border-radius: 999px;
   display: inline-flex; align-items: center; gap: 5px;
-  backdrop-filter: blur(8px) saturate(160%);
-  -webkit-backdrop-filter: blur(8px) saturate(160%);
   border: 1px solid;
-  border-top-color: rgba(255,255,255,0.30);
-  box-shadow: inset 0 1px 0 rgba(255,255,255,0.20), inset 0 -1px 0 rgba(0,0,0,0.12);
   font-weight: 500;
 }
 .st-approved {
-  background: linear-gradient(180deg, rgba(16,185,129,0.28) 0%, rgba(16,185,129,0.10) 100%);
-  color: var(--success); border-color: rgba(16,185,129,0.40);
+  background: color-mix(in oklab, var(--success) 12%, transparent);
+  color: var(--success); border-color: color-mix(in oklab, var(--success) 35%, transparent);
 }
 .st-pending {
-  background: linear-gradient(180deg, rgba(245,158,11,0.28) 0%, rgba(245,158,11,0.10) 100%);
-  color: var(--warning); border-color: rgba(245,158,11,0.40);
+  background: color-mix(in oklab, var(--warning) 12%, transparent);
+  color: var(--warning); border-color: color-mix(in oklab, var(--warning) 35%, transparent);
 }
 .st-refunded {
-  background: linear-gradient(180deg, rgba(140,161,200,0.22) 0%, rgba(140,161,200,0.06) 100%);
-  color: var(--navy-200); border-color: var(--border);
+  background: color-mix(in oklab, var(--fg4) 12%, transparent);
+  color: var(--fg4); border-color: color-mix(in oklab, var(--fg4) 35%, transparent);
 }
 .st-chargeback {
-  background: linear-gradient(180deg, rgba(239,68,68,0.28) 0%, rgba(239,68,68,0.10) 100%);
-  color: var(--danger); border-color: rgba(239,68,68,0.40);
+  background: color-mix(in oklab, var(--danger) 12%, transparent);
+  color: var(--danger); border-color: color-mix(in oklab, var(--danger) 35%, transparent);
 }
-[data-theme="light"] .st-approved { color: #047857; background: linear-gradient(180deg, rgba(16,185,129,0.30) 0%, rgba(16,185,129,0.18) 100%); }
-[data-theme="light"] .st-pending { color: #92400e; background: linear-gradient(180deg, rgba(245,158,11,0.30) 0%, rgba(245,158,11,0.18) 100%); }
-[data-theme="light"] .st-chargeback { color: #b91c1c; background: linear-gradient(180deg, rgba(239,68,68,0.28) 0%, rgba(239,68,68,0.16) 100%); }
-[data-theme="light"] .st-refunded { color: var(--fg3); background: linear-gradient(180deg, rgba(255,255,255,0.85) 0%, rgba(244,246,251,0.6) 100%); }
 
-/* stage pills (etapa do funil) em transactions — mesmo liquid glass do
-   .st: blur+saturate, sheen no topo, bevel inset, gradiente vertical.
-   Cores: FE cyan · Upsell fúcsia · Bump violeta · Downsell âmbar ·
-   Recovery verde (Upsell trocado de azul→fúcsia pra não colar no FE). */
+/* stage pills (etapa do funil) em transactions — chip chapado North
+   Editorial: texto na cor semântica, fundo color-mix 12%, borda 35%. */
 .stage-pill {
   font-family: var(--f-mono); font-size: 10px;
   letter-spacing: 0.06em; text-transform: uppercase;
   padding: 3px 9px; border-radius: 999px;
   display: inline-flex; align-items: center;
-  backdrop-filter: blur(6px) saturate(150%);
-  -webkit-backdrop-filter: blur(6px) saturate(150%);
   border: 1px solid;
-  border-top-color: rgba(255,255,255,0.45);
-  box-shadow: inset 0 1px 0 rgba(255,255,255,0.28), inset 0 -1px 0 rgba(0,0,0,0.18),
-              0 1px 4px -1px rgba(0,0,0,0.35);
   font-weight: 600; white-space: nowrap;
-  text-shadow: 0 1px 1px rgba(0,0,0,0.35);
 }
-/* Fundo bem mais saturado (texto branco em cima do tint da cor) — no
-   navy escuro o gradiente fraco anterior sumia. */
-.sp-fe   { background: linear-gradient(180deg, rgba(91,200,255,0.85) 0%, rgba(91,200,255,0.55) 100%); color: #06223a; border-color: rgba(91,200,255,0.75); text-shadow: none; }
-.sp-up   { background: linear-gradient(180deg, rgba(232,121,249,0.90) 0%, rgba(216,70,239,0.62) 100%); color: #fff; border-color: rgba(232,121,249,0.80); }
-.sp-bump { background: linear-gradient(180deg, rgba(139,127,255,0.90) 0%, rgba(112,98,240,0.62) 100%); color: #fff; border-color: rgba(139,127,255,0.80); }
-.sp-dw   { background: linear-gradient(180deg, rgba(255,177,78,0.92) 0%, rgba(245,150,40,0.65) 100%); color: #3a2406; border-color: rgba(255,177,78,0.82); text-shadow: none; }
-.sp-rc   { background: linear-gradient(180deg, rgba(40,200,120,0.90) 0%, rgba(22,170,98,0.62) 100%); color: #042b18; border-color: rgba(40,200,120,0.80); text-shadow: none; }
-[data-theme="light"] .sp-fe   { color: #06223a; background: linear-gradient(180deg, rgba(91,200,255,0.92) 0%, rgba(91,200,255,0.70) 100%); }
-[data-theme="light"] .sp-up   { color: #fff;    background: linear-gradient(180deg, rgba(216,70,239,0.92) 0%, rgba(192,38,211,0.74) 100%); }
-[data-theme="light"] .sp-bump { color: #fff;    background: linear-gradient(180deg, rgba(124,108,255,0.92) 0%, rgba(99,82,240,0.74) 100%); }
-[data-theme="light"] .sp-dw   { color: #3a2406; background: linear-gradient(180deg, rgba(255,177,78,0.95) 0%, rgba(245,150,40,0.78) 100%); }
-[data-theme="light"] .sp-rc   { color: #042b18; background: linear-gradient(180deg, rgba(40,200,120,0.92) 0%, rgba(22,170,98,0.74) 100%); }
+/* Chips chapados (North Editorial): fundo color-mix 12%, texto na cor
+   semântica, borda color-mix 35%. Tokens theme-aware — sem override claro.
+   FE accent · Upsell danger · Bump fg4 · Downsell warning · Recovery money. */
+.sp-fe   { background: color-mix(in oklab, var(--accent) 12%, transparent); color: var(--accent); border-color: color-mix(in oklab, var(--accent) 35%, transparent); }
+.sp-up   { background: color-mix(in oklab, var(--danger) 12%, transparent); color: var(--danger); border-color: color-mix(in oklab, var(--danger) 35%, transparent); }
+.sp-bump { background: color-mix(in oklab, var(--fg4) 12%, transparent); color: var(--fg4); border-color: color-mix(in oklab, var(--fg4) 35%, transparent); }
+.sp-dw   { background: color-mix(in oklab, var(--warning) 12%, transparent); color: var(--warning); border-color: color-mix(in oklab, var(--warning) 35%, transparent); }
+.sp-rc   { background: color-mix(in oklab, var(--money) 12%, transparent); color: var(--money); border-color: color-mix(in oklab, var(--money) 35%, transparent); }
 
 /* drill-down modal */
 .drawer-backdrop { position: fixed; inset: 0; background: rgba(13,18,21,0.72); z-index: 50; animation: fadeIn 200ms var(--ease-smooth); }
@@ -1044,8 +973,8 @@ body { overflow-x: hidden; }
   display: flex; align-items: flex-start; gap: 10px;
   border: 1px solid;
 }
-.flag-card.bad { background: rgba(239,68,68,0.06); border-color: rgba(239,68,68,0.3); }
-.flag-card.warn { background: rgba(245,158,11,0.06); border-color: rgba(245,158,11,0.3); }
+.flag-card.bad { background: color-mix(in oklab, var(--danger) 8%, transparent); border-color: color-mix(in oklab, var(--danger) 35%, transparent); }
+.flag-card.warn { background: color-mix(in oklab, var(--warning) 8%, transparent); border-color: color-mix(in oklab, var(--warning) 35%, transparent); }
 .flag-card svg { flex-shrink: 0; margin-top: 2px; }
 .flag-card .ft { display: flex; flex-direction: column; gap: 2px; }
 .flag-card .ft .t { color: var(--white); font-size: 13px; }
@@ -1062,11 +991,9 @@ body { overflow-x: hidden; }
 .modal-backdrop {
   position: fixed; inset: 0;
   background: rgba(3, 6, 23, 0.72);
-  backdrop-filter: blur(6px);
-  -webkit-backdrop-filter: blur(6px);
-  /* Acima da topbar (.top, z 3) e do drawer (.drawer, z 51). Sticky+
-     backdrop-filter da topbar criam stacking context próprio que em
-     alguns browsers competia com o modal — z 100 resolve sem ambiguidade. */
+  /* Acima da topbar (.top, z 3) e do drawer (.drawer, z 51). Sticky da
+     topbar cria stacking context próprio que em alguns browsers
+     competia com o modal — z 100 resolve sem ambiguidade. */
   z-index: 100;
   animation: fadeIn 200ms var(--ease-smooth);
   display: grid;
@@ -1096,12 +1023,9 @@ body { overflow-x: hidden; }
      Usamos só opacity em modalIn por segurança. */
 }
 [data-theme="light"] .modal-card {
-  background: linear-gradient(180deg, #FFFFFF 0%, #F4F6FB 100%);
-  border-color: rgba(30,58,138,0.20);
-  border-top-color: rgba(255,255,255,0.95);
-  box-shadow:
-    0 30px 80px -10px rgba(15,31,77,0.20),
-    inset 0 1px 0 rgba(255,255,255,0.95);
+  background: var(--bg-elev);
+  border-color: var(--border);
+  box-shadow: var(--shadow-lg);
 }
 @keyframes modalIn {
   from { opacity: 0; }
@@ -1190,89 +1114,29 @@ body { overflow-x: hidden; }
 [data-theme="light"] .user-chip .who .nm { color: var(--fg1); }
 [data-theme="light"] .user-chip .who .rl { color: var(--fg5); }
 
-[data-theme="light"] .top {
-  background: rgba(255,255,255,0.75);
-  border-bottom-color: var(--border-soft);
-  box-shadow: inset 0 1px 0 rgba(255,255,255,0.9);
-}
+/* .top/.icon-btn: bases agora 100% token-based (theme-aware) — sem
+   override claro de superfície. */
 [data-theme="light"] .top-crumb { color: var(--fg5); }
 [data-theme="light"] .top-crumb .sep { color: var(--navy-200); }
 [data-theme="light"] .top-h1 { color: var(--fg1); }
-[data-theme="light"] .icon-btn {
-  background: rgba(255,255,255,0.6);
-  color: var(--fg3);
-}
-[data-theme="light"] .icon-btn:hover {
-  color: var(--navy-600);
-  background: rgba(91,200,255,0.12);
-}
-[data-theme="light"] .filters {
-  background: rgba(255,255,255,0.65);
-  border-bottom-color: var(--border-soft);
-}
+/* .filters/.chip/.date-chip/.select-btn/.seg: bases 100% token-based
+   (theme-aware) — só sobram ajustes de COR de texto no claro. */
 [data-theme="light"] .f-label { color: var(--fg5); }
-
 [data-theme="light"] .chip,
 [data-theme="light"] .date-chip,
-[data-theme="light"] .select-btn {
-  background: rgba(255,255,255,0.55);
-  color: var(--fg2);
-}
-[data-theme="light"] .chip:hover,
-[data-theme="light"] .date-chip:hover,
-[data-theme="light"] .select-btn:hover {
-  color: var(--navy-600);
-  border-color: var(--border-strong);
-}
-[data-theme="light"] .chip.is-active,
-[data-theme="light"] .date-chip.is-active {
-  background: rgba(91,200,255,0.18);
-  color: var(--navy-600);
-}
-[data-theme="light"] .seg {
-  background: rgba(255,255,255,0.5);
-  border-color: var(--border-soft);
-}
+[data-theme="light"] .select-btn { color: var(--fg2); }
 [data-theme="light"] .seg button { color: var(--fg4); }
-[data-theme="light"] .seg button:hover { color: var(--navy-600); }
-[data-theme="light"] .seg button.is-active {
-  background: rgba(91,200,255,0.20);
-  color: var(--navy-600);
-}
 
 [data-theme="light"] .page-head h2 { color: var(--fg1); }
 [data-theme="light"] .page-head .sub { color: var(--fg5); }
 
-[data-theme="light"] .btn-ghost {
-  background: rgba(255,255,255,0.55);
-  color: var(--fg2);
-  border-color: var(--border);
-}
-[data-theme="light"] .btn-ghost:hover {
-  color: var(--navy-600);
-  background: rgba(91,200,255,0.12);
-}
-[data-theme="light"] .btn-primary {
-  background: linear-gradient(135deg, var(--navy-500), var(--navy-700));
-  color: var(--white);
-  box-shadow: inset 0 1px 0 rgba(255,255,255,0.18), 0 6px 20px -10px rgba(30,58,138,0.35);
-}
+/* .btn-ghost: alinhado ao override layer (sólido) — sem override claro. */
+/* .btn-primary: tinta sólida nos dois temas (override layer) — sem
+   override claro (gradiente navy antigo removido). */
 
-[data-theme="light"] .kpi {
-  background: linear-gradient(135deg, rgba(255,255,255,0.85), rgba(244,246,251,0.65));
-  border-color: var(--border);
-  box-shadow:
-    0 4px 14px -4px rgba(15,31,77,0.08),
-    inset 0 1px 0 rgba(255,255,255,0.95),
-    inset 0 -20px 40px -20px rgba(91,200,255,0.10);
-}
-[data-theme="light"] .kpi:hover { border-color: var(--border-strong); }
-[data-theme="light"] .kpi.is-alert {
-  background: linear-gradient(135deg, rgba(255,236,236,0.7), rgba(255,255,255,0.65));
-  border-color: rgba(239,68,68,0.35);
-}
+/* .kpi: base agora 100% token-based (theme-aware) — sem override claro
+   de superfície. */
 [data-theme="light"] .kpi-label { color: var(--navy-600); }
-[data-theme="light"] .kpi-label::before { box-shadow: 0 0 6px rgba(91,200,255,0.6); }
 [data-theme="light"] .kpi-value { color: var(--fg1); }
 [data-theme="light"] .kpi-value .unit { color: var(--fg5); }
 [data-theme="light"] .kpi-icon {
@@ -1281,13 +1145,8 @@ body { overflow-x: hidden; }
 }
 [data-theme="light"] .delta.flat { color: var(--fg5); }
 
-[data-theme="light"] .panel {
-  background: linear-gradient(135deg, rgba(255,255,255,0.78), rgba(244,246,251,0.55));
-  border-color: var(--border);
-  box-shadow:
-    0 8px 24px -10px rgba(15,31,77,0.10),
-    inset 0 1px 0 rgba(255,255,255,0.85);
-}
+/* .panel: base agora 100% token-based (theme-aware) — sem override
+   claro de superfície. */
 [data-theme="light"] .panel-h3 { color: var(--fg1); }
 [data-theme="light"] .panel-sub { color: var(--fg5); }
 [data-theme="light"] .panel-metric { color: var(--fg1); }
@@ -1303,47 +1162,35 @@ body { overflow-x: hidden; }
 [data-theme="light"] .tbl th {
   color: var(--fg5);
   border-bottom-color: var(--border);
-  background: rgba(255,255,255,0.75);
+  background: var(--bg-raised);
 }
 [data-theme="light"] .tbl td {
   color: var(--fg2);
   border-bottom-color: rgba(30,58,138,0.06);
 }
-[data-theme="light"] .tbl tbody tr:hover { background: rgba(91,200,255,0.08); }
+[data-theme="light"] .tbl tbody tr:hover { background: color-mix(in oklab, var(--accent) 5%, transparent); }
 [data-theme="light"] .rank,
 [data-theme="light"] .cell-mono { color: var(--fg4); }
 [data-theme="light"] .cell-aff .nm { color: var(--fg1); }
 [data-theme="light"] .cell-aff .id { color: var(--fg5); }
 
-[data-theme="light"] .mini-kpi {
-  background: rgba(255,255,255,0.7);
-  border-color: var(--border);
-  box-shadow: inset 0 1px 0 rgba(255,255,255,0.9);
-}
+/* .mini-kpi: base 100% token-based — sem override claro de superfície. */
 [data-theme="light"] .mini-kpi .l { color: var(--navy-600); }
 [data-theme="light"] .mini-kpi .v { color: var(--fg1); }
 [data-theme="light"] .mini-kpi .s { color: var(--fg4); }
 
 [data-theme="light"] .prod-card {
-  background: linear-gradient(135deg, rgba(255,255,255,0.78), rgba(244,246,251,0.55));
+  background: var(--bg-raised);
   border-color: var(--border);
-  box-shadow:
-    0 6px 18px -8px rgba(15,31,77,0.10),
-    inset 0 1px 0 rgba(255,255,255,0.85);
 }
 [data-theme="light"] .prod-card:hover {
-  border-color: var(--border-strong);
-  box-shadow:
-    0 12px 28px -10px rgba(91,200,255,0.30),
-    inset 0 1px 0 rgba(255,255,255,0.85);
+  border-color: var(--fg1);
+  box-shadow: var(--shadow-lg);
 }
 [data-theme="light"] .prod-name { color: var(--fg1); }
 [data-theme="light"] .prod-stat .l { color: var(--fg5); }
 [data-theme="light"] .prod-stat .v { color: var(--fg1); }
-[data-theme="light"] .prod-thumb {
-  background: linear-gradient(135deg, rgba(91,200,255,0.20), rgba(139,127,255,0.10));
-  color: var(--navy-600);
-}
+/* .prod-thumb: chip accent theme-aware — sem override claro. */
 
 [data-theme="light"] .funnel-stage { color: var(--fg1); }
 [data-theme="light"] .funnel-stage .n {
@@ -1351,16 +1198,15 @@ body { overflow-x: hidden; }
   color: var(--navy-600);
 }
 [data-theme="light"] .funnel-bar {
-  background: linear-gradient(90deg, rgba(91,200,255,0.40), rgba(74,144,255,0.25));
+  background: color-mix(in oklab, var(--accent) 18%, transparent);
   color: var(--navy-700);
 }
 [data-theme="light"] .funnel-meta .vol { color: var(--fg1); }
 [data-theme="light"] .funnel-meta .pct { color: var(--fg5); }
 
 [data-theme="light"] .ph-card {
-  background: rgba(255,255,255,0.75);
+  background: var(--bg-raised);
   border-color: var(--border);
-  box-shadow: inset 0 1px 0 rgba(255,255,255,0.9);
 }
 [data-theme="light"] .ph-name .nm { color: var(--fg1); }
 [data-theme="light"] .ph-name .sync { color: var(--fg5); }
@@ -1385,34 +1231,21 @@ body { overflow-x: hidden; }
 
 [data-theme="light"] .drawer-backdrop { background: rgba(244,246,251,0.55); }
 [data-theme="light"] .drawer {
-  background: linear-gradient(180deg, rgba(255,255,255,0.96), rgba(244,246,251,0.98));
+  background: var(--bg-elev);
   border-left-color: var(--border);
-  box-shadow:
-    -20px 0 60px -10px rgba(15,31,77,0.18),
-    inset 1px 0 0 rgba(255,255,255,0.9);
+  box-shadow: -20px 0 60px -10px rgba(15,31,77,0.18);
 }
 [data-theme="light"] .drawer-aff h3 { color: var(--fg1); }
 [data-theme="light"] .drawer-aff .sub { color: var(--fg5); }
-[data-theme="light"] .flag-card.bad { background: rgba(239,68,68,0.08); }
-[data-theme="light"] .flag-card.warn { background: rgba(245,158,11,0.10); }
+[data-theme="light"] .flag-card.bad { background: color-mix(in oklab, var(--danger) 8%, transparent); }
+[data-theme="light"] .flag-card.warn { background: color-mix(in oklab, var(--warning) 8%, transparent); }
 [data-theme="light"] .flag-card .ft .t { color: var(--fg1); }
 [data-theme="light"] .flag-card .ft .d { color: var(--fg3); }
 
 [data-theme="light"] .tbl-wrap::-webkit-scrollbar-thumb,
-[data-theme="light"] .drawer::-webkit-scrollbar-thumb { background: rgba(30,58,138,0.18); }
+[data-theme="light"] .drawer::-webkit-scrollbar-thumb { background: color-mix(in oklab, var(--fg1) 18%, transparent); }
 [data-theme="light"] .tbl-wrap::-webkit-scrollbar-thumb:hover,
-[data-theme="light"] .drawer::-webkit-scrollbar-thumb:hover { background: rgba(30,58,138,0.32); }
-
-[data-theme="light"] .badge {
-  background: rgba(91,200,255,0.14);
-  color: var(--navy-600);
-  border-color: var(--border);
-}
-[data-theme="light"] .st-refunded {
-  background: rgba(140,161,200,0.18);
-  color: var(--fg3);
-  border-color: var(--border);
-}
+[data-theme="light"] .drawer::-webkit-scrollbar-thumb:hover { background: color-mix(in oklab, var(--fg1) 32%, transparent); }
 
 [data-theme="light"] .empty { color: var(--fg5); }
 
@@ -1435,26 +1268,18 @@ body { overflow-x: hidden; }
   position: absolute; top: 50%;
   width: 22px; height: 22px;
   border-radius: 50%;
-  background: linear-gradient(135deg, rgba(255,255,255,0.30), rgba(91,200,255,0.50));
-  border: 1px solid rgba(255,255,255,0.35);
+  background: var(--bg-elev);
+  border: 1px solid var(--border);
   display: grid; place-items: center;
   color: var(--fg1);
   transform: translateY(-50%);
   transition: left 250ms var(--ease-smooth), background 200ms var(--ease-smooth);
-  box-shadow:
-    0 2px 6px rgba(0,0,0,0.30),
-    inset 0 1px 0 rgba(255,255,255,0.55);
+  box-shadow: var(--shadow-sm);
 }
 .theme-toggle .knob { left: 4px; }
+/* knob chapado theme-aware — no claro só muda a POSIÇÃO */
 [data-theme="light"] .theme-toggle .knob {
   left: calc(100% - 26px);
-  background: linear-gradient(135deg, rgba(255,255,255,0.95), rgba(91,200,255,0.65));
-  border-color: rgba(255,255,255,0.85);
-  color: var(--navy-700);
-}
-[data-theme="light"] .theme-toggle {
-  background: rgba(255,255,255,0.65);
-  border-color: var(--border);
 }
 .theme-toggle .knob svg { width: 12px; height: 12px; }
 
@@ -1540,11 +1365,8 @@ body { overflow-x: hidden; }
   color: var(--navy-600);
 }
 
-/* Theme toggle em light: knob mais legível */
-[data-theme="light"] .theme-toggle {
-  background: rgba(255,255,255,0.8);
-  box-shadow: inset 0 1px 0 rgba(255,255,255,0.95), 0 2px 6px -2px rgba(15,31,77,0.10);
-}
+/* .theme-toggle: superfície vem do override layer (sólida) — sem
+   override claro translúcido. */
 
 /* Drawer-head em light pode ter title invisível se ficou .drawer-aff h3
    sem override; o bump pra fg1 acima já cobre, mas reforço aqui: */
@@ -1556,118 +1378,16 @@ body { overflow-x: hidden; }
 
 
 /* ============================================================
-   LIQUID GLASS — sheen + rim refraction nas superfícies-chave
-   Aplica top-sheen (::before) e bottom rim cyan/violet (::after)
-   no .kpi, .panel, .drawer, .top, .filters, sem mudar JSX. Usa
-   mix-blend-mode: screen no dark; opacity normalizada no light.
+   LIQUID GLASS — NEUTRALIZADO (North Editorial §1: sem glass em
+   superfície de trabalho). Sheens de .kpi/.panel/.top/.filters/
+   .btn-primary removidos; a sidebar (.side::before, cena fixa)
+   mantém o próprio sheen adiante. Helpers de stacking mantidos.
    ============================================================ */
 .kpi, .panel, .drawer-head { isolation: isolate; }
-
-/* topbar + filters: brilho horizontal sutil */
-.top::before,
-.filters::before {
-  content: '';
-  position: absolute; inset: 0;
-  pointer-events: none;
-  background:
-    linear-gradient(180deg,
-      rgba(255,255,255,0.10) 0%,
-      rgba(255,255,255,0.02) 4%,
-      transparent 12%);
-  mix-blend-mode: screen;
-}
 .top { position: sticky; }
 .filters { position: sticky; }
-[data-theme="light"] .top::before,
-[data-theme="light"] .filters::before {
-  mix-blend-mode: normal;
-  opacity: 0.5;
-  background:
-    linear-gradient(180deg,
-      rgba(255,255,255,0.85) 0%,
-      rgba(255,255,255,0.30) 4%,
-      transparent 16%);
-}
-
-/* KPI cards — top accent line (HUD signal) + sheen + canto rimado em cyan */
-.kpi::before {
-  content: '';
-  position: absolute; inset: 0;
-  pointer-events: none;
-  border-radius: inherit;
-  background:
-    /* top accent line — gradient cyan, fade left/right */
-    linear-gradient(90deg,
-      transparent 0%,
-      var(--glow-cyan) 50%,
-      transparent 100%) top/100% 1px no-repeat,
-    /* top sheen */
-    radial-gradient(ellipse 130% 55% at 50% -25%,
-      rgba(255,255,255,0.30) 0%,
-      rgba(255,255,255,0.08) 22%,
-      transparent 50%);
-  mix-blend-mode: screen;
-  z-index: 0;
-}
-.kpi.is-alert::before {
-  background:
-    linear-gradient(90deg,
-      transparent 0%,
-      var(--danger) 50%,
-      transparent 100%) top/100% 1px no-repeat,
-    radial-gradient(ellipse 130% 55% at 50% -25%,
-      rgba(255,255,255,0.20) 0%,
-      transparent 50%);
-}
-.kpi::after {
-  content: '';
-  position: absolute; inset: 0;
-  pointer-events: none;
-  border-radius: inherit;
-  background:
-    radial-gradient(ellipse 140% 70% at 50% 130%,
-      rgba(91,200,255,0.18) 0%,
-      transparent 55%);
-  mix-blend-mode: screen;
-  z-index: 0;
-}
 .kpi > * { position: relative; z-index: 1; }
-[data-theme="light"] .kpi::before {
-  mix-blend-mode: normal;
-  background:
-    radial-gradient(ellipse 130% 55% at 50% -25%,
-      rgba(255,255,255,0.85) 0%,
-      rgba(255,255,255,0.30) 22%,
-      transparent 50%);
-}
-[data-theme="light"] .kpi::after {
-  mix-blend-mode: normal;
-  opacity: 0.7;
-}
-
-/* Panels — sheen sutil só no topo */
-.panel::before {
-  content: '';
-  position: absolute; left: 0; right: 0; top: 0;
-  height: 28%;
-  pointer-events: none;
-  border-radius: inherit;
-  background:
-    linear-gradient(180deg,
-      rgba(255,255,255,0.10) 0%,
-      transparent 100%);
-  mix-blend-mode: screen;
-  z-index: 0;
-}
 .panel > * { position: relative; z-index: 1; }
-[data-theme="light"] .panel::before {
-  mix-blend-mode: normal;
-  background:
-    linear-gradient(180deg,
-      rgba(255,255,255,0.7) 0%,
-      transparent 100%);
-  opacity: 0.6;
-}
 
 /* Drawer — glass profundo com sheen no topo (fica BEHIND do conteúdo
    via z-index negativo + isolation, pra não interferir nos forms). */
@@ -1699,22 +1419,11 @@ body { overflow-x: hidden; }
       transparent 100%);
 }
 
-/* Botões primários ganham um sheen líquido sutil */
+/* .btn-primary: sheen removido (tinta sólida) — helpers mantidos. */
 .btn-primary {
   position: relative;
   isolation: isolate;
   overflow: hidden;
-}
-.btn-primary::before {
-  content: '';
-  position: absolute; inset: 0;
-  background:
-    linear-gradient(180deg,
-      rgba(255,255,255,0.30) 0%,
-      rgba(255,255,255,0.05) 50%,
-      transparent 100%);
-  mix-blend-mode: screen;
-  pointer-events: none;
 }
 .btn-primary > * { position: relative; z-index: 1; }
 
@@ -1862,7 +1571,6 @@ body { overflow-x: hidden; }
 .loading-msg .dot {
   width: 6px; height: 6px; border-radius: 50%;
   background: var(--glow-cyan);
-  box-shadow: 0 0 8px var(--glow-cyan);
   animation: nsPulseDot 1.2s ease-in-out infinite;
 }
 @keyframes nsPulse    { 0%,100% { opacity: 0.55; } 50% { opacity: 1; } }

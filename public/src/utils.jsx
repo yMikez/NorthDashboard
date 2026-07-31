@@ -72,18 +72,11 @@ function platBadge(slug) {
   return PLATFORM_BADGE[slug] || { short: (slug || '??').slice(0,3).toUpperCase(), cls: 'plat-cb', upper: (slug || '').toUpperCase() };
 }
 function avatarColor(id) {
-  // deterministic hue from id
+  // Cor sólida editorial determinística a partir do id (sem gradiente).
   let h = 0;
   for (let i = 0; i < id.length; i++) h = (h * 31 + id.charCodeAt(i)) >>> 0;
-  const palettes = [
-    ['#5BC8FF','#1E3A8A'],
-    ['#8B7FFF','#1E3A8A'],
-    ['#4A90FF','#152A66'],
-    ['#5BC8FF','#8B7FFF'],
-    ['#4A90FF','#0F1F4D'],
-  ];
-  const p = palettes[h % palettes.length];
-  return `linear-gradient(135deg, ${p[0]}, ${p[1]})`;
+  const palette = ['#0E7C97', '#37D695', '#C29B3C', '#E0653A', '#3EB7D4'];
+  return palette[h % palette.length];
 }
 
 // ---------- date range utils ----------

@@ -3,6 +3,19 @@
 
 const { useState: useStateC, useMemo: useMemoC, useRef: useRefC } = React;
 
+// Cores que vão pra atributo SVG não resolvem var(--x) de forma confiável.
+// chTok lê o token computado no render (segue o tema); chAlpha aplica alfa
+// sobre o hex resolvido. (Nomes distintos de nsTok/nsAlpha do ns-charts.jsx —
+// escopo global compartilhado entre os classic scripts.)
+function chTok(name, fb) { try { var v = getComputedStyle(document.documentElement).getPropertyValue(name).trim(); return v || fb; } catch (e) { return fb; } }
+function chAlpha(hex, a) {
+  var h = String(hex || '').replace('#', '');
+  if (h.length === 3) h = h[0] + h[0] + h[1] + h[1] + h[2] + h[2];
+  var n = parseInt(h, 16);
+  if (h.length !== 6 || Number.isNaN(n)) return hex;
+  return 'rgba(' + ((n >> 16) & 255) + ',' + ((n >> 8) & 255) + ',' + (n & 255) + ',' + a + ')';
+}
+
 // ---------- Donut ----------
 // Interativo: hover (no arco OU na legenda) destaca o segmento e troca o
 // centro pro valor dele; onItemClick (opcional) torna segmentos/linhas
@@ -13,13 +26,20 @@ function Donut({ items, totalLabel = 'Total', format = (v) => fmtCurrency(v), on
   const r = 60, cx = 75, cy = 75, stroke = 16;
   const C = 2 * Math.PI * r;
   let offset = 0;
-  const colors = ['#5BC8FF', '#4A90FF', '#8B7FFF', '#a8b7d8', '#6b84b8'];
+  // Paleta tokenizada resolvida no render (segue troca de tema).
+  const colors = [
+    chTok('--accent', '#3EB7D4'),
+    chTok('--money', '#37D695'),
+    chTok('--hot', '#E0653A'),
+    chTok('--warning', '#ffd166'),
+    chTok('--gold', '#C29B3C'),
+  ];
   const act = active != null ? items[active] : null;
   const clickable = (it) => !!onItemClick && it.clickable !== false;
   return (
     <div className="donut-wrap">
       <svg className="donut" viewBox="0 0 150 150">
-        <circle cx={cx} cy={cy} r={r} fill="none" stroke="rgba(91,200,255,0.08)" strokeWidth={stroke}/>
+        <circle cx={cx} cy={cy} r={r} fill="none" stroke={chAlpha(chTok('--fg1', '#182226'), 0.08)} strokeWidth={stroke}/>
         {items.map((it, i) => {
           const frac = it.value / total;
           const dash = C * frac;
@@ -192,7 +212,7 @@ function FunnelChart({ stages, currency }) {
               {hasRevenue && (
                 <span style={{
                   fontFamily: 'var(--f-mono)', fontSize: 11,
-                  color: s.revenue > 0 ? 'var(--glow-cyan)' : 'var(--fg5)',
+                  color: s.revenue > 0 ? 'var(--money)' : 'var(--fg5)',
                   letterSpacing: '0.02em',
                 }}>
                   {fmtCurrency(s.revenue, cur, 0)}
@@ -243,11 +263,13 @@ function HourHeatmap({ data, metric = 'orders', currency = 'USD' }) {
   // Show subset of hour labels (every 3h) to avoid clutter.
   const HOUR_TICK = (h) => h % 3 === 0;
 
+  // Rampa monocromática em cima do token de acento, resolvida no render
+  // (segue o tema). Célula zero fica quase invisível (~4%).
+  const heatBase = chTok('--accent', '#3EB7D4');
   function cellColor(v) {
-    if (v <= 0) return 'rgba(91,200,255,0.04)';
+    if (v <= 0) return chAlpha(heatBase, 0.04);
     const t = Math.min(1, v / max);
-    // Cyan ramp matching the dashboard palette.
-    return `rgba(91,200,255,${0.08 + t * 0.82})`;
+    return chAlpha(heatBase, 0.08 + t * 0.82);
   }
 
   function fmtCellValue(c) {
@@ -300,13 +322,13 @@ function HourHeatmap({ data, metric = 'orders', currency = 'USD' }) {
           left: Math.min(hover.x + 14, (wrapRef.current?.clientWidth ?? 600) - 215),
           top: Math.max(2, hover.y - 44),
           padding: '6px 10px',
-          background: 'var(--bg-elev)', backdropFilter: 'blur(14px) saturate(180%)', WebkitBackdropFilter: 'blur(14px) saturate(180%)',
+          background: 'var(--bg-elev)',
           border: '1px solid var(--border)',
           borderRadius: 4,
           fontFamily: 'var(--f-mono)', fontSize: 11, color: 'var(--fg2)',
           display: 'flex', gap: 12, whiteSpace: 'nowrap',
           pointerEvents: 'none', zIndex: 3,
-          boxShadow: '0 10px 30px -10px rgba(91,200,255,0.35)',
+          boxShadow: 'var(--shadow-lg)',
         }}>
           <span>{ROWS[hover.r]} · {String(hover.h).padStart(2, '0')}:00 BRT</span>
           <span style={{ color: 'var(--fg1)' }}>

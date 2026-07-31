@@ -1,8 +1,8 @@
 /* global React, Recharts, fmtCurrency, fmtInt, fmtK, fmtDateShort, fmtDateLong */
 /* NSChart — wrapper temático sobre o Recharts (window.Recharts, bundlado em
    /dist/vendor-recharts.js). Aplica o design system NorthScale em TODOS os
-   gráficos de série temporal: grid dasheado ciano, gradientes de área,
-   tooltip glassy (mesmo estilo do antigo LineChart), eixos em fonte mono,
+   gráficos de série temporal: grid dasheado discreto, gradientes de área,
+   tooltip sólido tokenizado (North Editorial), eixos em fonte mono,
    brush de zoom e legenda clicável.
 
    Substitui o LineChart hand-rolled (charts.jsx), o SupplierDailyChart e o
@@ -10,7 +10,28 @@
 
 const { useState: useStateN, useMemo: useMemoN } = React;
 
-const NS_SERIES_PALETTE = ['#5BC8FF', '#4A90FF', '#8B7FFF', '#28C878', '#FFB14E', '#FF6B6B', '#a8b7d8'];
+// Recharts escreve cores como ATRIBUTO SVG — var(--x) não resolve de forma
+// confiável ali. nsTok resolve o token computado no momento do render (segue
+// o tema); nsAlpha aplica alfa em cima do hex resolvido.
+function nsTok(name, fb) { try { var v = getComputedStyle(document.documentElement).getPropertyValue(name).trim(); return v || fb; } catch (e) { return fb; } }
+function nsAlpha(hex, a) {
+  var h = String(hex || '').replace('#', '');
+  if (h.length === 3) h = h[0] + h[0] + h[1] + h[1] + h[2] + h[2];
+  var n = parseInt(h, 16);
+  if (h.length !== 6 || Number.isNaN(n)) return hex;
+  return 'rgba(' + ((n >> 16) & 255) + ',' + ((n >> 8) & 255) + ',' + (n & 255) + ',' + a + ')';
+}
+
+// Paleta de séries tokenizada (função, não constante: acompanha troca de tema).
+function nsSeriesPalette() {
+  return [
+    nsTok('--accent', '#3EB7D4'),
+    nsTok('--money', '#37D695'),
+    nsTok('--hot', '#E0653A'),
+    nsTok('--warning', '#ffd166'),
+    nsTok('--gold', '#C29B3C'),
+  ];
+}
 
 // ---------- formatação por tipo de série ----------
 function nsFmtValue(format, v, currency) {
@@ -29,16 +50,15 @@ function nsDateStr(d) {
   return typeof d === 'string' ? d : new Date(d).toISOString().slice(0, 10);
 }
 
-// ---------- tooltip glassy (porta o estilo do LineChart antigo) ----------
+// ---------- tooltip sólido (superfície --bg-elev, sem blur) ----------
 function NSTooltipContent({ active, payload, label, currency, formatFor }) {
   if (!active || !payload || payload.length === 0) return null;
   return (
     <div style={{
       background: 'var(--bg-elev)', border: '1px solid var(--border)',
-      backdropFilter: 'blur(20px) saturate(180%)', WebkitBackdropFilter: 'blur(20px) saturate(180%)',
       borderRadius: 6, padding: '8px 12px', minWidth: 150,
       fontFamily: 'var(--f-mono)', fontSize: 11, color: 'var(--fg2)', letterSpacing: '0.02em',
-      boxShadow: '0 10px 30px -10px rgba(91,200,255,0.35)',
+      boxShadow: 'var(--shadow-lg)',
     }}>
       <div style={{ fontSize: 10, color: 'var(--fg5)', letterSpacing: '0.1em', textTransform: 'uppercase', marginBottom: 6 }}>
         {fmtDateLong(label)}
@@ -89,9 +109,10 @@ function NSTimeSeries({
     CartesianGrid, Tooltip, Brush, ReferenceLine,
   } = R;
 
+  const nsPal = nsSeriesPalette();
   const seriesDef = series.map((s, i) => ({
     kind: 'area',
-    color: NS_SERIES_PALETTE[i % NS_SERIES_PALETTE.length],
+    color: nsPal[i % nsPal.length],
     format,
     ...s,
   }));
@@ -151,14 +172,14 @@ function NSTimeSeries({
               </linearGradient>
             ))}
           </defs>
-          <CartesianGrid vertical={false} stroke="rgba(91,200,255,0.07)" strokeDasharray="3 6"/>
+          <CartesianGrid vertical={false} stroke={nsAlpha(nsTok('--fg1', '#182226'), 0.1)} strokeDasharray="3 6"/>
           <XAxis dataKey="date" tickFormatter={fmtDateShort} minTickGap={28}
             axisLine={false} tickLine={false}
             tick={{ fontSize: 10, fill: 'var(--fg5)', fontFamily: 'var(--f-mono)' }}/>
           <YAxis tickFormatter={(v) => nsFmtAxis(axisFormat, v, currency)} width={58}
             axisLine={false} tickLine={false}
             tick={{ fontSize: 10, fill: 'var(--fg5)', fontFamily: 'var(--f-mono)' }}/>
-          {hasNegative && <ReferenceLine y={0} stroke="rgba(255,107,107,0.45)" strokeDasharray="4 4"/>}
+          {hasNegative && <ReferenceLine y={0} stroke={nsAlpha(nsTok('--danger', '#FF6B6B'), 0.45)} strokeDasharray="4 4"/>}
           {refLines.map((rl, i) => (
             <ReferenceLine key={`ref${i}`} y={rl.y}
               stroke={rl.color || 'var(--warning)'} strokeDasharray="4 4" strokeOpacity={0.7}
@@ -170,7 +191,7 @@ function NSTimeSeries({
           ))}
           <Tooltip
             content={<NSTooltipContent currency={currency} formatFor={formatFor}/>}
-            cursor={{ stroke: 'rgba(91,200,255,0.35)', strokeDasharray: '3 3' }}
+            cursor={{ stroke: nsAlpha(nsTok('--accent', '#3EB7D4'), 0.35), strokeDasharray: '3 3' }}
           />
           {visible.map((s) => {
             const dimmed = focusKey != null && s.key !== focusKey;
@@ -194,7 +215,7 @@ function NSTimeSeries({
           {showBrush && (
             <Brush dataKey="date" height={24} travellerWidth={8}
               tickFormatter={fmtDateShort}
-              stroke="rgba(91,200,255,0.45)" fill="rgba(10,16,40,0.45)"
+              stroke={nsTok('--accent', '#3EB7D4')} fill={nsAlpha(nsTok('--fg1', '#182226'), 0.08)}
               traveller={undefined}/>
           )}
         </ComposedChart>

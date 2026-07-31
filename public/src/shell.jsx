@@ -281,8 +281,7 @@ function MultiSelect({ label, options, selected, onChange, icon }) {
         <div style={{
           position: 'absolute', top: 'calc(100% + 6px)', left: 0, minWidth: 220,
           background: 'var(--bg-elev)', border: '1px solid var(--border)',
-          backdropFilter: 'blur(20px) saturate(180%)', WebkitBackdropFilter: 'blur(20px) saturate(180%)',          borderRadius: 8, padding: 6, zIndex: 20, boxShadow: '0 20px 60px -20px rgba(91,200,255,0.3)',
-          backdropFilter: 'blur(10px)'
+          borderRadius: 8, padding: 6, zIndex: 20, boxShadow: 'var(--shadow-lg)',
         }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', padding: '4px 8px', marginBottom: 4 }}>
             <button className="dh-link" style={{ background: 'none', border: 0, color: 'var(--glow-cyan)', fontFamily: 'var(--f-mono)', fontSize: 10, letterSpacing: '0.08em', cursor: 'pointer' }}
@@ -312,7 +311,7 @@ function MultiSelect({ label, options, selected, onChange, icon }) {
                 <label key={opt.id} style={{
                   display: 'flex', alignItems: 'center', gap: 8, padding: '6px 8px',
                   fontSize: 12, color: 'var(--fg2)', cursor: 'pointer', borderRadius: 4,
-                  background: on ? 'rgba(91,200,255,0.06)' : 'transparent',
+                  background: on ? 'color-mix(in oklab, var(--accent) 8%, transparent)' : 'transparent',
                   transition: 'background 120ms',
                 }}>
                   <input
@@ -383,9 +382,8 @@ function DateRangeChip({ range, onChange }) {
         <div style={{
           position: 'absolute', top: 'calc(100% + 6px)', left: 0, minWidth: 280,
           background: 'var(--bg-elev)', border: '1px solid var(--border)',
-          backdropFilter: 'blur(20px) saturate(180%)', WebkitBackdropFilter: 'blur(20px) saturate(180%)',          borderRadius: 8, padding: 12, zIndex: 20,
-          boxShadow: '0 20px 60px -20px rgba(91,200,255,0.3)',
-          backdropFilter: 'blur(10px)',
+          borderRadius: 8, padding: 12, zIndex: 20,
+          boxShadow: 'var(--shadow-lg)',
           display: 'grid', gap: 10,
         }}>
           <div style={{ fontFamily: 'var(--f-mono)', fontSize: 10, color: 'var(--fg4)', letterSpacing: '0.08em' }}>
@@ -423,14 +421,13 @@ function DateRangeChip({ range, onChange }) {
 }
 
 const dateInputStyle = {
-  background: 'rgba(91,200,255,0.06)',
+  background: 'var(--bg)',
   border: '1px solid var(--border)',
   borderRadius: 4,
   padding: '6px 8px',
   color: 'var(--fg1)',
   fontFamily: 'var(--f-mono)',
   fontSize: 12,
-  colorScheme: 'dark',
 };
 
 // ---------- Filter bar ----------
@@ -482,9 +479,7 @@ function PeriodDropdown({ filters, setFilters }) {
           position: 'absolute', top: 'calc(100% + 6px)', left: 0, minWidth: 220,
           background: 'var(--bg-elev)', border: '1px solid var(--border)',
           borderRadius: 8, padding: 4, zIndex: 20,
-          boxShadow: '0 20px 60px -20px rgba(91,200,255,0.30)',
-          backdropFilter: 'blur(20px) saturate(180%)',
-          WebkitBackdropFilter: 'blur(20px) saturate(180%)',
+          boxShadow: 'var(--shadow-lg)',
         }}>
           {DATE_PRESETS.map((p) => (
             <button
@@ -496,11 +491,11 @@ function PeriodDropdown({ filters, setFilters }) {
                 display: 'block', width: '100%', textAlign: 'left',
                 padding: '8px 12px', fontSize: 12,
                 color: filters.preset === p.id ? 'var(--glow-cyan)' : 'var(--fg2)',
-                background: filters.preset === p.id ? 'rgba(91,200,255,0.08)' : 'transparent',
+                background: filters.preset === p.id ? 'color-mix(in oklab, var(--accent) 10%, transparent)' : 'transparent',
                 border: 0, borderRadius: 4, cursor: 'pointer',
                 fontFamily: 'inherit',
               }}
-              onMouseEnter={(e) => { if (filters.preset !== p.id) e.currentTarget.style.background = 'rgba(91,200,255,0.04)'; }}
+              onMouseEnter={(e) => { if (filters.preset !== p.id) e.currentTarget.style.background = 'color-mix(in oklab, var(--accent) 5%, transparent)'; }}
               onMouseLeave={(e) => { if (filters.preset !== p.id) e.currentTarget.style.background = 'transparent'; }}
             >
               {p.label}
@@ -515,11 +510,11 @@ function PeriodDropdown({ filters, setFilters }) {
               display: 'block', width: '100%', textAlign: 'left',
               padding: '8px 12px', fontSize: 12,
               color: filters.preset === 'custom' ? 'var(--glow-cyan)' : 'var(--fg2)',
-              background: filters.preset === 'custom' ? 'rgba(91,200,255,0.08)' : 'transparent',
+              background: filters.preset === 'custom' ? 'color-mix(in oklab, var(--accent) 10%, transparent)' : 'transparent',
               border: 0, borderRadius: 4, cursor: 'pointer',
               fontFamily: 'inherit',
             }}
-            onMouseEnter={(e) => { if (filters.preset !== 'custom') e.currentTarget.style.background = 'rgba(91,200,255,0.04)'; }}
+            onMouseEnter={(e) => { if (filters.preset !== 'custom') e.currentTarget.style.background = 'color-mix(in oklab, var(--accent) 5%, transparent)'; }}
             onMouseLeave={(e) => { if (filters.preset !== 'custom') e.currentTarget.style.background = 'transparent'; }}
           >
             Personalizado…

@@ -21,7 +21,7 @@ function familyAccentCu(family) {
 // (sem sparkline, sem delta — esses números não têm comparação de período).
 function MiniStat({ label, value, sub, color }) {
   return (
-    <div className="mini-kpi" style={color ? { borderColor: color + '4D' } : undefined}>
+    <div className="mini-kpi" style={color ? { borderColor: `color-mix(in oklab, ${color} 30%, transparent)` } : undefined}>
       <div className="l">{label}</div>
       <div className="v" style={color ? { color } : undefined}>{value}</div>
       {sub && <div className="s">{sub}</div>}
@@ -36,7 +36,7 @@ function CostKpi({ label, value, icon, hint, accent, index, countValue, countFor
     ? <CountUp value={countValue} format={countFormat}/>
     : value;
   return (
-    <div className="kpi anim-in" style={{ ...(accent ? { borderColor: accent + '4D' } : {}), ...(index != null ? { '--i': index } : {}) }}>
+    <div className="kpi anim-in" style={{ ...(accent ? { borderColor: `color-mix(in oklab, ${accent} 30%, transparent)` } : {}), ...(index != null ? { '--i': index } : {}) }}>
       <span className="corner-tl"/>
       <span className="corner-br"/>
       <div className="kpi-row">
@@ -101,12 +101,12 @@ function CustosPage({ filters }) {
     cpa: d.cpaUsd,
   }));
   const costSeries = [
-    { key: 'platformFees', label: 'Plataforma', color: '#8B7FFF', stackId: 'cost' },
+    { key: 'platformFees', label: 'Plataforma', color: 'var(--hot)', stackId: 'cost' },
     { key: 'cpa', label: 'CPA', color: '#FFB14E', stackId: 'cost' },
     { key: 'cogs', label: 'Produção', color: '#FF8FCF', stackId: 'cost' },
-    { key: 'fulfillment', label: 'Frete', color: '#4A90FF', stackId: 'cost' },
-    { key: 'gross', label: 'Bruto', color: '#5BC8FF', kind: 'line' },
-    { key: 'profit', label: 'Lucro', color: '#28C878', kind: 'line' },
+    { key: 'fulfillment', label: 'Frete', color: 'var(--gold)', stackId: 'cost' },
+    { key: 'gross', label: 'Bruto', color: 'var(--accent)', kind: 'line' },
+    { key: 'profit', label: 'Lucro', color: 'var(--money)', kind: 'line' },
   ];
 
   return (
@@ -375,8 +375,8 @@ function CustosPage({ filters }) {
                         <span title="Família sem custo unitário cadastrado — COGS pode estar zerado ou usando placeholder. Vá em /costs pra atualizar."
                           style={{
                             fontFamily: 'var(--f-mono)', fontSize: 9, letterSpacing: '0.06em',
-                            color: 'var(--warning)', background: 'rgba(255,180,0,0.12)',
-                            border: '1px solid rgba(255,180,0,0.35)', borderRadius: 4,
+                            color: 'var(--warning)', background: 'color-mix(in oklab, var(--warning) 12%, transparent)',
+                            border: '1px solid color-mix(in oklab, var(--warning) 35%, transparent)', borderRadius: 4,
                             padding: '1px 6px',
                           }}>
                           PLACEHOLDER

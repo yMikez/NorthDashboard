@@ -89,7 +89,7 @@ function KpiCard({
           {display}
           <span className="vs">{hint || 'vs prev'}</span>
         </span>
-        {!hideSparkline && sparkData && <Sparkline data={sparkData} color={alert ? '#EF4444' : '#5BC8FF'}/>}
+        {!hideSparkline && sparkData && <Sparkline data={sparkData} color={alert ? 'var(--danger)' : 'var(--accent)'}/>}
       </div>
       {threshold && threshold.label && (
         <div className={`kpi-threshold ${threshold.state}`}>{threshold.label}</div>
@@ -106,10 +106,10 @@ const PRODUCT_TYPE_LABELS = {
 };
 
 const PRODUCT_TYPE_COLORS = {
-  FRONTEND: '#5BC8FF',
-  UPSELL: '#4A90FF',
-  BUMP: '#8B7FFF',
-  DOWNSELL: '#6b84b8',
+  FRONTEND: 'var(--accent)',
+  UPSELL: 'var(--money)',
+  BUMP: 'var(--warning)',
+  DOWNSELL: 'var(--hot)',
 };
 
 const COUNTRY_NAMES = {
@@ -151,12 +151,12 @@ function ProfitSplitPanel({ filters, cur, onData }) {
       <div className="mini-kpis">
         <div className="mini-kpi">
           <div className="l">Lucro FRONT (funil)</div>
-          <div className="v" style={{ color: d.front.profitUsd >= 0 ? 'var(--success)' : '#ff8a8a' }}>{fmtCurrency(d.front.profitUsd, cur, 0)}</div>
+          <div className="v" style={{ color: d.front.profitUsd >= 0 ? 'var(--money)' : 'var(--danger)' }}>{fmtCurrency(d.front.profitUsd, cur, 0)}</div>
           <div className="s">{fmtCurrency(d.front.grossUsd, cur, 0)} gross × modelo − {fmtCurrency(d.front.cpaUsd, cur, 0)} CPA · {fmtInt(d.front.orders)} pedidos</div>
         </div>
         <div className="mini-kpi">
           <div className="l">Lucro BACK (retenção)</div>
-          <div className="v" style={{ color: 'var(--glow-cyan)' }}>{fmtCurrency(d.back.profitUsd, cur, 0)}</div>
+          <div className="v" style={{ color: 'var(--money)' }}>{fmtCurrency(d.back.profitUsd, cur, 0)}</div>
           <div className="s">recuperação + Tauk + SMS · líquido de comissões</div>
         </div>
         <div className="mini-kpi">
@@ -169,12 +169,12 @@ function ProfitSplitPanel({ filters, cur, onData }) {
         {d.back.sources.map((s) => (
           <span key={s.key} style={{
             fontFamily: 'var(--f-mono)', fontSize: 10, padding: '4px 12px', borderRadius: 'var(--r-full)',
-            background: s.available ? 'rgba(91,200,255,0.08)' : 'rgba(255,255,255,0.03)',
-            border: `1px solid ${s.available ? 'rgba(91,200,255,0.3)' : 'var(--border-soft)'}`,
+            background: s.available ? 'color-mix(in oklab, var(--accent) 8%, transparent)' : 'var(--bg-raised)',
+            border: `1px solid ${s.available ? 'color-mix(in oklab, var(--accent) 30%, transparent)' : 'var(--border-soft)'}`,
             color: s.available ? 'var(--fg3)' : 'var(--fg5)', opacity: s.available ? 1 : 0.7,
           }}>
             {s.label}{s.available
-              ? <> · <span style={{ color: 'var(--fg1)' }}>{fmtCurrency(s.grossUsd, cur, 0)}</span> → <span style={{ color: 'var(--success)' }}>{fmtCurrency(s.netUsd, cur, 0)}</span></>
+              ? <> · <span style={{ color: 'var(--fg3)' }}>{fmtCurrency(s.grossUsd, cur, 0)}</span> → <span style={{ color: 'var(--money)' }}>{fmtCurrency(s.netUsd, cur, 0)}</span></>
               : ' · em breve'}
           </span>
         ))}
@@ -423,14 +423,14 @@ function OverviewPage({ filters, setFilters }) {
           // (unidades diferentes não dividem eixo).
           const series = MONEY.has(metric)
             ? [
-                { key: 'gross', label: 'Bruto', color: '#5BC8FF' },
-                { key: 'net', label: 'Líquido', color: '#8B7FFF' },
-                { key: 'profit', label: 'Lucro', color: '#28C878' },
+                { key: 'gross', label: 'Bruto', color: 'var(--accent)' },
+                { key: 'net', label: 'Líquido', color: 'var(--hot)' },
+                { key: 'profit', label: 'Lucro', color: 'var(--money)' },
               ]
             : [{
                 key: metric,
                 label: metric === 'orders' ? 'Pedidos' : metric === 'aov' ? 'AOV' : 'Aprovação',
-                color: '#5BC8FF',
+                color: 'var(--accent)',
                 format: metric === 'orders' ? 'int' : metric === 'aov' ? 'money2' : 'pct',
               }];
           return (
@@ -529,7 +529,7 @@ function OverviewPage({ filters, setFilters }) {
                       <td className="num cell-mono">{fmtInt(a.orders)}</td>
                       <td className="num cell-mono">{fmtCurrency(a.revenue, cur, 0)}</td>
                       <td className={`num cell-mono ${apClass}`}>{(a.approvalRate * 100).toFixed(1)}%</td>
-                      <td className="num cell-mono" style={{ color: a.netMargin > 0 ? 'var(--success)' : 'var(--danger)' }}>
+                      <td className="num cell-mono" style={{ color: a.netMargin > 0 ? 'var(--money)' : 'var(--danger)' }}>
                         {fmtCurrency(a.netMargin, cur, 0)}
                       </td>
                     </tr>

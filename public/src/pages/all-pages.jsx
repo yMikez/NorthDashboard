@@ -5,16 +5,16 @@ function funnelTabStyle(active) {
   return {
     display: 'inline-flex', alignItems: 'center', gap: 6,
     padding: '6px 10px', whiteSpace: 'nowrap',
-    background: active ? 'rgba(91,200,255,0.15)' : 'transparent',
-    border: active ? '1px solid rgba(91,200,255,0.4)' : '1px solid transparent',
+    background: active ? 'color-mix(in oklab, var(--accent) 12%, transparent)' : 'transparent',
+    border: active ? '1px solid var(--accent)' : '1px solid transparent',
     borderRadius: 6, cursor: 'pointer',
     fontFamily: 'var(--f-mono)', fontSize: 11, letterSpacing: '0.04em',
-    color: active ? 'var(--white)' : 'var(--navy-200)',
+    color: active ? 'var(--accent)' : 'var(--fg3)',
   };
 }
 const funnelTabPillStyle = {
   fontSize: 10, fontFamily: 'var(--f-mono)',
-  background: 'rgba(91,200,255,0.1)', color: 'var(--glow-cyan)',
+  background: 'color-mix(in oklab, var(--accent) 10%, transparent)', color: 'var(--accent)',
   padding: '1px 5px', borderRadius: 3,
 };
 function truncFunnelName(name, max = 28) {
@@ -93,7 +93,7 @@ function FunnelPage({ filters }) {
       {byFamily.length > 0 && (
         <div style={{
           display: 'flex', gap: 6, marginBottom: 14, padding: 4,
-          background: 'rgba(91,200,255,0.04)', border: '1px solid var(--border)',
+          background: 'color-mix(in oklab, var(--accent) 4%, transparent)', border: '1px solid var(--border)',
           borderRadius: 8, overflowX: 'auto',
         }}>
           <button
@@ -184,7 +184,7 @@ function FunnelPage({ filters }) {
                 {stages.map((s) => {
                   const isFE = s.id === 'frontend';
                   const rateColor = isFE
-                    ? 'var(--white)'
+                    ? 'var(--fg1)'
                     : s.takeRate > 0.25 ? 'var(--success)'
                     : s.takeRate > 0.12 ? 'var(--warning)'
                     : s.takeRate > 0   ? 'var(--danger)'
@@ -215,19 +215,19 @@ function FunnelPage({ filters }) {
           <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: 12, padding: '10px 0' }}>
             {[
               { label: 'FE only', value: summary.aovFEOnly, color: '#8CA1C8' },
-              { label: 'FE + upsell/bump/down', value: summary.aovWithUpsell, color: '#5BC8FF' },
-              { label: 'AOV global', value: summary.aov, color: '#4A90FF' },
+              { label: 'FE + upsell/bump/down', value: summary.aovWithUpsell, color: 'var(--accent)' },
+              { label: 'AOV global', value: summary.aov, color: 'var(--gold)' },
             ].map((r, i) => {
               const maxV = Math.max(summary.aovFEOnly, summary.aovWithUpsell, summary.aov, 1);
               const liftPct = i === 1 && summary.aovFEOnly > 0 ? (r.value - summary.aovFEOnly) / summary.aovFEOnly : null;
               return (
                 <div key={r.label} style={{ display: 'grid', gridTemplateColumns: '160px 1fr 80px', gap: 12, alignItems: 'center' }}>
                   <div style={{ fontSize: 12, color: 'var(--fg2)' }}>{r.label}</div>
-                  <div style={{ position: 'relative', height: 26, background: 'rgba(91,200,255,0.06)', borderRadius: 4, overflow: 'hidden' }}>
+                  <div style={{ position: 'relative', height: 26, background: 'color-mix(in oklab, var(--fg1) 6%, transparent)', borderRadius: 4, overflow: 'hidden' }}>
                     <div style={{
                       position: 'absolute', inset: 0,
                       width: `${(r.value / maxV) * 100}%`,
-                      background: `linear-gradient(90deg, ${r.color}, ${r.color}44)`,
+                      background: 'var(--accent)',
                       borderRadius: 4,
                       display: 'flex', alignItems: 'center', paddingLeft: 10,
                       fontFamily: 'var(--f-display)', fontSize: 14, color: 'var(--fg1)',
@@ -311,10 +311,10 @@ function FunnelPage({ filters }) {
 function CpaStatusChip({ status }) {
   if (!status) return <span style={{ color: 'var(--fg5)', fontSize: 10 }}>—</span>;
   const meta = {
-    saudavel:   { label: 'SAUDÁVEL',   fg: 'var(--success)', bg: 'rgba(58,214,140,0.12)', border: 'rgba(58,214,140,0.4)' },
-    atencao:    { label: 'ATENÇÃO',    fg: '#ffd166',        bg: 'rgba(255,180,0,0.12)',  border: 'rgba(255,180,0,0.4)' },
-    renegociar: { label: 'RENEGOCIAR', fg: '#ff8a8a',        bg: 'rgba(255,90,90,0.14)',  border: 'rgba(255,90,90,0.45)' },
-  }[status] || { label: String(status).toUpperCase(), fg: 'var(--fg4)', bg: 'rgba(255,255,255,0.05)', border: 'var(--border-soft)' };
+    saudavel:   { label: 'SAUDÁVEL',   fg: 'var(--success)', bg: 'color-mix(in oklab, var(--success) 12%, transparent)', border: 'color-mix(in oklab, var(--success) 35%, transparent)' },
+    atencao:    { label: 'ATENÇÃO',    fg: 'var(--warning)', bg: 'color-mix(in oklab, var(--warning) 12%, transparent)', border: 'color-mix(in oklab, var(--warning) 35%, transparent)' },
+    renegociar: { label: 'RENEGOCIAR', fg: 'var(--danger)',  bg: 'color-mix(in oklab, var(--danger) 12%, transparent)',  border: 'color-mix(in oklab, var(--danger) 35%, transparent)' },
+  }[status] || { label: String(status).toUpperCase(), fg: 'var(--fg4)', bg: 'color-mix(in oklab, var(--fg4) 12%, transparent)', border: 'var(--border-soft)' };
   return (
     <span style={{
       fontFamily: 'var(--f-mono)', fontSize: 9, fontWeight: 700, letterSpacing: '0.06em',
@@ -348,7 +348,7 @@ function ProfitConfigPanel() {
       .catch((e) => setMsg(e.message));
   }
   const inStyle = {
-    background: 'rgba(91,200,255,0.06)', border: '1px solid var(--border)', borderRadius: 4,
+    background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: 4,
     padding: '4px 8px', color: 'var(--fg1)', fontFamily: 'var(--f-mono)', fontSize: 12, width: 90, textAlign: 'right',
   };
   return (
@@ -416,8 +416,8 @@ function AffiliateRefundModal({ aff, onCancel, onSaved }) {
 
   return (
     <div onClick={onCancel} style={{
-      position: 'fixed', inset: 0, zIndex: 100, background: 'rgba(3,6,23,0.7)',
-      backdropFilter: 'blur(8px)', display: 'grid', placeItems: 'center',
+      position: 'fixed', inset: 0, zIndex: 100, background: 'rgba(13,18,21,0.72)',
+      display: 'grid', placeItems: 'center',
     }}>
       <div onClick={(e) => e.stopPropagation()} className="panel" style={{ width: 380, padding: 22 }}>
         <div className="eyebrow" style={{ fontSize: 10, color: 'var(--glow-cyan)', marginBottom: 4 }}>
@@ -643,7 +643,7 @@ function LeaderboardPage({ filters, onOpenAffiliate }) {
                     <td><span className={`plat ${platClass}`}>{platShort}</span></td>
                     <td className="num cell-mono">{fmtInt(r.orders)}</td>
                     <td className="num cell-mono" style={{ color: 'var(--fg1)' }}>{fmtCurrency(r.revenue, cur, 0)}</td>
-                    <td className="num cell-mono" style={{ color: 'var(--glow-cyan)' }}>
+                    <td className="num cell-mono" style={{ color: 'var(--money)' }}>
                       {aovOf(r) > 0 ? fmtCurrency(aovOf(r), cur, 0) : '—'}
                       {aovOf(r) > 0 && (
                         <span style={{ display: 'block', fontSize: 9, color: 'var(--fg5)', fontWeight: 400, marginTop: 1 }}>
@@ -668,7 +668,7 @@ function LeaderboardPage({ filters, onOpenAffiliate }) {
                     <td className="num cell-mono" style={{ color: 'var(--fg4)' }}>{r.opexPctUsed}%</td>
                     <td className="num cell-mono">{r.netAovUsd > 0 ? fmtCurrency(r.netAovUsd, cur, 0) : '—'}</td>
                     <td className="num cell-mono">{(r.cpaPerFe || 0) > 0 ? fmtCurrency(r.cpaPerFe, cur, 0) : '—'}</td>
-                    <td className="num cell-mono" style={{ fontWeight: 700, color: r.netAfterCpaUsd == null ? 'var(--fg5)' : r.netAfterCpaUsd < 0 ? '#ff8a8a' : r.cpaStatus === 'saudavel' ? 'var(--success)' : '#ffd166' }}>
+                    <td className="num cell-mono" style={{ fontWeight: 700, color: r.netAfterCpaUsd == null ? 'var(--fg5)' : r.netAfterCpaUsd < 0 ? 'var(--danger)' : r.cpaStatus === 'saudavel' ? 'var(--money)' : 'var(--warning)' }}>
                       {r.netAfterCpaUsd != null ? fmtCurrency(r.netAfterCpaUsd, cur, 0) : '—'}
                     </td>
                     <td>
@@ -848,7 +848,7 @@ function AffiliateDrawer({ affiliateId, filters, onClose }) {
             </div>
             {dailySeries.length > 0
               ? <NSTimeSeries data={dailySeries} height={200} currency={cur}
-                  series={[{ key: 'gross', label: 'Receita', color: '#5BC8FF' }]}/>
+                  series={[{ key: 'gross', label: 'Receita', color: 'var(--money)' }]}/>
               : <div style={{ padding: 24, textAlign: 'center', opacity: 0.6 }}>Sem vendas no período</div>}
           </div>
 
@@ -1201,8 +1201,8 @@ function useCallCenter() {
 }
 
 const CC_LEVEL_META = {
-  salesbound: { label: 'INTEGRAR SALESBOUND', chip: 'SALESBOUND ≥100/d', fg: '#fda4af', bg: 'rgba(244,63,94,0.14)', border: 'rgba(244,63,94,0.45)' },
-  tauk:       { label: 'CONECTAR TAUK',       chip: 'TAUK ≥30/d',        fg: '#ffd166', bg: 'rgba(255,180,0,0.14)', border: 'rgba(255,180,0,0.45)' },
+  salesbound: { label: 'INTEGRAR SALESBOUND', chip: 'SALESBOUND ≥100/d', fg: 'var(--danger)', bg: 'color-mix(in oklab, var(--danger) 12%, transparent)', border: 'color-mix(in oklab, var(--danger) 35%, transparent)' },
+  tauk:       { label: 'CONECTAR TAUK',       chip: 'TAUK ≥30/d',        fg: 'var(--warning)', bg: 'color-mix(in oklab, var(--warning) 12%, transparent)', border: 'color-mix(in oklab, var(--warning) 35%, transparent)' },
   ok:         { label: 'OK',                  chip: 'OK',                fg: 'var(--success)', bg: 'rgba(58,214,140,0.10)', border: 'rgba(58,214,140,0.35)' },
 };
 
@@ -1242,7 +1242,7 @@ function CallCenterMonitor({ cc }) {
   }
 
   const selStyle = {
-    background: 'rgba(255,255,255,0.04)', color: 'var(--fg2)', border: '1px solid var(--border-soft)',
+    background: 'var(--bg)', color: 'var(--fg1)', border: '1px solid var(--border)',
     borderRadius: 8, padding: '5px 8px', fontSize: 11, fontFamily: 'var(--f-mono)',
   };
 
@@ -1253,7 +1253,7 @@ function CallCenterMonitor({ cc }) {
         <div className="panel" style={{ marginBottom: 14, padding: '12px 16px', background: 'rgba(255,180,0,0.06)', border: '1px solid rgba(255,180,0,0.4)' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
             <Icon name="bell" size={14}/>
-            <span style={{ fontFamily: 'var(--f-mono)', fontSize: 10.5, fontWeight: 700, letterSpacing: '0.1em', color: '#ffd166' }}>
+            <span style={{ fontFamily: 'var(--f-mono)', fontSize: 10.5, fontWeight: 700, letterSpacing: '0.1em', color: 'var(--warning)' }}>
               CALL CENTER · {alerts.length} {alerts.length === 1 ? 'PRODUTO CRUZOU' : 'PRODUTOS CRUZARAM'} O LIMIAR
             </span>
           </div>
@@ -1490,7 +1490,7 @@ function pageStateStyle(state) {
   if (s === 'gray' || s === 'grey') {
     return { bg: 'rgba(120,130,160,0.30)', fg: '#cdd5e8', border: 'rgba(160,170,200,0.45)' };
   }
-  return { bg: 'rgba(91,200,255,0.18)', fg: 'var(--glow-cyan)', border: 'rgba(91,200,255,0.45)' };
+  return { bg: 'color-mix(in oklab, var(--accent) 18%, transparent)', fg: 'var(--glow-cyan)', border: 'color-mix(in oklab, var(--accent) 45%, transparent)' };
 }
 
 // Rótulo amigável: "black2"→"BLACK 2", "white"→"WHITE", senão UPPER do que veio.
@@ -1670,7 +1670,7 @@ function FamilyGrid({ state, cur, onPick, pageStates, callCenter }) {
               <div key={`${s.platform}:${s.product}`} style={{
                 display: 'inline-flex', alignItems: 'center', gap: 8,
                 padding: '6px 10px', borderRadius: 8,
-                background: 'rgba(91,200,255,0.04)', border: '1px solid var(--border-soft)',
+                background: 'var(--bg-raised)', border: '1px solid var(--border-soft)',
               }}>
                 <span style={{ fontFamily: 'var(--f-mono)', fontSize: 11, color: 'var(--fg2)' }}>{s.product}</span>
                 <PageStateBadge state={s.state} platform={s.platform}/>
@@ -1704,7 +1704,7 @@ function FamilyGrid({ state, cur, onPick, pageStates, callCenter }) {
             >
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                  <div style={{ width: 8, height: 8, borderRadius: '50%', background: accent, boxShadow: `0 0 8px ${accent}` }}/>
+                  <div style={{ width: 8, height: 8, borderRadius: '50%', background: accent }}/>
                   <div style={{ fontFamily: 'var(--f-display)', fontSize: 18, color: 'var(--fg1)' }}>{f.family}</div>
                 </div>
                 <div style={{ display: 'flex', gap: 6 }}>
@@ -1740,7 +1740,7 @@ function FamilyGrid({ state, cur, onPick, pageStates, callCenter }) {
                 <div className="prod-stat"><div className="l">AOV</div><div className="v sm">{hasOrders ? fmtCurrency(f.aov, cur, 0) : '—'}</div></div>
               </div>
 
-              <div style={{ paddingTop: 10, borderTop: '1px solid rgba(91,200,255,0.15)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: 11, color: 'var(--fg4)', fontFamily: 'var(--f-mono)' }}>
+              <div style={{ paddingTop: 10, borderTop: '1px solid var(--border-soft)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: 11, color: 'var(--fg4)', fontFamily: 'var(--f-mono)' }}>
                 <span>{f.feSkuCount} FE · {f.upSkuCount} UP · {f.dwSkuCount} DW · {f.rcSkuCount} RC</span>
                 <span style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
                   <CopyBeaconChip product={f.family} accent={accent}/>
@@ -1756,8 +1756,8 @@ function FamilyGrid({ state, cur, onPick, pageStates, callCenter }) {
 }
 
 const TYPE_COL_META = {
-  FRONTEND: { label: 'Frontend', accent: '#5BC8FF' },
-  UPSELL: { label: 'Upsell', accent: '#4A90FF' },
+  FRONTEND: { label: 'Frontend', accent: 'var(--accent)' },
+  UPSELL: { label: 'Upsell', accent: 'var(--gold)' },
   DOWNSELL: { label: 'Downsell', accent: '#FF8B5B' },
   SMS_RECOVERY: { label: 'SMS Recovery', accent: '#9B7BFF' },
 };
@@ -1884,12 +1884,12 @@ function VariantRow({ variant: v, cur, accent, onClick }) {
       onClick={onClick}
       style={{
         textAlign: 'left', font: 'inherit', cursor: 'pointer',
-        background: 'rgba(91,200,255,0.04)', border: '1px solid var(--border-soft)',
+        background: 'var(--bg-raised)', border: '1px solid var(--border-soft)',
         borderRadius: 6, padding: 10,
         display: 'grid', gap: 4,
       }}
-      onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(91,200,255,0.1)'; }}
-      onMouseLeave={(e) => { e.currentTarget.style.background = 'rgba(91,200,255,0.04)'; }}
+      onMouseEnter={(e) => { e.currentTarget.style.background = 'color-mix(in oklab, var(--accent) 6%, transparent)'; }}
+      onMouseLeave={(e) => { e.currentTarget.style.background = 'var(--bg-raised)'; }}
     >
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 6 }}>
         <span style={{ fontSize: 12, color: 'var(--fg1)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
@@ -1922,7 +1922,7 @@ function DrawerLink({ href, icon, label }) {
   return (
     <a href={href} target="_blank" rel="noopener noreferrer"
        style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 8px', borderRadius: 4,
-                background: 'rgba(91,200,255,0.04)', color: 'var(--glow-cyan)', fontFamily: 'var(--f-mono)', fontSize: 11,
+                background: 'var(--bg-raised)', color: 'var(--accent)', fontFamily: 'var(--f-mono)', fontSize: 11,
                 textDecoration: 'none', border: '1px solid var(--border-soft)' }}>
       <Icon name={icon} size={12}/> {label}
     </a>
@@ -1961,7 +1961,7 @@ function VariantDetailDrawer({ variant: v, cur, onClose }) {
         <div style={{ padding: 16, display: 'grid', gap: 14 }}>
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
             {v.bottles != null && (
-              <span className="badge" style={{ background: 'rgba(91,200,255,0.15)', color: 'var(--glow-cyan)', borderColor: 'rgba(91,200,255,0.4)' }}>
+              <span className="badge" style={{ background: 'color-mix(in oklab, var(--accent) 15%, transparent)', color: 'var(--glow-cyan)', borderColor: 'color-mix(in oklab, var(--accent) 40%, transparent)' }}>
                 {v.bottles} bottles
               </span>
             )}
@@ -1971,7 +1971,7 @@ function VariantDetailDrawer({ variant: v, cur, onClose }) {
               </span>
             )}
             {v.variant && (
-              <span className="badge" style={{ background: 'rgba(155,123,255,0.15)', color: '#9B7BFF', borderColor: 'rgba(155,123,255,0.4)' }}>
+              <span className="badge" style={{ background: 'color-mix(in oklab, var(--hot) 12%, transparent)', color: 'var(--hot)', borderColor: 'color-mix(in oklab, var(--hot) 35%, transparent)' }}>
                 Variant: {v.variant}
               </span>
             )}
@@ -2079,9 +2079,9 @@ function _LegacyProductsPage({ filters }) {
   }
 
   const TYPE_META = {
-    FRONTEND: { label: 'Frontend', accent: '#5BC8FF', tagClass: 'plat-cb' },
-    UPSELL:   { label: 'Upsell',   accent: '#4A90FF', tagClass: 'plat-cb' },
-    BUMP:     { label: 'Bump',     accent: '#8B7FFF', tagClass: 'plat-d24' },
+    FRONTEND: { label: 'Frontend', accent: 'var(--accent)', tagClass: 'plat-cb' },
+    UPSELL:   { label: 'Upsell',   accent: 'var(--gold)', tagClass: 'plat-cb' },
+    BUMP:     { label: 'Bump',     accent: 'var(--hot)', tagClass: 'plat-d24' },
     DOWNSELL: { label: 'Downsell', accent: '#6b84b8', tagClass: 'plat-d24' },
   };
 
@@ -2144,7 +2144,7 @@ function _LegacyProductsPage({ filters }) {
       {view === 'cards' && (
         <div className="prod-grid">
           {products.map((p) => {
-            const meta = TYPE_META[p.productType] || { label: p.productType, accent: '#5BC8FF' };
+            const meta = TYPE_META[p.productType] || { label: p.productType, accent: 'var(--accent)' };
             const margin = p.net - p.cpa;
             const marginPct = p.revenue ? margin / p.revenue : 0;
             const aov = p.orders ? p.revenue / p.orders : 0;
@@ -2163,7 +2163,7 @@ function _LegacyProductsPage({ filters }) {
                 </div>
                 <div className="prod-plat">
                   <span className={`plat ${platClass}`}>{platShort}</span>
-                  <span className="badge" style={{ background: `${meta.accent}22`, color: meta.accent, borderColor: `${meta.accent}55` }}>
+                  <span className="badge" style={{ background: `color-mix(in oklab, ${meta.accent} 12%, transparent)`, color: meta.accent, borderColor: `color-mix(in oklab, ${meta.accent} 35%, transparent)` }}>
                     {meta.label}
                   </span>
                   {p.vendorAccount && (
@@ -2183,7 +2183,7 @@ function _LegacyProductsPage({ filters }) {
                   <div className="prod-stat"><div className="l">Margem %</div><div className="v sm" style={{ color: marginPct > 0.2 ? 'var(--success)' : marginPct > 0.1 ? 'var(--warning)' : 'var(--danger)' }}>{(marginPct * 100).toFixed(1)}%</div></div>
                 </div>
                 {p.lastSoldAt && (
-                  <div style={{ marginTop: 10, paddingTop: 10, borderTop: '1px solid rgba(91,200,255,0.15)', fontSize: 11, color: 'var(--fg4)', display: 'flex', justifyContent: 'space-between', fontFamily: 'var(--f-mono)' }}>
+                  <div style={{ marginTop: 10, paddingTop: 10, borderTop: '1px solid var(--border-soft)', fontSize: 11, color: 'var(--fg4)', display: 'flex', justifyContent: 'space-between', fontFamily: 'var(--f-mono)' }}>
                     <span>1ª venda: {fmtDateShort(p.firstSoldAt)}</span>
                     <span>Última: {fmtDateShort(p.lastSoldAt)}</span>
                   </div>
@@ -2215,7 +2215,7 @@ function _LegacyProductsPage({ filters }) {
               </thead>
               <tbody>
                 {products.map((p) => {
-                  const meta = TYPE_META[p.productType] || { label: p.productType, accent: '#5BC8FF' };
+                  const meta = TYPE_META[p.productType] || { label: p.productType, accent: 'var(--accent)' };
                   const { cls: platClass, short: platShort } = platBadge(p.platformSlug);
                   const apColor = p.approvalRate > 0.7 ? 'var(--success)' : p.approvalRate > 0.5 ? 'var(--warning)' : 'var(--danger)';
                   const margin = p.net - p.cpa;
@@ -2224,7 +2224,7 @@ function _LegacyProductsPage({ filters }) {
                       <td>{p.name}</td>
                       <td className="cell-mono" style={{ color: 'var(--fg4)' }}>{p.externalId}</td>
                       <td>
-                        <span className="badge" style={{ background: `${meta.accent}22`, color: meta.accent, borderColor: `${meta.accent}55` }}>
+                        <span className="badge" style={{ background: `color-mix(in oklab, ${meta.accent} 12%, transparent)`, color: meta.accent, borderColor: `color-mix(in oklab, ${meta.accent} 35%, transparent)` }}>
                           {meta.label}
                         </span>
                       </td>
@@ -2257,9 +2257,9 @@ function _LegacyProductsPage({ filters }) {
           </div>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 10 }}>
             {byType.map((b) => {
-              const meta = TYPE_META[b.productType] || { label: b.productType, accent: '#5BC8FF' };
+              const meta = TYPE_META[b.productType] || { label: b.productType, accent: 'var(--accent)' };
               return (
-                <div key={b.productType} style={{ padding: 12, border: '1px solid var(--border-soft)', borderRadius: 6, background: 'rgba(91,200,255,0.03)' }}>
+                <div key={b.productType} style={{ padding: 12, border: '1px solid var(--border-soft)', borderRadius: 6, background: 'color-mix(in oklab, var(--accent) 3%, transparent)' }}>
                   <div style={{ fontFamily: 'var(--f-mono)', fontSize: 10, color: meta.accent, letterSpacing: '0.1em', marginBottom: 6 }}>
                     {meta.label.toUpperCase()}
                   </div>
@@ -2538,7 +2538,7 @@ function TransactionDrawer({ externalId, platformSlug, cur, onClose, onPickOrder
             <h3 style={{ margin: '4px 0', fontSize: 18, color: 'var(--fg1)' }}>{o.externalId}</h3>
             <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
               <span className={`plat ${platClass}`}>{platShort}</span>
-              <span className="badge" style={{ background: `${typeColor}22`, color: typeColor, borderColor: `${typeColor}55` }}>
+              <span className="badge" style={{ background: `color-mix(in oklab, ${typeColor} 12%, transparent)`, color: typeColor, borderColor: `color-mix(in oklab, ${typeColor} 35%, transparent)` }}>
                 {typeLabel}
               </span>
               <span className={`st st-${statusLc}`}>{statusLc}</span>
@@ -2568,7 +2568,7 @@ function TransactionDrawer({ externalId, platformSlug, cur, onClose, onPickOrder
                 : `Afiliado recebeu (CPA) — sem CPA neste ${o.productType === 'UPSELL' ? 'upsell' : o.productType === 'DOWNSELL' ? 'downsell' : 'pedido'}`}
               value={-o.cpaPaidUsd}
               cur={cur}
-              accent={o.cpaPaidUsd > 0 ? 'var(--glow-cyan)' : 'var(--navy-400)'}
+              accent={o.cpaPaidUsd > 0 ? 'var(--money)' : 'var(--fg5)'}
               muted={o.cpaPaidUsd === 0}
             />
             <div style={{ height: 1, background: 'var(--border)', margin: '8px 0' }}/>
@@ -2690,12 +2690,12 @@ function TransactionDrawer({ externalId, platformSlug, cur, onClose, onPickOrder
                       disabled={s.isSelf}
                       style={{
                         textAlign: 'left', font: 'inherit', padding: '6px 8px', borderRadius: 4,
-                        background: s.isSelf ? 'rgba(91,200,255,0.1)' : 'rgba(91,200,255,0.04)',
+                        background: s.isSelf ? 'color-mix(in oklab, var(--accent) 10%, transparent)' : 'var(--bg-raised)',
                         border: '1px solid var(--border-soft)', cursor: s.isSelf ? 'default' : 'pointer',
                         display: 'grid', gridTemplateColumns: '64px 1fr auto auto', gap: 8, alignItems: 'center',
                       }}
                     >
-                      <span className="badge" style={{ background: `${sColor}22`, color: sColor, borderColor: `${sColor}55`, fontSize: 9, justifySelf: 'start' }}>
+                      <span className="badge" style={{ background: `color-mix(in oklab, ${sColor} 12%, transparent)`, color: sColor, borderColor: `color-mix(in oklab, ${sColor} 35%, transparent)`, fontSize: 9, justifySelf: 'start' }}>
                         {sType}
                       </span>
                       <span style={{ fontSize: 12, color: 'var(--fg2)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
@@ -2746,7 +2746,7 @@ function TransactionDrawer({ externalId, platformSlug, cur, onClose, onPickOrder
           {o.detailsUrl && (
             <a href={o.detailsUrl} target="_blank" rel="noopener noreferrer"
                style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 12px',
-                        borderRadius: 4, background: 'rgba(91,200,255,0.06)', color: 'var(--glow-cyan)',
+                        borderRadius: 4, background: 'var(--bg-raised)', color: 'var(--accent)',
                         border: '1px solid var(--border-soft)', textDecoration: 'none',
                         fontFamily: 'var(--f-mono)', fontSize: 11 }}>
               <Icon name="link" size={12}/> Abrir receipt na plataforma
@@ -2808,9 +2808,9 @@ function txTypeLabel(productType, funnelStep) {
 }
 function txTypeColor(productType) {
   switch (productType) {
-    case 'FRONTEND': return '#5BC8FF';
-    case 'UPSELL': return '#4A90FF';
-    case 'BUMP': return '#8B7FFF';
+    case 'FRONTEND': return 'var(--accent)';
+    case 'UPSELL': return 'var(--gold)';
+    case 'BUMP': return 'var(--hot)';
     case 'DOWNSELL': return '#FF8B5B';
     case 'SMS_RECOVERY': return '#9B7BFF';
     default: return '#8CA1C8';
@@ -2925,7 +2925,7 @@ function IntegrationsPage({ filters }) {
                  Gross bruto → − taxa → − comissões → = Your earnings.
                  Allowance reservado entra como linha separada (sobre gross). */}
               {(p.feeRatePct != null || p.allowancePct != null) && (
-                <div style={{ marginTop: 12, paddingTop: 10, borderTop: '1px solid rgba(91,200,255,0.15)' }}>
+                <div style={{ marginTop: 12, paddingTop: 10, borderTop: '1px solid var(--border-soft)' }}>
                   <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
                     <div style={{ fontSize: 10, letterSpacing: '0.1em', color: 'var(--fg4)' }}>
                       WATERFALL · PERÍODO
@@ -2990,7 +2990,7 @@ function IntegrationsPage({ filters }) {
 
               {/* Botão cadastrar quando vazio. */}
               {p.feeRatePct == null && p.allowancePct == null && (
-                <div style={{ marginTop: 12, paddingTop: 10, borderTop: '1px solid rgba(91,200,255,0.15)' }}>
+                <div style={{ marginTop: 12, paddingTop: 10, borderTop: '1px solid var(--border-soft)' }}>
                   <button
                     className="btn btn-ghost"
                     style={{ fontSize: 11, width: '100%', justifyContent: 'center' }}
@@ -3010,7 +3010,7 @@ function IntegrationsPage({ filters }) {
               )}
 
               {p.topProduct && (
-                <div style={{ marginTop: 12, paddingTop: 10, borderTop: '1px solid rgba(91,200,255,0.15)' }}>
+                <div style={{ marginTop: 12, paddingTop: 10, borderTop: '1px solid var(--border-soft)' }}>
                   <div style={{ fontSize: 10, letterSpacing: '0.1em', color: 'var(--fg4)', marginBottom: 4 }}>
                     TOP PRODUTO
                   </div>
@@ -3018,7 +3018,7 @@ function IntegrationsPage({ filters }) {
                     <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                       {p.topProduct.name}
                     </span>
-                    <span className="cell-mono" style={{ color: 'var(--glow-cyan)' }}>
+                    <span className="cell-mono" style={{ color: 'var(--money)' }}>
                       {fmtCurrency(p.topProduct.revenue, cur, 0)}
                     </span>
                   </div>
@@ -3114,8 +3114,8 @@ function PlatformFeesModal({ platform, onCancel, onSaved }) {
     <div
       onClick={onCancel}
       style={{
-        position: 'fixed', inset: 0, zIndex: 100, background: 'rgba(3,6,23,0.7)',
-        backdropFilter: 'blur(8px)', display: 'grid', placeItems: 'center',
+        position: 'fixed', inset: 0, zIndex: 100, background: 'rgba(13,18,21,0.72)',
+        display: 'grid', placeItems: 'center',
       }}
     >
       <div
@@ -3191,7 +3191,7 @@ function PlatformFeesModal({ platform, onCancel, onSaved }) {
 
 const feesInputStyle = {
   width: '100%', padding: '8px 10px',
-  background: 'rgba(91,200,255,0.05)', border: '1px solid rgba(91,200,255,0.20)',
+  background: 'var(--bg)', border: '1px solid var(--border)',
   borderRadius: 6, color: 'var(--fg1)', fontFamily: 'var(--f-mono)', fontSize: 13,
   outline: 'none',
 };
@@ -3352,9 +3352,9 @@ function UsersPage({ currentUser }) {
                     </td>
                     <td>
                       <span className="badge" style={{
-                        background: u.role === 'ADMIN' ? 'rgba(91,200,255,0.15)' : 'rgba(155,123,255,0.15)',
-                        color: u.role === 'ADMIN' ? 'var(--glow-cyan)' : '#9B7BFF',
-                        borderColor: u.role === 'ADMIN' ? 'rgba(91,200,255,0.4)' : 'rgba(155,123,255,0.4)',
+                        background: u.role === 'ADMIN' ? 'color-mix(in oklab, var(--accent) 12%, transparent)' : 'transparent',
+                        color: u.role === 'ADMIN' ? 'var(--accent)' : 'var(--fg4)',
+                        borderColor: u.role === 'ADMIN' ? 'var(--accent)' : 'var(--border)',
                       }}>
                         {u.role}
                       </span>
@@ -3373,9 +3373,9 @@ function UsersPage({ currentUser }) {
                     </td>
                     <td>
                       <span className="badge" style={{
-                        background: u.active ? 'rgba(16,185,129,0.15)' : 'rgba(239,68,68,0.15)',
+                        background: u.active ? 'color-mix(in oklab, var(--success) 12%, transparent)' : 'color-mix(in oklab, var(--danger) 12%, transparent)',
                         color: u.active ? 'var(--success)' : 'var(--danger)',
-                        borderColor: u.active ? 'rgba(16,185,129,0.4)' : 'rgba(239,68,68,0.4)',
+                        borderColor: u.active ? 'color-mix(in oklab, var(--success) 35%, transparent)' : 'color-mix(in oklab, var(--danger) 35%, transparent)',
                       }}>
                         {u.active ? 'ATIVO' : 'INATIVO'}
                       </span>
@@ -3578,8 +3578,8 @@ function UserFormDrawer({ mode, initial, isSelf, onClose, onSaved }) {
                 onClick={genPassword}
                 style={{
                   justifySelf: 'start', padding: '4px 10px', fontFamily: 'var(--f-mono)', fontSize: 10,
-                  color: 'var(--glow-cyan)', background: 'rgba(91,200,255,0.08)',
-                  border: '1px solid rgba(91,200,255,0.3)', borderRadius: 4, cursor: 'pointer',
+                  color: 'var(--glow-cyan)', background: 'color-mix(in oklab, var(--accent) 8%, transparent)',
+                  border: '1px solid color-mix(in oklab, var(--accent) 30%, transparent)', borderRadius: 4, cursor: 'pointer',
                   letterSpacing: '0.08em',
                 }}
               >
@@ -3627,7 +3627,7 @@ function UserFormDrawer({ mode, initial, isSelf, onClose, onSaved }) {
                   onChange={(e) => setNetworkId(e.target.value)}
                   style={{
                     padding: '9px 12px', fontSize: 13, color: 'var(--fg1)',
-                    background: 'rgba(91,200,255,0.05)', border: '1px solid rgba(91,200,255,0.2)',
+                    background: 'var(--bg)', border: '1px solid var(--border)',
                     borderRadius: 6,
                   }}
                 >
@@ -3734,8 +3734,8 @@ function UserFormDrawer({ mode, initial, isSelf, onClose, onSaved }) {
                     <button
                       onClick={genPassword}
                       style={{ padding: '4px 10px', fontFamily: 'var(--f-mono)', fontSize: 10,
-                               color: 'var(--glow-cyan)', background: 'rgba(91,200,255,0.08)',
-                               border: '1px solid rgba(91,200,255,0.3)', borderRadius: 4,
+                               color: 'var(--glow-cyan)', background: 'color-mix(in oklab, var(--accent) 8%, transparent)',
+                               border: '1px solid color-mix(in oklab, var(--accent) 30%, transparent)', borderRadius: 4,
                                cursor: 'pointer', letterSpacing: '0.08em' }}
                     ><Icon name="key" size={10}/> GERAR</button>
                     <button
@@ -3806,11 +3806,11 @@ function UserField({ label, value, onChange, type, required }) {
         required={required}
         style={{
           padding: '9px 12px', fontSize: 13, color: 'var(--fg1)',
-          background: 'rgba(91,200,255,0.05)', border: '1px solid rgba(91,200,255,0.2)',
+          background: 'var(--bg)', border: '1px solid var(--border)',
           borderRadius: 6, outline: 'none', fontFamily: 'inherit',
         }}
-        onFocus={(e) => { e.currentTarget.style.borderColor = 'var(--glow-cyan)'; }}
-        onBlur={(e) => { e.currentTarget.style.borderColor = 'rgba(91,200,255,0.2)'; }}
+        onFocus={(e) => { e.currentTarget.style.borderColor = 'var(--accent)'; }}
+        onBlur={(e) => { e.currentTarget.style.borderColor = 'var(--border)'; }}
       />
     </label>
   );
@@ -3908,7 +3908,7 @@ function HealthPage() {
                     </td>
                     <td className="num cell-mono">{(p.successRate24h * 100).toFixed(1)}%</td>
                     <td>
-                      <span className="badge" style={{ background: `${stateColor}22`, color: stateColor, borderColor: `${stateColor}55` }}>
+                      <span className="badge" style={{ background: `color-mix(in oklab, ${stateColor} 12%, transparent)`, color: stateColor, borderColor: `color-mix(in oklab, ${stateColor} 35%, transparent)` }}>
                         {stateLabel}
                       </span>
                     </td>
@@ -4014,17 +4014,17 @@ function fmtAgo(seconds) {
 // fullstack/+). Cores usadas nos cards de distribuição, barra, chart e selos.
 const SUPPLIER_META = {
   shipoffers: { label: 'ShipOffers', solid: '#5BC8FF', text: '#7cd0ff', darkText: true,
-    grad: 'linear-gradient(180deg, #7cd0ff 0%, #5BC8FF 50%, #2a9cd6 100%)', glow: 'rgba(91,200,255,0.45)', chipBg: 'rgba(124,208,255,0.18)' },
+    chipBg: 'rgba(124,208,255,0.18)' },
   redrock: { label: 'RedRock', solid: '#ff5a5a', text: '#ff8a8a', darkText: false,
-    grad: 'linear-gradient(180deg, #ff7373 0%, #ff5a5a 50%, #e83838 100%)', glow: 'rgba(255,90,90,0.45)', chipBg: 'rgba(255,138,138,0.18)' },
+    chipBg: 'rgba(255,138,138,0.18)' },
   fullstack: { label: 'FullStack', solid: '#9b7bff', text: '#b99cff', darkText: false,
-    grad: 'linear-gradient(180deg, #b99cff 0%, #9b7bff 50%, #6f4de0 100%)', glow: 'rgba(155,123,255,0.45)', chipBg: 'rgba(155,123,255,0.18)' },
+    chipBg: 'rgba(155,123,255,0.18)' },
 };
 function supMeta(s) {
   return SUPPLIER_META[s] || {
     label: s ? String(s).charAt(0).toUpperCase() + String(s).slice(1) : '—',
     solid: '#8aa0c0', text: '#aab8d0', darkText: false,
-    grad: 'linear-gradient(180deg, #9aa8c0 0%, #8aa0c0 50%, #6a7890 100%)', glow: 'rgba(140,160,190,0.4)', chipBg: 'rgba(140,160,190,0.18)',
+    chipBg: 'rgba(140,160,190,0.18)',
   };
 }
 const SUPPLIER_OPTIONS = ['shipoffers', 'redrock', 'fullstack'];
@@ -4410,11 +4410,11 @@ function CostsPage({ filters }) {
         const cov = health.h.kpis.coveragePct ?? 100;
         const blocking = health.h.issues.filter((i) => i.blocking);
         const info = health.h.issues.filter((i) => !i.blocking);
-        const tone = cov >= 100 ? ['rgba(58,214,140', 'var(--success)'] : cov >= 95 ? ['rgba(255,180,0', '#ffd166'] : ['rgba(255,90,90', '#ff8a8a'];
+        const tone = cov >= 100 ? 'var(--success)' : cov >= 95 ? 'var(--warning)' : 'var(--danger)';
         return (
-          <div className="panel" style={{ marginBottom: 14, border: `1px solid ${tone[0]},0.45)`, background: `${tone[0]},0.06)` }}>
+          <div className="panel" style={{ marginBottom: 14, border: `1px solid color-mix(in oklab, ${tone} 45%, transparent)`, background: `color-mix(in oklab, ${tone} 6%, transparent)` }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
-              <div style={{ fontFamily: 'var(--f-display)', fontSize: 22, fontWeight: 600, color: tone[1] }}>
+              <div style={{ fontFamily: 'var(--f-display)', fontSize: 22, fontWeight: 600, color: tone }}>
                 {cov.toFixed(1).replace(/\.0$/, '')}%
               </div>
               <div style={{ flex: 1, minWidth: 240 }}>
@@ -4433,7 +4433,7 @@ function CostsPage({ filters }) {
               <div style={{ display: 'grid', gap: 6, marginTop: 10 }}>
                 {blocking.map((i) => (
                   <div key={i.type} style={{ fontSize: 11.5, color: 'var(--fg2)' }}>
-                    <span style={{ color: tone[1], fontWeight: 600 }}>{fmtInt(i.orders)} {i.orders === 1 ? 'pedido' : 'pedidos'}</span>
+                    <span style={{ color: tone, fontWeight: 600 }}>{fmtInt(i.orders)} {i.orders === 1 ? 'pedido' : 'pedidos'}</span>
                     {' · '}{i.label}
                     {i.skus.length > 0 && (
                       <span style={{ color: 'var(--fg5)', fontFamily: 'var(--f-mono)', fontSize: 10 }}>
@@ -4510,19 +4510,19 @@ function CostsPage({ filters }) {
           <NSTimeSeries height={220} format="int"
             data={fm.daily.map((d) => ({ date: d.date, potes: d.bottles, pacotes: d.packages }))}
             series={[
-              { key: 'potes', label: 'Potes', color: '#5BC8FF' },
-              { key: 'pacotes', label: 'Pacotes', color: '#9b7bff' },
+              { key: 'potes', label: 'Potes', color: 'var(--accent)' },
+              { key: 'pacotes', label: 'Pacotes', color: 'var(--hot)' },
             ]}/>
           {fm.bracketMix.length > 0 && (
             <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 12 }}>
               {fm.bracketMix.map((b) => (
                 <span key={b.bracket} style={{
                   fontFamily: 'var(--f-mono)', fontSize: 10.5, padding: '4px 12px', borderRadius: 'var(--r-full)',
-                  background: 'rgba(91,200,255,0.08)', border: '1px solid rgba(91,200,255,0.3)', color: 'var(--fg3)',
+                  background: 'color-mix(in oklab, var(--accent) 12%, transparent)', border: '1px solid color-mix(in oklab, var(--accent) 35%, transparent)', color: 'var(--fg3)',
                 }}>
                   {b.bracket === 'sem potes' ? 'sem potes' : `${b.bracket} ${b.bracket === '1' ? 'pote' : 'potes'}`}
                   {' · '}<span style={{ color: 'var(--fg1)' }}>{fmtInt(b.packages)}</span> pacotes
-                  {' · '}<span style={{ color: 'var(--glow-cyan)' }}>{b.pctPackages.toFixed(1)}%</span>
+                  {' · '}<span style={{ color: 'var(--accent)' }}>{b.pctPackages.toFixed(1)}%</span>
                 </span>
               ))}
             </div>
@@ -4554,7 +4554,7 @@ function CostsPage({ filters }) {
                     <td className="num">{fmtInt(f.bottles)}</td>
                     <td className="num">{fmtCurrency(f.fulfillmentUsd, cur, 0)}</td>
                     <td className="num">{fmtCurrency(f.cogsUsd, cur, 0)}</td>
-                    <td className="num" style={{ color: 'var(--glow-cyan)' }}>{f.costPerBottleUsd != null ? fmtCurrency(f.costPerBottleUsd, cur, 2) : '—'}</td>
+                    <td className="num" style={{ color: 'var(--money)' }}>{f.costPerBottleUsd != null ? fmtCurrency(f.costPerBottleUsd, cur, 2) : '—'}</td>
                   </tr>
                 ))}
               </tbody>
@@ -4580,7 +4580,7 @@ function CostsPage({ filters }) {
           <NSTimeSeries height={220} currency={cur}
             data={fm.daily.map((d) => ({ date: d.date, frete: d.fulfillmentUsd, cogs: d.cogsUsd }))}
             series={[
-              { key: 'frete', label: 'Frete', color: '#5BC8FF' },
+              { key: 'frete', label: 'Frete', color: 'var(--accent)' },
               { key: 'cogs', label: 'COGS', color: '#ffb86b' },
             ]}/>
         </div>
@@ -4610,7 +4610,7 @@ function CostsPage({ filters }) {
             </div>
             <div className="mini-kpi" style={fm.forecast.trendPct != null && Math.abs(fm.forecast.trendPct) >= 20 ? { borderColor: 'rgba(255,180,0,0.35)' } : undefined}>
               <div className="l">Tendência (7d vs 30d)</div>
-              <div className="v" style={{ color: fm.forecast.trendPct == null ? 'var(--fg3)' : fm.forecast.trendPct > 0 ? '#ffd166' : 'var(--success)' }}>
+              <div className="v" style={{ color: fm.forecast.trendPct == null ? 'var(--fg3)' : fm.forecast.trendPct > 0 ? 'var(--warning)' : 'var(--success)' }}>
                 {fm.forecast.trendPct == null ? '—' : `${fm.forecast.trendPct >= 0 ? '+' : ''}${fm.forecast.trendPct.toFixed(1)}%`}
               </div>
               <div className="s">gasto/dia: {fmtCurrency(fm.forecast.avg7d.totalPerDay, cur, 0)} vs {fmtCurrency(fm.forecast.avg30d.totalPerDay, cur, 0)}</div>
@@ -4623,11 +4623,11 @@ function CostsPage({ filters }) {
                 return (
                   <span key={inv.supplier} style={{
                     fontFamily: 'var(--f-mono)', fontSize: 10.5, padding: '5px 12px', borderRadius: 'var(--r-full)',
-                    background: meta.chipBg, border: `1px solid ${meta.glow}`, color: 'var(--fg3)',
+                    background: meta.chipBg, border: `1px solid color-mix(in oklab, ${meta.solid} 35%, transparent)`, color: 'var(--fg3)',
                   }}>
                     <span style={{ color: meta.text, fontWeight: 600 }}>{meta.label}</span>
                     {' · fatura acumulada '}<span style={{ color: 'var(--fg1)' }}>{fmtCurrency(inv.accruedUsd, cur, 0)}</span>
-                    {' · projeção '}<span style={{ color: '#ffd166' }}>{fmtCurrency(inv.projectedUsd, cur, 0)}</span>
+                    {' · projeção '}<span style={{ color: 'var(--money)' }}>{fmtCurrency(inv.projectedUsd, cur, 0)}</span>
                     {` · fecha em ${inv.daysToNext}d`}
                   </span>
                 );
@@ -4652,7 +4652,7 @@ function CostsPage({ filters }) {
                       {fm.forecast.invoiceCycles.map((c) => {
                         const pct = c.totalPctOfGross != null ? c.totalPctOfGross * 100 : null;
                         const dev = pct != null ? Math.abs(pct - bench) : null;
-                        const color = dev == null ? 'var(--fg5)' : dev <= 2 ? 'var(--success)' : dev <= 4 ? '#ffd166' : '#ff8a8a';
+                        const color = dev == null ? 'var(--fg5)' : dev <= 2 ? 'var(--success)' : dev <= 4 ? 'var(--warning)' : 'var(--danger)';
                         return (
                           <tr key={c.closesOn}>
                             <td className="cell-mono" style={{ fontSize: 11 }}>
@@ -4701,14 +4701,13 @@ function CostsPage({ filters }) {
               const m = supMeta(s.supplier);
               return (
                 <div key={s.supplier} className="mini-kpi" style={{
-                  borderColor: m.glow,
-                  background: `linear-gradient(180deg, ${m.chipBg}, transparent)`,
-                  boxShadow: `0 0 24px -8px ${m.glow}, inset 0 1px 0 rgba(255,255,255,0.04)`,
+                  borderColor: m.solid,
+                  background: 'var(--bg-raised)',
                 }}>
                   <div className="l" style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                     <span style={{
                       display: 'inline-block', width: 8, height: 8, borderRadius: '50%',
-                      background: m.solid, boxShadow: `0 0 8px ${m.glow}`,
+                      background: m.solid,
                     }}/>
                     <span style={{ color: m.text }}>{m.label}</span>
                   </div>
@@ -4738,7 +4737,7 @@ function CostsPage({ filters }) {
                           <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
                             <span style={{
                               display: 'inline-block', width: 10, height: 10, borderRadius: '50%',
-                              background: m.solid, boxShadow: `0 0 10px ${m.glow}, 0 0 0 2px ${m.chipBg}`,
+                              background: m.solid, boxShadow: `0 0 0 2px ${m.chipBg}`,
                             }}/>
                             <span style={{ color: m.text }}>{s.pct.toFixed(1)}%</span>
                             <span style={{ color: 'var(--fg3)', fontFamily: 'var(--f-mono)', fontSize: 13, fontWeight: 500, letterSpacing: '0.04em' }}>{m.label}</span>
@@ -4766,19 +4765,12 @@ function CostsPage({ filters }) {
                   return (
                     <div key={s.supplier} style={{
                       width: `${s.pct}%`,
-                      background: m.grad,
+                      background: m.solid,
                       display: 'flex', alignItems: 'center', justifyContent: 'center',
                       fontSize: 11, fontWeight: 600, color: m.darkText ? '#0a1820' : '#fff',
                       letterSpacing: '0.04em',
-                      textShadow: m.darkText ? 'none' : '0 1px 2px rgba(0,0,0,0.4)',
                       position: 'relative',
-                      boxShadow: `inset 0 1px 0 rgba(255,255,255,0.3), 0 0 14px ${m.glow}`,
                     }}>
-                      <span style={{
-                        position: 'absolute', inset: 0,
-                        background: 'linear-gradient(180deg, rgba(255,255,255,0.2), transparent 45%)',
-                        pointerEvents: 'none',
-                      }}/>
                       <span style={{ position: 'relative', zIndex: 1 }}>
                         {s.pct >= 6 ? `${m.label} · ${fmtInt(s.orderCount)}` : ''}
                       </span>
@@ -4809,7 +4801,7 @@ function CostsPage({ filters }) {
                       }}>
                         <span style={{
                           display: 'inline-block', width: 9, height: 9, borderRadius: '50%',
-                          background: m.solid, boxShadow: `0 0 8px ${m.glow}, 0 0 0 2px ${m.chipBg}`,
+                          background: m.solid, boxShadow: `0 0 0 2px ${m.chipBg}`,
                         }}/>
                         {m.label}
                       </span>
@@ -4869,7 +4861,7 @@ function CostsPage({ filters }) {
               onChange={(e) => setTokenInput(e.target.value)}
               placeholder="bearer secret"
               style={{
-                background: 'rgba(91,200,255,0.06)', border: '1px solid var(--border)',
+                background: 'var(--bg)', border: '1px solid var(--border)',
                 borderRadius: 4, padding: '6px 10px', color: 'var(--fg1)',
                 fontFamily: 'var(--f-mono)', fontSize: 12, minWidth: 240,
               }}
@@ -5127,9 +5119,9 @@ function CostsPage({ filters }) {
               value={supplierFilters.platform}
               onChange={(e) => setSupplierFilters((f) => ({ ...f, platform: e.target.value }))}
               style={{
-                background: 'rgba(255,255,255,0.04)',
-                border: '1px solid rgba(255,255,255,0.1)',
-                color: 'var(--fg2)', padding: '6px 10px', borderRadius: 6, fontSize: 12,
+                background: 'var(--bg)',
+                border: '1px solid var(--border)',
+                color: 'var(--fg1)', padding: '6px 10px', borderRadius: 6, fontSize: 12,
               }}
             >
               <option value="">Todas plataformas</option>
@@ -5145,9 +5137,9 @@ function CostsPage({ filters }) {
               value={supplierFilters.search}
               onChange={(e) => setSupplierFilters((f) => ({ ...f, search: e.target.value }))}
               style={{
-                background: 'rgba(255,255,255,0.04)',
-                border: '1px solid rgba(255,255,255,0.1)',
-                color: 'var(--fg2)', padding: '6px 10px', borderRadius: 6, fontSize: 12,
+                background: 'var(--bg)',
+                border: '1px solid var(--border)',
+                color: 'var(--fg1)', padding: '6px 10px', borderRadius: 6, fontSize: 12,
                 flex: 1, minWidth: 200,
               }}
             />
@@ -5157,9 +5149,9 @@ function CostsPage({ filters }) {
               value={supplierFilters.family}
               onChange={(e) => setSupplierFilters((f) => ({ ...f, family: e.target.value }))}
               style={{
-                background: 'rgba(255,255,255,0.04)',
-                border: '1px solid rgba(255,255,255,0.1)',
-                color: 'var(--fg2)', padding: '6px 10px', borderRadius: 6, fontSize: 12,
+                background: 'var(--bg)',
+                border: '1px solid var(--border)',
+                color: 'var(--fg1)', padding: '6px 10px', borderRadius: 6, fontSize: 12,
                 width: 200,
               }}
             />
@@ -5182,7 +5174,7 @@ function CostsPage({ filters }) {
           {supplierList.status === 'ready' && supplierList.products.length > 0 && (
             <div style={{ maxHeight: 480, overflow: 'auto', borderRadius: 6 }}>
               <table className="data-table" style={{ width: '100%', fontSize: 12 }}>
-                <thead style={{ position: 'sticky', top: 0, background: 'rgba(15,20,28,0.95)', zIndex: 1 }}>
+                <thead style={{ position: 'sticky', top: 0, background: 'var(--bg-raised)', zIndex: 1 }}>
                   <tr>
                     <th style={{ textAlign: 'left' }}>SKU / Produto</th>
                     <th style={{ textAlign: 'left', width: 100 }}>Plataforma</th>
@@ -5199,7 +5191,7 @@ function CostsPage({ filters }) {
                     const eff = supplierEffective(p);
                     const choiceVal = ovr === null ? 'inherit' : (ovr || 'inherit');
                     return (
-                      <tr key={p.id} style={{ background: dirty ? 'rgba(91,200,255,0.06)' : undefined }}>
+                      <tr key={p.id} style={{ background: dirty ? 'color-mix(in oklab, var(--accent) 6%, transparent)' : undefined }}>
                         <td>
                           <div style={{ fontWeight: 500 }}>{p.name}</div>
                           <div style={{ color: 'var(--fg5)', fontSize: 10 }}>{p.externalId}</div>
@@ -5216,9 +5208,9 @@ function CostsPage({ filters }) {
                               value={choiceVal}
                               onChange={(e) => setSupplierDraft(p.id, e.target.value)}
                               style={{
-                                background: dirty ? 'rgba(91,200,255,0.12)' : 'rgba(255,255,255,0.04)',
-                                border: `1px solid ${dirty ? 'rgba(91,200,255,0.4)' : 'rgba(255,255,255,0.1)'}`,
-                                color: 'var(--fg2)', padding: '4px 8px', borderRadius: 4, fontSize: 11,
+                                background: dirty ? 'color-mix(in oklab, var(--accent) 12%, transparent)' : 'var(--bg)',
+                                border: `1px solid ${dirty ? 'var(--accent)' : 'var(--border)'}`,
+                                color: 'var(--fg1)', padding: '4px 8px', borderRadius: 4, fontSize: 11,
                                 minWidth: 120,
                               }}
                             >
@@ -5289,8 +5281,8 @@ function CostsPage({ filters }) {
 
 function costInputStyle(dirty, disabled) {
   return {
-    background: dirty ? 'rgba(91,200,255,0.15)' : 'rgba(91,200,255,0.06)',
-    border: '1px solid ' + (dirty ? 'var(--glow-cyan)' : 'var(--border)'),
+    background: dirty ? 'color-mix(in oklab, var(--accent) 12%, transparent)' : 'var(--bg)',
+    border: '1px solid ' + (dirty ? 'var(--accent)' : 'var(--border)'),
     borderRadius: 4,
     padding: '4px 8px',
     color: 'var(--fg1)',
@@ -5391,7 +5383,7 @@ function InsightsPage() {
       {/* Tabs (when layout=tabs) */}
       {layout === 'tabs' && (
         <div style={{ display: 'flex', gap: 6, marginBottom: 14, padding: 4,
-                      background: 'rgba(91,200,255,0.04)', border: '1px solid var(--border)', borderRadius: 8 }}>
+                      background: 'color-mix(in oklab, var(--accent) 4%, transparent)', border: '1px solid var(--border)', borderRadius: 8 }}>
           <InsightTab id="all" label="Todos" count={insights.length}
                       active={activeCategory === 'all'} onClick={() => setActiveCategory('all')}/>
           {categories.map((c) => (
@@ -5415,7 +5407,7 @@ function InsightsPage() {
 
       {/* Empty state by severity stats — celebrate green */}
       {insights.length > 0 && alertCount === 0 && layout === 'tabs' && activeCategory === 'all' && (
-        <div className="panel" style={{ marginTop: 14, background: 'rgba(40,200,120,0.05)', borderColor: 'rgba(40,200,120,0.4)' }}>
+        <div className="panel" style={{ marginTop: 14, background: 'color-mix(in oklab, var(--success) 12%, transparent)', borderColor: 'color-mix(in oklab, var(--success) 35%, transparent)' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, color: 'var(--success)' }}>
             <Icon name="check" size={14}/>
             <span>Sem alertas críticos. Os insights acima são oportunidades, não problemas.</span>
@@ -5434,18 +5426,18 @@ function InsightTab({ id, label, count, icon, active, onClick }) {
       style={{
         display: 'inline-flex', alignItems: 'center', gap: 6,
         padding: '6px 12px', whiteSpace: 'nowrap',
-        background: active ? 'rgba(91,200,255,0.15)' : 'transparent',
-        border: active ? '1px solid rgba(91,200,255,0.4)' : '1px solid transparent',
+        background: active ? 'color-mix(in oklab, var(--accent) 12%, transparent)' : 'transparent',
+        border: active ? '1px solid color-mix(in oklab, var(--accent) 35%, transparent)' : '1px solid transparent',
         borderRadius: 6, cursor: 'pointer',
         fontFamily: 'var(--f-mono)', fontSize: 11, letterSpacing: '0.04em',
-        color: active ? 'var(--white)' : 'var(--navy-200)',
+        color: active ? 'var(--accent)' : 'var(--fg4)',
       }}
     >
       {icon && <Icon name={icon} size={11}/>}
       {label}
       <span style={{
         fontSize: 10, fontFamily: 'var(--f-mono)',
-        background: 'rgba(91,200,255,0.1)', color: 'var(--glow-cyan)',
+        background: 'color-mix(in oklab, var(--accent) 10%, transparent)', color: 'var(--accent)',
         padding: '1px 5px', borderRadius: 3,
       }}>{count}</span>
     </button>
@@ -5898,7 +5890,7 @@ function NetworkFormModal({ initial, onClose, onSaved }) {
                 onChange={(e) => setPaymentPeriodUnit(e.target.value)}
                 style={{
                   padding: '9px 12px', fontSize: 13, color: 'var(--fg1)',
-                  background: 'rgba(91,200,255,0.05)', border: '1px solid rgba(91,200,255,0.2)',
+                  background: 'var(--bg)', border: '1px solid var(--border)',
                   borderRadius: 6,
                 }}
               >
@@ -5919,7 +5911,7 @@ function NetworkFormModal({ initial, onClose, onSaved }) {
               rows={3}
               style={{
                 padding: '9px 12px', fontSize: 13, color: 'var(--fg1)',
-                background: 'rgba(91,200,255,0.05)', border: '1px solid rgba(91,200,255,0.2)',
+                background: 'var(--bg)', border: '1px solid var(--border)',
                 borderRadius: 6, fontFamily: 'var(--f-sans)', resize: 'vertical',
               }}
             />
@@ -6327,7 +6319,7 @@ function NetCommissions({ fetcher, statusFilter, onStatusChange }) {
                 <td>{c.affiliateNickname || c.affiliateExternalId}</td>
                 <td className="cell-mono">{c.country || '—'}</td>
                 <td className="num cell-mono">{fmtCurrency(Number(c.orderGrossUsd), 'USD', 2)}</td>
-                <td className="num cell-mono" style={{ color: 'var(--glow-cyan)' }}>{fmtCurrency(Number(c.amountUsd), 'USD', 2)}</td>
+                <td className="num cell-mono" style={{ color: 'var(--money)' }}>{fmtCurrency(Number(c.amountUsd), 'USD', 2)}</td>
                 <td><span className={`badge ${c.status === 'PAID' ? 'ok' : 'neutral'}`}>{c.status}</span></td>
                 <td style={{ fontFamily: 'var(--f-mono)', fontSize: 11, color: 'var(--fg4)' }}>{fmtRelativeShort(c.createdAt)}</td>
               </tr>
@@ -6359,11 +6351,11 @@ function NetPayouts({ fetcher, onGenerate, onMarkPaid, accruedUsd, accruedCount,
   return (
     <div style={{ display: 'grid', gap: 12 }}>
       {showAccruedCard && (
-        <div className="panel" style={{ background: 'rgba(91,200,255,0.04)' }}>
+        <div className="panel" style={{ background: 'var(--bg-raised)' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12 }}>
             <div>
               <div style={{ fontFamily: 'var(--f-mono)', fontSize: 10, color: 'var(--fg5)', letterSpacing: '0.12em' }}>PRONTO PRA PAYOUT</div>
-              <div style={{ fontSize: 24, color: 'var(--glow-cyan)', fontFamily: 'var(--f-display)', marginTop: 4 }}>
+              <div style={{ fontSize: 24, color: 'var(--money)', fontFamily: 'var(--f-display)', marginTop: 4 }}>
                 {fmtCurrency(Number(accruedUsd), 'USD', 2)}
               </div>
               <div style={{ fontSize: 11, color: 'var(--fg5)' }}>{fmtInt(accruedCount)} comissões accrued</div>
@@ -6534,7 +6526,7 @@ function AttachAffiliateModal({ networkId, onClose, onSaved }) {
 
   const inputStyle = {
     padding: '9px 12px', fontSize: 13, color: 'var(--fg1)',
-    background: 'rgba(91,200,255,0.05)', border: '1px solid rgba(91,200,255,0.2)',
+    background: 'var(--bg)', border: '1px solid var(--border)',
     borderRadius: 6,
   };
 
@@ -6641,7 +6633,7 @@ function AttachAffiliateModal({ networkId, onClose, onSaved }) {
                   {list.items.map((a) => (
                     <label key={a.id} style={{
                       display: 'flex', alignItems: 'center', gap: 10, padding: '8px 10px',
-                      background: selected.has(a.id) ? 'rgba(91,200,255,0.08)' : 'transparent',
+                      background: selected.has(a.id) ? 'color-mix(in oklab, var(--accent) 8%, transparent)' : 'transparent',
                       border: '1px solid var(--border-soft)', borderRadius: 6, cursor: 'pointer',
                     }}>
                       <input type="checkbox" checked={selected.has(a.id)} onChange={() => toggle(a.id)}/>
@@ -6726,7 +6718,7 @@ function MarkPaidModal({ networkId, payout, onClose, onSaved }) {
               placeholder="ex: TX hash, ref do transfer, etc"
               style={{
                 padding: '9px 12px', fontSize: 13, color: 'var(--fg1)',
-                background: 'rgba(91,200,255,0.05)', border: '1px solid rgba(91,200,255,0.2)',
+                background: 'var(--bg)', border: '1px solid var(--border)',
                 borderRadius: 6, fontFamily: 'var(--f-sans)', resize: 'vertical',
               }}
             />
@@ -7000,7 +6992,7 @@ function ContractAcceptanceGate({ network, onSign, signing, onLogout }) {
 
             <label style={{
               display: 'flex', alignItems: 'flex-start', gap: 10, padding: 12,
-              background: 'rgba(91,200,255,0.06)', border: '1px solid var(--border-soft)',
+              background: 'color-mix(in oklab, var(--accent) 6%, transparent)', border: '1px solid var(--border-soft)',
               borderRadius: 6, cursor: 'pointer',
             }}>
               <input type="checkbox" checked={agreed} onChange={(e) => setAgreed(e.target.checked)} style={{ marginTop: 3 }}/>
@@ -7096,7 +7088,7 @@ function ChatPage({ user }) {
               onClick={() => setSelectedId(c.id)}
               style={{
                 padding: '8px 14px', cursor: 'pointer',
-                background: selectedId === c.id ? 'rgba(91,200,255,0.08)' : 'transparent',
+                background: selectedId === c.id ? 'color-mix(in oklab, var(--accent) 8%, transparent)' : 'transparent',
                 borderLeft: selectedId === c.id ? '2px solid var(--glow-cyan)' : '2px solid transparent',
                 display: 'flex', gap: 8, alignItems: 'flex-start',
               }}
@@ -7150,9 +7142,9 @@ function ChatWidget({ user }) {
           style={{
             position: 'fixed', bottom: 24, right: 24, zIndex: 1000,
             width: 52, height: 52, borderRadius: '50%',
-            background: 'linear-gradient(135deg, #5BC8FF 0%, #9B7BFF 100%)',
+            background: 'var(--accent)',
             border: 0, cursor: 'pointer',
-            boxShadow: '0 8px 20px -4px rgba(91,200,255,0.4)',
+            boxShadow: '0 8px 20px -4px color-mix(in oklab, var(--accent) 40%, transparent)',
             display: 'grid', placeItems: 'center',
             color: '#0A1638',
           }}
@@ -7165,15 +7157,15 @@ function ChatWidget({ user }) {
           position: 'fixed', bottom: 24, right: 24, zIndex: 1000,
           width: 420, height: 600, maxHeight: 'calc(100vh - 48px)',
           display: 'flex', flexDirection: 'column',
-          background: 'linear-gradient(180deg, #15275A 0%, #0F1F4D 50%, #0A1638 100%)',
-          border: '1px solid var(--border-strong)',
+          background: 'var(--bg-elev)',
+          border: '1px solid var(--border)',
           borderRadius: 12, overflow: 'hidden',
-          boxShadow: '0 30px 80px -10px rgba(0,0,0,0.6)',
+          boxShadow: 'var(--shadow-lg)',
         }}>
           <div style={{
             padding: '10px 14px', borderBottom: '1px solid var(--border-soft)',
             display: 'flex', alignItems: 'center', gap: 10,
-            background: 'rgba(91,200,255,0.04)',
+            background: 'color-mix(in oklab, var(--accent) 4%, transparent)',
           }}>
             <Icon name="sparkles" size={14} className=""/>
             <div style={{ flex: 1 }}>
@@ -7341,9 +7333,9 @@ function ChatBody({ conversationId, onConversationCreated, onMessageSent, compac
                   <span key={i} style={{
                     fontFamily: 'var(--f-mono)', fontSize: 10,
                     padding: '2px 8px', borderRadius: 4,
-                    background: t.state === 'done' ? 'rgba(40,200,120,0.1)' : 'rgba(91,200,255,0.1)',
+                    background: t.state === 'done' ? 'color-mix(in oklab, var(--success) 10%, transparent)' : 'color-mix(in oklab, var(--accent) 10%, transparent)',
                     color: t.state === 'done' ? 'var(--success)' : 'var(--glow-cyan)',
-                    border: `1px solid ${t.state === 'done' ? 'rgba(40,200,120,0.3)' : 'rgba(91,200,255,0.3)'}`,
+                    border: `1px solid ${t.state === 'done' ? 'color-mix(in oklab, var(--success) 30%, transparent)' : 'color-mix(in oklab, var(--accent) 30%, transparent)'}`,
                   }}>
                     {t.state === 'done' ? '✓' : '⋯'} {t.name}
                   </span>
@@ -7372,7 +7364,7 @@ function ChatBody({ conversationId, onConversationCreated, onMessageSent, compac
         padding: compact ? '10px 12px' : '14px 18px',
         borderTop: '1px solid var(--border-soft)',
         display: 'flex', gap: 8,
-        background: 'rgba(91,200,255,0.02)',
+        background: 'color-mix(in oklab, var(--accent) 2%, transparent)',
       }}>
         <textarea
           value={input}
@@ -7384,8 +7376,8 @@ function ChatBody({ conversationId, onConversationCreated, onMessageSent, compac
           style={{
             flex: 1, resize: 'none', padding: '8px 10px',
             fontFamily: 'var(--f-body)', fontSize: 13, color: 'var(--fg1)',
-            background: 'rgba(91,200,255,0.05)',
-            border: '1px solid rgba(91,200,255,0.2)', borderRadius: 6,
+            background: 'var(--bg)',
+            border: '1px solid var(--border)', borderRadius: 6,
             outline: 'none',
           }}
         />
@@ -7435,8 +7427,8 @@ function ChatMessage({ message, compact, streaming }) {
         style={{
           maxWidth: '85%',
           padding: '8px 12px', borderRadius: 8,
-          background: isUser ? 'rgba(91,200,255,0.10)' : 'rgba(255,255,255,0.03)',
-          border: `1px solid ${isUser ? 'rgba(91,200,255,0.25)' : 'var(--border-soft)'}`,
+          background: isUser ? 'color-mix(in oklab, var(--accent) 10%, transparent)' : 'rgba(255,255,255,0.03)',
+          border: `1px solid ${isUser ? 'color-mix(in oklab, var(--accent) 25%, transparent)' : 'var(--border-soft)'}`,
           fontSize: compact ? 12 : 13, color: 'var(--fg1)',
           wordBreak: 'break-word', lineHeight: 1.5,
           whiteSpace: isUser ? 'pre-wrap' : 'normal',
@@ -7471,7 +7463,7 @@ function ChatMessage({ message, compact, streaming }) {
 
 const coInputStyle = {
   width: '100%', padding: '8px 10px',
-  background: 'rgba(91,200,255,0.05)', border: '1px solid rgba(91,200,255,0.20)',
+  background: 'var(--bg)', border: '1px solid var(--border)',
   borderRadius: 6, color: 'var(--fg1)', fontFamily: 'var(--f-mono)', fontSize: 13, outline: 'none',
 };
 const coFieldLabel = { display: 'grid', gap: 4, fontSize: 11, color: 'var(--fg3)' };
@@ -7486,7 +7478,7 @@ function CopyToggle({ on, onChange, disabled }) {
       title={on ? 'Ativo' : 'Inativo'}
       style={{
         width: 34, height: 18, borderRadius: 9, border: '1px solid var(--border)',
-        background: on ? 'rgba(91,200,255,0.30)' : 'rgba(255,255,255,0.05)',
+        background: on ? 'color-mix(in oklab, var(--accent) 30%, transparent)' : 'color-mix(in oklab, var(--fg1) 10%, transparent)',
         position: 'relative', cursor: disabled ? 'default' : 'pointer', padding: 0,
         transition: 'background 150ms', opacity: disabled ? 0.6 : 1,
       }}
@@ -7621,7 +7613,7 @@ function CopyAovLine({ daily, target }) {
   return (
     <NSTimeSeries
       data={daily.map((d) => ({ date: d.date, aov: d.aov }))}
-      series={[{ key: 'aov', label: 'AOV', color: '#5BC8FF', format: 'money2' }]}
+      series={[{ key: 'aov', label: 'AOV', color: 'var(--money)', format: 'money2' }]}
       height={150} brush={false}
       refLines={[{ y: target, label: `target ${fmtCurrency(target, 'USD', 0)}`, color: 'var(--warning)' }]}
     />
@@ -7811,8 +7803,8 @@ function CopyObservabilityPanel() {
               <div className="panel-head"><div className="panel-title">Distribuição por layer</div></div>
               <Donut items={[
                 { label: 'Black 1', value: d.summary.byLayer.black1 || 0, color: '#a8b7d8' },
-                { label: 'Black 2', value: d.summary.byLayer.black2 || 0, color: '#5BC8FF' },
-                { label: 'White', value: d.summary.byLayer.white || 0, color: '#8B7FFF' },
+                { label: 'Black 2', value: d.summary.byLayer.black2 || 0, color: 'var(--accent)' },
+                { label: 'White', value: d.summary.byLayer.white || 0, color: 'var(--warning)' },
               ]} totalLabel="views" format={(v) => fmtInt(v)}/>
             </div>
           </div>
@@ -7941,7 +7933,7 @@ function CopyCalculatorPanel() {
               <div key={sc.label} className="panel" style={{ opacity: sc.status === 'over' ? 0.5 : 1, borderColor: sc.label === res.easiestScenario ? 'var(--glow-cyan)' : undefined }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                   <span style={{ fontWeight: 600, fontSize: 13 }}>{sc.label === res.easiestScenario ? '★ ' : ''}{sc.label}</span>
-                  <span className="badge" style={{ background: sc.status === 'ok' ? 'rgba(34,197,94,0.15)' : sc.status === 'below' ? 'rgba(91,200,255,0.15)' : 'rgba(239,68,68,0.15)', fontSize: 9 }}>{sc.status}</span>
+                  <span className="badge" style={{ background: sc.status === 'ok' ? 'color-mix(in oklab, var(--success) 12%, transparent)' : sc.status === 'below' ? 'color-mix(in oklab, var(--accent) 12%, transparent)' : 'color-mix(in oklab, var(--danger) 12%, transparent)', fontSize: 9 }}>{sc.status}</span>
                 </div>
                 <div style={{ fontFamily: 'var(--f-display)', fontSize: 18, marginTop: 4 }}>{fmtCurrency(sc.aov, 'USD', 0)}</div>
                 <div style={{ fontSize: 10, color: 'var(--fg5)', marginTop: 4 }}>convs: {sc.convs.map((c) => fmtPct(c)).join(' · ')}</div>
@@ -8228,7 +8220,7 @@ function RecoveryPage({ filters }) {
                           <td className="num cell-mono">{(a.commissionPct * 100).toFixed(0)}%{multi && <span style={{ color: 'var(--warning)', marginLeft: 4 }} title="A % mudou dentro do período — contadores por taxa abaixo">*</span>}</td>
                           <td className="num">{fmtInt(a.sales)}</td>
                           <td className="num">{fmtCurrency(a.grossUsd, 'USD', 2)}</td>
-                          <td className="num" style={{ color: 'var(--glow-cyan)' }}>{fmtCurrency(a.commissionUsd, 'USD', 2)}</td>
+                          <td className="num" style={{ color: 'var(--money)' }}>{fmtCurrency(a.commissionUsd, 'USD', 2)}</td>
                         </tr>
                         {/* Contadores por período de taxa: vendas feitas com a % antiga
                             ficam registradas no contador antigo; a % nova acumula no novo. */}
@@ -8240,14 +8232,14 @@ function RecoveryPage({ filters }) {
                               ? `${fmtDateShort(p.effectiveFrom)} → ${fmtDateShort(p.effectiveTo)}`
                               : `até ${fmtDateShort(p.effectiveTo)}`;
                           return (
-                            <tr key={`${a.affiliateExternalId}-p${i}`} style={{ background: 'rgba(91,200,255,0.025)' }}>
+                            <tr key={`${a.affiliateExternalId}-p${i}`} style={{ background: 'color-mix(in oklab, var(--accent) 4%, transparent)' }}>
                               <td className="cell-mono" style={{ paddingLeft: 26, fontSize: 10, color: vigente ? 'var(--fg3)' : 'var(--fg5)' }}>
                                 <Icon name="chevron-right" size={9}/> <span style={{ marginLeft: 4 }}>{label}</span>
                               </td>
                               <td className="num cell-mono" style={{ fontSize: 10, color: vigente ? 'var(--glow-cyan)' : 'var(--fg5)' }}>{(p.commissionPct * 100).toFixed(0)}%</td>
                               <td className="num" style={{ fontSize: 11, color: 'var(--fg4)' }}>{fmtInt(p.sales)}</td>
                               <td className="num" style={{ fontSize: 11, color: 'var(--fg4)' }}>{fmtCurrency(p.grossUsd, 'USD', 2)}</td>
-                              <td className="num" style={{ fontSize: 11, color: vigente ? 'var(--glow-cyan)' : 'var(--fg4)' }}>{fmtCurrency(p.commissionUsd, 'USD', 2)}</td>
+                              <td className="num" style={{ fontSize: 11, color: vigente ? 'var(--money)' : 'var(--fg4)' }}>{fmtCurrency(p.commissionUsd, 'USD', 2)}</td>
                             </tr>
                           );
                         })}
@@ -8279,14 +8271,14 @@ function RecoveryPage({ filters }) {
 
 function taukStatusStyle(status) {
   const s = String(status || '').toUpperCase();
-  if (s === 'HOLD') return { bg: 'rgba(255,180,0,0.14)', fg: '#ffd166', border: 'rgba(255,180,0,0.4)' };
+  if (s === 'HOLD') return { bg: 'color-mix(in oklab, var(--warning) 12%, transparent)', fg: 'var(--warning)', border: 'color-mix(in oklab, var(--warning) 35%, transparent)' };
   if (s === 'SHIPPED' || s === 'FULFILLED' || s === 'DELIVERED') {
     return { bg: 'rgba(58,214,140,0.14)', fg: 'var(--success)', border: 'rgba(58,214,140,0.4)' };
   }
   if (s === 'CANCELED' || s === 'CANCELLED' || s === 'REFUNDED') {
-    return { bg: 'rgba(255,90,90,0.14)', fg: '#ff8a8a', border: 'rgba(255,90,90,0.4)' };
+    return { bg: 'color-mix(in oklab, var(--danger) 12%, transparent)', fg: 'var(--danger)', border: 'color-mix(in oklab, var(--danger) 35%, transparent)' };
   }
-  return { bg: 'rgba(91,200,255,0.12)', fg: 'var(--glow-cyan)', border: 'rgba(91,200,255,0.35)' };
+  return { bg: 'color-mix(in oklab, var(--accent) 12%, transparent)', fg: 'var(--accent)', border: 'color-mix(in oklab, var(--accent) 35%, transparent)' };
 }
 
 function TaukStatusBadge({ status }) {
@@ -8372,7 +8364,7 @@ function TaukPage({ filters }) {
               </div>
               <NSTimeSeries height={220} currency="USD"
                 data={m.daily.map((d) => ({ date: d.date, receita: d.grossUsd }))}
-                series={[{ key: 'receita', label: 'Receita', color: '#5BC8FF' }]}/>
+                series={[{ key: 'receita', label: 'Receita', color: 'var(--accent)' }]}/>
             </div>
           )}
 
@@ -8420,7 +8412,7 @@ function TaukPage({ filters }) {
                         <td className="cell-mono" style={{ fontSize: 10.5, color: 'var(--fg4)' }}>
                           {r.email || '—'}{r.phone ? <span style={{ color: 'var(--fg5)' }}> · {r.phone}</span> : null}
                         </td>
-                        <td className="num" style={{ color: 'var(--glow-cyan)' }}>{fmtCurrency(r.amountUsd, 'USD', 2)}</td>
+                        <td className="num" style={{ color: 'var(--money)' }}>{fmtCurrency(r.amountUsd, 'USD', 2)}</td>
                         <td><TaukStatusBadge status={r.fulfillmentStatus}/></td>
                       </tr>
                     ))}
@@ -8452,8 +8444,8 @@ function TaukPage({ filters }) {
 
 const SMS_HEALTH_META = {
   green:  { label: 'SAUDÁVEL',    fg: 'var(--success)', bg: 'rgba(58,214,140,0.14)',  border: 'rgba(58,214,140,0.45)' },
-  yellow: { label: 'ATENÇÃO',     fg: '#ffd166',        bg: 'rgba(255,180,0,0.14)',   border: 'rgba(255,180,0,0.45)' },
-  red:    { label: 'CRÍTICO',     fg: '#ff8a8a',        bg: 'rgba(255,90,90,0.16)',   border: 'rgba(255,90,90,0.5)' },
+  yellow: { label: 'ATENÇÃO',     fg: 'var(--warning)', bg: 'color-mix(in oklab, var(--warning) 12%, transparent)', border: 'color-mix(in oklab, var(--warning) 35%, transparent)' },
+  red:    { label: 'CRÍTICO',     fg: 'var(--danger)',  bg: 'color-mix(in oklab, var(--danger) 12%, transparent)',  border: 'color-mix(in oklab, var(--danger) 35%, transparent)' },
   idle:   { label: 'SEM TRÁFEGO', fg: 'var(--fg5)',     bg: 'rgba(255,255,255,0.04)', border: 'var(--border-soft)' },
 };
 
@@ -8475,10 +8467,10 @@ function SmsHealthBadge({ level, big }) {
 // Chip do feed de diagnóstico: sent=neutro, delivered=verde,
 // undelivered/failed=vermelho, stop=laranja, skipped=cinza.
 const SMS_TYPE_META = {
-  sent:        { label: 'ENVIADO',    fg: 'var(--glow-cyan)', bg: 'rgba(91,200,255,0.12)',  border: 'rgba(91,200,255,0.35)' },
+  sent:        { label: 'ENVIADO',    fg: 'var(--accent)', bg: 'color-mix(in oklab, var(--accent) 12%, transparent)', border: 'color-mix(in oklab, var(--accent) 35%, transparent)' },
   delivered:   { label: 'ENTREGUE',   fg: 'var(--success)',   bg: 'rgba(58,214,140,0.14)',  border: 'rgba(58,214,140,0.4)' },
-  undelivered: { label: 'NÃO ENTREGUE', fg: '#ff8a8a',        bg: 'rgba(255,90,90,0.14)',   border: 'rgba(255,90,90,0.4)' },
-  failed:      { label: 'FALHOU',     fg: '#ff8a8a',          bg: 'rgba(255,90,90,0.14)',   border: 'rgba(255,90,90,0.4)' },
+  undelivered: { label: 'NÃO ENTREGUE', fg: 'var(--danger)', bg: 'color-mix(in oklab, var(--danger) 12%, transparent)', border: 'color-mix(in oklab, var(--danger) 35%, transparent)' },
+  failed:      { label: 'FALHOU',     fg: 'var(--danger)',   bg: 'color-mix(in oklab, var(--danger) 12%, transparent)', border: 'color-mix(in oklab, var(--danger) 35%, transparent)' },
   stop:        { label: 'STOP',       fg: '#ffb86b',          bg: 'rgba(255,150,60,0.14)',  border: 'rgba(255,150,60,0.4)' },
   skipped:     { label: 'DESCARTADO', fg: 'var(--fg4)',       bg: 'rgba(255,255,255,0.05)', border: 'var(--border-soft)' },
 };
@@ -8498,11 +8490,11 @@ function SmsTypeChip({ type }) {
 
 function SmsCampaignStatusBadge({ row }) {
   if (row.orphan) {
-    return <span style={{ fontFamily: 'var(--f-mono)', fontSize: 9, color: '#ffd166', border: '1px solid rgba(255,180,0,0.4)', background: 'rgba(255,180,0,0.1)', padding: '2px 8px', borderRadius: 'var(--r-full)', whiteSpace: 'nowrap' }}>NÃO ENCONTRADA NO MAUTIC</span>;
+    return <span style={{ fontFamily: 'var(--f-mono)', fontSize: 9, color: 'var(--warning)', border: '1px solid color-mix(in oklab, var(--warning) 35%, transparent)', background: 'color-mix(in oklab, var(--warning) 12%, transparent)', padding: '2px 8px', borderRadius: 'var(--r-full)', whiteSpace: 'nowrap' }}>NÃO ENCONTRADA NO MAUTIC</span>;
   }
   const map = {
     active:   { label: 'ATIVA',     fg: 'var(--success)', bg: 'rgba(58,214,140,0.14)', border: 'rgba(58,214,140,0.4)' },
-    paused:   { label: 'PAUSADA',   fg: '#ffd166',        bg: 'rgba(255,180,0,0.12)',  border: 'rgba(255,180,0,0.4)' },
+    paused:   { label: 'PAUSADA',   fg: 'var(--warning)', bg: 'color-mix(in oklab, var(--warning) 12%, transparent)', border: 'color-mix(in oklab, var(--warning) 35%, transparent)' },
     archived: { label: 'ARQUIVADA', fg: 'var(--fg5)',     bg: 'rgba(255,255,255,0.04)', border: 'var(--border-soft)' },
   };
   const meta = map[row.status] || map.archived;
@@ -8549,7 +8541,7 @@ function SmsNumberCard({ n }) {
           </div>
         </div>
         <div style={{ flex: 1, display: 'flex', justifyContent: 'flex-end' }}>
-          <Sparkline data={spark} width={140} height={34} color={n.health === 'red' ? '#ff8a8a' : n.health === 'yellow' ? '#ffd166' : '#5BC8FF'}/>
+          <Sparkline data={spark} width={140} height={34} color={n.health === 'red' ? 'var(--danger)' : n.health === 'yellow' ? 'var(--warning)' : 'var(--accent)'}/>
         </div>
       </div>
 
@@ -8574,21 +8566,21 @@ function SmsNumberCard({ n }) {
         </div>
         <div>
           <div className="eyebrow" style={{ fontSize: 8.5 }}>PENDENTES &gt;1H</div>
-          <div style={{ fontFamily: 'var(--f-mono)', fontSize: 14, color: n.pending > 0 ? '#ffd166' : 'var(--fg2)' }}>{fmtInt(n.pending)}</div>
+          <div style={{ fontFamily: 'var(--f-mono)', fontSize: 14, color: n.pending > 0 ? 'var(--warning)' : 'var(--fg2)' }}>{fmtInt(n.pending)}</div>
         </div>
       </div>
 
       {n.health === 'red' && (
         <div style={{
           marginTop: 12, padding: '9px 12px', borderRadius: 8, fontSize: 11.5, lineHeight: 1.5,
-          background: 'rgba(255,90,90,0.12)', border: '1px solid rgba(255,90,90,0.45)', color: '#ff8a8a',
+          background: 'rgba(255,90,90,0.12)', border: '1px solid rgba(255,90,90,0.45)', color: 'var(--danger)',
         }}>
           <b>Pausar envios desta marca e acionar o parceiro de SMS.</b>
           {n.healthReasons.length > 0 && <span style={{ color: 'var(--fg3)' }}> Motivo: {n.healthReasons.join(' · ')}.</span>}
         </div>
       )}
       {n.health === 'yellow' && n.healthReasons.length > 0 && (
-        <div style={{ marginTop: 10, fontFamily: 'var(--f-mono)', fontSize: 10, color: '#ffd166' }}>
+        <div style={{ marginTop: 10, fontFamily: 'var(--f-mono)', fontSize: 10, color: 'var(--warning)' }}>
           {n.healthReasons.join(' · ')}
         </div>
       )}
@@ -8640,7 +8632,7 @@ function SmsPage({ filters }) {
 
   const m = data.m;
   const selStyle = {
-    background: 'rgba(255,255,255,0.04)', color: 'var(--fg2)', border: '1px solid var(--border-soft)',
+    background: 'var(--bg)', color: 'var(--fg1)', border: '1px solid var(--border)',
     borderRadius: 8, padding: '5px 8px', fontSize: 11, fontFamily: 'var(--f-mono)',
   };
 
@@ -8689,7 +8681,7 @@ function SmsPage({ filters }) {
               background: 'rgba(255,90,90,0.1)', border: '1px solid rgba(255,90,90,0.5)',
             }}>
               <Icon name="alert-triangle" size={16}/>
-              <div style={{ fontSize: 12.5, color: '#ff8a8a' }}>
+              <div style={{ fontSize: 12.5, color: 'var(--danger)' }}>
                 <b>{m.alerts.redNumbers.join(', ')} em estado crítico.</b>{' '}
                 <span style={{ color: 'var(--fg3)' }}>Pausar envios desta marca e acionar o parceiro de SMS.</span>
               </div>
@@ -8698,7 +8690,7 @@ function SmsPage({ filters }) {
           {m.alerts.callbacksSuspect && (
             <div style={{
               marginBottom: 12, padding: '8px 14px', borderRadius: 9, fontSize: 11.5,
-              background: 'rgba(255,180,0,0.08)', border: '1px solid rgba(255,180,0,0.35)', color: '#ffd166',
+              background: 'rgba(255,180,0,0.08)', border: '1px solid rgba(255,180,0,0.35)', color: 'var(--warning)',
             }}>
               {fmtPct(m.alerts.recentPendingRatio)} dos envios recentes seguem sem status final há mais de 1h — os callbacks do Twilio podem estar fora do ar.
               {m.kpis.pending > 0 ? ` ${fmtInt(m.kpis.pending)} pendentes no período.` : ''}
@@ -8740,7 +8732,7 @@ function SmsPage({ filters }) {
             {m.sales.daily.length > 0 && (
               <NSTimeSeries height={160} currency="USD"
                 data={m.sales.daily.map((d) => ({ date: d.date, receita: d.grossUsd }))}
-                series={[{ key: 'receita', label: 'Receita', color: '#3ad68c' }]}/>
+                series={[{ key: 'receita', label: 'Receita', color: 'var(--money)' }]}/>
             )}
             {m.sales.byCampaign.length > 0 && (
               <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 10 }}>
@@ -8835,7 +8827,7 @@ function SmsPage({ filters }) {
                             {c.deliveryRate != null ? fmtPct(c.deliveryRate) : '—'}
                           </td>
                           <td className="num">{fmtInt(c.stops)}</td>
-                          <td className="num" style={{ color: c.skipped > 0 ? '#ffd166' : undefined }}>{fmtInt(c.skipped)}</td>
+                          <td className="num" style={{ color: c.skipped > 0 ? 'var(--warning)' : undefined }}>{fmtInt(c.skipped)}</td>
                           <td className="cell-mono" style={{ fontSize: 10.5 }}>{fmtSmsWhen(c.lastSentAt)}</td>
                         </tr>
                         {isOpen && (
@@ -8848,7 +8840,7 @@ function SmsPage({ filters }) {
                                   {c.skippedByReason.map((r) => (
                                     <div key={r.reason} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, color: 'var(--fg3)', padding: '2px 0' }}>
                                       <span style={{ marginRight: 12 }}>{r.reason}</span>
-                                      <span className="cell-mono" style={{ color: '#ffd166' }}>{fmtInt(r.count)}</span>
+                                      <span className="cell-mono" style={{ color: 'var(--warning)' }}>{fmtInt(r.count)}</span>
                                     </div>
                                   ))}
                                 </div>
@@ -8856,7 +8848,7 @@ function SmsPage({ filters }) {
                                   <div className="eyebrow" style={{ fontSize: 8.5, marginBottom: 6 }}>ENVIOS POR DIA</div>
                                   {c.dailySent.length > 0
                                     ? <NSTimeSeries height={120} format="int" data={c.dailySent.map((d) => ({ date: d.date, enviados: d.sent }))}
-                                        series={[{ key: 'enviados', label: 'Enviados', color: '#5BC8FF' }]}/>
+                                        series={[{ key: 'enviados', label: 'Enviados', color: 'var(--accent)' }]}/>
                                     : <div style={{ fontSize: 11, color: 'var(--fg5)' }}>Sem envios no período.</div>}
                                 </div>
                               </div>
@@ -8908,7 +8900,7 @@ function SmsPage({ filters }) {
                           <td style={{ fontSize: 11, color: 'var(--fg3)' }}>{f.brand || '—'}</td>
                           <td className="cell-mono" style={{ fontSize: 10, color: 'var(--fg4)' }}>{f.campaign || '—'}</td>
                           <td className="cell-mono" style={{ fontSize: 10.5 }}>{f.toMasked || '—'}</td>
-                          <td style={{ fontSize: 10.5, color: f.type === 'undelivered' || f.type === 'failed' ? '#ff8a8a' : 'var(--fg4)' }}>{f.detail || '—'}</td>
+                          <td style={{ fontSize: 10.5, color: f.type === 'undelivered' || f.type === 'failed' ? 'var(--danger)' : 'var(--fg4)' }}>{f.detail || '—'}</td>
                         </tr>
                       ))}
                     </tbody>
@@ -8940,7 +8932,7 @@ function SmsPage({ filters }) {
 const COMING_SOON_META = {
   sms: {
     icon: 'message-square',
-    accent: '#5BC8FF',
+    accent: 'var(--accent)',
     title: 'SMS',
     tagline: 'Mensagens curtas, receita comprida.',
     emoji: '📲',
@@ -8957,7 +8949,7 @@ const COMING_SOON_META = {
   },
   email: {
     icon: 'mail',
-    accent: '#9b7bff',
+    accent: 'var(--accent)',
     title: 'Email',
     tagline: 'O canal mais antigo da internet — e ainda um dos que mais pagam.',
     emoji: '📬',
@@ -9004,13 +8996,6 @@ function ComingSoonPage({ channel }) {
         display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center',
         padding: '56px 24px 44px', overflow: 'hidden', position: 'relative',
       }}>
-        {/* glow de fundo */}
-        <div style={{
-          position: 'absolute', top: -120, left: '50%', transform: 'translateX(-50%)',
-          width: 420, height: 300, borderRadius: '50%', filter: 'blur(80px)',
-          background: `${meta.accent}22`, pointerEvents: 'none',
-        }}/>
-
         {/* ícone flutuante com anéis pulsando */}
         <div style={{ position: 'relative', width: 110, height: 110, marginBottom: 22 }}>
           <div className="ns-cs-ring" style={{
@@ -9024,9 +9009,8 @@ function ComingSoonPage({ channel }) {
           <div className="ns-cs-float" style={{
             position: 'absolute', inset: 10, borderRadius: '50%',
             display: 'flex', alignItems: 'center', justifyContent: 'center',
-            background: `linear-gradient(160deg, ${meta.accent}2e, ${meta.accent}10)`,
-            border: `1px solid ${meta.accent}55`,
-            boxShadow: `0 0 34px -6px ${meta.accent}80`,
+            background: `color-mix(in oklab, ${meta.accent} 8%, transparent)`,
+            border: `1px solid color-mix(in oklab, ${meta.accent} 35%, transparent)`,
             animation: 'nsCsFloat 3.2s ease-in-out infinite',
             fontSize: 38,
           }}>
@@ -9037,7 +9021,7 @@ function ComingSoonPage({ channel }) {
         <span style={{
           fontFamily: 'var(--f-mono)', fontSize: 10.5, fontWeight: 700, letterSpacing: '0.18em',
           padding: '4px 14px', borderRadius: 'var(--r-full)', marginBottom: 14,
-          background: `${meta.accent}1c`, color: meta.accent, border: `1px solid ${meta.accent}50`,
+          background: `color-mix(in oklab, ${meta.accent} 12%, transparent)`, color: meta.accent, border: `1px solid color-mix(in oklab, ${meta.accent} 35%, transparent)`,
         }}>
           EM BREVE
         </span>
@@ -9055,17 +9039,17 @@ function ComingSoonPage({ channel }) {
             <div key={i} className="anim-in" style={{
               display: 'flex', alignItems: 'center', gap: 10, '--i': i + 1,
               padding: '9px 13px', borderRadius: 9,
-              background: s.done ? `${meta.accent}0e` : 'rgba(255,255,255,0.025)',
-              border: `1px solid ${s.done ? `${meta.accent}40` : 'var(--border-soft)'}`,
+              background: s.done ? `color-mix(in oklab, ${meta.accent} 6%, transparent)` : 'rgba(255,255,255,0.025)',
+              border: `1px solid ${s.done ? `color-mix(in oklab, ${meta.accent} 25%, transparent)` : 'var(--border-soft)'}`,
               opacity: s.done ? 1 : 0.75,
             }}>
               <span style={{
                 width: 20, height: 20, borderRadius: '50%', flexShrink: 0,
                 display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
                 fontSize: 11, fontWeight: 700,
-                background: s.done ? `${meta.accent}28` : 'rgba(255,255,255,0.05)',
+                background: s.done ? `color-mix(in oklab, ${meta.accent} 15%, transparent)` : 'rgba(255,255,255,0.05)',
                 color: s.done ? meta.accent : 'var(--fg5)',
-                border: `1px solid ${s.done ? `${meta.accent}60` : 'var(--border-soft)'}`,
+                border: `1px solid ${s.done ? `color-mix(in oklab, ${meta.accent} 35%, transparent)` : 'var(--border-soft)'}`,
               }}>
                 {s.done ? '✓' : i + 1}
               </span>
@@ -9080,7 +9064,7 @@ function ComingSoonPage({ channel }) {
             <span>construção do canal</span><span style={{ color: meta.accent }}>~50%</span>
           </div>
           <div style={{ height: 8, borderRadius: 4, background: 'rgba(255,255,255,0.05)', overflow: 'hidden' }}>
-            <div className="skel" style={{ width: '50%', height: '100%', borderRadius: 4, background: `${meta.accent}55` }}/>
+            <div className="skel" style={{ width: '50%', height: '100%', borderRadius: 4, background: `color-mix(in oklab, ${meta.accent} 35%, transparent)` }}/>
           </div>
         </div>
 
