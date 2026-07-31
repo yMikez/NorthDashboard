@@ -21,9 +21,11 @@ body { overflow-x: hidden; }
   position: fixed; inset: 0; z-index: 0; pointer-events: none; overflow: hidden;
   background: var(--navy-950);
 }
+/* North: papel e tinta, não neon — orbes viram um sopro de aurora teal
+   bem discreto (sem roxo genérico). */
 .ns-bg::before, .ns-bg::after {
   content: ""; position: absolute; width: 900px; height: 900px;
-  border-radius: 50%; filter: blur(80px); opacity: 0.22;
+  border-radius: 50%; filter: blur(80px); opacity: 0.08;
   will-change: transform;
 }
 .ns-bg::before {
@@ -32,7 +34,7 @@ body { overflow-x: hidden; }
   animation: nsDrift1 22s ease-in-out infinite;
 }
 .ns-bg::after {
-  background: radial-gradient(circle, var(--glow-violet), transparent 60%);
+  background: radial-gradient(circle, #0E7C97, transparent 60%);
   bottom: -300px; right: -200px;
   animation: nsDrift2 28s ease-in-out infinite;
 }
@@ -57,15 +59,24 @@ body { overflow-x: hidden; }
   min-height: 100vh;
 }
 
-/* ---------- SIDEBAR ---------- */
+/* ---------- SIDEBAR (North: escura SEMPRE, gradiente petróleo fixo +
+   brilhos ciano-gelo; igual nos dois temas) ---------- */
 .side {
-  background: linear-gradient(180deg, rgba(6,13,37,0.85), rgba(3,6,23,0.92));
-  border-right: 1px solid var(--border-soft);
-  backdrop-filter: blur(10px);
+  background: linear-gradient(180deg, #0E1A20 0%, #132630 55%, #0F2028 100%);
+  border-right: 1px solid rgba(91,200,255,0.10);
   padding: 20px 14px 16px;
   display: flex; flex-direction: column;
   position: sticky; top: 0; height: 100vh;
   z-index: 2;
+}
+/* Cordilheira sutil no rodapé — a metáfora da montanha, quase
+   imperceptível (traço ciano-gelo ~14%). Se dá pra notar de relance,
+   está forte demais. */
+.side::after {
+  content: "";
+  position: absolute; left: 0; right: 0; bottom: 0; height: 72px;
+  pointer-events: none;
+  background: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 232 72' preserveAspectRatio='none'><path d='M0 60 L26 40 L42 50 L68 24 L90 45 L116 32 L140 52 L166 36 L194 48 L232 28' fill='none' stroke='rgba(91,200,255,0.14)' stroke-width='1.5' stroke-linejoin='round' stroke-linecap='round'/><path d='M68 24 L71 28 L65 28 Z' fill='rgba(91,200,255,0.18)'/></svg>") bottom center / 100% auto no-repeat;
 }
 .side-logo {
   display: flex; align-items: center; gap: 10px;
@@ -1001,11 +1012,11 @@ body { overflow-x: hidden; }
 [data-theme="light"] .sp-rc   { color: #042b18; background: linear-gradient(180deg, rgba(40,200,120,0.92) 0%, rgba(22,170,98,0.74) 100%); }
 
 /* drill-down modal */
-.drawer-backdrop { position: fixed; inset: 0; background: rgba(3,6,23,0.7); backdrop-filter: blur(4px); z-index: 50; animation: fadeIn 200ms var(--ease-smooth); }
+.drawer-backdrop { position: fixed; inset: 0; background: rgba(13,18,21,0.72); z-index: 50; animation: fadeIn 200ms var(--ease-smooth); }
 .drawer {
   position: fixed; top: 0; right: 0; bottom: 0;
   width: 760px; max-width: 92vw;
-  background: linear-gradient(180deg, #060D25 0%, #030617 100%);
+  background: var(--bg-elev);
   border-left: 1px solid var(--border);
   z-index: 51; overflow-y: auto;
   animation: slideIn 300ms var(--ease-smooth);
@@ -1071,7 +1082,7 @@ body { overflow-x: hidden; }
   width: 100%;
   max-width: 540px;
   max-height: calc(100vh - 48px);
-  background: linear-gradient(180deg, #15275A 0%, #0F1F4D 50%, #0A1638 100%);
+  background: var(--bg-elev);
   border: 1px solid var(--border-strong);
   border-top-color: rgba(91,200,255,0.30);
   border-radius: var(--r-lg);
