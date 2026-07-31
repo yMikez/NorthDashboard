@@ -262,7 +262,7 @@ function Icon({ name, size = 16, stroke = 1.5, className = '' }) {
 
 // ---------- sparkline ----------
 function Sparkline({ data, width = 80, height = 26, color = '#5BC8FF', fill = true }) {
-  if (!data || data.length < 2) return <svg width={width} height={height}/>;
+  if (!data || data.length < 2) return <svg width={width} height={height} viewBox={`0 0 ${width} ${height}`}/>;
   const min = Math.min(...data);
   const max = Math.max(...data);
   const span = max - min || 1;
@@ -275,7 +275,9 @@ function Sparkline({ data, width = 80, height = 26, color = '#5BC8FF', fill = tr
   const area = path + ` L ${width - 1} ${height} L 1 ${height} Z`;
   const gid = 'spg' + Math.random().toString(36).slice(2, 7);
   return (
-    <svg width={width} height={height} className="spark">
+    // viewBox: quando o CSS mobile encolhe o svg (max-width), o traço
+    // escala em vez de clipar à direita.
+    <svg width={width} height={height} viewBox={`0 0 ${width} ${height}`} className="spark">
       {fill && (
         <>
           <defs>

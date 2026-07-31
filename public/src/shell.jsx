@@ -225,11 +225,14 @@ function Topbar({ title, titleEm, crumbs, onToggleCurrency, currency, onMenu }) 
       <div className="top-spacer"/>
       <div className="top-actions">
         <ThemeToggle/>
+        {/* Mobile (≤820px): rótulos de texto somem via .hide-mobile — a linha
+            de ações vira só ícones e cabe numa linha. Sino e theme-toggle
+            ficam intactos. */}
         <button className="btn btn-ghost" title="Atualizar dados">
-          <Icon name="refresh" size={13}/> Sincronizado há 2 min
+          <Icon name="refresh" size={13}/> <span className="hide-mobile">Sincronizado há 2 min</span>
         </button>
-        <button className="btn btn-ghost">
-          <Icon name="download" size={13}/> Exportar
+        <button className="btn btn-ghost" title="Exportar">
+          <Icon name="download" size={13}/> <span className="hide-mobile">Exportar</span>
         </button>
         <button className="icon-btn" title="Notificações">
           <Icon name="bell" size={14}/>
@@ -383,7 +386,9 @@ function DateRangeChip({ range, onChange }) {
   }
 
   return (
-    <div ref={ref} style={{ position: 'relative' }}>
+    // hide-mobile: no mobile a faixa de datas some (a informação já está no
+    // dropdown de período) — corta custo vertical da FilterBar.
+    <div ref={ref} className="hide-mobile" style={{ position: 'relative' }}>
       <button
         className="date-chip"
         onClick={() => setOpen(v => !v)}
@@ -600,8 +605,10 @@ function FilterBar({ filters, setFilters, options, route }) {
       />
       {showCompare && (
         <>
-          <span className="f-label" style={{ marginLeft: 8 }}>COMPARAR</span>
-          <button className={`chip ${filters.compare ? 'is-active' : ''}`}
+          {/* hide-mobile nos dois: COMPARAR/chip somem ≤820px pra reduzir
+              o custo vertical da barra. */}
+          <span className="f-label hide-mobile" style={{ marginLeft: 8 }}>COMPARAR</span>
+          <button className={`chip hide-mobile ${filters.compare ? 'is-active' : ''}`}
             onClick={() => setFilters(f => ({ ...f, compare: !f.compare }))}
           >
             <Icon name="arrow-up-right" size={12}/>

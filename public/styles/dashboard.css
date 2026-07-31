@@ -1841,8 +1841,11 @@ input:focus, select:focus, textarea:focus {
 @media (max-width: 600px) {
   .prod-grid { grid-template-columns: 1fr; }
 }
-@media (max-width: 420px) {
+/* Degrau de 1 coluna só em telas realmente estreitas (≤360px) —
+   a 412px (comum) os KPIs ficam em 2 colunas, sem rolagem infinita. */
+@media (max-width: 360px) {
   .kpi-grid { grid-template-columns: 1fr; }
+  .mini-kpis { grid-template-columns: 1fr; }
 }
 
 /* ---------- Alvos de toque (qualquer largura, input grosseiro) ----------
@@ -1857,4 +1860,93 @@ input:focus, select:focus, textarea:focus {
   .icon-btn { min-width: 40px; }
   .seg { height: auto; }
   .side-item { min-height: 44px; }
+}
+
+/* ============================================================
+   RESPONSIVO — R2
+   Camada mobile do CONTEÚDO (R1 cuidou da casca). Contrato com os
+   agentes JSX — nomes EXATOS: .hide-mobile (some ≤820px),
+   .only-mobile (some ≥821px), .tbl--sticky-first (1ª coluna fixa
+   no scroll-x), .tx-cards/.tx-card (lista de cards de transações).
+   ============================================================ */
+
+/* ---------- Utilitários de visibilidade ---------- */
+/* Base: mobile-only fica escondido no desktop; o override ≤820px
+   abaixo inverte. Variante display:contents descartada — block
+   resolve os usos do contrato. */
+.only-mobile { display: none; }
+
+/* ---------- .tbl--sticky-first: 1ª coluna fixa no scroll-x ----------
+   Qualquer largura — só tem efeito quando o .tbl-wrap rola. Fundo
+   opaco via token (--bg-raised = superfície do panel) → funciona nos
+   2 temas. th:first-child acumula o sticky top do thead (top:0) com
+   o left da coluna, e sobe pra z-index 3 (acima dos th z1 e dos
+   td:first-child z2). */
+.tbl--sticky-first th:first-child,
+.tbl--sticky-first td:first-child {
+  position: sticky;
+  left: 0;
+  z-index: 2;
+  background: var(--bg-raised);
+  box-shadow: 6px 0 12px -8px rgba(0,0,0,0.35);
+}
+.tbl--sticky-first th:first-child { top: 0; left: 0; z-index: 3; }
+/* Hover de linha: o tint translúcido do tr não atravessa o fundo
+   opaco da coluna fixa — reproduz o MESMO tint misturado por cima
+   de --bg-raised (idêntico ao olho nos 2 temas) e preserva o filete
+   cyan do hover junto com a sombra de scroll. */
+.tbl--sticky-first tbody tr:hover td:first-child {
+  background: color-mix(in oklab, var(--accent) 5%, var(--bg-raised));
+  box-shadow: inset 2px 0 0 var(--glow-cyan), 6px 0 12px -8px rgba(0,0,0,0.35);
+}
+
+/* ---------- .tx-cards/.tx-card: transações como cards (mobile) ---------- */
+.tx-cards { display: flex; flex-direction: column; gap: 10px; }
+.tx-card {
+  background: var(--bg-raised);
+  border: 1px solid var(--border);
+  border-radius: var(--r-lg);
+  padding: 12px 14px;
+  cursor: pointer;
+}
+.tx-card:active { border-color: var(--fg1); }
+/* l1: identidade × valor. l2: chips/badges. l3: metadados mono. */
+.tx-card .l1 { display: flex; justify-content: space-between; gap: 10px; align-items: baseline; }
+.tx-card .l1 .val { font-family: var(--f-mono); color: var(--money); white-space: nowrap; }
+.tx-card .l2 { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+.tx-card .l3 {
+  margin-top: 8px;
+  font-family: var(--f-mono); font-size: 10.5px; color: var(--fg5);
+  display: flex; flex-wrap: wrap; gap: 4px 10px;
+}
+
+/* ---------- Conteúdo ≤820px ---------- */
+@media (max-width: 820px) {
+  /* Utilitários de visibilidade (contrato JSX). */
+  .hide-mobile { display: none !important; }
+  .only-mobile { display: block; }
+
+  /* Tipografia display: título da topbar e hero do page-head escalam
+     com a viewport — acabou o título em 3 linhas. */
+  .top-h1 { font-size: clamp(18px, 5vw, 24px); }
+  .page-head h2 { font-size: clamp(26px, 8vw, 40px); line-height: 1.05; }
+  .page-head .sub { font-size: 12px; }
+
+  /* Ribbon de contexto ("7D · TIER 1 GLOBAL · USD"): quebra linha
+     com respiro em vez de truncar. */
+  .page-head .eyebrow { white-space: normal; line-height: 1.6; }
+
+  /* Chrome enxuto: topbar/filtros/page-head devolvem tela pro
+     conteúdo. page-head ganha wrap pra actions caírem embaixo do
+     hero sem esticar a linha. */
+  .top { row-gap: 6px; }
+  .filters { row-gap: 6px; }
+  .page-head { flex-wrap: wrap; row-gap: 8px; }
+  .page-head-actions { flex-wrap: wrap; }
+
+  /* Sparkline não espreme o delta: o foot quebra linha e o svg do
+     spark (filho direto — o ícone do delta fica de fora) se limita
+     a 45% da largura. */
+  .kpi-foot { flex-wrap: wrap; gap: 4px 8px; }
+  .kpi-foot > svg { max-width: 45%; height: auto; }
 }

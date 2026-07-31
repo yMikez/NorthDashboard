@@ -1,6 +1,27 @@
 /* global React */
 /* All remaining pages: Funnel, Leaderboard, All Affiliates, Products, Transactions, Settings */
 
+// ---------- MOBILE (R2) ----------
+// Hook local: true quando o viewport é mobile (≤820px) — mesma régua dos
+// utilitários .hide-mobile/.only-mobile do CSS. useState/useEffect vêm dos
+// globals de utils.jsx (React UMD).
+function useIsMobileAP() {
+  const [m, setM] = useState(() => window.matchMedia('(max-width: 820px)').matches);
+  useEffect(() => {
+    const mq = window.matchMedia('(max-width: 820px)');
+    const on = (e) => setM(e.matches);
+    mq.addEventListener('change', on);
+    return () => mq.removeEventListener('change', on);
+  }, []);
+  return m;
+}
+
+// ID de pedido curto pros cards mobile (l3 meta) — mantém início+fim.
+function shortTxId(id) {
+  if (!id) return '—';
+  return id.length > 14 ? `${id.slice(0, 6)}…${id.slice(-4)}` : id;
+}
+
 function funnelTabStyle(active) {
   return {
     display: 'inline-flex', alignItems: 'center', gap: 6,
@@ -595,7 +616,7 @@ function LeaderboardPage({ filters, onOpenAffiliate }) {
 
       <div className="panel" style={{ padding: 0 }}>
         <div className="tbl-wrap" style={{ margin: 0, padding: '0 4px', maxHeight: 620, overflowY: 'auto' }}>
-          <table className="tbl">
+          <table className="tbl tbl--sticky-first">
             <thead>
               <tr>
                 <th style={{ width: 36 }}>#</th>
@@ -1078,7 +1099,7 @@ function AllAffiliatesPage({ filters, onOpenAffiliate }) {
 
       <div className="panel" style={{ padding: 0 }}>
         <div className="tbl-wrap" style={{ margin: 0, padding: '0 4px', maxHeight: 720, overflowY: 'auto' }}>
-          <table className="tbl">
+          <table className="tbl tbl--sticky-first">
             <thead>
               <tr>
                 <th>Afiliado</th><th>Plataforma</th>
@@ -2333,6 +2354,7 @@ function TransactionsPage({ filters }) {
   const [debouncedQuery, setDebouncedQuery] = useState('');
   const [state, setStateTx] = useState({ status: 'loading', data: null, error: null });
   const [drawer, setDrawer] = useState(null); // { externalId, platformSlug } | null
+  const isMobile = useIsMobileAP();
 
   // Debounce search input so we don't hammer the endpoint on every keystroke.
   useEffect(() => {
@@ -2417,6 +2439,44 @@ function TransactionsPage({ filters }) {
         <div className="panel" style={{ color: 'var(--danger)' }}>Erro ao carregar: {state.error}</div>
       )}
 
+      {isMobile ? (
+        /* MOBILE (R2): mesma lista, em cards — mesmo handler do drawer da
+           linha. Estilos de .tx-cards/.tx-card vêm do CSS (contrato R2). */
+        <div className="tx-cards">
+          {state.status === 'loading' && Array.from({ length: 6 }).map((_, i) => (
+            <div className="tx-card" key={`sk-${i}`}>
+              <div className="l1"><SkelLine w="55%"/></div>
+              <div className="l3"><SkelLine w="75%"/></div>
+            </div>
+          ))}
+          {state.status === 'ready' && orders.length === 0 && (
+            <div style={{ textAlign: 'center', padding: 24, opacity: 0.6 }}>Nenhuma transação no período</div>
+          )}
+          {orders.map((o) => {
+            const { cls: platClass, short: platShort } = platBadge(o.platformSlug);
+            const statusLc = o.status.toLowerCase();
+            return (
+              <div className="tx-card" key={`${o.platformSlug}:${o.externalId}`}
+                   onClick={() => setDrawer({ externalId: o.externalId, platformSlug: o.platformSlug })}>
+                <div className="l1">
+                  <span>{o.productName || o.productExternalId}</span>
+                  <span className="val" style={o.grossAmountUsd < 0 ? { color: 'var(--danger)' } : undefined}>
+                    {fmtCurrency(o.grossAmountUsd, cur, 2)}
+                  </span>
+                </div>
+                <div className="l2">
+                  <span className={`plat ${platClass}`}>{platShort}</span>
+                  <StagePill type={o.productType} />
+                  <span className={`st st-${statusLc}`}>{statusLc}</span>
+                </div>
+                <div className="l3">
+                  {fmtDateTime(o.orderedAt)} · {o.affiliateNickname || o.affiliateExternalId || '—'} · {o.country || '—'} · {shortTxId(o.externalId)}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      ) : (
       <div className="panel" style={{ padding: 0 }}>
         <div className="tbl-wrap" style={{ margin: 0, padding: '0 4px', maxHeight: 720, overflowY: 'auto' }}>
           <table className="tbl">
@@ -2467,6 +2527,7 @@ function TransactionsPage({ filters }) {
           </table>
         </div>
       </div>
+      )}
 
       {drawer && (
         <TransactionDrawer

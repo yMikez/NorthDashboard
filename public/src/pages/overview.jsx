@@ -293,12 +293,16 @@ function OverviewPage({ filters, setFilters }) {
     <div className="page-in">
       <div className="page-head">
         <div className="lead">
-          <span className="eyebrow">{filters.preset.toUpperCase()} · TIER 1 GLOBAL · USD</span>
+          {/* whiteSpace normal: em telas estreitas o ribbon quebra limpo em
+              vez de estourar/truncar. */}
+          <span className="eyebrow" style={{ whiteSpace: 'normal' }}>{filters.preset.toUpperCase()} · TIER 1 GLOBAL · USD</span>
           <h2>Operação <em>em tempo real</em></h2>
           <span className="sub">{fmtRange(filters.dateRange)} · dados unificados ClickBank + Digistore24</span>
         </div>
-        <div className="page-head-actions">
-          <div className="seg" title="Modo de cálculo do gross">
+        {/* Mobile: wrap + flexShrink 0 — nada é cortado na borda; o texto de
+            "Agendar relatório" some ≤820px (fica só o ícone de calendário). */}
+        <div className="page-head-actions" style={{ flexWrap: 'wrap' }}>
+          <div className="seg" title="Modo de cálculo do gross" style={{ flexShrink: 0 }}>
             <button
               className={grossMode === 'active' ? 'is-active' : ''}
               onClick={() => setGrossMode('active')}
@@ -310,8 +314,12 @@ function OverviewPage({ filters, setFilters }) {
               aria-label="Data do evento: inclui valor original de vendas refundadas (alinha com ClickBank)"
             >EVENTO</button>
           </div>
-          <button className="btn btn-ghost"><Icon name="calendar" size={12}/> Agendar relatório</button>
-          <button className="btn btn-primary"><Icon name="plus" size={12}/> Nova visão</button>
+          <button className="btn btn-ghost" style={{ flexShrink: 0 }} title="Agendar relatório">
+            <Icon name="calendar" size={12}/> <span className="hide-mobile">Agendar relatório</span>
+          </button>
+          <button className="btn btn-primary" style={{ flexShrink: 0 }}>
+            <Icon name="plus" size={12}/> Nova visão
+          </button>
         </div>
       </div>
 

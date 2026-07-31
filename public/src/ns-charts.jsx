@@ -46,6 +46,23 @@ function nsFmtAxis(format, v, currency) {
   if (format === 'money2') return '$' + v.toFixed(0);
   return '$' + fmtK(v);
 }
+// Ticks compactos p/ telas estreitas (SÓ eixo Y — tooltip segue no formato cheio):
+// 746961 → "747K", 7300000 → "7.3M", 12400000 → "12M". Abaixo de 1000, inteiro puro.
+function nsCompact(n) {
+  var v = Number(n);
+  if (!isFinite(v)) return String(n);
+  var sign = v < 0 ? '-' : '';
+  var abs = Math.abs(v);
+  if (abs >= 1e6) { var m = abs / 1e6; return sign + (m >= 10 ? Math.round(m) : Math.round(m * 10) / 10) + 'M'; }
+  if (abs >= 1000) return sign + Math.round(abs / 1000) + 'K';
+  return sign + Math.round(abs);
+}
+// Variante narrow do nsFmtAxis: mesmo prefixo $ dos formatos de dinheiro, pct intacto.
+function nsFmtAxisNarrow(format, v, currency) {
+  if (format === 'pct') return (v * 100).toFixed(0) + '%';
+  if (format === 'int') return nsCompact(v);
+  return '$' + nsCompact(v); // 'money' e 'money2'
+}
 function nsDateStr(d) {
   return typeof d === 'string' ? d : new Date(d).toISOString().slice(0, 10);
 }
@@ -125,6 +142,10 @@ function NSTimeSeries({
   // desabilitado incondicionalmente (equivale a brush={false}).
   const coarse = typeof window !== 'undefined' && window.matchMedia && window.matchMedia('(pointer: coarse)').matches;
   const showBrush = !coarse && (brush === true || (brush === 'auto' && rows.length > 14));
+  // Tela estreita (~mobile): lido no render — rotação/resize re-renderiza via
+  // ResponsiveContainer, então não precisa de listener próprio.
+  const narrow = typeof window !== 'undefined' && window.matchMedia && window.matchMedia('(max-width: 820px)').matches;
+  const tightLegend = narrow && seriesDef.length > 3;
 
   function toggle(key) {
     if (!toggles) return;
@@ -140,7 +161,7 @@ function NSTimeSeries({
   return (
     <div>
       {(toggles || seriesDef.length > 1) && (
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12, padding: '2px 4px 8px' }}>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: tightLegend ? 8 : 12, padding: '2px 4px 8px' }}>
           {seriesDef.map((s) => {
             const off = hidden.has(s.key);
             const isFocus = focusKey != null && s.key === focusKey;
@@ -150,7 +171,7 @@ function NSTimeSeries({
                 style={{
                   display: 'inline-flex', alignItems: 'center', gap: 6,
                   background: 'none', border: 'none', padding: 0,
-                  fontFamily: 'var(--f-mono)', fontSize: 10, letterSpacing: '0.08em',
+                  fontFamily: 'var(--f-mono)', fontSize: tightLegend ? 9 : 10, letterSpacing: '0.08em',
                   textTransform: 'uppercase',
                   color: off ? 'var(--fg6)' : isFocus ? 'var(--fg1)' : 'var(--fg4)',
                   cursor: toggles ? 'pointer' : 'default',
@@ -166,7 +187,7 @@ function NSTimeSeries({
         </div>
       )}
       <ResponsiveContainer width="100%" height={height}>
-        <ComposedChart data={rows} margin={{ top: 8, right: 12, bottom: 0, left: 0 }}>
+        <ComposedChart data={rows} margin={{ top: 8, right: narrow ? 6 : 12, bottom: 0, left: 0 }}>
           <defs>
             {visible.map((s) => (
               <linearGradient key={s.key} id={`nsgrad-${s.key}`} x1="0" x2="0" y1="0" y2="1">
@@ -177,9 +198,11 @@ function NSTimeSeries({
           </defs>
           <CartesianGrid vertical={false} stroke={nsAlpha(nsTok('--fg1', '#182226'), 0.1)} strokeDasharray="3 6"/>
           <XAxis dataKey="date" tickFormatter={fmtDateShort} minTickGap={28}
+            interval={narrow ? 'preserveStartEnd' : undefined}
             axisLine={false} tickLine={false}
             tick={{ fontSize: 10, fill: 'var(--fg5)', fontFamily: 'var(--f-mono)' }}/>
-          <YAxis tickFormatter={(v) => nsFmtAxis(axisFormat, v, currency)} width={58}
+          <YAxis width={narrow ? 44 : 58}
+            tickFormatter={(v) => (narrow ? nsFmtAxisNarrow : nsFmtAxis)(axisFormat, v, currency)}
             axisLine={false} tickLine={false}
             tick={{ fontSize: 10, fill: 'var(--fg5)', fontFamily: 'var(--f-mono)' }}/>
           {hasNegative && <ReferenceLine y={0} stroke={nsAlpha(nsTok('--danger', '#FF6B6B'), 0.45)} strokeDasharray="4 4"/>}
