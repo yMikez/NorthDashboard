@@ -119,7 +119,7 @@ function CustosPage({ filters }) {
               ribbon do overview). */}
           <span className="eyebrow" style={{ whiteSpace: 'normal' }}>{filters.preset.toUpperCase()} · MARGEM & CUSTOS</span>
           <h2>Custos <em>e lucro real</em></h2>
-          <span className="sub">
+          <span className="sub hide-mobile">
             Gross aprovado − taxa plataforma − CPA − COGS − frete · estimativa de allowance rolling 60d
           </span>
         </div>

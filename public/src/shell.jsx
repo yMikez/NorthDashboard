@@ -295,7 +295,7 @@ function MultiSelect({ label, options, selected, onChange, icon }) {
         <Icon name="chevron-down" size={12}/>
       </button>
       {open && (
-        <div style={{
+        <div className="filter-pop" style={{
           position: 'absolute', top: 'calc(100% + 6px)', left: 0, minWidth: 220,
           maxWidth: 'calc(100vw - 24px)',
           background: 'var(--bg-elev)', border: '1px solid var(--border)',
@@ -496,7 +496,7 @@ function PeriodDropdown({ filters, setFilters }) {
         <Icon name="chevron-down" size={12}/>
       </button>
       {open && (
-        <div role="listbox" style={{
+        <div role="listbox" className="filter-pop" style={{
           position: 'absolute', top: 'calc(100% + 6px)', left: 0, minWidth: 220,
           maxWidth: 'calc(100vw - 24px)',
           background: 'var(--bg-elev)', border: '1px solid var(--border)',

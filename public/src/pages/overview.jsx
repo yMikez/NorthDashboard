@@ -297,7 +297,7 @@ function OverviewPage({ filters, setFilters }) {
               vez de estourar/truncar. */}
           <span className="eyebrow" style={{ whiteSpace: 'normal' }}>{filters.preset.toUpperCase()} · TIER 1 GLOBAL · USD</span>
           <h2>Operação <em>em tempo real</em></h2>
-          <span className="sub">{fmtRange(filters.dateRange)} · dados unificados ClickBank + Digistore24</span>
+          <span className="sub">{fmtRange(filters.dateRange)}<span className="hide-mobile"> · dados unificados ClickBank + Digistore24</span></span>
         </div>
         {/* Mobile: wrap + flexShrink 0 — nada é cortado na borda; o texto de
             "Agendar relatório" some ≤820px (fica só o ícone de calendário). */}
