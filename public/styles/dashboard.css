@@ -1371,7 +1371,24 @@ body { overflow-x: hidden; }
    do bg principal já dá identidade visual suficiente. */
 
 /* Sidebar — top sheen sutil pra dar peso "vidro" */
-.side { isolation: isolate; overflow: hidden; }
+/* overflow-y auto: com 18+ itens o menu estoura em telas baixas (drawer
+   mobile e janelas desktop curtas) — os itens do fim têm que ser
+   alcançáveis. Scrollbar fininha ciano-gelo, na cena da sidebar. */
+.side {
+  isolation: isolate;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(91,200,255,0.22) transparent;
+}
+.side::-webkit-scrollbar { width: 4px; }
+.side::-webkit-scrollbar-track { background: transparent; }
+.side::-webkit-scrollbar-thumb {
+  background: rgba(91,200,255,0.22);
+  border-radius: 4px;
+}
 .side::before {
   content: '';
   position: absolute; left: 0; right: 0; top: 0;
