@@ -9,7 +9,7 @@
 // pontuais. Só o que vale lembrar permanentemente. Dedup por título
 // case-insensitive. Cap de MAX_AUTO entries (remove as mais antigas).
 
-import { getAnthropicClient, ANTHROPIC_MODEL } from './ai';
+import { getAnthropicClient, ANTHROPIC_FAST_MODEL } from './ai';
 import { invalidateKnowledgeCache } from './knowledge';
 import { db } from '../db';
 import { logger } from '../logger';
@@ -45,7 +45,9 @@ export async function extractAndSaveMemory(
     if (!userText.trim() || !assistantText.trim()) return;
     const client = getAnthropicClient();
     const resp = await client.messages.create({
-      model: ANTHROPIC_MODEL,
+      // Extração de fato é tarefa simples — Haiku resolve em fração do
+      // tempo/custo e sai da rota crítica (já é fire-and-forget).
+      model: ANTHROPIC_FAST_MODEL,
       max_tokens: 600,
       system: SYSTEM,
       messages: [

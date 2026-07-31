@@ -18,7 +18,7 @@
 import type Anthropic from '@anthropic-ai/sdk';
 import { db } from '@/lib/db';
 import { requireAdmin } from '@/lib/auth/guard';
-import { getAnthropicClient, ANTHROPIC_MODEL, systemPrompt } from '@/lib/services/ai';
+import { getAnthropicClient, ANTHROPIC_MODEL, systemBlocks } from '@/lib/services/ai';
 import { getKnowledgePromptBlock } from '@/lib/services/knowledge';
 import { extractAndSaveMemory } from '@/lib/services/chatMemory';
 import { TOOLS, executeTool, TERMINAL_TOOL } from '@/lib/services/aiTools';
@@ -30,6 +30,42 @@ export const dynamic = 'force-dynamic';
 interface RequestBody {
   conversationId?: string;
   message?: string;
+  // Estado atual da UI da SPA (aba, período, filtros ativos) — vira o
+  // bloco dinâmico do system pra perguntas dêiticas ("por que caiu aqui?").
+  uiState?: {
+    route?: string;
+    preset?: string;
+    startDate?: string;
+    endDate?: string;
+    platforms?: string[];
+    families?: string[];
+    stages?: string[];
+    countries?: string[];
+  };
+}
+
+// Sanitiza e serializa o uiState num bloco curto de texto. Free-form do
+// client — só strings curtas passam, listas capadas em 10 itens.
+function uiStateText(ui: RequestBody['uiState']): string {
+  if (!ui || typeof ui !== 'object') return '';
+  const s = (v: unknown) => (typeof v === 'string' ? v.slice(0, 60) : '');
+  const arr = (v: unknown) =>
+    Array.isArray(v) ? v.filter((x) => typeof x === 'string').slice(0, 10).map((x) => (x as string).slice(0, 40)) : [];
+  const parts: string[] = [];
+  if (s(ui.route)) parts.push(`aba: ${s(ui.route)}`);
+  if (s(ui.preset)) parts.push(`período selecionado: ${s(ui.preset)}`);
+  if (s(ui.startDate) && s(ui.endDate)) parts.push(`intervalo: ${s(ui.startDate)} → ${s(ui.endDate)}`);
+  const lists: Array<[string, unknown]> = [
+    ['plataformas', ui.platforms], ['famílias', ui.families],
+    ['etapas', ui.stages], ['países', ui.countries],
+  ];
+  for (const [label, v] of lists) {
+    const a = arr(v);
+    if (a.length) parts.push(`${label}: ${a.join(', ')}`);
+  }
+  return parts.length
+    ? `\n\n# Estado da UI (o que o usuário está vendo agora)\n${parts.join(' · ')}`
+    : '';
 }
 
 // Limits
@@ -53,6 +89,7 @@ export async function POST(req: Request) {
   if (!userMsg) {
     return new Response(JSON.stringify({ error: 'message vazio' }), { status: 400 });
   }
+  const uiTxt = uiStateText(body.uiState);
 
   // Rate limit: conta mensagens 'user' do admin nas últimas 24h.
   // Defesa contra loop acidental no client + custo descontrolado.
@@ -150,13 +187,7 @@ export async function POST(req: Request) {
           const ms = client.messages.stream({
             model: ANTHROPIC_MODEL,
             max_tokens: 4096,
-            system: [
-              {
-                type: 'text',
-                text: systemPrompt(new Date(), knowledgeBlock),
-                cache_control: { type: 'ephemeral' },
-              },
-            ],
+            system: systemBlocks(new Date(), knowledgeBlock, uiTxt),
             tools: TOOLS,
             messages: apiMessages,
           });
@@ -183,35 +214,43 @@ export async function POST(req: Request) {
             break;
           }
 
-          // Executa cada tool_use e empilha tool_result.
+          // Executa os tool_use e empilha tool_result.
           // `respond_with_blocks` é terminal: extrai os blocos do input,
           // emite SSE pra UI e quebra fora do loop sem mais iterações.
-          const toolResults: Anthropic.ToolResultBlockParam[] = [];
-          for (const block of finalMessage.content) {
-            if (block.type !== 'tool_use') continue;
+          const toolBlocks = finalMessage.content.filter(
+            (b): b is Anthropic.ToolUseBlock => b.type === 'tool_use',
+          );
 
-            if (block.name === TERMINAL_TOOL) {
-              const input = block.input as { blocks?: unknown };
-              finalBlocks = Array.isArray(input?.blocks) ? input.blocks : null;
-              toolUses.push({ name: block.name, input: block.input, result: { ok: true } });
-              send('tool_use_result', { name: block.name, id: block.id });
-              if (finalBlocks) {
-                send('blocks', { blocks: finalBlocks });
-              }
-              break outer;
+          const terminal = toolBlocks.find((b) => b.name === TERMINAL_TOOL);
+          if (terminal) {
+            const input = terminal.input as { blocks?: unknown };
+            finalBlocks = Array.isArray(input?.blocks) ? input.blocks : null;
+            toolUses.push({ name: terminal.name, input: terminal.input, result: { ok: true } });
+            send('tool_use_result', { name: terminal.name, id: terminal.id });
+            if (finalBlocks) {
+              send('blocks', { blocks: finalBlocks });
             }
+            break outer;
+          }
 
-            const result = await executeTool(block.name, block.input as Record<string, unknown>);
-            toolUses.push({ name: block.name, input: block.input, result });
+          // Sem terminal: executa TODAS as tools da rodada em PARALELO —
+          // o modelo costuma pedir 2-3 consultas juntas (ex: comparar
+          // períodos) e executá-las em série somava as latências.
+          const results = await Promise.all(
+            toolBlocks.map((block) =>
+              executeTool(block.name, block.input as Record<string, unknown>),
+            ),
+          );
+          const toolResults: Anthropic.ToolResultBlockParam[] = toolBlocks.map((block, i) => {
+            toolUses.push({ name: block.name, input: block.input, result: results[i] });
             send('tool_use_result', { name: block.name, id: block.id });
-            toolResults.push({
+            return {
               type: 'tool_result',
               tool_use_id: block.id,
-              content: JSON.stringify(result).slice(0, TOOL_RESULT_MAX_BYTES),
-            });
-          }
+              content: JSON.stringify(results[i]).slice(0, TOOL_RESULT_MAX_BYTES),
+            };
+          });
           if (toolResults.length === 0) {
-            // Só terminal tool foi chamada — sem tool_results pra empilhar.
             break;
           }
           apiMessages.push({ role: 'user', content: toolResults });

@@ -290,9 +290,14 @@ export async function executeTool(name: string, input: ToolInput): Promise<unkno
         const data = await getAffiliates(parseFilters(input));
         // Cortar pra evitar payload gigante voltando pro modelo.
         // Modelo lê top 30 por receita; suficiente pra análise.
+        // Sparkline (30 pontos/afiliado) só serve pra UI — fora do
+        // payload do modelo: 30×30 números eram puro ruído/latência.
         return {
           summary: data.summary,
-          affiliates: data.affiliates.slice(0, 30),
+          affiliates: data.affiliates.slice(0, 30).map((a) => {
+            const { sparkline: _sparkline, ...rest } = a as Record<string, unknown> & { sparkline?: unknown };
+            return rest;
+          }),
           totalCount: data.affiliates.length,
         };
       }

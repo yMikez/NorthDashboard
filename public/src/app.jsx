@@ -160,6 +160,25 @@ function App({ user }) {
     currency: 'USD',
   }));
 
+  // Estado da UI exposto globalmente pro chat IA (aiSendMessage em api.js
+  // manda junto da mensagem — habilita perguntas dêiticas tipo "por que
+  // caiu aqui?"). Global de propósito: ChatWidget/ChatPage não recebem
+  // filters por prop e o idioma da SPA é escopo global.
+  useEffectApp(() => {
+    try {
+      window.NSUiState = {
+        route: hashState.route,
+        preset: filters.preset,
+        startDate: isoDateOnly(filters.dateRange.start),
+        endDate: isoDateOnly(filters.dateRange.end),
+        platforms: Array.from(filters.platforms || []),
+        families: Array.from(filters.families || []),
+        stages: Array.from(filters.stages || []),
+        countries: Array.from(filters.countries || []),
+      };
+    } catch (e) { /* nunca quebra o render por causa do chat */ }
+  }, [filters, hashState.route]);
+
   // persist filters to URL via replaceState (no new history entry — typing
   // in a filter shouldn't litter back-button history).
   useEffectApp(() => {

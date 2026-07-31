@@ -7,7 +7,10 @@
 import Anthropic from '@anthropic-ai/sdk';
 import { logger } from '../logger';
 
-const MODEL = 'claude-sonnet-4-6';
+const MODEL = 'claude-sonnet-5';
+// Modelo rápido pra tarefas laterais (extração de memória, sumarização):
+// não precisam do modelo principal e saem da rota crítica de latência.
+const FAST_MODEL = 'claude-haiku-4-5-20251001';
 
 let cached: Anthropic | null = null;
 
@@ -22,6 +25,7 @@ export function getAnthropicClient(): Anthropic {
 }
 
 export const ANTHROPIC_MODEL = MODEL;
+export const ANTHROPIC_FAST_MODEL = FAST_MODEL;
 
 /**
  * Formata uma Date no fuso BRT (America/Sao_Paulo, UTC-3, sem DST desde 2019)
@@ -41,21 +45,40 @@ function formatBrt(d: Date): { date: string; datetime: string } {
 }
 
 /**
- * System prompt em PT-BR. Define persona, contexto do negócio, e regras
- * de estilo. Marcado pra cache ephemeral — Anthropic detecta o conteúdo
- * idêntico e cobra 10% do preço de input nas chamadas subsequentes.
- *
- * IMPORTANTE: o prompt é estável por minuto (cache hit). Como a hora
- * passa por aqui, cache é invalidado a cada minuto — aceitável já que
- * o ganho de "hoje" correto > redução de custo. Se virar gargalo,
- * granularidade pra hora ou dia recompõe o cache.
+ * System prompt em 3 blocos pra maximizar prompt cache:
+ *   1. ESTÁVEL (persona/regras/contexto/tools) — cache ephemeral; só muda
+ *      em deploy. Antes o timestamp minuto-a-minuto vivia DENTRO do bloco
+ *      cacheado e invalidava o cache a cada request — era o principal
+ *      motivo de latência/custo do chat.
+ *   2. KNOWLEDGE — cache ephemeral próprio: um fato novo salvo pela
+ *      memória automática invalida só este bloco, não o estável.
+ *   3. DINÂMICO (agora em BRT + estado da UI) — SEM cache_control, fica
+ *      fora do prefixo cacheado de propósito.
  */
-export function systemPrompt(currentDate: Date, knowledgeBlock = ''): string {
+export function systemBlocks(
+  currentDate: Date,
+  knowledgeBlock = '',
+  uiStateText = '',
+): Anthropic.TextBlockParam[] {
   const { date: dt, datetime: now } = formatBrt(currentDate);
-  const knowledgeSection = knowledgeBlock.trim()
-    ? `\n\n# Base de conhecimento (admin)\nInformação adicional fornecida pelo admin do dashboard. Use como contexto autoritativo — preferir aos seus chutes sempre que cobrir o tópico.\n\n${knowledgeBlock}\n`
-    : '';
-  return `Você é especialista em analytics de marketing direct-response no nicho de nutra, trabalhando dentro do dashboard NorthScale que agrega vendas de ClickBank e Digistore24.
+  const blocks: Anthropic.TextBlockParam[] = [
+    { type: 'text', text: STABLE_PROMPT, cache_control: { type: 'ephemeral' } },
+  ];
+  if (knowledgeBlock.trim()) {
+    blocks.push({
+      type: 'text',
+      text: `# Base de conhecimento (admin)\nInformação adicional fornecida pelo admin do dashboard. Use como contexto autoritativo — preferir aos seus chutes sempre que cobrir o tópico.\n\n${knowledgeBlock}`,
+      cache_control: { type: 'ephemeral' },
+    });
+  }
+  blocks.push({
+    type: 'text',
+    text: `Agora em BRT: ${now} (data: ${dt}).${uiStateText}`,
+  });
+  return blocks;
+}
+
+const STABLE_PROMPT = `Você é especialista em analytics de marketing direct-response no nicho de nutra, trabalhando dentro do dashboard NorthScale que agrega vendas de ClickBank e Digistore24.
 
 # Regras de resposta
 - SEMPRE em PT-BR.
@@ -98,8 +121,11 @@ Ordem dos blocos: SummaryBlock (se houver) primeiro, depois InsightsBlock, depoi
 
 Formatos: KPI \`value\` sempre formatado pra UI ("$ 154.318" não 154318.42). Table rows com keys batendo column.key. Chart data: x pode ser data ISO ou label string.
 
-# Fuso horário
-Usuário e operação estão no Brasil (America/Sao_Paulo, BRT = UTC-3, sem horário de verão). TODA referência a data ("hoje", "ontem", "esta semana") DEVE ser interpretada em BRT. Ao montar filtros para tools (start_date/end_date), use a data BRT atual fornecida abaixo — nunca infira UTC ou outra zona. Se o usuário não especificar período, use a janela default (30 dias até hoje em BRT).
+# Honestidade com dados
+Se as tools disponíveis NÃO cobrem o dado pedido, diga claramente que esse dado não está disponível no dashboard — NUNCA estime ou invente números. Resposta confiante e errada é pior que "não tenho esse dado".
 
-Agora em BRT: ${now} (data: ${dt}).${knowledgeSection}`;
-}
+# Estado da UI
+Quando presente, o bloco "Estado da UI" no fim deste system diz o que o usuário está vendo AGORA (aba, período, filtros ativos). Use-o pra interpretar perguntas dêiticas ("por que caiu aqui?", "esse período", "esses afiliados") e como default de filtros quando a pergunta não especificar.
+
+# Fuso horário
+Usuário e operação estão no Brasil (America/Sao_Paulo, BRT = UTC-3, sem horário de verão). TODA referência a data ("hoje", "ontem", "esta semana") DEVE ser interpretada em BRT. Ao montar filtros para tools (start_date/end_date), use a data BRT atual fornecida abaixo — nunca infira UTC ou outra zona. Se o usuário não especificar período, use a janela default (30 dias até hoje em BRT).`;

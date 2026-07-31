@@ -42,7 +42,7 @@ export interface StreamCallbacks {
  * limit pra exibir UI específica. Suporta abort via AbortController.
  */
 export async function sendMessage(
-  input: { conversationId?: string | null; message: string },
+  input: { conversationId?: string | null; message: string; uiState?: unknown },
   callbacks: StreamCallbacks,
   signal?: AbortSignal,
 ): Promise<void> {
@@ -51,7 +51,7 @@ export async function sendMessage(
     res = await fetch('/api/chat', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Accept: 'text/event-stream' },
-      body: JSON.stringify({ conversationId: input.conversationId, message: input.message }),
+      body: JSON.stringify({ conversationId: input.conversationId, message: input.message, uiState: input.uiState }),
       signal,
     });
   } catch (err) {

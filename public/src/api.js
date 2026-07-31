@@ -727,10 +727,14 @@ async function aiDeleteConversation(id) {
  *   onError({message})    — erro
  */
 async function aiSendMessage({ conversationId, message }, callbacks) {
+  // Estado da UI (aba + filtros ativos) vai junto — o backend injeta no
+  // system pro modelo entender "por que caiu aqui?" / "esse período".
+  let uiState;
+  try { uiState = window.NSUiState || undefined; } catch (e) { uiState = undefined; }
   const res = await fetch('/api/chat', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Accept: 'text/event-stream' },
-    body: JSON.stringify({ conversationId, message }),
+    body: JSON.stringify({ conversationId, message, uiState }),
   });
   if (!res.ok) {
     const data = await res.json().catch(() => ({}));
