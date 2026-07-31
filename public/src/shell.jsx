@@ -3,7 +3,7 @@
 
 const { useState: useStateS, useEffect: useEffectS, useRef: useRefS } = React;
 
-function Sidebar({ active, onNav, user }) {
+function Sidebar({ active, onNav, user, open, onClose }) {
   const allGroups = [
     {
       label: 'Análise',
@@ -76,7 +76,10 @@ function Sidebar({ active, onNav, user }) {
     try { localStorage.setItem('ns-side-collapsed', next ? '1' : '0'); } catch (e) {}
   }
   return (
-    <aside className={`side ${collapsed ? 'is-collapsed' : ''}`}>
+    <>
+      {/* Véu do drawer mobile — só existe no DOM enquanto aberto (≤820px). */}
+      {open && <div className="side-backdrop" onClick={onClose}/>}
+      <aside className={'side ' + (collapsed ? 'is-collapsed ' : '') + (open ? 'is-open' : '')}>
       <button
         className="side-collapse"
         onClick={toggleCollapse}
@@ -133,7 +136,8 @@ function Sidebar({ active, onNav, user }) {
         </div>
         <UserChip user={user}/>
       </div>
-    </aside>
+      </aside>
+    </>
   );
 }
 
@@ -193,9 +197,18 @@ function UserChip({ user }) {
   );
 }
 
-function Topbar({ title, titleEm, crumbs, onToggleCurrency, currency }) {
+function Topbar({ title, titleEm, crumbs, onToggleCurrency, currency, onMenu }) {
   return (
     <header className="top">
+      {/* Hambúrguer do drawer mobile — o CSS o esconde em desktop (>820px).
+          SVG inline (3 linhas) porque o Icon set (utils.jsx) não tem 'menu';
+          mesmo idioma visual do Icon: stroke currentColor, caps redondos. */}
+      <button className="top-menu-btn" onClick={onMenu} aria-label="Abrir menu">
+        <svg width={18} height={18} viewBox="0 0 24 24" fill="none"
+          stroke="currentColor" strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round">
+          <path d="M3 6h18"/><path d="M3 12h18"/><path d="M3 18h18"/>
+        </svg>
+      </button>
       <div className="top-title">
         <div className="top-crumb">
           {crumbs.map((c, i) => (
@@ -281,6 +294,7 @@ function MultiSelect({ label, options, selected, onChange, icon }) {
       {open && (
         <div style={{
           position: 'absolute', top: 'calc(100% + 6px)', left: 0, minWidth: 220,
+          maxWidth: 'calc(100vw - 24px)',
           background: 'var(--bg-elev)', border: '1px solid var(--border)',
           borderRadius: 8, padding: 6, zIndex: 20, boxShadow: 'var(--shadow-lg)',
         }}>
@@ -382,6 +396,7 @@ function DateRangeChip({ range, onChange }) {
       {open && (
         <div style={{
           position: 'absolute', top: 'calc(100% + 6px)', left: 0, minWidth: 280,
+          maxWidth: 'calc(100vw - 24px)',
           background: 'var(--bg-elev)', border: '1px solid var(--border)',
           borderRadius: 8, padding: 12, zIndex: 20,
           boxShadow: 'var(--shadow-lg)',
@@ -466,7 +481,7 @@ function PeriodDropdown({ filters, setFilters }) {
       <button
         className="select-btn"
         onClick={() => setOpen((v) => !v)}
-        style={{ minWidth: 180, justifyContent: 'space-between' }}
+        style={{ minWidth: 'min(180px, calc(100vw - 48px))', justifyContent: 'space-between' }}
         aria-haspopup="listbox"
         aria-expanded={open}
       >
@@ -478,6 +493,7 @@ function PeriodDropdown({ filters, setFilters }) {
       {open && (
         <div role="listbox" style={{
           position: 'absolute', top: 'calc(100% + 6px)', left: 0, minWidth: 220,
+          maxWidth: 'calc(100vw - 24px)',
           background: 'var(--bg-elev)', border: '1px solid var(--border)',
           borderRadius: 8, padding: 4, zIndex: 20,
           boxShadow: 'var(--shadow-lg)',

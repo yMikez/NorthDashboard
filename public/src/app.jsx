@@ -185,7 +185,20 @@ function App({ user }) {
 
   const [drawerAff, setDrawerAff] = useStateApp(null);
 
+  // Drawer de navegação mobile (≤820px). Independente do colapso desktop
+  // (is-collapsed vive dentro do Sidebar); em desktop o CSS ignora is-open.
+  const [navOpen, setNavOpen] = useStateApp(false);
+
+  // Trava o scroll do body enquanto o drawer está aberto, com cleanup pra
+  // nunca deixar o body preso se o App desmontar com o drawer aberto.
+  useEffectApp(() => {
+    document.body.style.overflow = navOpen ? 'hidden' : '';
+    return () => { document.body.style.overflow = ''; };
+  }, [navOpen]);
+
   function onNav(route) {
+    // Fecha o drawer mobile em qualquer troca de aba.
+    setNavOpen(false);
     // /chat foi migrado pra rota Next.js native (TS + Tailwind + shadcn).
     // SPA não renderiza mais o ChatPage inline — full-page nav garante que
     // o usuário vê a UI nova com layout integrado (dashboard nav + chat).
@@ -204,12 +217,13 @@ function App({ user }) {
   return (
     <div className="app">
       <FXLayers/>
-      <Sidebar active={hashState.route} onNav={onNav} user={user}/>
+      <Sidebar active={hashState.route} onNav={onNav} user={user} open={navOpen} onClose={() => setNavOpen(false)}/>
       <div className="main">
         <Topbar
           title={r.title} titleEm={r.em} crumbs={r.crumbs}
           currency={filters.currency}
           onToggleCurrency={(c) => setFilters(f => ({ ...f, currency: c }))}
+          onMenu={() => setNavOpen(true)}
         />
         <FilterBar filters={filters} setFilters={setFilters} options={filterOptions} route={hashState.route}/>
         <div className="page">

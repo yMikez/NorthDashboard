@@ -419,7 +419,7 @@ function AffiliateRefundModal({ aff, onCancel, onSaved }) {
       position: 'fixed', inset: 0, zIndex: 100, background: 'rgba(13,18,21,0.72)',
       display: 'grid', placeItems: 'center',
     }}>
-      <div onClick={(e) => e.stopPropagation()} className="panel" style={{ width: 380, padding: 22 }}>
+      <div onClick={(e) => e.stopPropagation()} className="panel" style={{ width: 'min(380px, 92vw)', padding: 22 }}>
         <div className="eyebrow" style={{ fontSize: 10, color: 'var(--glow-cyan)', marginBottom: 4 }}>
           REFUND & CHARGEBACK · MODELO CPA
         </div>
@@ -616,7 +616,7 @@ function LeaderboardPage({ filters, onOpenAffiliate }) {
               </tr>
             </thead>
             <tbody>
-              {state.status === 'loading' && <SkelTableRows rows={10} cols={9}/>}
+              {state.status === 'loading' && <SkelTableRows rows={10} cols={15}/>}
               {state.status === 'ready' && rows.length === 0 && (
                 <tr><td colSpan={15} style={{ textAlign: 'center', padding: 24, opacity: 0.6 }}>
                   Nenhum afiliado com pelo menos {minOrders} pedido{minOrders > 1 ? 's' : ''} no período
@@ -860,29 +860,31 @@ function AffiliateDrawer({ affiliateId, filters, onClose }) {
                   <div className="panel-sub">Aprovados, ordenados por receita</div>
                 </div>
               </div>
-              <table className="tbl">
-                <thead>
-                  <tr>
-                    <th>Oferta</th>
-                    <th>Tipo</th>
-                    <th className="num">Pedidos</th>
-                    <th className="num">Receita</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {data.byProduct.map((p) => (
-                    <tr key={p.externalId}>
-                      <td>
-                        <div>{p.name}</div>
-                        <div className="cell-mono" style={{ fontSize: 10, color: 'var(--fg5)' }}>{p.externalId}</div>
-                      </td>
-                      <td><span className="badge neutral">{p.productType.toLowerCase()}</span></td>
-                      <td className="num cell-mono">{fmtInt(p.orders)}</td>
-                      <td className="num cell-mono">{fmtCurrency(p.revenue, cur, 0)}</td>
+              <div className="tbl-wrap">
+                <table className="tbl">
+                  <thead>
+                    <tr>
+                      <th>Oferta</th>
+                      <th>Tipo</th>
+                      <th className="num">Pedidos</th>
+                      <th className="num">Receita</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
+                  </thead>
+                  <tbody>
+                    {data.byProduct.map((p) => (
+                      <tr key={p.externalId}>
+                        <td>
+                          <div>{p.name}</div>
+                          <div className="cell-mono" style={{ fontSize: 10, color: 'var(--fg5)' }}>{p.externalId}</div>
+                        </td>
+                        <td><span className="badge neutral">{p.productType.toLowerCase()}</span></td>
+                        <td className="num cell-mono">{fmtInt(p.orders)}</td>
+                        <td className="num cell-mono">{fmtCurrency(p.revenue, cur, 0)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             </div>
           )}
 
@@ -894,24 +896,26 @@ function AffiliateDrawer({ affiliateId, filters, onClose }) {
                   <div className="panel-sub">Receita aprovada por país</div>
                 </div>
               </div>
-              <table className="tbl">
-                <thead>
-                  <tr>
-                    <th>País</th>
-                    <th className="num">Pedidos</th>
-                    <th className="num">Receita</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {data.byCountry.map((c) => (
-                    <tr key={c.code}>
-                      <td className="cell-mono">{c.code}</td>
-                      <td className="num cell-mono">{fmtInt(c.orders)}</td>
-                      <td className="num cell-mono">{fmtCurrency(c.revenue, cur, 0)}</td>
+              <div className="tbl-wrap">
+                <table className="tbl">
+                  <thead>
+                    <tr>
+                      <th>País</th>
+                      <th className="num">Pedidos</th>
+                      <th className="num">Receita</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
+                  </thead>
+                  <tbody>
+                    {data.byCountry.map((c) => (
+                      <tr key={c.code}>
+                        <td className="cell-mono">{c.code}</td>
+                        <td className="num cell-mono">{fmtInt(c.orders)}</td>
+                        <td className="num cell-mono">{fmtCurrency(c.revenue, cur, 0)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             </div>
           )}
         </div>
@@ -1017,8 +1021,8 @@ function AllAffiliatesPage({ filters, onOpenAffiliate }) {
           <h2>Todos os <em>afiliados</em></h2>
           <span className="sub">{rows.length} no total · pesquisável · exporta o que está filtrado</span>
         </div>
-        <div className="page-head-actions">
-          <div className="select-btn" style={{ padding: '0 10px', width: 260 }}>
+        <div className="page-head-actions" style={{ flexWrap: 'wrap' }}>
+          <div className="select-btn" style={{ padding: '0 10px', width: 'min(260px, 100%)' }}>
             <Icon name="search" size={13}/>
             <input value={query} onChange={(e) => setQuery(e.target.value)}
               placeholder="Buscar por nickname ou ID..."
@@ -1086,7 +1090,7 @@ function AllAffiliatesPage({ filters, onOpenAffiliate }) {
               </tr>
             </thead>
             <tbody>
-              {state.status === 'loading' && <SkelTableRows rows={10} cols={8}/>}
+              {state.status === 'loading' && <SkelTableRows rows={10} cols={10}/>}
               {state.status === 'ready' && rows.length === 0 && (
                 <tr><td colSpan={10} style={{ textAlign: 'center', padding: 24, opacity: 0.6 }}>
                   {query ? 'Nenhum afiliado encontrado' : 'Nenhum afiliado ainda'}
@@ -1365,7 +1369,7 @@ function CallCenterMonitor({ cc }) {
                 value={fam}
                 onChange={(e) => setFam(e.target.value)}
                 placeholder="Família (vazio = TODAS da plataforma)"
-                style={{ ...selStyle, width: 260 }}
+                style={{ ...selStyle, width: 'min(260px, 100%)' }}
               />
               <button className="btn btn-ghost" onClick={addWatch} disabled={busy}>
                 <Icon name="plus" size={12}/> Monitorar
@@ -2093,8 +2097,8 @@ function _LegacyProductsPage({ filters }) {
           <h2>Performance <em>do catálogo</em></h2>
           <span className="sub">{products.length} de {allProducts.length} SKUs · clica num card pra abrir detalhes</span>
         </div>
-        <div className="page-head-actions">
-          <div className="select-btn" style={{ padding: '0 10px', width: 220 }}>
+        <div className="page-head-actions" style={{ flexWrap: 'wrap' }}>
+          <div className="select-btn" style={{ padding: '0 10px', width: 'min(220px, 100%)' }}>
             <Icon name="search" size={13}/>
             <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Buscar por nome ou ID..."
               style={{ background: 'transparent', border: 0, color: 'var(--fg1)', outline: 'none', flex: 1, fontFamily: 'var(--f-mono)', fontSize: 12 }}/>
@@ -2373,8 +2377,8 @@ function TransactionsPage({ filters }) {
             Stream bruto · {fmtInt(showing)} de {fmtInt(total)} linhas{showing < total ? ' · cap de 500 linhas · use filtros pra refinar' : ''}
           </span>
         </div>
-        <div className="page-head-actions">
-          <div className="select-btn" style={{ padding: '0 10px', width: 240 }}>
+        <div className="page-head-actions" style={{ flexWrap: 'wrap' }}>
+          <div className="select-btn" style={{ padding: '0 10px', width: 'min(240px, 100%)' }}>
             <Icon name="search" size={13}/>
             <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Buscar por ID de pedido ou afiliado..."
               style={{ background: 'transparent', border: 0, color: 'var(--fg1)', outline: 'none', flex: 1, fontFamily: 'var(--f-mono)', fontSize: 12 }}/>
@@ -2428,7 +2432,7 @@ function TransactionsPage({ filters }) {
               </tr>
             </thead>
             <tbody>
-              {state.status === 'loading' && <SkelTableRows rows={12} cols={8}/>}
+              {state.status === 'loading' && <SkelTableRows rows={12} cols={12}/>}
               {state.status === 'ready' && orders.length === 0 && (
                 <tr><td colSpan={12} style={{ textAlign: 'center', padding: 24, opacity: 0.6 }}>Nenhuma transação no período</td></tr>
               )}
@@ -3121,7 +3125,7 @@ function PlatformFeesModal({ platform, onCancel, onSaved }) {
       <div
         onClick={(e) => e.stopPropagation()}
         className="panel"
-        style={{ width: 380, padding: 22 }}
+        style={{ width: 'min(380px, 92vw)', padding: 22 }}
       >
         <div className="eyebrow" style={{ fontSize: 10, color: 'var(--glow-cyan)', marginBottom: 4 }}>
           PLATAFORMA · {platform.slug.toUpperCase()}
@@ -5172,16 +5176,16 @@ function CostsPage({ filters }) {
             </div>
           )}
           {supplierList.status === 'ready' && supplierList.products.length > 0 && (
-            <div style={{ maxHeight: 480, overflow: 'auto', borderRadius: 6 }}>
-              <table className="data-table" style={{ width: '100%', fontSize: 12 }}>
+            <div className="tbl-wrap" style={{ margin: 0, maxHeight: 480, overflow: 'auto', borderRadius: 6 }}>
+              <table className="tbl" style={{ fontSize: 12 }}>
                 <thead style={{ position: 'sticky', top: 0, background: 'var(--bg-raised)', zIndex: 1 }}>
                   <tr>
                     <th style={{ textAlign: 'left' }}>SKU / Produto</th>
-                    <th style={{ textAlign: 'left', width: 100 }}>Plataforma</th>
-                    <th style={{ textAlign: 'left', width: 130 }}>Família</th>
-                    <th style={{ textAlign: 'left', width: 60 }}>Potes</th>
-                    <th style={{ textAlign: 'right', width: 70 }}>Pedidos</th>
-                    <th style={{ textAlign: 'left', width: 280 }}>Fornecedor</th>
+                    <th style={{ textAlign: 'left' }}>Plataforma</th>
+                    <th style={{ textAlign: 'left' }}>Família</th>
+                    <th style={{ textAlign: 'left' }}>Potes</th>
+                    <th style={{ textAlign: 'right' }}>Pedidos</th>
+                    <th style={{ textAlign: 'left' }}>Fornecedor</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -5716,7 +5720,7 @@ function NetworksPage() {
               </tr>
             </thead>
             <tbody>
-              {state.status === 'loading' && <SkelTableRows rows={8} cols={8}/>}
+              {state.status === 'loading' && <SkelTableRows rows={8} cols={9}/>}
               {state.status === 'ready' && state.networks.length === 0 && (
                 <tr><td colSpan={9} style={{ textAlign: 'center', padding: 24, color: 'var(--fg4)' }}>
                   Nenhuma network cadastrada. Click em <strong>Nova network</strong> pra começar.
@@ -6172,7 +6176,7 @@ function NetSummary({ network: n }) {
   const next = n.nextPayout;
   return (
     <div style={{ display: 'grid', gap: 16 }}>
-      <div className="kpi-grid" style={{ gridTemplateColumns: 'repeat(2, 1fr)' }}>
+      <div className="kpi-grid">
         <NetKpi label="A PAGAR (ACUMULADO)" icon="wallet"
           value={fmtCurrency(Number(next.accruedUsd), 'USD', 0)}
           hint={`${fmtInt(next.accruedCount)} comissões accrued`}/>
@@ -6761,6 +6765,8 @@ function PartnerShell({ user, onLogout }) {
   const [state, setState] = useState({ status: 'loading', data: null, error: null });
   const [refresh, setRefresh] = useState(0);
   const [signing, setSigning] = useState(false);
+  // Drawer mobile (≤820px) — paridade com a casca principal (shell.jsx).
+  const [navOpen, setNavOpen] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -6801,14 +6807,15 @@ function PartnerShell({ user, onLogout }) {
   return (
     <div className="app">
       <FXLayers/>
-      <aside className="side">
+      {navOpen && <div className="side-backdrop" onClick={() => setNavOpen(false)}/>}
+      <aside className={`side ${navOpen ? 'is-open' : ''}`}>
         <div className="side-logo">
           <div className="wm" style={{ width: 71, fontSize: 24 }}>north<em>scale</em></div>
         </div>
         <div style={{ flex: 1 }}>
           <div className="side-group-label">Minha Network</div>
           <nav className="side-nav">
-            <button className="side-item is-active">
+            <button className="side-item is-active" onClick={() => setNavOpen(false)}>
               <Icon name="layers" size={14}/> {n.name}
             </button>
           </nav>
@@ -6826,6 +6833,14 @@ function PartnerShell({ user, onLogout }) {
 
       <div className="main">
         <header className="top">
+          {/* Hambúrguer do drawer mobile — o CSS o esconde em desktop (>820px).
+              Mesmo idioma do Topbar da casca principal (Icon set não tem 'menu'). */}
+          <button className="top-menu-btn" onClick={() => setNavOpen(true)} aria-label="Abrir menu">
+            <svg width={18} height={18} viewBox="0 0 24 24" fill="none"
+              stroke="currentColor" strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round">
+              <path d="M3 6h18"/><path d="M3 12h18"/><path d="M3 18h18"/>
+            </svg>
+          </button>
           <div className="top-title">
             <div className="top-crumb"><span className="cur">PARTNER · MINHA NETWORK</span></div>
             <h1 className="top-h1" style={{ fontSize: 25 }}>{n.name}</h1>
@@ -7155,7 +7170,7 @@ function ChatWidget({ user }) {
       {open && ReactDOM.createPortal((
         <div style={{
           position: 'fixed', bottom: 24, right: 24, zIndex: 1000,
-          width: 420, height: 600, maxHeight: 'calc(100vh - 48px)',
+          width: 'min(420px, calc(100vw - 24px))', height: 'min(600px, calc(100vh - 100px))', maxHeight: 'calc(100vh - 48px)',
           display: 'flex', flexDirection: 'column',
           background: 'var(--bg-elev)',
           border: '1px solid var(--border)',
@@ -7570,7 +7585,7 @@ function CopyRuleCreateForm({ onClose, onSaved }) {
         <div className="panel-title">Nova regra</div>
         <button className="btn btn-ghost" onClick={onClose} style={{ padding: '4px 8px' }}><Icon name="x" size={12}/></button>
       </div>
-      <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 1fr auto', gap: 10, alignItems: 'end', marginTop: 10 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: 10, alignItems: 'end', marginTop: 10 }}>
         <label style={coFieldLabel}>
           <span>aff_id ou aff_name</span>
           <input value={key} onChange={(e) => setKey(e.target.value)} placeholder="46 ou Matheus Petersen" style={coInputStyle}/>
@@ -7717,9 +7732,9 @@ function CopyRulesPanel() {
   const rules = state.rules;
   return (
     <div>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10, flexWrap: 'wrap', gap: 8 }}>
         <span style={{ fontSize: 11, color: 'var(--fg5)' }}>{rules.length} regras · {rules.filter((r) => r.enabled).length} ativas · {rules.filter((r) => r.autotune).length} em auto-tune</span>
-        <div style={{ display: 'flex', gap: 8 }}>
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
           <button className="btn btn-ghost" onClick={reload}><Icon name="refresh" size={12}/> Recarregar</button>
           <button className="btn btn-ghost" onClick={() => setApplyAll((v) => !v)}><Icon name="users" size={12}/> Aplicar a todos</button>
           <button className="btn btn-primary" onClick={() => setCreating((v) => !v)}><Icon name="plus" size={12}/> Nova regra</button>
@@ -7770,8 +7785,8 @@ function CopyObservabilityPanel() {
 
   return (
     <div>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
-        <div style={{ display: 'flex', gap: 6 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12, flexWrap: 'wrap', gap: 8 }}>
+        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
           {CO_PERIODS.map(([id, label]) => (
             <button key={id} className={`chip ${period === id ? 'is-active' : ''}`} onClick={() => setPeriod(id)}>{label}</button>
           ))}
@@ -7785,7 +7800,7 @@ function CopyObservabilityPanel() {
 
       {d && !empty && (
         <>
-          <div className="grid-2" style={{ gridTemplateColumns: 'repeat(4,1fr)', marginBottom: 12 }}>
+          <div className="grid-2" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', marginBottom: 12 }}>
             <CopyKpi label="AOV NO PERÍODO" value={fmtCurrency(d.summary.aovOverall, 'USD', 2)}/>
             <CopyKpi label="VIEWS" value={fmtInt(d.summary.totalViews)}/>
             <CopyKpi label="CONVERSÃO" value={fmtPct(d.summary.convOverall)}/>
@@ -7794,7 +7809,7 @@ function CopyObservabilityPanel() {
 
           <CopyForecastCard forecast={d.forecast}/>
 
-          <div className="grid-2" style={{ gridTemplateColumns: '1.4fr 1fr', marginBottom: 12 }}>
+          <div className="grid-2" style={{ marginBottom: 12 }}>
             <div className="panel">
               <div className="panel-head"><div className="panel-title">AOV diário</div></div>
               <CopyAovLine daily={d.daily} target={d.summary.aovTarget}/>
@@ -7901,7 +7916,7 @@ function CopyCalculatorPanel() {
 
   const sorted = res ? res.scenarios.slice().sort((a, b) => a.effort - b.effort) : [];
   return (
-    <div className="grid-2" style={{ gridTemplateColumns: '1fr 1.2fr', alignItems: 'start' }}>
+    <div className="grid-2" style={{ alignItems: 'start' }}>
       <div className="panel">
         <div className="panel-head"><div className="panel-title">Configuração</div></div>
         <div style={{ display: 'grid', gap: 10, marginTop: 8 }}>
@@ -7921,14 +7936,14 @@ function CopyCalculatorPanel() {
 
       <div style={{ display: 'grid', gap: 12 }}>
         {res && (
-          <div className="grid-2" style={{ gridTemplateColumns: 'repeat(3,1fr)' }}>
+          <div className="grid-2" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))' }}>
             <CopyKpi label="BASELINE" value={fmtCurrency(res.baselineAov, 'USD', 2)}/>
             <CopyKpi label="GAP" value={(res.gap >= 0 ? '+' : '') + fmtCurrency(res.gap, 'USD', 2)} tone={res.gap > 0 ? 'danger' : 'ok'}/>
             <CopyKpi label="MAIS FÁCIL" value={res.easiestScenario || '—'} sub="menor esforço"/>
           </div>
         )}
         {res && (
-          <div className="grid-2" style={{ gridTemplateColumns: 'repeat(2,1fr)' }}>
+          <div className="grid-2">
             {sorted.map((sc) => (
               <div key={sc.label} className="panel" style={{ opacity: sc.status === 'over' ? 0.5 : 1, borderColor: sc.label === res.easiestScenario ? 'var(--glow-cyan)' : undefined }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between' }}>
@@ -7990,7 +8005,7 @@ function CopyAutotunePanel() {
 
   if (!cfg) return <div className="panel" style={{ opacity: 0.6 }}>{msg || 'Carregando…'}</div>;
   return (
-    <div className="grid-2" style={{ gridTemplateColumns: '1fr 1.4fr', alignItems: 'start' }}>
+    <div className="grid-2" style={{ alignItems: 'start' }}>
       <div className="panel">
         <div className="panel-head"><div className="panel-title">Config global</div></div>
         <div style={{ display: 'grid', gap: 8, marginTop: 8 }}>
@@ -8192,7 +8207,7 @@ function RecoveryPage({ filters }) {
 
       {m && (
         <>
-          <div className="grid-2" style={{ gridTemplateColumns: 'repeat(4,1fr)', marginBottom: 12 }}>
+          <div className="grid-2" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', marginBottom: 12 }}>
             <CopyKpi label="VENDAS RECUPERADAS" value={fmtInt(m.kpis.sales)}/>
             <CopyKpi label="RECEITA" value={fmtCurrency(m.kpis.grossUsd, 'USD', 2)}/>
             <CopyKpi label="COMISSÃO DEVIDA" value={fmtCurrency(m.kpis.commissionUsd, 'USD', 2)} tone="danger"/>
@@ -8343,7 +8358,7 @@ function TaukPage({ filters }) {
 
       {m && (
         <>
-          <div className="grid-2" style={{ gridTemplateColumns: 'repeat(3,1fr)', marginBottom: 12 }}>
+          <div className="grid-2" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', marginBottom: 12 }}>
             <CopyKpi label="VENDAS RECUPERADAS" value={fmtInt(m.kpis.sales)}/>
             <CopyKpi label="RECEITA" value={fmtCurrency(m.kpis.grossUsd, 'USD', 2)}/>
             <CopyKpi label="TICKET MÉDIO" value={fmtCurrency(m.kpis.aovUsd, 'USD', 2)}/>
@@ -8649,7 +8664,7 @@ function SmsPage({ filters }) {
           <h2>SMS <em>· saúde da operação</em></h2>
           <span className="sub">Telemetria da stack Mautic → n8n → Twilio (envios, entregas, STOPs, filtragem de operadora). Observabilidade — disparo e pausa continuam no Mautic.</span>
         </div>
-        <div className="page-head-actions" style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+        <div className="page-head-actions" style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
           <select value={brand} onChange={(e) => setBrand(e.target.value)} style={selStyle}>
             <option value="">Todas as marcas</option>
             {brandOpts.map((b) => <option key={b} value={b}>{b}</option>)}
@@ -8698,7 +8713,7 @@ function SmsPage({ filters }) {
           )}
 
           {/* Bloco A — KPIs do período */}
-          <div className="grid-2" style={{ gridTemplateColumns: 'repeat(4,1fr)', marginBottom: 12 }}>
+          <div className="grid-2" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', marginBottom: 12 }}>
             <CopyKpi label="ENVIADOS" value={fmtInt(m.kpis.sent)}
               sub={m.kpis.pending > 0 ? `${fmtInt(m.kpis.pending)} pendentes >1h` : undefined}/>
             <CopyKpi label="TAXA DE ENTREGA" value={m.kpis.deliveryRate != null ? fmtPct(m.kpis.deliveryRate) : '—'}
@@ -8724,7 +8739,7 @@ function SmsPage({ filters }) {
                 </div>
               </div>
             </div>
-            <div className="grid-2" style={{ gridTemplateColumns: 'repeat(3,1fr)', marginBottom: m.sales.daily.length > 0 ? 12 : 0 }}>
+            <div className="grid-2" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', marginBottom: m.sales.daily.length > 0 ? 12 : 0 }}>
               <CopyKpi label="VENDAS ATRIBUÍDAS" value={fmtInt(m.sales.sales)}/>
               <CopyKpi label="RECEITA" value={fmtCurrency(m.sales.grossUsd, 'USD', 2)} tone={m.sales.grossUsd > 0 ? 'ok' : undefined}/>
               <CopyKpi label="TICKET MÉDIO" value={m.sales.aovUsd != null ? fmtCurrency(m.sales.aovUsd, 'USD', 2) : '—'}/>
@@ -8764,7 +8779,7 @@ function SmsPage({ filters }) {
             )}
           </div>
           {reserves.length > 0 && (
-            <div style={{ display: 'grid', gridTemplateColumns: `repeat(${reserves.length},1fr)`, gap: 12, marginBottom: 12 }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(120px, 1fr))', gap: 12, marginBottom: 12 }}>
               {reserves.map((n) => (
                 <div key={`r-${n.subIndex}`} className="panel" style={{ padding: '10px 14px', opacity: 0.55 }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>

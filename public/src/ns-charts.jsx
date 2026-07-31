@@ -121,7 +121,10 @@ function NSTimeSeries({
   const axisFormat = (visible[0] || seriesDef[0]).format;
 
   const hasNegative = visible.some((s) => rows.some((d) => (d[s.key] ?? 0) < 0));
-  const showBrush = brush === true || (brush === 'auto' && rows.length > 14);
+  // Touch: o Brush briga com o scroll por gesto — em ponteiro coarse ele é
+  // desabilitado incondicionalmente (equivale a brush={false}).
+  const coarse = typeof window !== 'undefined' && window.matchMedia && window.matchMedia('(pointer: coarse)').matches;
+  const showBrush = !coarse && (brush === true || (brush === 'auto' && rows.length > 14));
 
   function toggle(key) {
     if (!toggles) return;
