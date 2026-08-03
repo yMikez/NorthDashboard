@@ -39,15 +39,23 @@ const CB_SKU_RE =
 //           "DS1a Cognizil 3 Bottles $120"            (+ sufixo de preço)
 //           "DS3 FlexGuard + ImmuneGuard (1 + 1 Bottles)"
 //           "DW1 - V1 Thermo Burn Pro (3 Bottles)"    (prefixo de variante "V1" na frente da família)
+//           "UP1A - NeuroMind Pro (6 Bottles)"        (sufixo de variante em LETRA)
+//           "UP1.1 - NeuroPulse Pro (12 Bottles)"     (sufixo de variante com PONTO)
+//           "DS2.1 - Lumicept (6 Bottles)"            (idem no DS)
+//           "M1 - AFF - NeuroMind Pro (2 Bottles)"    (clone de order form com marcador)
 // Por isso:
 //   - separador é " - " OU só espaço: (?:\s*-\s*|\s+)
+//   - todos os slots aceitam sufixo de variante ".N" e/ou letra
+//     (UP1A, UP1.1, UP1.2A, UP2b, DS1a, DS2.1) — auditoria prod 2026-08-03:
+//     sem isso caíam no fallback (UPSELL sem família) ou, pior, no path
+//     BuyGoods virando FRONTEND com família-lixo ("DS1.1 - Hawaiian…").
+//   - marcadores de clone "AFF -" / "B -" após o separador são descartados
 //   - prefixo de variante "V\d+ " opcional é descartado (fica na família senão)
 //   - parênteses dos potes são opcionais: \(? ... \)?
 //   - sufixo de preço "$120"/"$49.50" opcional no fim
-//   - tipo DS aceita sufixo de letra (DS1a/DS1b/DS1c)
 // Family character class aceita hífen (Flex-ImmuneGuard), "+" (combos) e dígitos.
 const D24_NAME_RE =
-  /^(?<typeFull>M\d+|UP\d+(?:-[A-Za-z0-9]+)?|DW\d+(?:-[A-Za-z0-9]+)?|DS\d*[a-z]?|RC)(?:\s*-\s*|\s+)(?:V\d+\s+)?(?<family>[A-Za-z][A-Za-z0-9 \-+]*?)\s*\(?\s*(?<bottles>\d+)\s*(?:\+\s*(?<bonus>\d+)\s*)?Bottles?\)?(?:\s*\$[\d.,]+)?$/i;
+  /^(?<typeFull>(?:M|UP|DW)\d+(?:\.\d+)?[A-Za-z]?(?:-[A-Za-z0-9]+)?|DS\d*(?:\.\d+)?[A-Za-z]?|RC)(?:\s*-\s*|\s+)(?:(?:AFF|B)\s*-\s*)?(?:V\d+\s+)?(?<family>[A-Za-z][A-Za-z0-9 \-+]*?)\s*\(?\s*(?<bottles>\d+)\s*(?:\+\s*(?<bonus>\d+)\s*)?Bottles?\)?(?:\s*\$[\d.,]+)?$/i;
 
 // BuyGoods classifier — convenção do vendor:
 //
@@ -114,6 +122,21 @@ const FAMILY_NORMALIZATIONS: Array<[RegExp, string]> = [
   // ProstaFlow: unifica "ProstaFlow"/"Prostaflow". (NÃO afeta o combo
   // "GlycoPulse + ProstaFlow", que não casa o ^...$ inteiro.)
   [/^prosta\s*flow$/i, 'ProstaFlow'],
+  // Duplicatas do filtro de Produto (auditoria prod 2026-08-03) — o mesmo
+  // produto grafado diferente por plataforma/era virava 2-3 famílias:
+  [/^retra\s*burn$/i, 'RetraBurn'],           // "Retra Burn" (D24) × "RetraBurn"
+  [/^mind\s*trex$/i, 'MindTrex'],             // "Mindtrex" (BG) × "MindTrex" (D24)
+  [/^evo\s*slim$/i, 'EvoSlim'],               // "Evo Slim" (BG) × "EvoSlim" (D24)
+  // "LumiCept"/"Lumicept" (case) + typo BG "Luminacept" → canônica única.
+  // "Lumicept Gummies" é produto DISTINTO (formato gummy) — não casa o ^...$
+  // e permanece família própria de propósito.
+  [/^lumi\s*cept$/i, 'Lumicept'],
+  [/^luminacept$/i, 'Lumicept'],
+  // Clone TikTok do Cartpanda ("Horse Peak Gelatin - TK") = mesmo produto.
+  [/^horse\s*peak\s*gelatin(?:\s*[-–]\s*tk)?$/i, 'Horse Peak Gelatin'],
+  // Combo com grafia criativa do vendor ("ImuneGuard + FlexyGuard") —
+  // ordem invertida do combo canônico FlexImmuneGuard.
+  [/^imm?une\s*guard\s*\+\s*flexy?\s*guard$/i, 'FlexImmuneGuard'],
 ];
 
 export function normalizeFamily(raw: string): string {
@@ -125,10 +148,14 @@ export function normalizeFamily(raw: string): string {
   return trimmed;
 }
 
+// Sufixos de variante (".1", letra — UP1A, UP1.1, DS2.1, DS1a) NÃO mudam a
+// posição no funil: são split-tests/clones do MESMO slot. O número que
+// importa é o primeiro.
 function classifyType(typeCode: string): { type: ProductType; step: number } {
   const code = typeCode.toUpperCase();
-  // Frontend: 'FE' (CB) ou 'M\d+' (D24, multi-bottle pack).
-  if (code === 'FE' || /^M\d+$/.test(code)) {
+  // Frontend: 'FE' (CB) ou 'M\d+' (D24, multi-bottle pack) — com ou sem
+  // sufixo de variante.
+  if (code === 'FE' || /^M\d+(?:\.\d+)?[A-Z]?$/.test(code)) {
     return { type: 'FRONTEND', step: 1 };
   }
   // Recovery: SMS opt-in flow.
@@ -138,19 +165,23 @@ function classifyType(typeCode: string): { type: ProductType; step: number } {
   // Upsell: UP1=step 2 (após FE), UP2=step 3, UP3=step 4, ...
   // Step indica posição do produto na sequência do funil; permite
   // distinguir UP1 vs UP2 vs UP3 nas agregações sem hardcode.
-  const upMatch = code.match(/^UP(\d+)$/);
+  const upMatch = code.match(/^UP(\d+)(?:\.\d+)?[A-Z]?$/);
   if (upMatch) {
     return { type: 'UPSELL', step: parseInt(upMatch[1], 10) + 1 };
   }
   // Downsell: DW1=step 2 (após declinar UP1), DW2=step 3, DW3=step 4, ...
-  const dwMatch = code.match(/^DW(\d+)$/);
+  const dwMatch = code.match(/^DW(\d+)(?:\.\d+)?[A-Z]?$/);
   if (dwMatch) {
     return { type: 'DOWNSELL', step: parseInt(dwMatch[1], 10) + 1 };
   }
-  // 'DS' (downsell) — sem número, com número, ou com sufixo de letra
-  // (DS1a/DS1b/DS1c, variantes de preço do MESMO downsell). Todos → step 2.
-  if (/^DS\d*[A-Z]?$/.test(code)) {
-    return { type: 'DOWNSELL', step: 2 };
+  // 'DS' (downsell) — mesma escada do DW: DS1=step 2, DS2=step 3, DS3=step 4.
+  // Sem número (DS puro) assume o 1º slot (step 2). Sufixos DS1a/DS1b/DS1c e
+  // DS1.1/DS2.1 são variantes de preço/clone do MESMO slot.
+  // (Antes TODO DS caía em step 2 — DS2/DS3 ficavam na posição errada.)
+  const dsMatch = code.match(/^DS(\d+)?(?:\.\d+)?[A-Z]?$/);
+  if (dsMatch) {
+    const n = dsMatch[1] ? parseInt(dsMatch[1], 10) : 1;
+    return { type: 'DOWNSELL', step: n + 1 };
   }
   throw new Error(`classifyProduct: unknown type code "${typeCode}"`);
 }

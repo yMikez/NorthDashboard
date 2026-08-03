@@ -587,3 +587,54 @@ describe('classifyProduct (cartpanda)', () => {
     expect(errado.family).not.toBe('Giant Power');
   });
 });
+
+// Auditoria prod 2026-08-03: sufixos de variante reais da D24 que caíam no
+// fallback (UPSELL sem família) ou viravam FRONTEND com família-lixo, a
+// escada do DS (DS2/DS3 ficavam todos em step 2) e as grafias divergentes
+// que duplicavam famílias no filtro de Produto.
+describe('classifyProduct (D24 sufixos de variante + escada DS — auditoria 2026-08-03)', () => {
+  const cases: Array<[string, { type: string; step: number; family: string }]> = [
+    ['UP1A - NeuroMind Pro (6 Bottles)',       { type: 'UPSELL', step: 2, family: 'NeuroMindPro' }],
+    ['UP1B - NeuroMind Pro (12 Bottles)',      { type: 'UPSELL', step: 2, family: 'NeuroMindPro' }],
+    ['UP1.1 - NeuroPulse Pro (12 Bottles)',    { type: 'UPSELL', step: 2, family: 'NeuroPulsePro' }],
+    ['UP1.2A - NeuroPulse Pro (12 Bottles)',   { type: 'UPSELL', step: 2, family: 'NeuroPulsePro' }],
+    ['UP2b Lumicept Gummies (6 Bottles) $114', { type: 'UPSELL', step: 3, family: 'Lumicept Gummies' }],
+    ['DS1 - Retra Burn (3 Bottles)',           { type: 'DOWNSELL', step: 2, family: 'RetraBurn' }],
+    ['DS1.1 - Hawaiian Harmony (12 Bottles)',  { type: 'DOWNSELL', step: 2, family: 'Hawaiian Harmony' }],
+    ['DS1a Cognizil 3 Bottles $120',           { type: 'DOWNSELL', step: 2, family: 'Cognizil' }],
+    ['DS2 - Night Calm (3 Bottles)',           { type: 'DOWNSELL', step: 3, family: 'NightCalm' }],
+    ['DS2.1 - Lumicept (6 Bottles)',           { type: 'DOWNSELL', step: 3, family: 'Lumicept' }],
+    ['DS3 - Blessed Kit (5 Bottles)',          { type: 'DOWNSELL', step: 4, family: 'Blessed Kit' }],
+    ['M1 - AFF -  NeuroMind Pro (2 Bottles)',  { type: 'FRONTEND', step: 1, family: 'NeuroMindPro' }],
+    ['M1 - B - Glyco Pulse (2 Bottles)',       { type: 'FRONTEND', step: 1, family: 'GlycoPulse' }],
+  ];
+  it.each(cases)('"%s"', (name, exp) => {
+    const c = classifyProduct('123456', name);
+    expect(c.type).toBe(exp.type);
+    expect(c.funnelStep).toBe(exp.step);
+    expect(c.family).toBe(exp.family);
+  });
+
+  it('DS3 combo com grafia invertida → FlexImmuneGuard', () => {
+    const c = classifyProduct('123457', 'DS3 ImuneGuard + FlexyGuard (1+1 Bottles)');
+    expect(c.type).toBe('DOWNSELL');
+    expect(c.funnelStep).toBe(4);
+    expect(c.family).toBe('FlexImmuneGuard');
+  });
+});
+
+describe('normalizeFamily — duplicatas do filtro (auditoria 2026-08-03)', () => {
+  it('colapsa grafias divergentes na canônica', () => {
+    expect(normalizeFamily('Retra Burn')).toBe('RetraBurn');
+    expect(normalizeFamily('RetraBurn')).toBe('RetraBurn');
+    expect(normalizeFamily('Mindtrex')).toBe('MindTrex');
+    expect(normalizeFamily('MindTrex')).toBe('MindTrex');
+    expect(normalizeFamily('Evo Slim')).toBe('EvoSlim');
+    expect(normalizeFamily('LumiCept')).toBe('Lumicept');
+    expect(normalizeFamily('Luminacept')).toBe('Lumicept');
+    expect(normalizeFamily('Horse Peak Gelatin - TK')).toBe('Horse Peak Gelatin');
+  });
+  it('Lumicept Gummies segue família própria (produto distinto)', () => {
+    expect(normalizeFamily('Lumicept Gummies')).toBe('Lumicept Gummies');
+  });
+});

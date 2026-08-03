@@ -90,15 +90,22 @@ export async function getFilterOptions(): Promise<FilterOptionsResponse> {
     totalSkuCount: number;
     niches: Set<string>;
   }
-  const byFamily = new Map<string, FamilyAcc>();
+  // Chave case-insensitive: defesa contra grafias divergentes da MESMA
+  // família ("LumiCept" × "Lumicept", "Mindtrex" × "MindTrex") aparecerem
+  // como duplicatas no dropdown. A correção de verdade é a normalização no
+  // classifier + backfill; aqui é o cinto de segurança pra próxima grafia
+  // nova que escapar. Label = a grafia com mais SKUs.
+  const byFamily = new Map<string, FamilyAcc & { labels: Map<string, number> }>();
   for (const row of familyRows) {
     if (!row.family) continue;
-    let acc = byFamily.get(row.family);
+    const key = row.family.trim().toLowerCase();
+    let acc = byFamily.get(key);
     if (!acc) {
-      acc = { feSkuCount: 0, totalSkuCount: 0, niches: new Set() };
-      byFamily.set(row.family, acc);
+      acc = { feSkuCount: 0, totalSkuCount: 0, niches: new Set(), labels: new Map() };
+      byFamily.set(key, acc);
     }
     acc.totalSkuCount++;
+    acc.labels.set(row.family, (acc.labels.get(row.family) ?? 0) + 1);
     if (row.productType === 'FRONTEND') acc.feSkuCount++;
     if (row.niche) acc.niches.add(row.niche);
   }
@@ -122,15 +129,24 @@ export async function getFilterOptions(): Promise<FilterOptionsResponse> {
     return true;
   }
 
-  const families = Array.from(byFamily.entries())
-    .filter(([name]) => isMainFamily(name))
-    .map(([name, acc]) => ({
-      id: name,
-      label: name,
-      feSkuCount: acc.feSkuCount,
-      totalSkuCount: acc.totalSkuCount,
-      niches: Array.from(acc.niches).sort(),
-    }))
+  const families = Array.from(byFamily.values())
+    .map((acc) => {
+      // Grafia vencedora = a com mais SKUs (id continua sendo o valor real
+      // gravado em Product.family, então o filtro segue casando no backend).
+      let label = '';
+      let best = -1;
+      for (const [spelling, count] of acc.labels) {
+        if (count > best) { best = count; label = spelling; }
+      }
+      return {
+        id: label,
+        label,
+        feSkuCount: acc.feSkuCount,
+        totalSkuCount: acc.totalSkuCount,
+        niches: Array.from(acc.niches).sort(),
+      };
+    })
+    .filter((f) => isMainFamily(f.id))
     .sort((a, b) => a.id.localeCompare(b.id));
 
   // Distinct countries that appear in any order. Sort by activity desc so the
