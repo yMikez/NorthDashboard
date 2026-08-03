@@ -134,7 +134,15 @@ function ProfitSplitPanel({ filters, cur, onData }) {
       .then((d) => { if (!cancelled) { setPs({ status: 'ready', d }); if (onData) onData(d); } })
       .catch(() => { if (!cancelled) setPs((s) => ({ status: 'error', d: s.d })); });
     return () => { cancelled = true; };
-  }, [filters.dateRange.start.getTime(), filters.dateRange.end.getTime()]);
+    // Refaz também quando plataforma/família/país mudam — antes o card
+    // ficava travado no global com filtro ativo.
+  }, [
+    filters.dateRange.start.getTime(),
+    filters.dateRange.end.getTime(),
+    Array.from(filters.platforms || []).join(','),
+    Array.from(filters.families || []).join(','),
+    Array.from(filters.countries || []).join(','),
+  ]);
   const d = ps.d;
   if (!d) return null;
   return (

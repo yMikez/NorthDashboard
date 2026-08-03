@@ -48,9 +48,28 @@ export interface ProfitSplitResponse {
   totalUsd: number;
 }
 
-export async function getProfitSplit(filters: { startDate: Date; endDate: Date }): Promise<ProfitSplitResponse> {
-  const { startDate, endDate } = filters;
+export interface ProfitSplitFilters {
+  startDate: Date;
+  endDate: Date;
+  // Filtros de ordem (plataforma/família/país) — aplicados ao FRONT e às
+  // fontes de back baseadas em Order (recovery/SMS). Tauk NÃO tem
+  // plataforma/produto: com qualquer um desses filtros ativo, a fonte
+  // Tauk é OMITIDA (não dá pra atribuir) em vez de mentir um global.
+  platformSlugs?: string[];
+  productFamilies?: string[];
+  countries?: string[];
+}
+
+export async function getProfitSplit(filters: ProfitSplitFilters): Promise<ProfitSplitResponse> {
+  const { startDate, endDate, platformSlugs, productFamilies, countries } = filters;
   const range = { gte: startDate, lte: endDate };
+
+  const orderScope = {
+    ...(platformSlugs?.length ? { platform: { slug: { in: platformSlugs } } } : {}),
+    ...(productFamilies?.length ? { product: { family: { in: productFamilies } } } : {}),
+    ...(countries?.length ? { country: { in: countries } } : {}),
+  };
+  const hasOrderScope = Object.keys(orderScope).length > 0;
 
   const [pm, recoveryAffs, taukAgg] = await Promise.all([
     getProfitModelInputs(),
@@ -58,11 +77,13 @@ export async function getProfitSplit(filters: { startDate: Date; endDate: Date }
       where: { enabled: true },
       select: { affiliateId: true, commissionPct: true },
     }),
-    db.taukSale.aggregate({
-      where: { purchasedAt: range },
-      _sum: { amountUsd: true },
-      _count: { _all: true },
-    }),
+    hasOrderScope
+      ? Promise.resolve(null)
+      : db.taukSale.aggregate({
+          where: { purchasedAt: range },
+          _sum: { amountUsd: true },
+          _count: { _all: true },
+        }),
   ]);
   const recoveryIds = recoveryAffs.map((r) => r.affiliateId);
   const recoveryPct = new Map(recoveryAffs.map((r) => [r.affiliateId, Number(r.commissionPct)]));
@@ -80,22 +101,24 @@ export async function getProfitSplit(filters: { startDate: Date; endDate: Date }
   ];
 
   const [frontByPlatform, frontCpa, smsAgg, recoveryOrders] = await Promise.all([
-    // FRONT: aprovadas do período SEM as fontes de back.
+    // FRONT: aprovadas do período SEM as fontes de back, DENTRO do escopo
+    // de filtro da UI (plataforma/família/país) — antes o card ignorava o
+    // filtro e mostrava o global com cara de filtrado.
     db.order.groupBy({
       by: ['platformId'],
-      where: { status: 'APPROVED', orderedAt: range, AND: frontExclusions },
+      where: { status: 'APPROVED', orderedAt: range, ...orderScope, AND: frontExclusions },
       _sum: { grossAmountUsd: true, cpaPaidUsd: true },
       _count: { _all: true },
     }),
     db.platform.findMany({ select: { id: true, slug: true } }),
     db.order.aggregate({
-      where: { status: 'APPROVED', orderedAt: range, trafficSource: { equals: SMS_UTM_SOURCE, mode: 'insensitive' } },
+      where: { status: 'APPROVED', orderedAt: range, ...orderScope, trafficSource: { equals: SMS_UTM_SOURCE, mode: 'insensitive' } },
       _sum: { grossAmountUsd: true },
     }),
     recoveryIds.length
       ? db.order.groupBy({
           by: ['affiliateId'],
-          where: { status: 'APPROVED', orderedAt: range, affiliateId: { in: recoveryIds } },
+          where: { status: 'APPROVED', orderedAt: range, ...orderScope, affiliateId: { in: recoveryIds } },
           _sum: { grossAmountUsd: true },
         })
       : Promise.resolve([] as Array<{ affiliateId: string | null; _sum: { grossAmountUsd: unknown } }>),
@@ -117,7 +140,7 @@ export async function getProfitSplit(filters: { startDate: Date; endDate: Date }
   }
   const frontProfit = round2(frontModelNet - frontCpaTotal);
 
-  const taukGross = taukAgg._sum.amountUsd ? Number(taukAgg._sum.amountUsd) : 0;
+  const taukGross = taukAgg?._sum.amountUsd ? Number(taukAgg._sum.amountUsd) : 0;
   const smsGross = smsAgg._sum.grossAmountUsd ? Number(smsAgg._sum.grossAmountUsd) : 0;
   let recoveryGross = 0;
   let recoveryCost = 0;
@@ -129,7 +152,12 @@ export async function getProfitSplit(filters: { startDate: Date; endDate: Date }
 
   const sources = [
     { key: 'recovery', label: 'Recuperação', grossUsd: round2(recoveryGross), costUsd: round2(recoveryCost), netUsd: round2(recoveryGross - recoveryCost), available: true },
-    { key: 'tauk', label: 'Tauk', grossUsd: round2(taukGross), costUsd: round2(taukGross * TAUK_COMMISSION_PCT), netUsd: round2(taukGross * (1 - TAUK_COMMISSION_PCT)), available: true },
+    // Tauk some quando há filtro de ordem ativo (venda Tauk não carrega
+    // plataforma/produto — melhor omitir do que somar um global no card
+    // filtrado).
+    ...(hasOrderScope
+      ? []
+      : [{ key: 'tauk', label: 'Tauk', grossUsd: round2(taukGross), costUsd: round2(taukGross * TAUK_COMMISSION_PCT), netUsd: round2(taukGross * (1 - TAUK_COMMISSION_PCT)), available: true }]),
     { key: 'sms', label: 'SMS', grossUsd: round2(smsGross), costUsd: 0, netUsd: round2(smsGross), available: true },
     { key: 'salesbound', label: 'SalesBound', grossUsd: 0, costUsd: 0, netUsd: 0, available: false },
     { key: 'email', label: 'Email', grossUsd: 0, costUsd: 0, netUsd: 0, available: false },

@@ -901,11 +901,16 @@ function fetchCallCenter() { return coGet('/api/metrics/callcenter'); }
 function fetchProfitConfig() { return coGet('/api/admin/profit-config'); }
 function patchProfitConfig(body) { return coSend('/api/admin/profit-config', 'PATCH', body); }
 // Lucro FRONT (funil, modelo CPA) × BACK (recuperação/Tauk/SMS...).
+// Manda plataforma/família/país junto — o card respeita o filtro da UI
+// (com filtro ativo o backend omite a fonte Tauk, que não é atribuível).
 function fetchProfitSplit(filters) {
   const qs = new URLSearchParams({
     start_date: toISODate(filters.dateRange.start),
     end_date: toISODate(filters.dateRange.end),
   });
+  if (filters.platforms?.size) qs.set('platforms', Array.from(filters.platforms).join(','));
+  if (filters.families?.size) qs.set('families', Array.from(filters.families).join(','));
+  if (filters.countries?.size) qs.set('countries', Array.from(filters.countries).join(','));
   return coGet(`/api/metrics/profit-split?${qs}`);
 }
 // Override de refund&cb% por afiliado (null = herda da plataforma).

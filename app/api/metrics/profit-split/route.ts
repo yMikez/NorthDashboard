@@ -26,8 +26,19 @@ export async function GET(req: Request) {
     return NextResponse.json({ error: 'invalid date format' }, { status: 400 });
   }
 
+  // Filtros de ordem da UI (CSV) — mesmos nomes dos demais /api/metrics/*.
+  const csv = (key: string) =>
+    (searchParams.get(key) ?? '')
+      .split(',')
+      .map((s) => s.trim())
+      .filter(Boolean);
+  const platformSlugs = csv('platforms');
+  const productFamilies = csv('families');
+  const countries = csv('countries');
+
   try {
-    return await respondCached('profit-split', searchParams, () => getProfitSplit({ startDate, endDate }));
+    return await respondCached('profit-split', searchParams, () =>
+      getProfitSplit({ startDate, endDate, platformSlugs, productFamilies, countries }));
   } catch (err) {
     logger.error({ err }, 'metrics/profit-split failed');
     return NextResponse.json({ error: 'query failed' }, { status: 500 });
