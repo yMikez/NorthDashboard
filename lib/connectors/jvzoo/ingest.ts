@@ -5,12 +5,18 @@
 //   JVZOO DOT COM  → fees (taxa da plataforma)
 //   net = total − tax − fees − cpa (JVZoo é USD-only).
 //
-// Sessão/funil: prekey = "WR-" + receipt. Na FE o prekey aponta pro
-// PRÓPRIO transaction_id; a PREMISSA (a validar com o primeiro upsell
-// real) é que em upsells ele aponta pro receipt da FE — então
-// parentExternalId = prekey sem o prefixo agrupa a sessão, e
-// prekey ≠ próprio id ⇒ UPSELL. rawMetadata guarda o payload inteiro
-// pra forward-fix se a premissa falhar (padrão BG codename collision).
+// Sessão/funil — VALIDADO 2026-08-03 com o 1º upsell real (FE RNQLMA… +
+// upsell N6AHUP… da mesma compra, 18s de intervalo):
+//   - prekey é SEMPRE "WR-"+<PRÓPRIO receipt>, em FE E upsell. A premissa
+//     de que no upsell ele apontaria pro receipt da FE MORREU — prekey não
+//     linka nada.
+//   - paykey difere a cada transação (um payment key por cobrança).
+//   - O que liga FE↔upsell: `tid` do other_params (tracking do link,
+//     idêntico na sessão do browser) + customer_email + dia Eastern.
+// jvzooSessionAnchor() monta a chave; o papel FE/UPSELL NÃO é decidido
+// no parse — quem decide é a reconciliação por sessão
+// (lib/services/jvzooSessions.ts): compra mais antiga = FRONTEND, demais
+// = UPSELL. À prova de IPN fora de ordem (forward-fix, padrão BG).
 //
 // Timestamp: `date` vem como wall clock SEM timezone. JVZoo (Flórida)
 // segue o padrão BuyGoods: tratamos como America/New_York (EST/EDT via
@@ -123,54 +129,57 @@ function parseOtherParams(raw: string | undefined): URLSearchParams {
   }
 }
 
-// Dois formatos entram aqui, unificados por fallback (dedup por
-// transaction_id torna entrega dupla inofensiva):
-//   IPN/webhook (rico): total, transactionPayouts, prekey, date,
-//     customer_first/last_name, delivery_country enum...
-//   POSTBACK S2S (magro): transaction_amount, affiliate_amount (CPA flat),
-//     customer_name único, customer_country, SEM prekey (cada transação é
-//     a própria sessão — upsell não é detectável) e SEM date (usa o relógio
-//     do recebimento — o postback dispara na hora da compra).
-//   Fee da plataforma não vem no postback → fees=0; o card "Taxas pagas"
-//   usa o Platform.feeRatePct editável (como nas outras plataformas).
+/**
+ * Âncora de sessão (ver header). Rebill (BILL/UNCANCEL-REBILL) ancora em
+ * SI MESMO: cada rebill despacha a própria remessa — agrupar na sessão
+ * original fundiria FE + N rebills num pacote só e reescreveria o frete
+ * histórico a cada mês. Sem email/data não há como agrupar → sessão
+ * própria (transactionId), comportamento antigo.
+ * Exportada pro backfill (recomputa âncoras a partir dos IngestLogs SALE).
+ */
+export function jvzooSessionAnchor(payload: JvzooPayload): string {
+  const transactionId = payload.transaction_id ?? '';
+  const transactionType = (payload.transaction_type ?? '').toUpperCase();
+  const isRebill = transactionType === 'BILL' || transactionType === 'UNCANCEL-REBILL';
+  if (isRebill || !transactionId) return transactionId;
+  const other = parseOtherParams(payload.other_params);
+  const tid = other.get('tid') || payload.tid || '';
+  const email = (payload.customer_email ?? '').trim().toLowerCase();
+  // Dia do wall clock Eastern direto da string ("2026-08-03 08:21:45").
+  // O dia entra na chave pra um recompra do mesmo cliente meses depois
+  // (tid estático de campanha) não fundir com a sessão antiga. Upsell
+  // cruzando meia-noite Eastern é raro o bastante pra aceitar a borda.
+  const day = (payload.date ?? '').slice(0, 10);
+  if (email && day) {
+    return tid
+      ? `jvz:${tid}:${email}:${day}`
+      : `jvz:${email}:f${payload.funnel_id ?? '0'}:${day}`;
+  }
+  return transactionId;
+}
+
 export function parseJvzooIngest(payload: JvzooPayload): NormalizedOrder {
   const transactionId = required(payload, 'transaction_id');
   const transactionType = (payload.transaction_type ?? '').toUpperCase();
 
-  // REBILL (BILL/UNCANCEL-REBILL): pagamento recorrente da MESMA compra —
-  // chega com transaction_id NOVO e o prekey da compra ORIGINAL. Não é
-  // upsell, e cada rebill despacha a PRÓPRIA remessa: ancorar na sessão
-  // original faria o rebalance fundir FE + N rebills num pacote só
-  // (bracket de 18 potes em vez de 3 remessas de 6) e reescrever o frete
-  // histórico da FE a cada mês. Rebill ancora em si mesmo.
-  const isRebill = transactionType === 'BILL' || transactionType === 'UNCANCEL-REBILL';
+  // Papel definitivo (FRONTEND vs UPSELL) sai da reconciliação de sessão
+  // no ingest — aqui todo pedido nasce FRONTEND e é rebaixado pra UPSELL
+  // quando existe compra mais antiga na mesma sessão. (prekey NÃO indica
+  // papel — ver header.)
+  const productType: NormalizedProductType = 'FRONTEND';
 
-  // prekey "WR-<receipt>": na FE aponta pro próprio id (ver header).
-  const prekeyBase = isRebill
-    ? transactionId
-    : (payload.prekey ?? '').replace(/^WR-/, '') || transactionId;
-  const productType: NormalizedProductType = !isRebill && prekeyBase !== transactionId ? 'UPSELL' : 'FRONTEND';
-
-  const gross = decimal(payload.total ?? payload.transaction_amount);
+  const gross = decimal(payload.total);
   const tax = decimal(payload.tax_total);
-  // IPN: rachos do transactionPayouts. Postback: affiliate_amount flat.
-  const payouts = payload.transactionPayouts
-    ? parsePayouts(payload.transactionPayouts)
-    : { affiliateUsd: decimal(payload.affiliate_amount), platformFeeUsd: 0 };
-  const { affiliateUsd, platformFeeUsd } = payouts;
+  const { affiliateUsd, platformFeeUsd } = parsePayouts(payload.transactionPayouts);
 
   const other = parseOtherParams(payload.other_params);
-  const countryRaw = payload.delivery_country ?? payload.customer_country ?? '';
-
-  // Postback manda customer_name único — split primeira palavra/resto.
-  const nameParts = (payload.customer_name ?? '').trim().split(/\s+/);
-  const firstNameFallback = nameParts[0] || null;
-  const lastNameFallback = nameParts.length > 1 ? nameParts.slice(1).join(' ') : null;
+  const countryRaw = payload.delivery_country ?? '';
 
   return {
     platformSlug: 'jvzoo',
     externalId: transactionId,
-    parentExternalId: prekeyBase,
+    // Self no parse; a reconciliação aponta upsells pro receipt da FE.
+    parentExternalId: transactionId,
     previousTransactionId: null,
     vendorAccount: payload.vendor_name || payload.vendor_id || null,
 
@@ -184,8 +193,8 @@ export function parseJvzooIngest(payload: JvzooPayload): NormalizedOrder {
     // Sem buyer id no payload — email é o identificador estável.
     customerExternalId: payload.customer_email || null,
     customerEmail: payload.customer_email || null,
-    customerFirstName: payload.customer_first_name || firstNameFallback,
-    customerLastName: payload.customer_last_name || lastNameFallback,
+    customerFirstName: payload.customer_first_name || null,
+    customerLastName: payload.customer_last_name || null,
     customerLanguage: null,
 
     status: mapStatus(transactionType),
@@ -194,9 +203,8 @@ export function parseJvzooIngest(payload: JvzooPayload): NormalizedOrder {
     paySequenceNo: null,
     numberOfInstallments: null,
 
-    currencyOriginal: (payload.currency || 'USD').toUpperCase(),
+    currencyOriginal: 'USD',
     grossAmountOrig: gross,
-    // JVZoo liquida em USD; se um dia vier currency ≠ USD, tratar FX aqui.
     grossAmountUsd: gross,
     taxAmount: tax,
     fees: platformFeeUsd,
@@ -204,22 +212,18 @@ export function parseJvzooIngest(payload: JvzooPayload): NormalizedOrder {
     cpaPaidUsd: affiliateUsd,
 
     paymentMethod: payload.payment_method || null,
-    // IPN manda enum verboso (UNITED_STATES); postback pode mandar ISO2 já.
-    country: countryRaw
-      ? (countryRaw.length === 2 ? countryRaw.toUpperCase() : COUNTRY_ISO2[countryRaw] ?? countryRaw)
-      : null,
+    country: countryRaw ? (COUNTRY_ISO2[countryRaw] ?? countryRaw) : null,
     state: payload.delivery_region || null,
     city: payload.delivery_city || null,
 
-    funnelSessionId: prekeyBase,
+    funnelSessionId: jvzooSessionAnchor(payload),
     funnelStep: null,
-    clickId: other.get('vtid') || payload.gclid || null,
+    clickId: other.get('vtid') || null,
     trackingId: other.get('tid') || payload.tid || null,
-    campaignKey: other.get('utm_campaign') || payload.utm_campaign || null,
+    campaignKey: other.get('utm_campaign') || null,
     // utm_source no link (quando o tráfego marca) — mesma atribuição de
-    // fonte usada na Digistore (ex.: smsbrdcst na aba SMS). No postback os
-    // UTMs vêm como params de topo.
-    trafficSource: other.get('utm_source') || payload.utm_source || null,
+    // fonte usada na Digistore (ex.: smsbrdcst na aba SMS).
+    trafficSource: other.get('utm_source') || null,
     deviceType: null,
     browser: null,
 

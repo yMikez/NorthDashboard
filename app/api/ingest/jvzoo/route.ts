@@ -13,7 +13,10 @@ import { db } from '@/lib/db';
 import { checkIngestSecret } from '@/lib/ingest/auth';
 import { parseJvzooIngest } from '@/lib/connectors/jvzoo/ingest';
 import type { JvzooPayload } from '@/lib/connectors/jvzoo/types';
+import type { NormalizedProductType } from '@/lib/shared/types';
 import { upsertOrder } from '@/lib/services/upsertOrder';
+import { reconcileJvzooSession } from '@/lib/services/jvzooSessions';
+import { rebalanceSessionFulfillment } from '@/lib/services/sessionFulfillment';
 import { logger, maskEmail } from '@/lib/logger';
 
 export const runtime = 'nodejs';
@@ -62,7 +65,40 @@ export async function POST(req: Request) {
 
   try {
     const normalized = parseJvzooIngest(params);
+
+    // Eventos NÃO-venda (RFND/CGBK/INSF/CANCEL-REBILL) chegam com payload
+    // do EVENTO (date = dia do refund, other_params às vezes ausente) —
+    // a âncora recomputada sairia errada e o update arrancaria o pedido
+    // da sessão de compra. Preserva sessão e papel já gravados.
+    const isSaleLike = ['sale', 'bill', 'uncancel-rebill'].includes(normalized.eventType);
+    if (!isSaleLike) {
+      const platform = await db.platform.findUnique({ where: { slug: 'jvzoo' }, select: { id: true } });
+      const prev = platform
+        ? await db.order.findUnique({
+            where: { platformId_externalId: { platformId: platform.id, externalId: normalized.externalId } },
+            select: { funnelSessionId: true, productType: true, parentExternalId: true },
+          })
+        : null;
+      if (prev) {
+        normalized.funnelSessionId = prev.funnelSessionId;
+        normalized.productType = prev.productType as NormalizedProductType;
+        normalized.parentExternalId = prev.parentExternalId ?? normalized.parentExternalId;
+      }
+    }
+
     const result = await upsertOrder(normalized);
+
+    // Papel FE/UPSELL sai da ordem dentro da sessão (mais antiga = FE).
+    // Roda depois de TODO upsert: corrige upsell recém-chegado, FE
+    // atrasada (rebaixa o upsell) e o clobber de productType em updates.
+    const reclassified = await reconcileJvzooSession(normalized.funnelSessionId);
+    if (reclassified > 0) {
+      // Papel mudou → o pacote (frete ancora na FE) precisa reagrupar.
+      const platform = await db.platform.findUnique({ where: { slug: 'jvzoo' }, select: { id: true } });
+      if (platform && normalized.funnelSessionId) {
+        await rebalanceSessionFulfillment(platform.id, normalized.funnelSessionId, 'session');
+      }
+    }
 
     await db.ingestLog.update({
       where: { id: log.id },

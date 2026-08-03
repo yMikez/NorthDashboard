@@ -40,7 +40,10 @@ const PLATFORM_DISPLAY_NAMES: Record<string, string> = {
 // por-transação, então a sessão real é o sessid2. (Cartpanda NÃO entra aqui:
 // o webhook traz FE+upsells como line items do MESMO pedido, então o
 // parentExternalId = order_id já agrupa a sessão pelo anchor padrão.)
-const SESSION_GROUPED_PLATFORMS = new Set(['buygoods']);
+// JVZoo entrou em 2026-08-03: a sessão real é "jvz:<tid>:<email>:<dia>"
+// (prekey/parentExternalId são por-transação — ver connectors/jvzoo).
+// Rebill JVZoo segue com funnelSessionId = próprio receipt → pacote próprio.
+const SESSION_GROUPED_PLATFORMS = new Set(['buygoods', 'jvzoo']);
 
 export async function upsertOrder(normalized: NormalizedOrder): Promise<UpsertOrderResult> {
   const platform = await db.platform.upsert({
