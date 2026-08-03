@@ -1,7 +1,7 @@
 // Client helpers pra UI nova de chat (Phase 1+).
 // Tipados, isolados do api.js da SPA legacy.
 
-import type { Block, Conversation, Message, StreamEvent } from '@/types/chat';
+import type { Block, ChatFolder, Conversation, Message, StreamEvent } from '@/types/chat';
 
 export async function listConversations(): Promise<Conversation[]> {
   const res = await fetch('/api/chat/conversations', { headers: { Accept: 'application/json' } });
@@ -26,12 +26,70 @@ export async function deleteConversation(id: string): Promise<void> {
   if (!res.ok) throw new Error(`deleteConversation ${res.status}`);
 }
 
+// ---------------- Pastas/Projetos ----------------
+
+export async function listFolders(): Promise<ChatFolder[]> {
+  const res = await fetch('/api/chat/folders', { headers: { Accept: 'application/json' } });
+  if (!res.ok) throw new Error(`listFolders ${res.status}`);
+  const data = (await res.json()) as { folders: ChatFolder[] };
+  return data.folders;
+}
+
+export async function createFolder(name: string): Promise<{ id: string; name: string }> {
+  const res = await fetch('/api/chat/folders', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+    body: JSON.stringify({ name }),
+  });
+  if (!res.ok) throw new Error(`createFolder ${res.status}`);
+  const data = (await res.json()) as { folder: { id: string; name: string } };
+  return data.folder;
+}
+
+export async function renameFolder(id: string, name: string): Promise<void> {
+  const res = await fetch(`/api/chat/folders/${encodeURIComponent(id)}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+    body: JSON.stringify({ name }),
+  });
+  if (!res.ok) throw new Error(`renameFolder ${res.status}`);
+}
+
+/** As conversas da pasta voltam pra raiz — nada é apagado. */
+export async function deleteFolder(id: string): Promise<void> {
+  const res = await fetch(`/api/chat/folders/${encodeURIComponent(id)}`, {
+    method: 'DELETE',
+    headers: { Accept: 'application/json' },
+  });
+  if (!res.ok) throw new Error(`deleteFolder ${res.status}`);
+}
+
+/** Move conversa pra pasta (folderId) ou pra raiz (null). */
+export async function moveConversation(id: string, folderId: string | null): Promise<void> {
+  const res = await fetch(`/api/chat/conversations/${encodeURIComponent(id)}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+    body: JSON.stringify({ folderId }),
+  });
+  if (!res.ok) throw new Error(`moveConversation ${res.status}`);
+}
+
+export async function renameConversation(id: string, title: string): Promise<void> {
+  const res = await fetch(`/api/chat/conversations/${encodeURIComponent(id)}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+    body: JSON.stringify({ title }),
+  });
+  if (!res.ok) throw new Error(`renameConversation ${res.status}`);
+}
+
 export interface StreamCallbacks {
   onConversation?: (e: { id: string }) => void;
   onToken?: (e: { text: string }) => void;
   onToolUseStart?: (e: { name: string; id: string }) => void;
   onToolUseResult?: (e: { name: string; id: string }) => void;
   onBlocks?: (e: { blocks: Block[] }) => void;
+  onTruncated?: (e: { reason: string }) => void;
   onDone?: (e: { conversationId: string }) => void;
   onError?: (e: { message: string }) => void;
   onRateLimited?: (e: { message: string; retryAfterSeconds: number }) => void;
@@ -42,7 +100,7 @@ export interface StreamCallbacks {
  * limit pra exibir UI específica. Suporta abort via AbortController.
  */
 export async function sendMessage(
-  input: { conversationId?: string | null; message: string; uiState?: unknown },
+  input: { conversationId?: string | null; message: string; uiState?: unknown; folderId?: string | null },
   callbacks: StreamCallbacks,
   signal?: AbortSignal,
 ): Promise<void> {
@@ -51,7 +109,13 @@ export async function sendMessage(
     res = await fetch('/api/chat', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Accept: 'text/event-stream' },
-      body: JSON.stringify({ conversationId: input.conversationId, message: input.message, uiState: input.uiState }),
+      body: JSON.stringify({
+        conversationId: input.conversationId,
+        message: input.message,
+        uiState: input.uiState,
+        // Só relevante quando conversationId é null — conversa NOVA nasce na pasta.
+        folderId: input.folderId,
+      }),
       signal,
     });
   } catch (err) {
@@ -126,6 +190,8 @@ function parseSSE(chunk: string): StreamEvent | null {
         return { type: 'tool_use_result', name: payload.name as string, id: payload.id as string };
       case 'blocks':
         return { type: 'blocks', blocks: payload.blocks as Block[] };
+      case 'truncated':
+        return { type: 'truncated', reason: payload.reason as string };
       case 'done':
         return { type: 'done', conversationId: payload.conversationId as string };
       case 'error':
@@ -154,6 +220,9 @@ function dispatch(evt: StreamEvent, cb: StreamCallbacks): void {
       break;
     case 'blocks':
       cb.onBlocks?.({ blocks: evt.blocks });
+      break;
+    case 'truncated':
+      cb.onTruncated?.({ reason: evt.reason });
       break;
     case 'done':
       cb.onDone?.({ conversationId: evt.conversationId });

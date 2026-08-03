@@ -13,13 +13,20 @@ import { ChatInput } from './ChatInput';
 import { DetailDrawer } from './DetailDrawer';
 import { KnowledgeSheet } from './KnowledgeSheet';
 import {
+  createFolder,
   deleteConversation,
+  deleteFolder,
   getConversation,
   listConversations,
+  listFolders,
+  moveConversation,
+  renameConversation,
+  renameFolder,
   sendMessage,
 } from '@/lib/chat/client';
 import type {
   Block,
+  ChatFolder,
   ChatUser,
   Conversation,
   EntityRef,
@@ -46,6 +53,9 @@ const INITIAL_FILTERS: FilterState = (() => {
 export function ChatShell({ user }: { user: ChatUser }) {
   const [collapsed, setCollapsed] = React.useState(false);
   const [conversations, setConversations] = React.useState<Conversation[]>([]);
+  const [folders, setFolders] = React.useState<ChatFolder[]>([]);
+  // Pasta "ativa" — conversa NOVA nasce nela (folderId no 1º sendMessage).
+  const [activeFolderId, setActiveFolderId] = React.useState<string | null>(null);
   const [selectedId, setSelectedId] = React.useState<string | null>(null);
   const [messages, setMessages] = React.useState<Message[]>([]);
   const [input, setInput] = React.useState('');
@@ -79,11 +89,13 @@ export function ChatShell({ user }: { user: ChatUser }) {
   }, []);
 
   async function refreshConversations() {
+    // Conversas + pastas carregam juntas — contagens e seções dependem das duas.
     try {
-      const list = await listConversations();
+      const [list, folderList] = await Promise.all([listConversations(), listFolders()]);
       setConversations(list);
+      setFolders(folderList);
     } catch (err) {
-      console.error('listConversations', err);
+      console.error('refreshConversations', err);
       setSyncStatus('error');
     }
   }
@@ -173,9 +185,15 @@ export function ChatShell({ user }: { user: ChatUser }) {
     let acc = '';
     const tools: { name: string; id: string }[] = [];
     let received: Block[] | null = null;
+    let truncated = false;
 
     await sendMessage(
-      { conversationId: selectedId, message: text },
+      {
+        conversationId: selectedId,
+        message: text,
+        // Conversa NOVA nasce na pasta ativa; conversas existentes ignoram.
+        folderId: selectedId ? undefined : activeFolderId,
+      },
       {
         onConversation: ({ id }) => {
           setSelectedId(id);
@@ -194,6 +212,9 @@ export function ChatShell({ user }: { user: ChatUser }) {
         onBlocks: ({ blocks }) => {
           received = blocks;
         },
+        onTruncated: () => {
+          truncated = true;
+        },
         onDone: ({ conversationId: cid }) => {
           const final: Message = {
             id: 'asst-' + Date.now(),
@@ -202,6 +223,7 @@ export function ChatShell({ user }: { user: ChatUser }) {
             toolUses: tools.map((t) => ({ name: t.name })),
             blocks: received ?? undefined,
             createdAt: new Date().toISOString(),
+            truncated: truncated || undefined,
           };
           setMessages((prev) => [...prev, final]);
           setStreamPartial(null);
@@ -284,20 +306,79 @@ export function ChatShell({ user }: { user: ChatUser }) {
 
   function handleRenameTitle(next: string) {
     if (!selectedId) return;
-    setConversations((prev) =>
-      prev.map((c) => (c.id === selectedId ? { ...c, title: next } : c)),
-    );
-    // Server-side rename ainda não tem endpoint dedicado; Phase 1 mantém local-only.
+    handleRenameConv(selectedId, next);
   }
 
   function handleRenameConv(id: string, title: string) {
+    // Otimista: aplica local e persiste via PATCH; reverte com refresh em erro.
     setConversations((prev) => prev.map((c) => (c.id === id ? { ...c, title } : c)));
+    renameConversation(id, title).catch((err) => {
+      console.error('renameConversation', err);
+      void refreshConversations();
+    });
   }
 
   function handleTogglePin(id: string) {
     setConversations((prev) =>
       prev.map((c) => (c.id === id ? { ...c, pinned: !c.pinned } : c)),
     );
+  }
+
+  // ---- Pastas ----
+
+  async function handleCreateFolder(name: string) {
+    try {
+      const folder = await createFolder(name);
+      setActiveFolderId(folder.id);
+      await refreshConversations();
+    } catch (err) {
+      console.error('createFolder', err);
+      window.alert(`Não foi possível criar a pasta.\n${err instanceof Error ? err.message : ''}`);
+    }
+  }
+
+  async function handleRenameFolder(id: string, name: string) {
+    // Otimista + persistência; refresh corrige em caso de erro.
+    setFolders((prev) => prev.map((f) => (f.id === id ? { ...f, name } : f)));
+    try {
+      await renameFolder(id, name);
+    } catch (err) {
+      console.error('renameFolder', err);
+      void refreshConversations();
+    }
+  }
+
+  async function handleDeleteFolder(id: string) {
+    const folder = folders.find((f) => f.id === id);
+    const name = folder?.name || '(sem nome)';
+    if (
+      !window.confirm(
+        `Excluir a pasta "${name}"?\n\nAs conversas dela NÃO são apagadas — voltam pra raiz ("Conversas").`,
+      )
+    ) {
+      return;
+    }
+    try {
+      await deleteFolder(id);
+      if (activeFolderId === id) setActiveFolderId(null);
+      await refreshConversations();
+    } catch (err) {
+      console.error('deleteFolder', err);
+      window.alert(`Não foi possível excluir a pasta.\n${err instanceof Error ? err.message : ''}`);
+    }
+  }
+
+  async function handleMoveConversation(id: string, folderId: string | null) {
+    // Otimista: reflete a seção nova na hora; refresh sincroniza contagens.
+    setConversations((prev) => prev.map((c) => (c.id === id ? { ...c, folderId } : c)));
+    try {
+      await moveConversation(id, folderId);
+    } catch (err) {
+      console.error('moveConversation', err);
+      window.alert(`Não foi possível mover a conversa.\n${err instanceof Error ? err.message : ''}`);
+    } finally {
+      void refreshConversations();
+    }
   }
 
   function handleExport(id: string) {
@@ -321,6 +402,10 @@ export function ChatShell({ user }: { user: ChatUser }) {
 
   const currentConv = conversations.find((c) => c.id === selectedId) ?? null;
 
+  // Knowledge é admin-only (/api/admin/knowledge*) — member agora acessa o
+  // chat, mas o gatilho do KnowledgeSheet some pra não levar 401 no clique.
+  const isAdmin = user.role === 'ADMIN';
+
   // h-full = preenche o wrapper fixed do layout (100vh ancorado).
   // grid-rows-[100%] força a única row implícita a respeitar 100% da
   // altura do grid container — evita que filhos com height: 100vh
@@ -334,17 +419,25 @@ export function ChatShell({ user }: { user: ChatUser }) {
         collapsed={collapsed}
         onToggleCollapsed={() => setCollapsed((v) => !v)}
         conversations={conversations}
+        folders={folders}
+        activeFolderId={activeFolderId}
         selectedId={selectedId}
         onSelect={setSelectedId}
+        onSelectFolder={setActiveFolderId}
         onNew={startNew}
         onRename={handleRenameConv}
         onTogglePin={handleTogglePin}
         onExport={handleExport}
         onDelete={(id) => void handleDelete(id)}
+        onMove={(id, folderId) => void handleMoveConversation(id, folderId)}
+        onCreateFolder={(name) => void handleCreateFolder(name)}
+        onRenameFolder={(id, name) => void handleRenameFolder(id, name)}
+        onDeleteFolder={(id) => void handleDeleteFolder(id)}
+        showKnowledge={isAdmin}
         onOpenKnowledge={() => setKnowledgeOpen(true)}
       />
 
-      <KnowledgeSheet open={knowledgeOpen} onOpenChange={setKnowledgeOpen} />
+      {isAdmin && <KnowledgeSheet open={knowledgeOpen} onOpenChange={setKnowledgeOpen} />}
 
       <main className="relative z-[1] flex flex-col h-full overflow-hidden">
         <TopBar

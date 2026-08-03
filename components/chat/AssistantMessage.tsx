@@ -22,6 +22,7 @@ interface AssistantMessageProps {
   toolUses?: ToolUseRecord[] | null;
   blocks?: Block[];
   streaming?: boolean;
+  truncated?: boolean;
   onRegenerate?: () => void;
   onFeedback?: (kind: 'up' | 'down') => void;
 }
@@ -31,6 +32,7 @@ export function AssistantMessage({
   toolUses,
   blocks,
   streaming,
+  truncated,
   onRegenerate,
   onFeedback,
 }: AssistantMessageProps) {
@@ -77,6 +79,12 @@ export function AssistantMessage({
         {!content && !hasBlocks && streaming && (
           <div className="text-xs text-muted-foreground italic">
             <span className="inline-block w-1.5 h-4 bg-primary animate-pulse ml-0.5 -mb-0.5" />
+          </div>
+        )}
+
+        {truncated && !streaming && (
+          <div className="font-mono text-[11px] leading-snug" style={{ color: 'hsl(var(--warning))' }}>
+            ⚠ Resposta truncada por limite de tamanho — peça pra continuar.
           </div>
         )}
 

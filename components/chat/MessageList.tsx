@@ -61,6 +61,7 @@ export function MessageList({
               content={m.content}
               toolUses={m.toolUses}
               blocks={m.blocks}
+              truncated={m.truncated}
               onRegenerate={idx === messages.length - 1 ? onRegenerate : undefined}
             />
           ),

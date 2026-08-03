@@ -53,19 +53,30 @@ function Sidebar({ active, onNav, user, open, onClose }) {
   // só pra admin.
   const isAdmin = user?.role === 'ADMIN';
   const allowed = new Set(user?.allowedTabs || []);
+  // Chat IA é pra TODO usuário logado (admin E member), independente de
+  // allowedTabs — por isso vive num grupo próprio injetado DEPOIS do filtro
+  // por allowed (senão o .filter dos members o removeria).
+  const iaGroup = {
+    label: 'IA',
+    items: [
+      { id: 'chat', label: 'Análise (IA)', icon: 'sparkles' },
+    ],
+  };
   const adminOnly = {
     label: 'Admin',
     items: [
-      { id: 'chat', label: 'Análise (IA)', icon: 'sparkles' },
       { id: 'users', label: 'Usuários', icon: 'user-plus' },
       { id: 'copy-optimizer', label: 'Copy Optimizer', icon: 'sliders' },
     ],
   };
   const groups = isAdmin
-    ? [...allGroups, adminOnly]
-    : allGroups
-        .map((g) => ({ ...g, items: g.items.filter((it) => allowed.has(it.id)) }))
-        .filter((g) => g.items.length > 0);
+    ? [...allGroups, iaGroup, adminOnly]
+    : [
+        ...allGroups
+          .map((g) => ({ ...g, items: g.items.filter((it) => allowed.has(it.id)) }))
+          .filter((g) => g.items.length > 0),
+        iaGroup,
+      ];
   // Colapso persistido — modo trilho de ícones (64px) com tooltip no title.
   const [collapsed, setCollapsed] = useStateS(() => {
     try { return localStorage.getItem('ns-side-collapsed') === '1'; } catch (e) { return false; }

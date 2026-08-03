@@ -14,6 +14,15 @@ export interface Conversation {
   updatedAt: string;
   messageCount: number;
   pinned?: boolean;        // Phase 1+ — persistido no DB futuro
+  folderId: string | null; // pasta/projeto; null = raiz
+}
+
+// Pasta/projeto de conversas (GET /api/chat/folders).
+export interface ChatFolder {
+  id: string;
+  name: string;
+  createdAt: string;
+  conversationCount: number;
 }
 
 export interface ToolUseRecord {
@@ -29,6 +38,7 @@ export interface Message {
   toolUses?: ToolUseRecord[] | null;
   blocks?: Block[];
   createdAt: string;
+  truncated?: boolean;   // resposta cortada por max_tokens (evento SSE `truncated`)
 }
 
 // ---------------- Blocks (Phase 2) ----------------
@@ -116,6 +126,7 @@ export type StreamEvent =
   | { type: 'tool_use_start'; name: string; id: string }
   | { type: 'tool_use_result'; name: string; id: string }
   | { type: 'blocks'; blocks: Block[] }       // Phase 2
+  | { type: 'truncated'; reason: string }     // resposta estourou max_tokens
   | { type: 'done'; conversationId: string }
   | { type: 'error'; message: string }
   | { type: 'rate_limited'; message: string; retryAfterSeconds: number };

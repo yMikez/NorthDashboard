@@ -397,6 +397,7 @@ model User {
   paidPayouts     NetworkPayout[]   @relation("PayoutPaidBy")
   auditEntries    NetworkAuditLog[] @relation("AuditActor")
   conversations   Conversation[]    @relation("ConversationsByUser")
+  chatFolders     ChatFolder[]      @relation("ChatFoldersByUser")
 }
 
 model Session {
@@ -591,13 +592,31 @@ model NetworkContract {
 // ============================================================
 
 model Conversation {
-  id        String    @id @default(cuid())
+  id        String      @id @default(cuid())
   userId    String
-  user      User      @relation("ConversationsByUser", fields: [userId], references: [id], onDelete: Cascade)
+  user      User        @relation("ConversationsByUser", fields: [userId], references: [id], onDelete: Cascade)
   title     String? // auto-gerado do primeiro user message (truncado)
-  createdAt DateTime  @default(now())
-  updatedAt DateTime  @updatedAt
+  // Pasta/projeto (opcional). Deletar a pasta NÃO deleta as conversas —
+  // elas voltam pra raiz (SetNull).
+  folderId  String?
+  folder    ChatFolder? @relation(fields: [folderId], references: [id], onDelete: SetNull)
+  createdAt DateTime    @default(now())
+  updatedAt DateTime    @updatedAt
   messages  Message[]
+
+  @@index([userId, updatedAt])
+  @@index([folderId])
+}
+
+// Pasta/projeto de chats — organização por usuário (cada um vê só as suas).
+model ChatFolder {
+  id            String         @id @default(cuid())
+  userId        String
+  user          User           @relation("ChatFoldersByUser", fields: [userId], references: [id], onDelete: Cascade)
+  name          String
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+  conversations Conversation[]
 
   @@index([userId, updatedAt])
 }

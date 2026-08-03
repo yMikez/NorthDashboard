@@ -7206,7 +7206,8 @@ function ChatWidget({ user }) {
   const [open, setOpen] = useState(false);
   const [conversationId, setConversationId] = useState(null);
 
-  if (!user || user.role !== 'ADMIN') return null;
+  // Chat IA é pra qualquer usuário logado (admin E member) — sem gate de role.
+  if (!user) return null;
 
   return (
     <>

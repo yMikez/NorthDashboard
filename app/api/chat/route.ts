@@ -17,7 +17,7 @@
 
 import type Anthropic from '@anthropic-ai/sdk';
 import { db } from '@/lib/db';
-import { requireAdmin } from '@/lib/auth/guard';
+import { requireAuth } from '@/lib/auth/guard';
 import { getAnthropicClient, ANTHROPIC_MODEL, systemBlocks } from '@/lib/services/ai';
 import { getKnowledgePromptBlock } from '@/lib/services/knowledge';
 import { extractAndSaveMemory } from '@/lib/services/chatMemory';
@@ -30,6 +30,8 @@ export const dynamic = 'force-dynamic';
 interface RequestBody {
   conversationId?: string;
   message?: string;
+  // Pasta onde a conversa NOVA nasce (ignorado quando conversationId vem).
+  folderId?: string | null;
   // Estado atual da UI da SPA (aba, período, filtros ativos) — vira o
   // bloco dinâmico do system pra perguntas dêiticas ("por que caiu aqui?").
   uiState?: {
@@ -69,13 +71,23 @@ function uiStateText(ui: RequestBody['uiState']): string {
 }
 
 // Limits
-const MAX_TOOL_LOOPS = 6;
+const MAX_TOOL_LOOPS = 8;
 const HISTORY_MAX_MESSAGES = 20; // últimos N pra evitar contexto explodindo
-const RATE_LIMIT_PER_DAY = 50;   // user-role messages / 24h por admin
+const RATE_LIMIT_PER_DAY = 50;   // user-role messages / 24h por usuário
+// 4096 truncava respostas com tabela grande no MEIO (stop_reason
+// max_tokens) — o sintoma clássico de "começa a responder e para".
+// 16384 dá folga; o caso raro que ainda estourar emite SSE 'truncated'.
+const MAX_OUTPUT_TOKENS = 16_384;
 const TOOL_RESULT_MAX_BYTES = 200_000;
+// Ping SSE (comentário ':') a cada 15s — mantém o stream vivo através de
+// proxy (Traefik) durante execuções longas de tool (ex: refresh da MV),
+// que antes derrubavam a conexão sem nenhum byte trafegando.
+const KEEPALIVE_MS = 15_000;
 
 export async function POST(req: Request) {
-  const auth = await requireAdmin();
+  // Aberto a QUALQUER usuário logado (2026-08-03) — conversas são
+  // escopadas por userId em todas as queries.
+  const auth = await requireAuth();
   if (!auth.ok) return auth.response;
 
   let body: RequestBody;
@@ -115,8 +127,17 @@ export async function POST(req: Request) {
   let conversationId = body.conversationId ?? '';
 
   if (!conversationId) {
+    // Conversa nova pode nascer numa pasta — valida a posse antes.
+    let folderId: string | null = null;
+    if (body.folderId) {
+      const folder = await db.chatFolder.findUnique({
+        where: { id: body.folderId },
+        select: { userId: true },
+      });
+      if (folder && folder.userId === auth.user.id) folderId = body.folderId;
+    }
     const created = await db.conversation.create({
-      data: { userId: auth.user.id, title: userMsg.slice(0, 60) },
+      data: { userId: auth.user.id, title: userMsg.slice(0, 60), folderId },
       select: { id: true },
     });
     conversationId = created.id;
@@ -164,14 +185,33 @@ export async function POST(req: Request) {
   const encoder = new TextEncoder();
   const stream = new ReadableStream({
     async start(controller) {
+      let closed = false;
       function send(event: string, data: unknown) {
-        const payload = `event: ${event}\ndata: ${JSON.stringify(data)}\n\n`;
-        controller.enqueue(encoder.encode(payload));
+        if (closed) return;
+        try {
+          const payload = `event: ${event}\ndata: ${JSON.stringify(data)}\n\n`;
+          controller.enqueue(encoder.encode(payload));
+        } catch {
+          closed = true; // client desconectou — não derruba o processamento
+        }
       }
+      // Keepalive: comentário SSE periódico segura a conexão viva através
+      // do proxy enquanto uma tool longa roda (nenhum token trafegando).
+      const keepalive = setInterval(() => {
+        if (closed) return;
+        try {
+          controller.enqueue(encoder.encode(`: ping\n\n`));
+        } catch {
+          closed = true;
+        }
+      }, KEEPALIVE_MS);
 
       const toolUses: Array<{ name: string; input: unknown; result?: unknown }> = [];
       let finalText = '';
       let finalBlocks: unknown = null;
+      // true quando o loop esgota com o modelo ainda pedindo tools — o
+      // pós-loop força uma resposta final em texto com o que foi coletado.
+      let exhaustedWithToolUse = false;
 
       // Carrega a base de conhecimento UMA vez por request — cache 60s no
       // service. Vai injetada no system prompt em todas as iterações do
@@ -186,7 +226,7 @@ export async function POST(req: Request) {
           // text_delta como SSE 'token' pra UX em tempo real.
           const ms = client.messages.stream({
             model: ANTHROPIC_MODEL,
-            max_tokens: 4096,
+            max_tokens: MAX_OUTPUT_TOKENS,
             system: systemBlocks(new Date(), knowledgeBlock, uiTxt),
             tools: TOOLS,
             messages: apiMessages,
@@ -210,9 +250,24 @@ export async function POST(req: Request) {
           const finalMessage = await ms.finalMessage();
           apiMessages.push({ role: 'assistant', content: finalMessage.content });
 
+          // Estourou o teto de output NO MEIO da resposta — avisa a UI e
+          // fecha o turno com o que já foi streamado (raro com 16k, mas o
+          // silêncio era exatamente o bug do "para sem terminar").
+          if (finalMessage.stop_reason === 'max_tokens') {
+            send('truncated', { reason: 'max_tokens' });
+            logger.warn({ conversationId }, '[chat] resposta truncada por max_tokens');
+            break;
+          }
+
           if (finalMessage.stop_reason !== 'tool_use') {
             break;
           }
+
+          // Última volta do loop e o modelo ainda quer tools: executa os
+          // tools abaixo e o pós-loop força uma resposta final em TEXTO
+          // (tool_choice none) — antes o turno simplesmente MORRIA aqui,
+          // sem resposta nenhuma ("começa e para").
+          exhaustedWithToolUse = loop === MAX_TOOL_LOOPS - 1;
 
           // Executa os tool_use e empilha tool_result.
           // `respond_with_blocks` é terminal: extrai os blocos do input,
@@ -256,6 +311,30 @@ export async function POST(req: Request) {
           apiMessages.push({ role: 'user', content: toolResults });
         }
 
+        // Loop esgotado com tools pendentes: força UMA resposta final em
+        // TEXTO (tool_choice none) com os dados já coletados — nunca mais
+        // terminar o turno em silêncio.
+        if (exhaustedWithToolUse) {
+          const finalMs = client.messages.stream({
+            model: ANTHROPIC_MODEL,
+            max_tokens: MAX_OUTPUT_TOKENS,
+            system: systemBlocks(new Date(), knowledgeBlock, uiTxt),
+            tools: TOOLS,
+            tool_choice: { type: 'none' },
+            messages: apiMessages,
+          });
+          for await (const event of finalMs) {
+            if (event.type === 'content_block_delta' && event.delta.type === 'text_delta') {
+              finalText += event.delta.text;
+              send('token', { text: event.delta.text });
+            }
+          }
+          const closing = await finalMs.finalMessage();
+          if (closing.stop_reason === 'max_tokens') {
+            send('truncated', { reason: 'max_tokens' });
+          }
+        }
+
         await db.message.create({
           data: {
             conversationId,
@@ -275,14 +354,19 @@ export async function POST(req: Request) {
 
         // Memória automática: fire-and-forget (não bloqueia o close do
         // stream). Extrai fatos duráveis do turno e salva como
-        // KnowledgeEntry source='auto' pra conversas futuras. Erros
-        // são engolidos dentro de extractAndSaveMemory.
-        void extractAndSaveMemory(userMsg, finalText);
+        // KnowledgeEntry source='auto' pra conversas futuras. SÓ pra
+        // ADMIN: a base de conhecimento é global/autoritativa e injeta o
+        // system de TODOS os usuários — member não escreve nela.
+        if (auth.user.role === 'ADMIN') {
+          void extractAndSaveMemory(userMsg, finalText);
+        }
       } catch (err) {
         logger.error({ err, conversationId }, '[chat] stream failed');
         send('error', { message: err instanceof Error ? err.message : 'erro desconhecido' });
       } finally {
-        controller.close();
+        clearInterval(keepalive);
+        closed = true;
+        try { controller.close(); } catch { /* já fechado pelo client */ }
       }
     },
   });
