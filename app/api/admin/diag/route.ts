@@ -19,6 +19,9 @@ export async function GET(req: Request) {
   }
   const { searchParams } = new URL(req.url);
   const platformSlug = searchParams.get('platform') || 'buygoods';
+  // take opcional (default 60 — comportamento original) pra auditorias de
+  // catálogo completo, ex. caça a famílias duplicadas no filtro.
+  const take = Math.min(Math.max(parseInt(searchParams.get('take') ?? '60', 10) || 60, 1), 500);
 
   const products = await db.product.findMany({
     where: { platform: { slug: platformSlug } },
@@ -32,7 +35,7 @@ export async function GET(req: Request) {
       _count: { select: { orders: true } },
     },
     orderBy: { name: 'asc' },
-    take: 60,
+    take,
   });
 
   // Reroda o classifier AGORA em cada produto pra ver o que ele devolveria
