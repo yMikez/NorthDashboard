@@ -37,7 +37,10 @@ export async function GET(req: Request) {
     by: ['status'],
     where: { platformId: platform.id, orderedAt: { gte: since } },
     _count: { _all: true },
-    _sum: { grossAmountUsd: true },
+    _sum: {
+      grossAmountUsd: true, originalGrossUsd: true,
+      cogsUsd: true, fulfillmentUsd: true, netAmountUsd: true,
+    },
   });
 
   // Amostra de refunds/chargebacks: o irmão (venda original) ainda está
@@ -96,6 +99,10 @@ export async function GET(req: Request) {
       status: s.status,
       count: s._count._all,
       grossSum: s._sum.grossAmountUsd ? Number(s._sum.grossAmountUsd) : 0,
+      originalGrossSum: s._sum.originalGrossUsd ? Number(s._sum.originalGrossUsd) : 0,
+      cogsSum: s._sum.cogsUsd ? Number(s._sum.cogsUsd) : 0,
+      fulfillmentSum: s._sum.fulfillmentUsd ? Number(s._sum.fulfillmentUsd) : 0,
+      netSum: s._sum.netAmountUsd ? Number(s._sum.netAmountUsd) : 0,
     })),
     verdict: {
       sampled: sample.length,
