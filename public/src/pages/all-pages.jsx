@@ -518,6 +518,16 @@ function LeaderboardPage({ filters, onOpenAffiliate }) {
     return a.revenue / a.feApprovedCount;
   }
 
+  // Média simples da coluna CPA/venda (cpaPerFe = CPA negociado, último
+  // valor observado). Roda sobre `all` — a lista completa do período, NÃO
+  // sobre `rows` (que o usuário filtra por mín. de pedidos e ordenação):
+  // o card mede o contrato médio da base, não da fatia visível.
+  const cpaStats = (() => {
+    const withCpa = all.filter((a) => (a.cpaPerFe || 0) > 0);
+    const sum = withCpa.reduce((s, a) => s + a.cpaPerFe, 0);
+    return { sum, count: withCpa.length, avg: withCpa.length ? sum / withCpa.length : 0 };
+  })();
+
   const rows = all.filter((a) => a.allOrders >= minOrders).sort((a, b) => {
     switch (sortBy) {
       case 'orders': return b.orders - a.orders;
@@ -592,6 +602,22 @@ function LeaderboardPage({ filters, onOpenAffiliate }) {
           <div className="l">Inativos</div>
           <div className="v" style={{ color: summary.churnedAff > 3 ? 'var(--warning)' : 'inherit' }}>{summary.churnedAff}</div>
           <div className="s">ativos antes · silenciosos agora</div>
+        </div>
+        {/* CPA médio: média SIMPLES da coluna CPA/venda — cada afiliado
+            entra uma vez, independente do volume dele (é a média do CPA
+            NEGOCIADO, não o custo médio por venda). Denominador = quem tem
+            CPA > 0; afiliado organic (coluna "—") ficaria como zero e
+            puxaria a média pra baixo. O sub deixa a conta explícita. */}
+        <div className="mini-kpi">
+          <div className="l">CPA médio por afiliado</div>
+          <div className="v" style={{ color: 'var(--money)' }}>
+            {cpaStats.count > 0 ? fmtCurrency(cpaStats.avg, cur, 0) : '—'}
+          </div>
+          <div className="s">
+            {cpaStats.count > 0
+              ? `${fmtCurrency(cpaStats.sum, cur, 0)} ÷ ${cpaStats.count} afiliados com CPA`
+              : 'nenhum afiliado com CPA no período'}
+          </div>
         </div>
       </div>
 
