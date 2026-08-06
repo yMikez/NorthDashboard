@@ -365,16 +365,22 @@ function OverviewPage({ filters, setFilters }) {
             state: KPI_THRESHOLDS.approvalRate.state(kpis.approvalRate),
           }}
           onClick={() => window.NSNavigate('transactions')}/>
+        {/* Número grande = lente de CONTAGEM por coorte, com denominador
+            corrigido pro modelo linha-extra da Digistore (vem do
+            profit-split, que respeita período e filtros). Fallback pro
+            refundRate da MV enquanto o split carrega. Delta segue da MV
+            (tendência vale; o viés é consistente entre períodos). */}
         <KpiCard label="TAXA DE REEMBOLSO" icon="refresh" index={5}
-          countValue={kpis.refundRate * 100} countFormat={(n) => n.toFixed(2)} unit="%"
+          countValue={split?.refunds ? split.refunds.pct : kpis.refundRate * 100}
+          countFormat={(n) => n.toFixed(2)} unit="%"
           cur={kpis.refundRate} prev={prev.refundRate}
           directionPreference="lower"
           threshold={KPI_THRESHOLDS.refundRate.label(kpis.refundRate) ? {
             label: KPI_THRESHOLDS.refundRate.label(kpis.refundRate),
             state: KPI_THRESHOLDS.refundRate.state(kpis.refundRate),
           } : null}
-          sub={split && split.front.refundCbUsd > 0
-            ? `modelo desconta −${fmtCurrency(split.front.refundCbUsd, cur, 0)} no NET AFTER CPA`
+          sub={split?.refunds
+            ? `${fmtInt(split.refunds.refundedCount)} de ${fmtInt(split.refunds.salesCount)} pedidos pediram reembolso (até agora)${split.front.refundCbUsd > 0 ? ` · modelo desconta −${fmtCurrency(split.front.refundCbUsd, cur, 0)}` : ''}`
             : null}
           onClick={() => window.NSNavigate('transactions', { status: 'refunded' })}/>
         <KpiCard label="CHARGEBACK" icon="alert-triangle" index={6}

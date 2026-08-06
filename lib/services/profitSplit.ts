@@ -51,6 +51,18 @@ export interface ProfitSplitResponse {
     profitUsd: number;
   };
   totalUsd: number;
+  // Lente de CONTAGEM por coorte pro card de reembolso do overview:
+  // "dos X pedidos feitos no período, Y pediram reembolso (até agora)".
+  // Denominador honesto por plataforma: na Digistore o refund é LINHA
+  // EXTRA (venda original segue APPROVED), então pedidos reais =
+  // total − linhas de refund/cb; nas demais (in-place) = total.
+  // O "(até agora)" importa: coorte recente ainda vai receber refunds.
+  refunds: {
+    salesCount: number;
+    refundedCount: number;
+    chargebackCount: number;
+    pct: number; // refundedCount ÷ salesCount × 100 (CB fora, tem card próprio)
+  };
 }
 
 export interface ProfitSplitFilters {
@@ -105,7 +117,7 @@ export async function getProfitSplit(filters: ProfitSplitFilters): Promise<Profi
       : []),
   ];
 
-  const [frontByPlatform, frontCpa, smsAgg, recoveryOrders] = await Promise.all([
+  const [frontByPlatform, frontCpa, smsAgg, recoveryOrders, statusCounts] = await Promise.all([
     // FRONT: aprovadas do período SEM as fontes de back, DENTRO do escopo
     // de filtro da UI (plataforma/família/país) — antes o card ignorava o
     // filtro e mostrava o global com cara de filtrado.
@@ -127,6 +139,13 @@ export async function getProfitSplit(filters: ProfitSplitFilters): Promise<Profi
           _sum: { grossAmountUsd: true },
         })
       : Promise.resolve([] as Array<{ affiliateId: string | null; _sum: { grossAmountUsd: unknown } }>),
+    // Contagem por plataforma×status pro card de reembolso do overview
+    // (TODOS os pedidos do escopo — sem as exclusões de back do front).
+    db.order.groupBy({
+      by: ['platformId', 'status'],
+      where: { orderedAt: range, ...orderScope },
+      _count: { _all: true },
+    }),
   ]);
 
   const slugById = new Map(frontCpa.map((p) => [p.id, p.slug]));
@@ -171,6 +190,28 @@ export async function getProfitSplit(filters: ProfitSplitFilters): Promise<Profi
   ];
   const backProfit = round2(sources.reduce((s, x) => s + x.netUsd, 0));
 
+  // Lente de contagem por coorte (ver interface). Denominador por modelo
+  // de contabilidade: Digistore (linha-extra) → pedidos reais = total −
+  // linhas sintéticas de refund/cb; demais (in-place) → todas as linhas.
+  let salesCount = 0;
+  let refundedCount = 0;
+  let chargebackCount = 0;
+  const perPlatform = new Map<string, { total: number; refunded: number; cb: number }>();
+  for (const g of statusCounts) {
+    const slug = slugById.get(g.platformId) ?? '';
+    const a = perPlatform.get(slug) ?? { total: 0, refunded: 0, cb: 0 };
+    a.total += g._count._all;
+    if (g.status === 'REFUNDED') a.refunded += g._count._all;
+    if (g.status === 'CHARGEBACK') a.cb += g._count._all;
+    perPlatform.set(slug, a);
+  }
+  for (const [slug, a] of perPlatform) {
+    const extraRow = slug === 'digistore24';
+    salesCount += extraRow ? a.total - a.refunded - a.cb : a.total;
+    refundedCount += a.refunded;
+    chargebackCount += a.cb;
+  }
+
   return {
     range: { start: startDate.toISOString(), end: endDate.toISOString() },
     opexPct: pm.opexPct,
@@ -183,5 +224,11 @@ export async function getProfitSplit(filters: ProfitSplitFilters): Promise<Profi
     },
     back: { sources, profitUsd: backProfit },
     totalUsd: round2(frontProfit + backProfit),
+    refunds: {
+      salesCount,
+      refundedCount,
+      chargebackCount,
+      pct: salesCount > 0 ? Math.round((refundedCount / salesCount) * 10000) / 100 : 0,
+    },
   };
 }
