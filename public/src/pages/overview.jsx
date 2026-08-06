@@ -369,16 +369,24 @@ function OverviewPage({ filters, setFilters }) {
             corrigido pro modelo linha-extra da Digistore (vem do
             profit-split, que respeita período e filtros). Fallback pro
             refundRate da MV enquanto o split carrega. Delta segue da MV
-            (tendência vale; o viés é consistente entre períodos). */}
+            (tendência vale; o viés é consistente entre períodos).
+            ALERTA (regra do usuário 2026-08-06): monitor ROLANTE dos
+            últimos 7 dias a partir de agora — limite 10% dos pedidos com
+            reembolso; acima disso o card acende. Warn a partir de 8%
+            (se aproximando do limite). */}
         <KpiCard label="TAXA DE REEMBOLSO" icon="refresh" index={5}
           countValue={split?.refunds ? split.refunds.pct : kpis.refundRate * 100}
           countFormat={(n) => n.toFixed(2)} unit="%"
           cur={kpis.refundRate} prev={prev.refundRate}
           directionPreference="lower"
-          threshold={KPI_THRESHOLDS.refundRate.label(kpis.refundRate) ? {
+          alert={(split?.refunds7d?.pct ?? 0) > 10}
+          threshold={split?.refunds7d && split.refunds7d.salesCount > 0 ? {
+            label: `últimos 7d: ${split.refunds7d.pct.toFixed(1)}% (${fmtInt(split.refunds7d.refundedCount)}/${fmtInt(split.refunds7d.salesCount)}) · limite 10%`,
+            state: split.refunds7d.pct > 10 ? 'danger' : split.refunds7d.pct > 8 ? 'warn' : 'ok',
+          } : (KPI_THRESHOLDS.refundRate.label(kpis.refundRate) ? {
             label: KPI_THRESHOLDS.refundRate.label(kpis.refundRate),
             state: KPI_THRESHOLDS.refundRate.state(kpis.refundRate),
-          } : null}
+          } : null)}
           sub={split?.refunds
             ? `${fmtInt(split.refunds.refundedCount)} de ${fmtInt(split.refunds.salesCount)} pedidos pediram reembolso (até agora)${split.front.refundCbUsd > 0 ? ` · modelo desconta −${fmtCurrency(split.front.refundCbUsd, cur, 0)}` : ''}`
             : null}

@@ -63,6 +63,51 @@ export interface ProfitSplitResponse {
     chargebackCount: number;
     pct: number; // refundedCount ÷ salesCount × 100 (CB fora, tem card próprio)
   };
+  // Monitor de alerta precoce (regra do usuário, 2026-08-06): coorte
+  // ROLANTE dos últimos 7 dias A PARTIR DE AGORA — independente do
+  // período selecionado na UI, mas respeitando os filtros de
+  // plataforma/família/país. Limite: 10% dos pedidos com reembolso →
+  // acende alerta no card (o threshold visual fica no front).
+  refunds7d: {
+    salesCount: number;
+    refundedCount: number;
+    chargebackCount: number;
+    pct: number;
+  };
+}
+
+// Reduz groupBy(platformId×status) pra lente de contagem por coorte.
+// Denominador por modelo de contabilidade: Digistore (linha-extra) →
+// pedidos reais = total − linhas sintéticas de refund/cb; demais
+// (in-place) → todas as linhas.
+function reduceRefundCounts(
+  rows: Array<{ platformId: string; status: string; _count: { _all: number } }>,
+  slugById: Map<string, string>,
+): { salesCount: number; refundedCount: number; chargebackCount: number; pct: number } {
+  const perPlatform = new Map<string, { total: number; refunded: number; cb: number }>();
+  for (const g of rows) {
+    const slug = slugById.get(g.platformId) ?? '';
+    const a = perPlatform.get(slug) ?? { total: 0, refunded: 0, cb: 0 };
+    a.total += g._count._all;
+    if (g.status === 'REFUNDED') a.refunded += g._count._all;
+    if (g.status === 'CHARGEBACK') a.cb += g._count._all;
+    perPlatform.set(slug, a);
+  }
+  let salesCount = 0;
+  let refundedCount = 0;
+  let chargebackCount = 0;
+  for (const [slug, a] of perPlatform) {
+    const extraRow = slug === 'digistore24';
+    salesCount += extraRow ? a.total - a.refunded - a.cb : a.total;
+    refundedCount += a.refunded;
+    chargebackCount += a.cb;
+  }
+  return {
+    salesCount,
+    refundedCount,
+    chargebackCount,
+    pct: salesCount > 0 ? Math.round((refundedCount / salesCount) * 10000) / 100 : 0,
+  };
 }
 
 export interface ProfitSplitFilters {
@@ -117,7 +162,7 @@ export async function getProfitSplit(filters: ProfitSplitFilters): Promise<Profi
       : []),
   ];
 
-  const [frontByPlatform, frontCpa, smsAgg, recoveryOrders, statusCounts] = await Promise.all([
+  const [frontByPlatform, frontCpa, smsAgg, recoveryOrders, statusCounts, statusCounts7d] = await Promise.all([
     // FRONT: aprovadas do período SEM as fontes de back, DENTRO do escopo
     // de filtro da UI (plataforma/família/país) — antes o card ignorava o
     // filtro e mostrava o global com cara de filtrado.
@@ -144,6 +189,13 @@ export async function getProfitSplit(filters: ProfitSplitFilters): Promise<Profi
     db.order.groupBy({
       by: ['platformId', 'status'],
       where: { orderedAt: range, ...orderScope },
+      _count: { _all: true },
+    }),
+    // Monitor rolante: últimos 7 dias a partir de AGORA (não do período
+    // selecionado) — alimenta o alerta de 10% do card.
+    db.order.groupBy({
+      by: ['platformId', 'status'],
+      where: { orderedAt: { gte: new Date(Date.now() - 7 * 86_400_000) }, ...orderScope },
       _count: { _all: true },
     }),
   ]);
@@ -190,27 +242,8 @@ export async function getProfitSplit(filters: ProfitSplitFilters): Promise<Profi
   ];
   const backProfit = round2(sources.reduce((s, x) => s + x.netUsd, 0));
 
-  // Lente de contagem por coorte (ver interface). Denominador por modelo
-  // de contabilidade: Digistore (linha-extra) → pedidos reais = total −
-  // linhas sintéticas de refund/cb; demais (in-place) → todas as linhas.
-  let salesCount = 0;
-  let refundedCount = 0;
-  let chargebackCount = 0;
-  const perPlatform = new Map<string, { total: number; refunded: number; cb: number }>();
-  for (const g of statusCounts) {
-    const slug = slugById.get(g.platformId) ?? '';
-    const a = perPlatform.get(slug) ?? { total: 0, refunded: 0, cb: 0 };
-    a.total += g._count._all;
-    if (g.status === 'REFUNDED') a.refunded += g._count._all;
-    if (g.status === 'CHARGEBACK') a.cb += g._count._all;
-    perPlatform.set(slug, a);
-  }
-  for (const [slug, a] of perPlatform) {
-    const extraRow = slug === 'digistore24';
-    salesCount += extraRow ? a.total - a.refunded - a.cb : a.total;
-    refundedCount += a.refunded;
-    chargebackCount += a.cb;
-  }
+  const refunds = reduceRefundCounts(statusCounts, slugById);
+  const refunds7d = reduceRefundCounts(statusCounts7d, slugById);
 
   return {
     range: { start: startDate.toISOString(), end: endDate.toISOString() },
@@ -224,11 +257,7 @@ export async function getProfitSplit(filters: ProfitSplitFilters): Promise<Profi
     },
     back: { sources, profitUsd: backProfit },
     totalUsd: round2(frontProfit + backProfit),
-    refunds: {
-      salesCount,
-      refundedCount,
-      chargebackCount,
-      pct: salesCount > 0 ? Math.round((refundedCount / salesCount) * 10000) / 100 : 0,
-    },
+    refunds,
+    refunds7d,
   };
 }
