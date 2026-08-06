@@ -40,6 +40,11 @@ export interface ProfitSplitResponse {
     cpaUsd: number;
     orders: number;
     profitUsd: number; // modelo CPA (ver header)
+    // Quanto o MODELO desconta de refund+chargeback neste período:
+    // Σ gross_p × refundCb%_p (taxa REAL na Digistore, manual nas demais).
+    // Exibido no card TAXA DE REEMBOLSO do overview pra tornar a
+    // subtração explícita.
+    refundCbUsd: number;
   };
   back: {
     sources: Array<{ key: string; label: string; grossUsd: number; costUsd: number; netUsd: number; available: boolean }>;
@@ -129,12 +134,14 @@ export async function getProfitSplit(filters: ProfitSplitFilters): Promise<Profi
   let frontModelNet = 0;
   let frontCpaTotal = 0;
   let frontOrders = 0;
+  let frontRefundCbUsd = 0;
   for (const g of frontByPlatform) {
     const slug = slugById.get(g.platformId) ?? '';
     const pcts = pm.byPlatform.get(slug) ?? { feePct: 0, refundCbPct: 0 };
     const gross = g._sum.grossAmountUsd ? Number(g._sum.grossAmountUsd) : 0;
     frontGross += gross;
     frontModelNet += gross * (1 - (pcts.refundCbPct + pcts.feePct + pm.opexPct) / 100);
+    frontRefundCbUsd += gross * (pcts.refundCbPct / 100);
     frontCpaTotal += g._sum.cpaPaidUsd ? Number(g._sum.cpaPaidUsd) : 0;
     frontOrders += g._count._all;
   }
@@ -167,7 +174,13 @@ export async function getProfitSplit(filters: ProfitSplitFilters): Promise<Profi
   return {
     range: { start: startDate.toISOString(), end: endDate.toISOString() },
     opexPct: pm.opexPct,
-    front: { grossUsd: round2(frontGross), cpaUsd: round2(frontCpaTotal), orders: frontOrders, profitUsd: frontProfit },
+    front: {
+      grossUsd: round2(frontGross),
+      cpaUsd: round2(frontCpaTotal),
+      orders: frontOrders,
+      profitUsd: frontProfit,
+      refundCbUsd: round2(frontRefundCbUsd),
+    },
     back: { sources, profitUsd: backProfit },
     totalUsd: round2(frontProfit + backProfit),
   };

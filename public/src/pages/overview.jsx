@@ -52,7 +52,7 @@ function KpiCard({
   label, value, unit, icon, alert, hint, sparkData,
   cur, prev, directionPreference = 'higher',
   threshold, hideSparkline, onClick,
-  index, countValue, countFormat, money,
+  index, countValue, countFormat, money, sub,
 }) {
   const { display, trend, good } = deltaFor(cur, prev, directionPreference);
   const colorClass = good === true ? 'good' : good === false ? 'bad' : 'flat';
@@ -93,6 +93,11 @@ function KpiCard({
       </div>
       {threshold && threshold.label && (
         <div className={`kpi-threshold ${threshold.state}`}>{threshold.label}</div>
+      )}
+      {/* Linha extra neutra (sem semáforo) — ex.: o $ que o modelo CPA
+          desconta de refund no card de taxa de reembolso. */}
+      {sub && (
+        <div className="kpi-threshold" style={{ color: 'var(--fg4)' }}>{sub}</div>
       )}
     </div>
   );
@@ -368,6 +373,9 @@ function OverviewPage({ filters, setFilters }) {
             label: KPI_THRESHOLDS.refundRate.label(kpis.refundRate),
             state: KPI_THRESHOLDS.refundRate.state(kpis.refundRate),
           } : null}
+          sub={split && split.front.refundCbUsd > 0
+            ? `modelo desconta −${fmtCurrency(split.front.refundCbUsd, cur, 0)} no NET AFTER CPA`
+            : null}
           onClick={() => window.NSNavigate('transactions', { status: 'refunded' })}/>
         <KpiCard label="CHARGEBACK" icon="alert-triangle" index={6}
           alert={kpis.cbRate >= 0.02}
