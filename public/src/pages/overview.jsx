@@ -365,33 +365,40 @@ function OverviewPage({ filters, setFilters }) {
             state: KPI_THRESHOLDS.approvalRate.state(kpis.approvalRate),
           }}
           onClick={() => window.NSNavigate('transactions')}/>
-        {/* Número grande = lente de CONTAGEM por coorte, com denominador
-            corrigido pro modelo linha-extra da Digistore (vem do
-            profit-split, que respeita período e filtros). Fallback pro
-            refundRate da MV enquanto o split carrega. Delta segue da MV
-            (tendência vale; o viés é consistente entre períodos).
-            ALERTA (regra do usuário 2026-08-06): monitor ROLANTE dos
-            últimos 7 dias a partir de agora — limite 10% dos pedidos com
-            reembolso; acima disso o card acende. Warn a partir de 8%
-            (se aproximando do limite). */}
+        {/* Lente de VALOR (decisão 2026-08-06): $ devolvido ÷ $ faturado —
+            "quanto do faturamento representa", a fórmula que a Digistore
+            usa no painel dela. Coorte por data da venda; período curto
+            ainda vai receber refunds ("até agora"). A lente por PEDIDOS
+            vive no card seguinte. Delta da MV mantido (tendência). */}
         <KpiCard label="TAXA DE REEMBOLSO" icon="refresh" index={5}
-          countValue={split?.refunds ? split.refunds.pct : kpis.refundRate * 100}
-          countFormat={(n) => n.toFixed(2)} unit="%"
+          countValue={split?.refunds ? split.refunds.valuePct : 0}
+          countFormat={(n) => split?.refunds ? n.toFixed(2) : '…'} unit="%"
           cur={kpis.refundRate} prev={prev.refundRate}
+          directionPreference="lower"
+          sub={split?.refunds
+            ? `−${fmtCurrency(split.refunds.refundedUsd, cur, 0)} de ${fmtCurrency(split.refunds.grossUsd, cur, 0)} faturados (até agora)${split.front.refundCbUsd > 0 ? ` · modelo desconta −${fmtCurrency(split.front.refundCbUsd, cur, 0)}` : ''}`
+            : null}
+          onClick={() => window.NSNavigate('transactions', { status: 'refunded' })}/>
+        {/* Lente por PEDIDOS ("Reembolsos baseados em pedidos"): % dos
+            pedidos do período que pediram reembolso, denominador honesto
+            (linhas sintéticas da D24 fora). Carrega o ALERTA do usuário:
+            monitor ROLANTE dos últimos 7 dias — limite 10% dos pedidos;
+            acima acende (warn ≥8%). */}
+        <KpiCard label="REEMBOLSO POR PEDIDOS" icon="refresh" index={6}
+          countValue={split?.refunds ? split.refunds.pct : 0}
+          countFormat={(n) => split?.refunds ? n.toFixed(2) : '…'} unit="%"
+          cur={null} prev={null}
           directionPreference="lower"
           alert={(split?.refunds7d?.pct ?? 0) > 10}
           threshold={split?.refunds7d && split.refunds7d.salesCount > 0 ? {
             label: `últimos 7d: ${split.refunds7d.pct.toFixed(1)}% (${fmtInt(split.refunds7d.refundedCount)}/${fmtInt(split.refunds7d.salesCount)}) · limite 10%`,
             state: split.refunds7d.pct > 10 ? 'danger' : split.refunds7d.pct > 8 ? 'warn' : 'ok',
-          } : (KPI_THRESHOLDS.refundRate.label(kpis.refundRate) ? {
-            label: KPI_THRESHOLDS.refundRate.label(kpis.refundRate),
-            state: KPI_THRESHOLDS.refundRate.state(kpis.refundRate),
-          } : null)}
-          sub={split?.refunds
-            ? `${fmtInt(split.refunds.refundedCount)} de ${fmtInt(split.refunds.salesCount)} pedidos pediram reembolso (até agora)${split.front.refundCbUsd > 0 ? ` · modelo desconta −${fmtCurrency(split.front.refundCbUsd, cur, 0)}` : ''}`
-            : null}
+          } : null}
+          hint={split?.refunds
+            ? `${fmtInt(split.refunds.refundedCount)} de ${fmtInt(split.refunds.salesCount)} pedidos (até agora)`
+            : 'carregando…'}
           onClick={() => window.NSNavigate('transactions', { status: 'refunded' })}/>
-        <KpiCard label="CHARGEBACK" icon="alert-triangle" index={6}
+        <KpiCard label="CHARGEBACK" icon="alert-triangle" index={7}
           alert={kpis.cbRate >= 0.02}
           countValue={kpis.cbRate * 100} countFormat={(n) => n.toFixed(2)} unit="%"
           cur={kpis.cbRate} prev={prev.cbRate}
@@ -404,7 +411,7 @@ function OverviewPage({ filters, setFilters }) {
         {/* Substitui o antigo "Lucro estimado" (net−cogs−frete) pelo NET
             AFTER CPA do modelo CPA (front do profit-split), a pedido do
             usuário — mesma régua da aba Afiliados/planilha. */}
-        <KpiCard label="NET AFTER CPA (MODELO)" icon="target" index={7} money
+        <KpiCard label="NET AFTER CPA (MODELO)" icon="target" index={8} money
           alert={(split?.front?.profitUsd ?? 0) < 0}
           countValue={split ? split.front.profitUsd : 0} countFormat={(n) => split ? fmtCurrency(n, cur, 0) : '…'}
           cur={split ? split.front.profitUsd : 0}

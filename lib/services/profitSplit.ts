@@ -62,6 +62,10 @@ export interface ProfitSplitResponse {
     refundedCount: number;
     chargebackCount: number;
     pct: number; // refundedCount ÷ salesCount × 100 (CB fora, tem card próprio)
+    // Lente de VALOR (card TAXA DE REEMBOLSO): |$ devolvido| ÷ $ faturado.
+    grossUsd: number;
+    refundedUsd: number;
+    valuePct: number;
   };
   // Monitor de alerta precoce (regra do usuário, 2026-08-06): coorte
   // ROLANTE dos últimos 7 dias A PARTIR DE AGORA — independente do
@@ -73,24 +77,36 @@ export interface ProfitSplitResponse {
     refundedCount: number;
     chargebackCount: number;
     pct: number;
+    grossUsd: number;
+    refundedUsd: number;
+    valuePct: number;
   };
 }
 
-// Reduz groupBy(platformId×status) pra lente de contagem por coorte.
-// Denominador por modelo de contabilidade: Digistore (linha-extra) →
-// pedidos reais = total − linhas sintéticas de refund/cb; demais
-// (in-place) → todas as linhas.
+// Reduz groupBy(platformId×status) pras DUAS lentes de reembolso:
+//   contagem — pedidos reais × pedidos reembolsados (denominador por
+//     modelo de contabilidade: Digistore linha-extra → total − linhas
+//     sintéticas de refund/cb; demais in-place → todas as linhas);
+//   valor — |$ devolvido| ÷ $ faturado (APPROVED) — "quanto do
+//     faturamento representa", fórmula que a Digistore usa.
 function reduceRefundCounts(
-  rows: Array<{ platformId: string; status: string; _count: { _all: number } }>,
+  rows: Array<{ platformId: string; status: string; _count: { _all: number }; _sum: { grossAmountUsd: unknown } }>,
   slugById: Map<string, string>,
-): { salesCount: number; refundedCount: number; chargebackCount: number; pct: number } {
+): {
+  salesCount: number; refundedCount: number; chargebackCount: number; pct: number;
+  grossUsd: number; refundedUsd: number; valuePct: number;
+} {
   const perPlatform = new Map<string, { total: number; refunded: number; cb: number }>();
+  let grossUsd = 0;
+  let refundedUsd = 0;
   for (const g of rows) {
     const slug = slugById.get(g.platformId) ?? '';
     const a = perPlatform.get(slug) ?? { total: 0, refunded: 0, cb: 0 };
     a.total += g._count._all;
-    if (g.status === 'REFUNDED') a.refunded += g._count._all;
+    const usd = g._sum.grossAmountUsd ? Number(g._sum.grossAmountUsd) : 0;
+    if (g.status === 'REFUNDED') { a.refunded += g._count._all; refundedUsd += Math.abs(usd); }
     if (g.status === 'CHARGEBACK') a.cb += g._count._all;
+    if (g.status === 'APPROVED') grossUsd += usd;
     perPlatform.set(slug, a);
   }
   let salesCount = 0;
@@ -107,6 +123,9 @@ function reduceRefundCounts(
     refundedCount,
     chargebackCount,
     pct: salesCount > 0 ? Math.round((refundedCount / salesCount) * 10000) / 100 : 0,
+    grossUsd: Math.round(grossUsd * 100) / 100,
+    refundedUsd: Math.round(refundedUsd * 100) / 100,
+    valuePct: grossUsd > 0 ? Math.round((refundedUsd / grossUsd) * 10000) / 100 : 0,
   };
 }
 
@@ -184,19 +203,21 @@ export async function getProfitSplit(filters: ProfitSplitFilters): Promise<Profi
           _sum: { grossAmountUsd: true },
         })
       : Promise.resolve([] as Array<{ affiliateId: string | null; _sum: { grossAmountUsd: unknown } }>),
-    // Contagem por plataforma×status pro card de reembolso do overview
-    // (TODOS os pedidos do escopo — sem as exclusões de back do front).
+    // Contagem+valor por plataforma×status pros cards de reembolso do
+    // overview (TODOS os pedidos do escopo — sem as exclusões de back).
     db.order.groupBy({
       by: ['platformId', 'status'],
       where: { orderedAt: range, ...orderScope },
       _count: { _all: true },
+      _sum: { grossAmountUsd: true },
     }),
     // Monitor rolante: últimos 7 dias a partir de AGORA (não do período
-    // selecionado) — alimenta o alerta de 10% do card.
+    // selecionado) — alimenta o alerta de 10% do card por pedidos.
     db.order.groupBy({
       by: ['platformId', 'status'],
       where: { orderedAt: { gte: new Date(Date.now() - 7 * 86_400_000) }, ...orderScope },
       _count: { _all: true },
+      _sum: { grossAmountUsd: true },
     }),
   ]);
 
