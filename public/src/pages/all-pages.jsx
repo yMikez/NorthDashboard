@@ -3009,6 +3009,24 @@ function IntegrationsPage({ filters }) {
                     </span>
                   </div>
                 </div>
+                {/* % de PEDIDOS reembolsados (+CB) em coorte MADURA (60–150d):
+                   o único recorte honesto — janela curta subestima porque o
+                   refund chega semanas depois da venda. Denominador já
+                   corrigido por plataforma no backend (linha-extra da D24). */}
+                <div className="ph-stat" style={{ gridColumn: '1 / -1' }}
+                  title="Refund+chargeback ÷ vendas, coorte de 60–150 dias atrás (madura). Janelas curtas subestimam — o reembolso chega até meses depois da venda.">
+                  <div className="l">Pedidos reembolsados · coorte madura</div>
+                  <div className="v cell-mono" style={{ fontSize: 18, color: (p.observedRefundCbPct ?? 0) > 10 ? 'var(--warning)' : 'inherit' }}>
+                    {p.observedRefundCbPct != null && p.observedRefundSample > 0
+                      ? `${p.observedRefundCbPct.toFixed(1)}%`
+                      : '—'}
+                    {p.observedRefundSample > 0 && (
+                      <span style={{ fontSize: 11, color: 'var(--fg4)', marginLeft: 6 }}>
+                        de {fmtInt(p.observedRefundSample)} pedidos (60–150d)
+                      </span>
+                    )}
+                  </div>
+                </div>
               </div>
 
               {/* Waterfall financeiro — só se fees cadastradas (admin).
@@ -3261,6 +3279,13 @@ function PlatformFeesModal({ platform, onCancel, onSaved }) {
               ? `observada (coorte madura 60–150d): ${platform.observedRefundCbPct.toFixed(1)}% em ${fmtInt(platform.observedRefundSample)} pedidos — use pra calibrar`
               : 'sem coorte madura ainda (plataforma nova) — mantenha a estimativa manual'}
           </span>
+          {platform.slug === 'digistore24' && (
+            <span style={{ display: 'block', fontSize: 10, color: 'var(--accent)', marginTop: 4, fontFamily: 'var(--f-mono)' }}>
+              Digistore usa a taxa REAL dos eventos de refund/chargeback
+              (em valor, coorte madura) automaticamente no NET AFTER CPA —
+              este campo manual é só fallback enquanto não há amostra.
+            </span>
+          )}
         </label>
 
         {error && (
