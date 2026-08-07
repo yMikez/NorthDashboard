@@ -24,9 +24,11 @@ export async function POST(req: Request) {
   }
 
   let dryRun = false;
+  let probe = false;
   try {
-    const body = (await req.json()) as { dryRun?: boolean };
+    const body = (await req.json()) as { dryRun?: boolean; probe?: boolean };
     dryRun = body?.dryRun === true;
+    probe = body?.probe === true;
   } catch {
     // sem body = execução real
   }
@@ -34,6 +36,37 @@ export async function POST(req: Request) {
   const platform = await db.platform.findUnique({ where: { slug: 'jvzoo' }, select: { id: true } });
   if (!platform) {
     return NextResponse.json({ error: 'plataforma jvzoo não existe' }, { status: 404 });
+  }
+
+  // Sonda diagnóstica: lista os menores valores absolutos da plataforma
+  // pra descobrir como as compras-teste entraram de fato. Não deleta nada.
+  if (probe) {
+    const small = await db.order.findMany({
+      where: { platformId: platform.id, grossAmountUsd: { gt: -10, lt: 10 } },
+      select: {
+        externalId: true, grossAmountUsd: true, netAmountUsd: true, cpaPaidUsd: true,
+        status: true, eventType: true, orderedAt: true,
+        product: { select: { name: true } },
+        customer: { select: { email: true } },
+      },
+      orderBy: { orderedAt: 'desc' },
+      take: 30,
+    });
+    return NextResponse.json({
+      probe: true,
+      count: small.length,
+      rows: small.map((r) => ({
+        externalId: r.externalId,
+        gross: Number(r.grossAmountUsd),
+        net: Number(r.netAmountUsd),
+        cpa: Number(r.cpaPaidUsd),
+        status: r.status,
+        eventType: r.eventType,
+        day: r.orderedAt.toISOString().slice(0, 10),
+        product: r.product?.name?.slice(0, 40) ?? null,
+        email: r.customer?.email ?? null,
+      })),
+    });
   }
 
   const where = {
