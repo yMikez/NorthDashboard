@@ -66,6 +66,22 @@ export async function POST(req: Request) {
   try {
     const normalized = parseJvzooIngest(params);
 
+    // Compras-TESTE do próprio vendor: funil inteiro a exatamente $1.
+    // Não viram Order (poluíam contagens, AOV, funil e fulfillment) —
+    // ficam só no IngestLog pra auditoria. Limpeza do legado:
+    // POST /api/admin/purge-jvzoo-tests.
+    if (Math.abs(normalized.grossAmountUsd) === 1) {
+      await db.ingestLog.update({
+        where: { id: log.id },
+        data: { processedOk: true, processedAt: new Date(), error: 'skip: compra-teste $1' },
+      });
+      logger.info(
+        { platform: 'jvzoo', externalId: normalized.externalId, gross: normalized.grossAmountUsd },
+        'jvzoo test purchase ($1) skipped',
+      );
+      return NextResponse.json({ ok: true, skipped: 'test-purchase-1usd' });
+    }
+
     // Eventos NÃO-venda (RFND/CGBK/INSF/CANCEL-REBILL) chegam com payload
     // do EVENTO (date = dia do refund, other_params às vezes ausente) —
     // a âncora recomputada sairia errada e o update arrancaria o pedido
