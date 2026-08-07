@@ -224,12 +224,16 @@ export async function upsertOrder(normalized: NormalizedOrder): Promise<UpsertOr
       ? classified.funnelStep
       : normalized.funnelStep;
 
-  // Order.productType: pro BuyGoods o role do IPN é pouco confiável — marca
-  // "Last Chance" (downsell) como UPSELL. Quando o classificador reconhece a
-  // família, ele sabe o role certo pelo NOME (DOWNSELL/UPSELL/RC). Então pra BG
-  // confiamos no classificador; demais plataformas mantêm o role do IPN.
+  // Order.productType: pro BuyGoods E Digistore o role do IPN é pouco
+  // confiável — BG marca "Last Chance" (downsell) como UPSELL, e o
+  // upsell_no da D24 só diz a POSIÇÃO pós-compra (>0), não o papel:
+  // "DS1 - GlycoEden" chega com upsell_no=2 e é DOWNSELL (caso real
+  // 2026-08-07, store_url /ds/Down01/). Quando o classificador reconhece
+  // a família, ele sabe o role certo pelo NOME (slots M/UP/DW/DS/RC).
+  // Demais plataformas mantêm o role do IPN (Cartpanda/JVZoo: connector).
+  const CLASSIFIER_ROLE_PLATFORMS = new Set(['buygoods', 'digistore24']);
   const orderType: ProductType =
-    normalized.platformSlug === 'buygoods' && classified.family !== null
+    CLASSIFIER_ROLE_PLATFORMS.has(normalized.platformSlug) && classified.family !== null
       ? catalogType
       : (normalized.productType as ProductType);
 
