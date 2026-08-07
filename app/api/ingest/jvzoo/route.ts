@@ -66,11 +66,14 @@ export async function POST(req: Request) {
   try {
     const normalized = parseJvzooIngest(params);
 
-    // Compras-TESTE do próprio vendor: funil inteiro a exatamente $1.
-    // Não viram Order (poluíam contagens, AOV, funil e fulfillment) —
-    // ficam só no IngestLog pra auditoria. Limpeza do legado:
+    // Compras-TESTE do próprio vendor: funil inteiro a ~$1 (na prática
+    // $1,02–$1,07 — os centavos variam por step; sonda 2026-08-07, todas
+    // com e-mail @thenorthscale.com). Regra: 0 < |gross| < $2. Não viram
+    // Order (poluíam contagens, AOV, funil e fulfillment) — ficam só no
+    // IngestLog pra auditoria. Limpeza do legado:
     // POST /api/admin/purge-jvzoo-tests.
-    if (Math.abs(normalized.grossAmountUsd) === 1) {
+    const absGross = Math.abs(normalized.grossAmountUsd);
+    if (absGross > 0 && absGross < 2) {
       await db.ingestLog.update({
         where: { id: log.id },
         data: { processedOk: true, processedAt: new Date(), error: 'skip: compra-teste $1' },

@@ -69,9 +69,14 @@ export async function POST(req: Request) {
     });
   }
 
+  // Testes reais entram como $1,02–$1,07 (sonda 2026-08-07) — faixa
+  // 0 < |gross| < $2, mesma regra do guard no ingest.
   const where = {
     platformId: platform.id,
-    grossAmountUsd: { in: [1, -1] },
+    OR: [
+      { grossAmountUsd: { gt: 0, lt: 2 } },
+      { grossAmountUsd: { gt: -2, lt: 0 } },
+    ],
   };
 
   const rows = await db.order.findMany({
