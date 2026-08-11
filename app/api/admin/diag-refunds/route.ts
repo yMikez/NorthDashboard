@@ -8,11 +8,12 @@
 // a suspeita é que cada refund vira uma linha extra (denominador inflado) e
 // a venda original fica APPROVED pra sempre.
 //
-// Retorna, por plataforma: contagem por status, e uma amostra de pedidos
-// REFUNDED com o status do "irmão" (a venda apontada por
-// rawMetadata.parent_transaction_id).
+// Retorna, por plataforma: contagem por status (eixo de VENDA), estornos
+// por dia no eixo de EVENTO, e uma amostra de pedidos REFUNDED com o
+// status do "irmão" (a venda apontada por rawMetadata.parent_transaction_id).
 
 import { NextResponse } from 'next/server';
+import { Prisma } from '@prisma/client';
 import { db } from '@/lib/db';
 import { checkIngestSecret } from '@/lib/ingest/auth';
 
@@ -92,9 +93,39 @@ export async function GET(req: Request) {
     };
   });
 
+  // Eixo de EVENTO: quantos estornos ACONTECERAM em cada dia (BRT, mesmo
+  // bucket da daily_metrics), independente de quando a venda foi feita. É
+  // a leitura do painel da plataforma — e a que os cards de reembolso da
+  // Visão Geral usam desde 2026-08-11. Comparar com `byStatus` (que conta
+  // por data de venda) mostra o quanto os dois eixos divergem.
+  const byEventDay = await db.$queryRaw<Array<{
+    day: Date; refunds: bigint; refundedUsd: Prisma.Decimal;
+    chargebacks: bigint; chargebackUsd: Prisma.Decimal;
+  }>>`
+    SELECT
+      DATE_TRUNC('day', (COALESCE(o."refundedAt", o."chargebackAt") AT TIME ZONE 'UTC')
+                        AT TIME ZONE 'America/Sao_Paulo')::date            AS day,
+      COUNT(*) FILTER (WHERE o."status" = 'REFUNDED')                       AS refunds,
+      COALESCE(SUM(ABS(o."grossAmountUsd")) FILTER (WHERE o."status" = 'REFUNDED'), 0)::numeric(14,2)   AS "refundedUsd",
+      COUNT(*) FILTER (WHERE o."status" = 'CHARGEBACK')                     AS chargebacks,
+      COALESCE(SUM(ABS(o."grossAmountUsd")) FILTER (WHERE o."status" = 'CHARGEBACK'), 0)::numeric(14,2) AS "chargebackUsd"
+    FROM "Order" o
+    WHERE o."platformId" = ${platform.id}
+      AND COALESCE(o."refundedAt", o."chargebackAt") >= ${since}
+    GROUP BY 1
+    ORDER BY 1 DESC
+    LIMIT 30`;
+
   return NextResponse.json({
     platform: slug,
     windowDays: days,
+    byEventDay: byEventDay.map((r) => ({
+      day: r.day.toISOString().slice(0, 10),
+      refunds: Number(r.refunds),
+      refundedUsd: Number(r.refundedUsd),
+      chargebacks: Number(r.chargebacks),
+      chargebackUsd: Number(r.chargebackUsd),
+    })),
     byStatus: byStatus.map((s) => ({
       status: s.status,
       count: s._count._all,
