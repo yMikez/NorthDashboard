@@ -89,6 +89,7 @@ export function parseDigistoreIngest(payload: DigistorePayload): NormalizedOrder
       payload.transaction_time,
       payload.server_time,
     ),
+    eventAt: parseDigistoreEventTimestamp(payload),
     rawMetadata: payload as unknown as Record<string, unknown>,
   };
 }
@@ -193,6 +194,29 @@ export function parseDigistoreTimestamp(
     if (parsed) return parsed;
   }
   return new Date();
+}
+
+/**
+ * Instante do EVENTO (não da venda). No refund/chargeback a Digistore manda
+ * os dois timestamps no mesmo payload e eles são DIFERENTES:
+ *
+ *   order_date_time  = 2026-07-23 05:17:58   ← a venda original
+ *   transaction_date = 2026-08-10            ← o estorno
+ *   transaction_time = 21:06:27
+ *
+ * `orderedAt` fica com a venda (coorte madura do modelo CPA depende disso —
+ * ver getObservedRefundCbPct). Este aqui alimenta refundedAt/chargebackAt,
+ * que é o eixo dos cards de reembolso. Mesmo wall clock Europe/Berlin do
+ * resto do payload (confirmado: transaction_time 21:06 CEST ↔ IPN recebido
+ * 19:07Z).
+ *
+ * Retorna null quando o payload não traz o par transaction_date/time — aí
+ * upsertOrder cai no fallback de orderedAt (comportamento antigo).
+ */
+export function parseDigistoreEventTimestamp(payload: DigistorePayload): Date | null {
+  const { transaction_date: date, transaction_time: time } = payload;
+  if (!date || !time) return null;
+  return parseDigistoreDateString(`${date} ${time}`);
 }
 
 function parseDigistoreDateString(raw: string): Date | null {

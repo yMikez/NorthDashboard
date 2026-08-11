@@ -2496,7 +2496,7 @@ function TransactionsPage({ filters }) {
                   <span className={`st st-${statusLc}`}>{statusLc}</span>
                 </div>
                 <div className="l3">
-                  {fmtDateTime(o.orderedAt)} · {o.affiliateNickname || o.affiliateExternalId || '—'} · {o.country || '—'} · {shortTxId(o.externalId)}
+                  {fmtDateTime(o.eventAt || o.orderedAt)} · {o.affiliateNickname || o.affiliateExternalId || '—'} · {o.country || '—'} · {shortTxId(o.externalId)}
                 </div>
               </div>
             );
@@ -2529,7 +2529,12 @@ function TransactionsPage({ filters }) {
                   <tr key={`${o.platformSlug}:${o.externalId}`}
                       onClick={() => setDrawer({ externalId: o.externalId, platformSlug: o.platformSlug })}
                       style={{ cursor: 'pointer' }}>
-                    <td className="cell-mono">{fmtDateTime(o.orderedAt)}</td>
+                    {/* Linha de estorno é datada da VENDA na Digistore (é
+                        linha extra), então mostramos a data do EVENTO —
+                        quando o dinheiro voltou — com a venda no title. */}
+                    <td className="cell-mono" title={o.eventAt !== o.orderedAt ? `venda em ${fmtDateTime(o.orderedAt)}` : undefined}>
+                      {fmtDateTime(o.eventAt || o.orderedAt)}
+                    </td>
                     <td className="cell-mono">{o.externalId}</td>
                     <td><span className={`plat ${platClass}`}>{platShort}</span></td>
                     <td>

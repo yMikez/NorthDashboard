@@ -71,6 +71,9 @@ export async function GET(req: Request) {
 
     const rows: Array<Array<string | number | null>> = all.map((o) => [
       BRT_FMT.format(new Date(o.orderedAt)),
+      // Data do evento: no estorno da Digistore a linha é datada da VENDA,
+      // então sem esta coluna o export não dizia quando o dinheiro voltou.
+      o.eventAt === o.orderedAt ? '' : BRT_FMT.format(new Date(o.eventAt)),
       o.platformSlug,
       o.externalId,
       o.parentExternalId,
@@ -92,7 +95,7 @@ export async function GET(req: Request) {
 
     const csv = buildCsv(
       [
-        'Data (BRT)', 'Plataforma', 'Pedido', 'Sessão', 'Produto', 'Etapa',
+        'Data (BRT)', 'Estorno (BRT)', 'Plataforma', 'Pedido', 'Sessão', 'Produto', 'Etapa',
         'Afiliado', 'Afiliado ID', 'País', 'Pagamento', 'Status',
         'Gross USD', 'Fees USD', 'Net USD', 'CPA USD',
       ],

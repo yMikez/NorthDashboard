@@ -1,6 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import fixturePayment from './__fixtures__/glyco-on-payment.json';
-import { parseDigistoreIngest, parseDigistoreTimestamp, deriveBaseOrderId } from './ingest';
+import {
+  parseDigistoreIngest,
+  parseDigistoreTimestamp,
+  parseDigistoreEventTimestamp,
+  deriveBaseOrderId,
+} from './ingest';
 import type { DigistorePayload } from './types';
 
 const payment = fixturePayment as unknown as DigistorePayload;
@@ -182,5 +187,46 @@ describe('parseDigistoreIngest — atribuição UTM (disparos de SMS)', () => {
     expect(parseDigistoreIngest({ ...payment, campaignkey: 'nativa', utm_campaign: 'utm' }).campaignKey).toBe('nativa');
     expect(parseDigistoreIngest({ ...payment, campaignkey: '', utm_campaign: 'neuromind-reposicao-01' }).campaignKey).toBe('neuromind-reposicao-01');
     expect(parseDigistoreIngest({ ...payment, campaignkey: '', utm_campaign: '' }).campaignKey).toBeNull();
+  });
+});
+
+describe('parseDigistoreEventTimestamp — data do ESTORNO', () => {
+  // O payload de refund traz os dois instantes e eles são diferentes:
+  // order_date_time = a venda original, transaction_date/time = o estorno.
+  // orderedAt precisa ficar com a venda (coorte do modelo CPA) e eventAt
+  // com o estorno (eixo dos cards de reembolso). Caso real 2026-08-10.
+  const refund: DigistorePayload = {
+    ...payment,
+    event: 'on_refund',
+    order_date_time: '2026-07-23 05:17:58',
+    transaction_date: '2026-08-10',
+    transaction_time: '21:06:27',
+  };
+
+  it('separa venda (orderedAt) de estorno (eventAt)', () => {
+    const n = parseDigistoreIngest(refund);
+    expect(n.orderedAt.toISOString()).toBe('2026-07-23T03:17:58.000Z');
+    // 21:06:27 CEST = 19:06:27 UTC (bate com o IPN recebido 19:07Z).
+    expect(n.eventAt?.toISOString()).toBe('2026-08-10T19:06:27.000Z');
+    expect(n.status).toBe('REFUNDED');
+  });
+
+  it('lê transaction_date/time direto do payload', () => {
+    expect(parseDigistoreEventTimestamp(refund)?.toISOString())
+      .toBe('2026-08-10T19:06:27.000Z');
+  });
+
+  it('null sem o par transaction_date/time (upsertOrder cai em orderedAt)', () => {
+    expect(parseDigistoreEventTimestamp({ ...refund, transaction_time: '' })).toBeNull();
+    const noDate = { ...refund } as Record<string, string>;
+    delete noDate.transaction_date;
+    expect(parseDigistoreEventTimestamp(noDate)).toBeNull();
+  });
+
+  it('venda comum: eventAt = o próprio instante da venda', () => {
+    // No on_payment os dois campos descrevem o mesmo evento; eventAt só
+    // diverge quando existe um evento pós-venda.
+    expect(parseDigistoreIngest(payment).eventAt?.toISOString())
+      .toBe('2026-04-24T01:56:54.000Z');
   });
 });

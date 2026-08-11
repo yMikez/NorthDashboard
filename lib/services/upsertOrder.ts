@@ -281,8 +281,13 @@ export async function upsertOrder(normalized: NormalizedOrder): Promise<UpsertOr
 
     orderedAt: normalized.orderedAt,
     approvedAt: normalized.status === 'APPROVED' ? normalized.orderedAt : null,
-    refundedAt: normalized.status === 'REFUNDED' ? normalized.orderedAt : null,
-    chargebackAt: normalized.status === 'CHARGEBACK' ? normalized.orderedAt : null,
+    // Instante do ESTORNO, não da venda. Na Digistore o refund é linha
+    // extra carimbada com a data da VENDA em orderedAt (coorte), então sem
+    // o eventAt do connector o estorno de hoje sumia do "hoje" — era o bug
+    // de "nenhum refund hoje". Nas plataformas in-place eventAt é null e o
+    // fallback pra orderedAt é o certo (a linha JÁ é o evento).
+    refundedAt: normalized.status === 'REFUNDED' ? (normalized.eventAt ?? normalized.orderedAt) : null,
+    chargebackAt: normalized.status === 'CHARGEBACK' ? (normalized.eventAt ?? normalized.orderedAt) : null,
 
     rawMetadata: normalized.rawMetadata as Prisma.InputJsonValue,
 

@@ -300,6 +300,13 @@ model Order {
   // Atribuição por fonte (utm_source → trafficSource): a aba SMS filtra
   // vendas com trafficSource='smsbrdcst' por período.
   @@index([trafficSource, orderedAt])
+  // Eixo de EVENTO dos estornos: os cards de reembolso e a lista de
+  // transações filtrada por refunded/chargeback consultam por refundedAt/
+  // chargebackAt (quando o estorno aconteceu), não por orderedAt (quando a
+  // venda aconteceu). Índice parcial via NULL: só linhas estornadas
+  // entram, então é pequeno mesmo com centenas de milhares de orders.
+  @@index([refundedAt])
+  @@index([chargebackAt])
   @@index([funnelSessionId])
   @@index([parentExternalId])
   @@index([vendorAccount, orderedAt])

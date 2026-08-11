@@ -66,6 +66,15 @@ export interface NormalizedOrder {
   detailsUrl: string | null;
 
   orderedAt: Date;
+  // Instante em que ESTE evento aconteceu, quando difere da venda.
+  // Só faz sentido em plataformas de LINHA EXTRA (Digistore): o refund
+  // chega com transaction_date/time = o estorno e order_date_time = a
+  // venda original. `orderedAt` fica com a VENDA (coorte intacta pro
+  // modelo CPA) e `eventAt` carrega o estorno → vira refundedAt/
+  // chargebackAt. Nas plataformas in-place (CB/JVZoo/BG/Cartpanda) o
+  // evento reescreve a própria linha, então orderedAt já É o instante do
+  // evento e este campo fica null (upsertOrder cai no fallback).
+  eventAt?: Date | null;
   rawMetadata: Record<string, unknown>;
 }
 

@@ -426,6 +426,8 @@ export interface OrdersResponse {
     cpaPaidUsd: number;
     status: string;
     orderedAt: string;
+    // Data do evento desta linha: estorno quando houve, senão a venda.
+    eventAt: string;
   }>;
   statusCounts: Record<string, number>;
   // Contagem por etapa do funil (productType), nas demais condições do
@@ -615,9 +617,9 @@ export async function getOverview(
   // regime de antes — só que agora ninguém paga o REFRESH na latência).
   void refreshDailyMetricsIfStale().catch(() => { /* logado em doRefresh */ });
 
-  const [rows, orderGroups, topAffiliates, hourlyHeatmap, platforms] = await Promise.all([
+  const [rows, feSessions, topAffiliates, hourlyHeatmap, platforms] = await Promise.all([
     queryDailyMetrics(filters),
-    orderGroupsCount(filters),
+    feSessionStats(filters),
     topAffiliatesQuery(filters, 5),
     hourlyHeatmapQuery(filters),
     db.platform.findMany({
@@ -625,7 +627,7 @@ export async function getOverview(
     }),
   ]);
 
-  const kpis = kpisFromRows(rows, orderGroups);
+  const kpis = kpisFromRows(rows, feSessions);
   const daily = dailyFromRows(rows, filters.startDate, filters.endDate);
   const byCountry = byCountryFromRows(rows);
   const byProductType = byProductTypeFromRows(rows);
@@ -650,11 +652,11 @@ export async function getOverview(
     const prevEnd = new Date(filters.startDate.getTime() - 1);
     const prevStart = new Date(prevEnd.getTime() - span);
     const prevFilters = { ...filters, startDate: prevStart, endDate: prevEnd };
-    const [prevRows, prevGroups] = await Promise.all([
+    const [prevRows, prevSessions] = await Promise.all([
       queryDailyMetrics(prevFilters),
-      orderGroupsCount(prevFilters),
+      feSessionStats(prevFilters),
     ]);
-    response.previous = kpisFromRows(prevRows, prevGroups);
+    response.previous = kpisFromRows(prevRows, prevSessions);
   }
 
   return response;
@@ -668,8 +670,9 @@ export async function getOverview(
 
 function kpisFromRows(
   rows: DailyMetricsRow[],
-  orderGroups: number,
+  feSessions: FeSessionStats,
 ): OverviewKPIs {
+  const orderGroups = feSessions.sessions;
   let gross = 0, grossOriginal = 0, net = 0, cpa = 0, cogs = 0, fulfillment = 0;
   let approvedCount = 0, refundedCount = 0, chargebackCount = 0;
   for (const r of rows) {
@@ -706,16 +709,97 @@ function kpisFromRows(
     approvalRate: round4(approvedCount / denom),
     refundRate: round4(refundedCount / denom),
     cbRate: round4(chargebackCount / denom),
-    aov: round2(orderGroups ? gross / orderGroups : 0),
+    // AOV canônico: receita das sessões com FE ÷ sessões (ver feSessionStats).
+    // NÃO usa o gross da MV — a MV soma receita de sessões órfãs (FE fora da
+    // janela) e de tipos fora do funil, o que inflava o AOV vs o Funil.
+    aov: round2(orderGroups ? feSessions.revenue / orderGroups : 0),
     approvedCount,
     totalCount,
     orderGroups,
-    // EPO = Net Sales / Conversions (proxy: sessões FE APPROVED).
-    epo: round2(orderGroups ? net / orderGroups : 0),
+    // EPO = Net Sales / Conversions — mesmas sessões do AOV, com net.
+    epo: round2(orderGroups ? feSessions.net / orderGroups : 0),
     cogs: round2(cogs),
     fulfillment: round2(fulfillment),
     estimatedProfit,
     estimatedMarginPct,
+  };
+}
+
+// ── Definição CANÔNICA de AOV (única em todo o dashboard) ──────────────────
+//
+//   AOV = receita APPROVED das sessões com FE APPROVED no período
+//         ÷ nº dessas sessões
+//
+// "Sessão" = o funil completo de um comprador (FE + bumps + upsells +
+// downsells). Chave por plataforma:
+//   - buygoods: funnelSessionId (sessid2) — order_id_global é POR TRANSAÇÃO,
+//     então parentExternalId NÃO agrupa FE com seus upsells no BG.
+//   - demais: parentExternalId (fallback externalId).
+// Sessões sem FE no período (órfãs — FE caiu fora da janela) ficam FORA do
+// numerador e do denominador. Mesma semântica do painel da BuyGoods
+// (revenue per checkout session). EPO usa o mesmo denominador com net.
+//
+// Todo lugar que mostra "AOV" deriva daqui (Overview/Funil/Afiliados/
+// Produtos/Plataformas/Famílias) — se mudar a definição, mude em conjunto.
+export const SESSION_KEY_SQL = Prisma.sql`
+  CASE WHEN pl."slug" = 'buygoods'
+       THEN pl."slug" || ':' || COALESCE(o."funnelSessionId", o."parentExternalId", o."externalId")
+       ELSE pl."slug" || ':' || COALESCE(o."parentExternalId", o."externalId")
+  END`;
+
+export interface FeSessionStats {
+  sessions: number;   // nº de sessões com FE APPROVED no período
+  revenue: number;    // gross APPROVED somado sobre TODAS as orders dessas sessões
+  net: number;        // net APPROVED idem (pro EPO)
+}
+
+async function feSessionStats(filters: MetricsFilters): Promise<FeSessionStats> {
+  // base = orders do período (todos os tipos/status, filtros de dimensão);
+  // fe   = sessões cujo PRIMEIRO FE APPROVED existe no período (família do
+  //        FE filtra a sessão inteira — semântica do funil);
+  // join = agrega receita/net APPROVED de TODAS as orders das sessões fe.
+  const baseConds: Prisma.Sql[] = [
+    Prisma.sql`o."orderedAt" >= ${filters.startDate}`,
+    Prisma.sql`o."orderedAt" <= ${filters.endDate}`,
+  ];
+  if (filters.platformSlugs?.length) {
+    baseConds.push(Prisma.sql`pl."slug" = ANY(${filters.platformSlugs})`);
+  }
+  if (filters.countries?.length) {
+    baseConds.push(Prisma.sql`o."country" = ANY(${filters.countries})`);
+  }
+  const feConds: Prisma.Sql[] = [
+    Prisma.sql`b."productType" = 'FRONTEND'`,
+    Prisma.sql`b."status" = 'APPROVED'`,
+  ];
+  if (filters.productFamilies?.length) {
+    feConds.push(Prisma.sql`b."family" = ANY(${filters.productFamilies})`);
+  }
+  const [row] = await db.$queryRaw<Array<{ sessions: bigint; revenue: Prisma.Decimal | null; net: Prisma.Decimal | null }>>(Prisma.sql`
+    WITH base AS (
+      SELECT o.id, o."productType", o."status", o."orderedAt",
+             o."grossAmountUsd", o."netAmountUsd",
+             pr."family" AS family,
+             ${SESSION_KEY_SQL} AS skey
+      FROM "Order" o
+      JOIN "Platform" pl ON o."platformId" = pl.id
+      JOIN "Product" pr ON o."productId" = pr.id
+      WHERE ${Prisma.join(baseConds, ' AND ')}
+    ),
+    fe AS (
+      SELECT DISTINCT skey FROM base b WHERE ${Prisma.join(feConds, ' AND ')}
+    )
+    SELECT
+      COUNT(DISTINCT fe.skey)::bigint AS sessions,
+      COALESCE(SUM(b."grossAmountUsd") FILTER (WHERE b."status" = 'APPROVED'), 0) AS revenue,
+      COALESCE(SUM(b."netAmountUsd")   FILTER (WHERE b."status" = 'APPROVED'), 0) AS net
+    FROM fe
+    JOIN base b ON b.skey = fe.skey
+  `);
+  return {
+    sessions: Number(row?.sessions ?? 0),
+    revenue: toNumber(row?.revenue ?? 0),
+    net: toNumber(row?.net ?? 0),
   };
 }
 
@@ -1351,7 +1435,12 @@ export function aggregateGroups(
   const totalUpsellRevenue = Array.from(upStepRevenue.values()).reduce((a, b) => a + b, 0);
   const totalDownsellRevenue = Array.from(dwStepRevenue.values()).reduce((a, b) => a + b, 0);
   const totalRevenue = feRevenue + bumpRevenue + totalUpsellRevenue + totalDownsellRevenue;
-  const aov = feGroups ? totalRevenue / feGroups : 0;
+  // AOV canônico = receita das sessões COM FE ÷ sessões com FE. NÃO usa
+  // totalRevenue: ele inclui receita de grupos órfãos (UP/DW cujo FE caiu
+  // fora da janela — os "N grupos totais" > "N FE"), que inflava o AOV.
+  // revenueFEOnly+revenueWithUpsell = exatamente a receita dos grupos com FE.
+  const feGroupsRevenue = revenueFEOnly + revenueWithUpsell;
+  const aov = feGroups ? feGroupsRevenue / feGroups : 0;
   const aovFEOnly = groupsFEOnly ? revenueFEOnly / groupsFEOnly : 0;
   const aovWithUpsell = groupsWithUpsell ? revenueWithUpsell / groupsWithUpsell : 0;
   const revenueLiftFromUpsells =
@@ -2754,7 +2843,13 @@ export async function getAffiliateDetail(
         productType: 'FRONTEND',
         orderedAt: { gte: filters.startDate, lte: filters.endDate },
       },
-      select: { parentExternalId: true, externalId: true, platformId: true },
+      select: {
+        parentExternalId: true,
+        externalId: true,
+        funnelSessionId: true,
+        platformId: true,
+        platform: { select: { slug: true } },
+      },
     }),
   ]);
 
@@ -2787,29 +2882,44 @@ export async function getAffiliateDetail(
   let attributedRevenue = 0;
   let attributedSessions = 0;
   if (feSessionKeys.length > 0) {
-    const keysByPlatform = new Map<string, Set<string>>();
+    // Chave de sessão CANÔNICA por plataforma (mesma do funil/overview):
+    // buygoods = funnelSessionId (sessid2) — order_id_global é por-transação
+    // e NÃO agrupa upsells com o FE; demais = parentExternalId (fallback
+    // externalId). Sem isso, upsells BG nunca entravam no atribuído e o
+    // "AOV global" saía só com o preço do FE.
+    const sessByPlatform = new Map<string, Set<string>>();   // BG: sessid2
+    const anchorByPlatform = new Map<string, Set<string>>(); // demais / fallback
     for (const r of feSessionKeys) {
-      const set = keysByPlatform.get(r.platformId) ?? new Set<string>();
-      set.add(r.parentExternalId ?? r.externalId);
-      keysByPlatform.set(r.platformId, set);
+      const isBg = r.platform.slug === 'buygoods';
+      if (isBg && r.funnelSessionId) {
+        const set = sessByPlatform.get(r.platformId) ?? new Set<string>();
+        set.add(r.funnelSessionId);
+        sessByPlatform.set(r.platformId, set);
+      } else {
+        const set = anchorByPlatform.get(r.platformId) ?? new Set<string>();
+        set.add(r.parentExternalId ?? r.externalId);
+        anchorByPlatform.set(r.platformId, set);
+      }
     }
-    attributedSessions = Array.from(keysByPlatform.values())
-      .reduce((sum, s) => sum + s.size, 0);
-    // Soma no banco (não em JS) e em paralelo por plataforma. Mantém o OR
-    // exato do código antigo — COALESCE não é equivalente quando uma FE tem
-    // parentExternalId próprio setado.
+    attributedSessions =
+      Array.from(sessByPlatform.values()).reduce((s, v) => s + v.size, 0) +
+      Array.from(anchorByPlatform.values()).reduce((s, v) => s + v.size, 0);
+
+    const platformIds = new Set([...sessByPlatform.keys(), ...anchorByPlatform.keys()]);
     const sums = await Promise.all(
-      Array.from(keysByPlatform.entries()).map(([platformId, keys]) => {
-        const keysArr = Array.from(keys);
+      Array.from(platformIds).map((platformId) => {
+        const sess = Array.from(sessByPlatform.get(platformId) ?? []);
+        const anchors = Array.from(anchorByPlatform.get(platformId) ?? []);
+        const or: Prisma.OrderWhereInput[] = [];
+        if (sess.length) or.push({ funnelSessionId: { in: sess } });
+        if (anchors.length) {
+          // Mantém o OR exato do código antigo — COALESCE não é equivalente
+          // quando uma FE tem parentExternalId próprio setado.
+          or.push({ parentExternalId: { in: anchors } });
+          or.push({ externalId: { in: anchors } });
+        }
         return db.order.aggregate({
-          where: {
-            platformId,
-            status: 'APPROVED',
-            OR: [
-              { parentExternalId: { in: keysArr } },
-              { externalId: { in: keysArr } },
-            ],
-          },
+          where: { platformId, status: 'APPROVED', OR: or },
           _sum: { grossAmountUsd: true },
         });
       }),
@@ -3532,7 +3642,7 @@ export async function getAffiliatesSql(
         WITH base AS (
           SELECT o.id, o."affiliateId", o."productType", o."status", o."orderedAt",
                  o."grossAmountUsd", o."netAmountUsd", o."cpaPaidUsd", o."cogsUsd", o."fulfillmentUsd",
-                 pl."slug" || ':' || COALESCE(o."parentExternalId", o."externalId") AS skey
+                 ${SESSION_KEY_SQL} AS skey
           FROM "Order" o
           JOIN "Platform" pl ON o."platformId" = pl.id
           WHERE ${sessWhere}
@@ -3933,6 +4043,20 @@ export async function getOrders(
   }
 
   const filteredWhere: Prisma.OrderWhereInput = { ...where };
+  // Filtrando por estorno, o período passa a valer sobre a DATA DO ESTORNO
+  // (refundedAt/chargebackAt), não sobre a data da venda — é o drill-down
+  // dos cards de reembolso da Visão Geral, que contam pelo mesmo eixo. Sem
+  // isso o card dizia "30 reembolsos hoje" e a lista abria vazia (na
+  // Digistore o orderedAt da linha de estorno é a data da venda original).
+  const eventDateField = options.status === 'refunded'
+    ? 'refundedAt'
+    : options.status === 'chargeback'
+      ? 'chargebackAt'
+      : null;
+  if (eventDateField) {
+    delete filteredWhere.orderedAt;
+    filteredWhere[eventDateField] = { gte: filters.startDate, lte: filters.endDate };
+  }
   if (options.status && options.status !== 'all') {
     filteredWhere.status = options.status.toUpperCase() as Prisma.OrderWhereInput['status'];
   }
@@ -3947,12 +4071,18 @@ export async function getOrders(
   // Um groupBy só por (status, productType) alimenta os dois breakdowns —
   // somar as partições por eixo dá exatamente os mesmos totais das duas
   // queries antigas. count + findMany rodam em paralelo junto.
-  const [countsRaw, total, rows] = await Promise.all([
+  const eventWindow = { gte: filters.startDate, lte: filters.endDate };
+  const [countsRaw, refundedInWindow, chargebackInWindow, total, rows] = await Promise.all([
     db.order.groupBy({
       by: ['status', 'productType'],
       where,
       _count: { _all: true },
     }),
+    // As abas de estorno contam pelo mesmo eixo de evento que a lista usa
+    // quando estão selecionadas — senão o número da aba e o da tabela
+    // discordariam.
+    db.order.count({ where: { ...where, status: 'REFUNDED', orderedAt: undefined, refundedAt: eventWindow } }),
+    db.order.count({ where: { ...where, status: 'CHARGEBACK', orderedAt: undefined, chargebackAt: eventWindow } }),
     db.order.count({ where: filteredWhere }),
     db.order.findMany({
       where: filteredWhere,
@@ -3965,7 +4095,9 @@ export async function getOrders(
       // não é determinística entre queries — e o export CSV pagina por
       // OFFSET em queries independentes (duplicaria/pularia linhas na
       // borda da página). Mesmo padrão das demais queries do arquivo.
-      orderBy: [{ orderedAt: 'desc' }, { id: 'desc' }],
+      orderBy: eventDateField
+        ? [{ [eventDateField]: 'desc' as const }, { id: 'desc' as const }]
+        : [{ orderedAt: 'desc' as const }, { id: 'desc' as const }],
       take: limit,
       skip: offset,
     }),
@@ -3989,6 +4121,11 @@ export async function getOrders(
     typeCounts[row.productType] = (typeCounts[row.productType] ?? 0) + n;
     typeCounts.all += n;
   }
+  // Contagens de estorno pelo eixo de EVENTO (ver eventDateField): cada aba
+  // mostra exatamente o que a lista dela vai trazer quando for clicada.
+  // `all` fica no eixo de venda de propósito — é o que a aba "todos" lista.
+  statusCounts.refunded = refundedInWindow;
+  statusCounts.chargeback = chargebackInWindow;
 
   return {
     orders: rows.map((o) => ({
@@ -4008,6 +4145,11 @@ export async function getOrders(
       cpaPaidUsd: toNumber(o.cpaPaidUsd),
       status: o.status,
       orderedAt: o.orderedAt.toISOString(),
+      // Quando o evento que a linha representa é posterior à venda
+      // (estorno da Digistore, que vira linha extra datada da venda), é
+      // esta a data que o painel da plataforma mostra. Nas linhas
+      // aprovadas / in-place cai no próprio orderedAt.
+      eventAt: (o.refundedAt ?? o.chargebackAt ?? o.orderedAt).toISOString(),
     })),
     statusCounts,
     typeCounts,

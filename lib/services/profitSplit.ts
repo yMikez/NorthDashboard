@@ -51,12 +51,16 @@ export interface ProfitSplitResponse {
     profitUsd: number;
   };
   totalUsd: number;
-  // Lente de CONTAGEM por coorte pro card de reembolso do overview:
-  // "dos X pedidos feitos no período, Y pediram reembolso (até agora)".
-  // Denominador honesto por plataforma: na Digistore o refund é LINHA
-  // EXTRA (venda original segue APPROVED), então pedidos reais =
-  // total − linhas de refund/cb; nas demais (in-place) = total.
-  // O "(até agora)" importa: coorte recente ainda vai receber refunds.
+  // Cards de reembolso do overview: "no período aconteceram Y estornos,
+  // contra X pedidos feitos no período".
+  //   numerador — estornos por DATA DO ESTORNO (refundedAt/chargebackAt),
+  //     inclusive de vendas anteriores ao período. Mesma leitura do painel
+  //     da Digistore.
+  //   denominador — pedidos/faturamento do período por orderedAt, com
+  //     desconto das linhas sintéticas da Digistore (refund é LINHA EXTRA,
+  //     a venda original segue APPROVED).
+  // Coorte "das vendas do dia X, quantas voltaram" é outra coisa e vive em
+  // getObservedRefundCbPct (profitModel) — é ela que calibra o NET AFTER CPA.
   refunds: {
     salesCount: number;
     refundedCount: number;
@@ -67,7 +71,7 @@ export interface ProfitSplitResponse {
     refundedUsd: number;
     valuePct: number;
   };
-  // Monitor de alerta precoce (regra do usuário, 2026-08-06): coorte
+  // Monitor de alerta precoce (regra do usuário, 2026-08-06): janela
   // ROLANTE dos últimos 7 dias A PARTIR DE AGORA — independente do
   // período selecionado na UI, mas respeitando os filtros de
   // plataforma/família/país. Limite: 10% dos pedidos com reembolso →
@@ -83,41 +87,74 @@ export interface ProfitSplitResponse {
   };
 }
 
-// Reduz groupBy(platformId×status) pras DUAS lentes de reembolso:
-//   contagem — pedidos reais × pedidos reembolsados (denominador por
-//     modelo de contabilidade: Digistore linha-extra → total − linhas
-//     sintéticas de refund/cb; demais in-place → todas as linhas);
-//   valor — |$ devolvido| ÷ $ faturado (APPROVED) — "quanto do
-//     faturamento representa", fórmula que a Digistore usa.
+type StatusGroup = {
+  platformId: string; status: string;
+  _count: { _all: number }; _sum: { grossAmountUsd: unknown };
+};
+type EventGroup = {
+  platformId: string;
+  _count: { _all: number }; _sum: { grossAmountUsd: unknown };
+};
+
+// Reduz os grupos pras DUAS lentes de reembolso do overview.
+//
+// EIXOS DIFERENTES de propósito (decisão 2026-08-11):
+//   denominador (`statusRows`) — por orderedAt: os pedidos/faturamento DO
+//     PERÍODO. Na Digistore o refund é LINHA EXTRA carimbada com a data da
+//     venda, então pedidos reais = total − linhas de refund/cb; nas demais
+//     (in-place) a linha estornada É a venda → total.
+//   numerador (`refundRows`/`cbRows`) — por refundedAt/chargebackAt: os
+//     estornos que ACONTECERAM no período, independente de quando a venda
+//     foi feita. É a leitura do painel da Digistore, e é o que faltava:
+//     antes o numerador também vinha por orderedAt, então o estorno de hoje
+//     (de uma venda de semanas atrás) sumia e "hoje" aparecia zerado.
+//
+// A coorte por data de venda continua existindo — mora em
+// getObservedRefundCbPct (profitModel), que calibra o NET AFTER CPA.
 function reduceRefundCounts(
-  rows: Array<{ platformId: string; status: string; _count: { _all: number }; _sum: { grossAmountUsd: unknown } }>,
+  statusRows: StatusGroup[],
+  refundRows: EventGroup[],
+  cbRows: EventGroup[],
   slugById: Map<string, string>,
 ): {
   salesCount: number; refundedCount: number; chargebackCount: number; pct: number;
   grossUsd: number; refundedUsd: number; valuePct: number;
 } {
   const perPlatform = new Map<string, { total: number; refunded: number; cb: number }>();
+  const bucket = (platformId: string) => {
+    const slug = slugById.get(platformId) ?? '';
+    let a = perPlatform.get(slug);
+    if (!a) { a = { total: 0, refunded: 0, cb: 0 }; perPlatform.set(slug, a); }
+    return a;
+  };
+
   let grossUsd = 0;
-  let refundedUsd = 0;
-  for (const g of rows) {
-    const slug = slugById.get(g.platformId) ?? '';
-    const a = perPlatform.get(slug) ?? { total: 0, refunded: 0, cb: 0 };
+  for (const g of statusRows) {
+    const a = bucket(g.platformId);
     a.total += g._count._all;
     const usd = g._sum.grossAmountUsd ? Number(g._sum.grossAmountUsd) : 0;
-    if (g.status === 'REFUNDED') { a.refunded += g._count._all; refundedUsd += Math.abs(usd); }
+    // refunded/cb aqui são as linhas SINTÉTICAS que caem no período por
+    // orderedAt — só servem pra descontar do denominador da Digistore.
+    if (g.status === 'REFUNDED') a.refunded += g._count._all;
     if (g.status === 'CHARGEBACK') a.cb += g._count._all;
     if (g.status === 'APPROVED') grossUsd += usd;
-    perPlatform.set(slug, a);
   }
+
   let salesCount = 0;
-  let refundedCount = 0;
-  let chargebackCount = 0;
   for (const [slug, a] of perPlatform) {
     const extraRow = slug === 'digistore24';
     salesCount += extraRow ? a.total - a.refunded - a.cb : a.total;
-    refundedCount += a.refunded;
-    chargebackCount += a.cb;
   }
+
+  let refundedCount = 0;
+  let refundedUsd = 0;
+  for (const g of refundRows) {
+    refundedCount += g._count._all;
+    refundedUsd += Math.abs(g._sum.grossAmountUsd ? Number(g._sum.grossAmountUsd) : 0);
+  }
+  let chargebackCount = 0;
+  for (const g of cbRows) chargebackCount += g._count._all;
+
   return {
     salesCount,
     refundedCount,
@@ -181,7 +218,27 @@ export async function getProfitSplit(filters: ProfitSplitFilters): Promise<Profi
       : []),
   ];
 
-  const [frontByPlatform, frontCpa, smsAgg, recoveryOrders, statusCounts, statusCounts7d] = await Promise.all([
+  // Estornos por EIXO DE EVENTO (quando o refund/CB aconteceu). Ver
+  // reduceRefundCounts: o numerador dos cards vem daqui, o denominador
+  // continua vindo do groupBy por orderedAt.
+  const range7d = { gte: new Date(Date.now() - 7 * 86_400_000) };
+  const refundedIn = (window: object) => db.order.groupBy({
+    by: ['platformId'],
+    where: { status: 'REFUNDED' as const, refundedAt: window, ...orderScope },
+    _count: { _all: true },
+    _sum: { grossAmountUsd: true },
+  });
+  const chargedBackIn = (window: object) => db.order.groupBy({
+    by: ['platformId'],
+    where: { status: 'CHARGEBACK' as const, chargebackAt: window, ...orderScope },
+    _count: { _all: true },
+    _sum: { grossAmountUsd: true },
+  });
+
+  const [
+    frontByPlatform, frontCpa, smsAgg, recoveryOrders, statusCounts, statusCounts7d,
+    refundEvents, refundEvents7d, cbEvents, cbEvents7d,
+  ] = await Promise.all([
     // FRONT: aprovadas do período SEM as fontes de back, DENTRO do escopo
     // de filtro da UI (plataforma/família/país) — antes o card ignorava o
     // filtro e mostrava o global com cara de filtrado.
@@ -215,10 +272,14 @@ export async function getProfitSplit(filters: ProfitSplitFilters): Promise<Profi
     // selecionado) — alimenta o alerta de 10% do card por pedidos.
     db.order.groupBy({
       by: ['platformId', 'status'],
-      where: { orderedAt: { gte: new Date(Date.now() - 7 * 86_400_000) }, ...orderScope },
+      where: { orderedAt: range7d, ...orderScope },
       _count: { _all: true },
       _sum: { grossAmountUsd: true },
     }),
+    refundedIn(range),
+    refundedIn(range7d),
+    chargedBackIn(range),
+    chargedBackIn(range7d),
   ]);
 
   const slugById = new Map(frontCpa.map((p) => [p.id, p.slug]));
@@ -263,8 +324,8 @@ export async function getProfitSplit(filters: ProfitSplitFilters): Promise<Profi
   ];
   const backProfit = round2(sources.reduce((s, x) => s + x.netUsd, 0));
 
-  const refunds = reduceRefundCounts(statusCounts, slugById);
-  const refunds7d = reduceRefundCounts(statusCounts7d, slugById);
+  const refunds = reduceRefundCounts(statusCounts, refundEvents, cbEvents, slugById);
+  const refunds7d = reduceRefundCounts(statusCounts7d, refundEvents7d, cbEvents7d, slugById);
 
   return {
     range: { start: startDate.toISOString(), end: endDate.toISOString() },
