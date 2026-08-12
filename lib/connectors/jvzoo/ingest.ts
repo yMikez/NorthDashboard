@@ -11,12 +11,14 @@
 //     de que no upsell ele apontaria pro receipt da FE MORREU — prekey não
 //     linka nada.
 //   - paykey difere a cada transação (um payment key por cobrança).
-//   - O que liga FE↔upsell: `tid` do other_params (tracking do link,
-//     idêntico na sessão do browser) + customer_email + dia Eastern.
-// jvzooSessionAnchor() monta a chave; o papel FE/UPSELL NÃO é decidido
-// no parse — quem decide é a reconciliação por sessão
-// (lib/services/jvzooSessions.ts): compra mais antiga = FRONTEND, demais
-// = UPSELL. À prova de IPN fora de ordem (forward-fix, padrão BG).
+//   - O que liga FE↔upsell: customer_email + dia Eastern (o `tid` saiu da
+//     chave em 2026-08-12 — ver jvzooSessionAnchor).
+// jvzooSessionAnchor() monta a chave; o papel FE/UPSELL/DOWNSELL não é
+// decidido no parse. Desde 2026-08-12 quem decide é o NOME do produto
+// (upsertOrder via classifyProduct — "(Upgrade)"/"(Last Chance)"), com a
+// reconciliação por sessão (lib/services/jvzooSessions.ts) como fallback
+// pros SKUs que o classificador não reconhece. À prova de IPN fora de
+// ordem (forward-fix, padrão BG).
 //
 // Timestamp: `date` vem como wall clock SEM timezone. JVZoo (Flórida)
 // segue o padrão BuyGoods: tratamos como America/New_York (EST/EDT via
@@ -130,11 +132,27 @@ function parseOtherParams(raw: string | undefined): URLSearchParams {
 }
 
 /**
- * Âncora de sessão (ver header). Rebill (BILL/UNCANCEL-REBILL) ancora em
- * SI MESMO: cada rebill despacha a própria remessa — agrupar na sessão
- * original fundiria FE + N rebills num pacote só e reescreveria o frete
- * histórico a cada mês. Sem email/data não há como agrupar → sessão
- * própria (transactionId), comportamento antigo.
+ * Âncora de sessão: `jvz:<email>:<dia Eastern>`.
+ *
+ * O `tid` SAIU da chave em 2026-08-12. Ele criava duas formas de chave que
+ * nunca casavam (`jvz:<tid>:<email>:<dia>` com tid, `jvz:<email>:f<funnel>:<dia>`
+ * sem), e nos payloads reais o tid falta ASSIMETRICAMENTE: 6 de 166 vendas
+ * (3,6%) chegam sem ele e todas no passo FE — o checkout direto manda só
+ * `orderform_view_id`, enquanto a página de upsell sempre injeta `tid`. Nesses
+ * casos a FE e o upsell da MESMA compra caíam em sessões separadas de 1 membro
+ * (caso fechado em prod: mesmo IP, mesmo email, mesmo funnel_id, 10min de
+ * intervalo). O `funnel_id` do fallback também não separava nada — é constante
+ * em 200/200 logs.
+ *
+ * Contrapartida aceita: duas compras independentes do mesmo cliente no mesmo
+ * dia agora fundem numa sessão só (0 ocorrências em 113 sessões auditadas).
+ * O risco de papel errado que isso traria morreu junto: o papel vem do NOME
+ * do produto (ver jvzooSessions.ts), não mais da posição.
+ *
+ * Rebill (BILL/UNCANCEL-REBILL) ancora em SI MESMO: cada rebill despacha a
+ * própria remessa — agrupar na sessão original fundiria FE + N rebills num
+ * pacote só e reescreveria o frete histórico a cada mês. Sem email/data não
+ * há como agrupar → sessão própria (transactionId).
  * Exportada pro backfill (recomputa âncoras a partir dos IngestLogs SALE).
  */
 export function jvzooSessionAnchor(payload: JvzooPayload): string {
@@ -142,19 +160,13 @@ export function jvzooSessionAnchor(payload: JvzooPayload): string {
   const transactionType = (payload.transaction_type ?? '').toUpperCase();
   const isRebill = transactionType === 'BILL' || transactionType === 'UNCANCEL-REBILL';
   if (isRebill || !transactionId) return transactionId;
-  const other = parseOtherParams(payload.other_params);
-  const tid = other.get('tid') || payload.tid || '';
   const email = (payload.customer_email ?? '').trim().toLowerCase();
-  // Dia do wall clock Eastern direto da string ("2026-08-03 08:21:45").
-  // O dia entra na chave pra um recompra do mesmo cliente meses depois
-  // (tid estático de campanha) não fundir com a sessão antiga. Upsell
-  // cruzando meia-noite Eastern é raro o bastante pra aceitar a borda.
+  // Dia do wall clock Eastern direto da string ("2026-08-03 08:21:45"). O dia
+  // entra na chave pra uma recompra do mesmo cliente meses depois não fundir
+  // com a sessão antiga. Upsell cruzando meia-noite Eastern é raro o
+  // bastante pra aceitar a borda.
   const day = (payload.date ?? '').slice(0, 10);
-  if (email && day) {
-    return tid
-      ? `jvz:${tid}:${email}:${day}`
-      : `jvz:${email}:f${payload.funnel_id ?? '0'}:${day}`;
-  }
+  if (email && day) return `jvz:${email}:${day}`;
   return transactionId;
 }
 
@@ -162,10 +174,9 @@ export function parseJvzooIngest(payload: JvzooPayload): NormalizedOrder {
   const transactionId = required(payload, 'transaction_id');
   const transactionType = (payload.transaction_type ?? '').toUpperCase();
 
-  // Papel definitivo (FRONTEND vs UPSELL) sai da reconciliação de sessão
-  // no ingest — aqui todo pedido nasce FRONTEND e é rebaixado pra UPSELL
-  // quando existe compra mais antiga na mesma sessão. (prekey NÃO indica
-  // papel — ver header.)
+  // O payload não carrega o papel (prekey NÃO indica nada — ver header), então
+  // nasce FRONTEND. Quem resolve é o upsertOrder pelo NOME do produto e, pros
+  // SKUs que o classificador não reconhece, a reconciliação por sessão.
   const productType: NormalizedProductType = 'FRONTEND';
 
   const gross = decimal(payload.total);

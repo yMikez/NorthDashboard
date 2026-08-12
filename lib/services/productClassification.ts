@@ -83,6 +83,22 @@ const D24_NAME_RE =
 const BUYGOODS_NAME_RE =
   /^(?<family>.+?)\s+(?<b1>\d+)(?:\s*\+\s*(?<b2>\d+))?\s*bottles?\b\s*(?<rest>.*)$/i;
 
+// Combo com a contagem de potes ABREVIADA em "NB" — convenção que só a JVZoo
+// usa até agora (auditoria 2026-08-12):
+//
+//   "FlexGuard 3B+ ImmuneGuard 3B (Upgrade)"
+//   "FlexGuard 1B+ ImmuneGuard 1B (LastChance)"
+//   "NightCalm 3B + FlexGuard 3B (Upgrade)"
+//
+// BUYGOODS_NAME_RE exige a palavra literal "Bottles", então esses nomes caíam
+// no fallback cego: família null → COGS $0, frete $0 e os potes fora do
+// bottlesShipped (96 pedidos em prod). Roda DEPOIS da tentativa BuyGoods —
+// nome com "Bottles" nunca chega aqui, e o combo antigo
+// ("Flex + Imune Guard 3 + 3 Bottles") não casa este padrão porque o "+"
+// aparece antes do primeiro número.
+const COMBO_ABBREV_RE =
+  /^(?<famA>[A-Za-z][A-Za-z ]*?)\s*(?<b1>\d+)\s*B\s*\+\s*(?<famB>[A-Za-z][A-Za-z ]*?)\s*(?<b2>\d+)\s*B\b\s*(?<rest>.*)$/i;
+
 const FAMILY_NORMALIZATIONS: Array<[RegExp, string]> = [
   [/^glycopulse$/i, 'GlycoPulse'],
   [/^glyco\s*pulse$/i, 'GlycoPulse'],
@@ -137,6 +153,14 @@ const FAMILY_NORMALIZATIONS: Array<[RegExp, string]> = [
   // Combo com grafia criativa do vendor ("ImuneGuard + FlexyGuard") —
   // ordem invertida do combo canônico FlexImmuneGuard.
   [/^imm?une\s*guard\s*\+\s*flexy?\s*guard$/i, 'FlexImmuneGuard'],
+  // Duplicatas por CAPITALIZAÇÃO entre plataformas (auditoria 2026-08-12): a
+  // JVZoo escreve "Memovance Pro"/"Blessed kit" e BG/D24 escrevem
+  // "Memovance PRO"/"Blessed Kit" — como o casamento de família é exact-match,
+  // viravam duas famílias no filtro E o COGS caía na média global. A canônica
+  // é a grafia que JÁ tem ProductFamilyCost cadastrado ("Memovance PRO"),
+  // senão a correção quebraria o custo dos 592 pedidos BuyGoods junto.
+  [/^memovance\s*pro$/i, 'Memovance PRO'],
+  [/^blessed\s*kit$/i, 'Blessed Kit'],
 ];
 
 export function normalizeFamily(raw: string): string {
@@ -200,19 +224,23 @@ function buyGoodsType(
   // Formato novo explícito: "Upgrade N" / "Downsell N" (N=1..9).
   const upN = r.match(/upgrade\s*(\d+)/);
   if (upN) return classifyType(`UP${parseInt(upN[1], 10)}`);
-  const dwN = r.match(/(?:downsell|down\s*sell|last\s*chance\s*(\d+))\s*(\d+)/);
-  // Captura "Downsell N" ou "Last Chance N" (ambos formatos suportados).
-  if (dwN) {
-    const num = dwN[1] || dwN[2];
-    if (num) return classifyType(`DW${parseInt(num, 10)}`);
-  }
-  // Formato antigo: "Upgrade" / "Last Chance" sem N → ancorado na família.
-  const isLastChance = /last\s*chance/.test(r);
+  // Captura "Downsell N" ou "Last Chance N". A versão anterior punha o número
+  // do "last chance" num grupo próprio e AINDA exigia \s*(\d+) depois — só
+  // casava com dois números seguidos, então "Last Chance 2" nunca era lido
+  // (contrariando o comentário original). Um grupo só resolve os dois.
+  const dwN = r.match(/(?:down\s*sell|last\s*chance)\s*(\d+)/);
+  if (dwN) return classifyType(`DW${parseInt(dwN[1], 10)}`);
+  // Formato antigo sem N → ancorado na família. "Downsell" NU entra aqui
+  // junto com "Last Chance": antes a palavra sozinha não estava em lugar
+  // nenhum e caía no FE — 135 pedidos BuyGoods gravados como FRONTEND
+  // ("Luminacept 3 Bottles (Downsell)" 129 + "Glyco Pulse 3 Bottles
+  // (Downsell)" 6), auditoria 2026-08-12.
+  const isDownsell = /last\s*chance|down\s*sell/.test(r);
   const isUpgrade = /upgrade/.test(r);
-  if (isLastChance || isUpgrade) {
-    if (family === 'NightCalm') return classifyType(isLastChance ? 'DW2' : 'UP2');
-    if (family === 'FlexImmuneGuard') return classifyType(isLastChance ? 'DW3' : 'UP3');
-    return classifyType(isLastChance ? 'DW1' : 'UP1');
+  if (isDownsell || isUpgrade) {
+    if (family === 'NightCalm') return classifyType(isDownsell ? 'DW2' : 'UP2');
+    if (family === 'FlexImmuneGuard') return classifyType(isDownsell ? 'DW3' : 'UP3');
+    return classifyType(isDownsell ? 'DW1' : 'UP1');
   }
   return classifyType('FE');
 }
@@ -267,12 +295,19 @@ function classifyCartpanda(sku: string, name?: string | null): ProductClassifica
 }
 
 // Plataformas cujo PAPEL no funil (productType/funnelStep) vem do CONNECTOR,
-// nunca do nome do produto: Cartpanda (up_sell_id) e JVZoo (prekey). O nome
-// nesses casos não anota o papel ("Hawaiian Harmony 6 Bottles" é o MESMO em
-// FE e upsell), então o classificador só é autoritativo pra FAMÍLIA/potes.
+// nunca do nome do produto: Cartpanda (up_sell_id). O nome ali não anota o
+// papel, então o classificador só é autoritativo pra FAMÍLIA/potes.
 // Consumido por upsertOrder e classifyExistingProducts — mudou aqui, vale
 // pros dois.
-export const CONNECTOR_ROLE_PLATFORMS = new Set(['cartpanda', 'jvzoo']);
+//
+// JVZoo SAIU daqui em 2026-08-12. A premissa ("o nome não anota o papel")
+// era factualmente falsa: 15 dos 28 SKUs trazem "(Upgrade)" ou "(Last
+// Chance)" no nome. Enquanto esteve no set, o papel vinha 100% da POSIÇÃO
+// na sessão (jvzooSessions.ts), que só sabe emitir FRONTEND|UPSELL — daí
+// DOWNSELL=0 em 3.156 pedidos, Product.productType=FRONTEND em 28/28 SKUs e
+// ~55 upsells marcados FRONTEND quando a sessão rachava. Agora o nome manda
+// e a posição é o fallback pros SKUs que o classificador não sabe ler.
+export const CONNECTOR_ROLE_PLATFORMS = new Set(['cartpanda']);
 
 export function classifyProduct(
   sku: string,
@@ -359,6 +394,27 @@ export function classifyProduct(
         variant: null,
         bottles,
         bonusBottles,
+      };
+    }
+
+    // Combo com potes abreviados ("FlexGuard 3B+ ImmuneGuard 3B (Upgrade)").
+    // Só chega aqui quem não tem a palavra "Bottles" — ver COMBO_ABBREV_RE.
+    const combo = COMBO_ABBREV_RE.exec(trimmed);
+    if (combo?.groups) {
+      const famA = combo.groups.famA.replace(/\s+/g, ' ').trim();
+      const famB = combo.groups.famB.replace(/\s+/g, ' ').trim();
+      // Normaliza o par inteiro: "FlexGuard + ImmuneGuard" tem regra de combo
+      // (→ FlexImmuneGuard, com custo cadastrado). Pares sem regra ficam com
+      // o nome composto — família própria, que é o que eles são de fato.
+      const family = normalizeFamily(`${famA} + ${famB}`);
+      const t = buyGoodsType(family, combo.groups.rest || '');
+      return {
+        family: family || null,
+        type: t.type,
+        funnelStep: t.step,
+        variant: null,
+        bottles: parseInt(combo.groups.b1, 10),
+        bonusBottles: parseInt(combo.groups.b2, 10),
       };
     }
   }

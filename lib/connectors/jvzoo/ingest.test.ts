@@ -52,8 +52,8 @@ describe('parseJvzooIngest — SALE (fixture real anonimizada)', () => {
     expect(n.parentExternalId).toBe('NSGOG44I8PJN0F8AR');
   });
 
-  it('sessão = jvz:<tid>:<email>:<dia Eastern> (prekey NÃO agrupa — validado 2026-08-03)', () => {
-    expect(n.funnelSessionId).toBe('jvz:ekmwpdty_3092_90872502:buyer@example.com:2026-07-26');
+  it('sessão = jvz:<email>:<dia Eastern> (prekey NÃO agrupa — validado 2026-08-03)', () => {
+    expect(n.funnelSessionId).toBe('jvz:buyer@example.com:2026-07-26');
   });
 
   it('dinheiro: payouts como fonte de verdade (cpa 230, fee 25.99, net 38.01)', () => {
@@ -95,19 +95,25 @@ describe('parseJvzooIngest — SALE (fixture real anonimizada)', () => {
 });
 
 describe('parseJvzooIngest — variações', () => {
-  it('upsell real: mesmo tid+email+dia → MESMA sessão da FE (prekey auto-referente é ignorado)', () => {
+  it('upsell real: mesmo email+dia → MESMA sessão da FE (prekey auto-referente é ignorado)', () => {
     // Caso real 2026-08-03: upsell chega com prekey "WR-"+PRÓPRIO id (não
-    // aponta pra FE). O que liga as duas transações é o tid do other_params.
+    // aponta pra FE). O que liga as duas transações é email + dia Eastern.
     const n = parseJvzooIngest({ ...sale, transaction_id: 'UPSELL123', prekey: 'WR-UPSELL123' });
-    expect(n.funnelSessionId).toBe('jvz:ekmwpdty_3092_90872502:buyer@example.com:2026-07-26');
-    // Papel sai da reconciliação (mais antiga = FE) — parse não decide.
+    expect(n.funnelSessionId).toBe('jvz:buyer@example.com:2026-07-26');
+    // Papel sai do NOME (upsertOrder) ou da reconciliação — parse não decide.
     expect(n.productType).toBe('FRONTEND');
     expect(n.parentExternalId).toBe('UPSELL123');
   });
 
-  it('sem tid no other_params → fallback email+funnel+dia (ainda agrupa)', () => {
-    const n = parseJvzooIngest({ ...sale, other_params: 'aid=123', funnel_id: '117247' });
-    expect(n.funnelSessionId).toBe('jvz:buyer@example.com:f117247:2026-07-26');
+  it('FE sem tid e upsell com tid caem na MESMA sessão (bug do racha, 2026-08-12)', () => {
+    // Em produção o tid falta assimetricamente: só no passo FE (checkout
+    // direto manda apenas orderform_view_id). Antes isso gerava duas chaves
+    // de NAMESPACES diferentes que nunca casavam, e o upsell virava um
+    // segundo "frontend". Agora a chave não olha tid.
+    const fe = parseJvzooIngest({ ...sale, other_params: 'orderform_view_id=9637465' });
+    const up = parseJvzooIngest({ ...sale, transaction_id: 'UPSELL123', other_params: 'aid=99&tid=abc' });
+    expect(fe.funnelSessionId).toBe('jvz:buyer@example.com:2026-07-26');
+    expect(up.funnelSessionId).toBe(fe.funnelSessionId);
   });
 
   it('sem email/data → sessão própria (transactionId, comportamento antigo)', () => {

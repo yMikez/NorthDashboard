@@ -638,3 +638,112 @@ describe('normalizeFamily — duplicatas do filtro (auditoria 2026-08-03)', () =
     expect(normalizeFamily('Lumicept Gummies')).toBe('Lumicept Gummies');
   });
 });
+
+// Auditoria JVZoo 2026-08-12 — o papel da JVZoo passou a sair do NOME
+// (CONNECTOR_ROLE_PLATFORMS perdeu 'jvzoo'), então o classificador precisa
+// ler os 28 SKUs reais dessa plataforma sem cair no fallback cego.
+describe('classifyProduct — JVZoo (papel pelo nome)', () => {
+  it('sem marcador → FRONTEND', () => {
+    const c = classifyProduct('446375', 'Neuro Mind Pro 6 Bottles', 'jvzoo');
+    expect(c.type).toBe('FRONTEND');
+    expect(c.family).toBe('NeuroMindPro');
+    expect(c.bottles).toBe(6);
+  });
+
+  it('"(Upgrade)" → UPSELL', () => {
+    const c = classifyProduct('446376', 'Neuro Mind Pro 6 Bottles (Upgrade)', 'jvzoo');
+    expect(c.type).toBe('UPSELL');
+    expect(c.family).toBe('NeuroMindPro');
+  });
+
+  it('"(Last Chance)" → DOWNSELL (era contado como upsell)', () => {
+    const c = classifyProduct('444187', 'Neuro Mind Pro 3 Bottles (Last Chance)', 'jvzoo');
+    expect(c.type).toBe('DOWNSELL');
+    expect(c.bottles).toBe(3);
+  });
+
+  it('"(LastChance)" colado também → DOWNSELL', () => {
+    const c = classifyProduct('446217', 'Hawaiian Harmony 6 Bottles (LastChance)', 'jvzoo');
+    expect(c.type).toBe('DOWNSELL');
+  });
+
+  it('combo abreviado "3B+ ... 3B" ganha família e potes (era COGS $0)', () => {
+    const c = classifyProduct('444185', 'FlexGuard 3B+ ImmuneGuard 3B (Upgrade)', 'jvzoo');
+    expect(c.family).toBe('FlexImmuneGuard');
+    expect(c.bottles).toBe(3);
+    expect(c.bonusBottles).toBe(3);
+    expect(c.type).toBe('UPSELL');
+  });
+
+  it('combo abreviado com espaço antes do "+" também casa', () => {
+    const c = classifyProduct('446331', 'FlexGuard 3B + ImmuneGuard 3B (Upgrade)', 'jvzoo');
+    expect(c.family).toBe('FlexImmuneGuard');
+    expect(c.bottles).toBe(3);
+  });
+
+  it('combo abreviado com "(LastChance)" → DOWNSELL (o único papel errado dos 28)', () => {
+    const c = classifyProduct('444191', 'FlexGuard 1B+ ImmuneGuard 1B (LastChance)', 'jvzoo');
+    expect(c.family).toBe('FlexImmuneGuard');
+    expect(c.type).toBe('DOWNSELL');
+    expect(c.bottles).toBe(1);
+  });
+
+  it('combo sem regra de normalização vira família própria, não null', () => {
+    const c = classifyProduct('445591', 'NightCalm 3B + FlexGuard 3B (Upgrade)', 'jvzoo');
+    expect(c.family).toBe('NightCalm + FlexGuard');
+    expect(c.type).toBe('UPSELL');
+  });
+
+  it('combo com "Bottles" por extenso segue no caminho antigo (sem regressão)', () => {
+    const c = classifyProduct('x', 'Flex + Imune Guard 3 + 3 Bottles (Upgrade 3)', 'buygoods');
+    expect(c.family).toBe('FlexImmuneGuard');
+    expect(c.type).toBe('UPSELL');
+    expect(c.funnelStep).toBe(4);
+  });
+
+  it('nome comum não é sequestrado pelo padrão de combo', () => {
+    expect(classifyProduct('x', 'Neuro Mind Pro 6 Bottles', 'jvzoo').type).toBe('FRONTEND');
+    expect(classifyProduct('x', 'Hawaiian Harmony 12 Bottles (Upgrade)', 'jvzoo').bottles).toBe(12);
+  });
+});
+
+describe('classifyProduct — vocabulário de downsell', () => {
+  it('"(Downsell)" sem número → DOWNSELL (135 pedidos BuyGoods estavam FRONTEND)', () => {
+    const c = classifyProduct('x', 'Luminacept 3 Bottles (Downsell)', 'buygoods');
+    expect(c.type).toBe('DOWNSELL');
+    expect(c.family).toBe('Lumicept');
+  });
+
+  it('"(Down Sell)" com espaço também', () => {
+    expect(classifyProduct('x', 'Glyco Pulse 3 Bottles (Down Sell)', 'buygoods').type)
+      .toBe('DOWNSELL');
+  });
+
+  it('"(Downsell N)" numerado continua ancorando no N', () => {
+    const c = classifyProduct('x', 'Neuro Mind Pro 3 Bottles (Downsell 2)', 'buygoods');
+    expect(c.type).toBe('DOWNSELL');
+    expect(c.funnelStep).toBe(3);
+  });
+
+  it('"(Last Chance N)" numerado passou a ser lido (a regex nunca casava)', () => {
+    const c = classifyProduct('x', 'Neuro Mind Pro 3 Bottles (Last Chance 2)', 'buygoods');
+    expect(c.type).toBe('DOWNSELL');
+    expect(c.funnelStep).toBe(3);
+  });
+
+  it('"(Last Chance)" sem número segue ancorado na família', () => {
+    expect(classifyProduct('x', 'Neuro Mind Pro 3 Bottles (Last Chance)', 'buygoods').funnelStep)
+      .toBe(2);
+  });
+});
+
+describe('normalizeFamily — duplicatas por capitalização', () => {
+  it('unifica Memovance na grafia que tem custo cadastrado', () => {
+    expect(classifyProduct('x', 'Memovance Pro 6 Bottles', 'jvzoo').family).toBe('Memovance PRO');
+    expect(classifyProduct('x', 'Memovance PRO 6 Bottles', 'buygoods').family).toBe('Memovance PRO');
+  });
+
+  it('unifica Blessed Kit', () => {
+    expect(classifyProduct('x', 'Blessed kit 5 Bottles (Upgrade)', 'jvzoo').family).toBe('Blessed Kit');
+  });
+});

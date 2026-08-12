@@ -231,7 +231,11 @@ export async function upsertOrder(normalized: NormalizedOrder): Promise<UpsertOr
   // 2026-08-07, store_url /ds/Down01/). Quando o classificador reconhece
   // a família, ele sabe o role certo pelo NOME (slots M/UP/DW/DS/RC).
   // Demais plataformas mantêm o role do IPN (Cartpanda/JVZoo: connector).
-  const CLASSIFIER_ROLE_PLATFORMS = new Set(['buygoods', 'digistore24']);
+  // JVZoo entrou em 2026-08-12: os nomes anotam o papel ("(Upgrade)",
+  // "(Last Chance)") e a reconciliação por posição — único caminho até
+  // então — não sabia emitir DOWNSELL. Quando o classificador não reconhece
+  // o SKU (family null), o papel continua vindo da sessão (jvzooSessions).
+  const CLASSIFIER_ROLE_PLATFORMS = new Set(['buygoods', 'digistore24', 'jvzoo']);
   const orderType: ProductType =
     CLASSIFIER_ROLE_PLATFORMS.has(normalized.platformSlug) && classified.family !== null
       ? catalogType

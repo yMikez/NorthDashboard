@@ -62,11 +62,12 @@ export async function classifyExistingProducts(): Promise<BackfillStats> {
       if (!p.family) stats.unrecognized.push(p.externalId);
       continue;
     }
-    // Cartpanda/JVZoo: o PAPEL (productType/funnelStep) é do connector
-    // (up_sell_id / prekey), não do nome. O classificador só dá a família.
-    // Então aqui atualizamos família/potes mas NUNCA o productType, e NÃO
-    // reconciliamos Order.productType/funnelStep — senão upsell (que o nome
-    // não anota como upgrade) seria reescrito pra FRONTEND e o funil quebraria.
+    // Cartpanda: o PAPEL (productType/funnelStep) é do connector (up_sell_id),
+    // não do nome. O classificador só dá a família. Então aqui atualizamos
+    // família/potes mas NUNCA o productType, e NÃO reconciliamos
+    // Order.productType/funnelStep — senão upsell (que o nome não anota como
+    // upgrade) seria reescrito pra FRONTEND e o funil quebraria.
+    // (JVZoo saiu deste grupo em 2026-08-12: lá o nome anota o papel.)
     const isCartpanda = CONNECTOR_ROLE_PLATFORMS.has(p.platform?.slug ?? '');
 
     const productTypeChanged = !isCartpanda && p.productType !== c.type;
