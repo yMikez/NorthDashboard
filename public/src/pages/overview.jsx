@@ -545,7 +545,10 @@ function OverviewPage({ filters, setFilters }) {
                   <th className="num">Pedidos</th>
                   <th className="num">Receita</th>
                   <th className="num">Aprovação</th>
-                  <th className="num">Margem</th>
+                  {/* Era "Margem" (net − CPA), uma TERCEIRA definição sob o
+                      mesmo rótulo — divergia do ranking e do drawer. Agora é
+                      o modelo da planilha CPA, igual nas três telas. */}
+                  <th className="num" title="NET AFTER CPA do período = (NET AOV − CPA por venda) × FEs aprovadas. Mesma conta do ranking de afiliados.">Net after CPA</th>
                 </tr>
               </thead>
               <tbody>
@@ -575,8 +578,13 @@ function OverviewPage({ filters, setFilters }) {
                       <td className="num cell-mono">{fmtInt(a.orders)}</td>
                       <td className="num cell-mono">{fmtCurrency(a.revenue, cur, 0)}</td>
                       <td className={`num cell-mono ${apClass}`}>{(a.approvalRate * 100).toFixed(1)}%</td>
-                      <td className="num cell-mono" style={{ color: a.netMargin > 0 ? 'var(--money)' : 'var(--danger)' }}>
-                        {fmtCurrency(a.netMargin, cur, 0)}
+                      <td className="num cell-mono"
+                        title={a.netAfterCpaUsd != null
+                          ? `${fmtCurrency(a.netAfterCpaUsd, cur, 2)}/venda × ${a.feApprovedCount} FEs aprovadas`
+                          : 'sem CPA observado no período'}
+                        style={{ color: a.netAfterCpaTotalUsd == null ? 'var(--fg5)'
+                          : a.netAfterCpaTotalUsd > 0 ? 'var(--money)' : 'var(--danger)' }}>
+                        {a.netAfterCpaTotalUsd != null ? fmtCurrency(a.netAfterCpaTotalUsd, cur, 0) : '—'}
                       </td>
                     </tr>
                   );

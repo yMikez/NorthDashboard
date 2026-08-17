@@ -316,7 +316,17 @@ export interface AffiliateDetailResponse {
     refundRate: number;
     cbRate: number;
     cpa: number;
+    /** @deprecated net−CPA misturava status e ignorava COGS/frete/opex — use netAfterCpa*. */
     netMargin: number;
+    // Modelo da planilha CPA — os MESMOS números do ranking.
+    netAovUsd: number;
+    cpaPerFe: number;
+    netAfterCpaUsd: number | null;       // por pedido
+    netAfterCpaTotalUsd: number | null;  // × FEs aprovadas = total do período
+    cpaStatus: 'saudavel' | 'atencao' | 'renegociar' | null;
+    refundCbPctUsed: number;
+    refundCbPctOverride: number | null;
+    opexPctUsed: number;
     // AOV direto = revenue / feApprovedCount. Receita do próprio
     // afiliado dividida por FEs aprovadas dele. Não conta cross-sells.
     aov: number;
@@ -384,7 +394,8 @@ export interface AffiliatesResponse {
     // netAfterCpaUsd = netAovUsd − cpaPerFe (null sem CPA detectado);
     // cpaStatus: 'saudavel' | 'atencao' | 'renegociar' | null.
     netAovUsd: number;
-    netAfterCpaUsd: number | null;
+    netAfterCpaUsd: number | null;       // por pedido
+    netAfterCpaTotalUsd: number | null;  // × FEs aprovadas = total do período
     cpaStatus: string | null;
     // Refund&CB efetivamente usado (override do afiliado ?? default da
     // plataforma) + o override cru (null = herdando).
@@ -566,7 +577,11 @@ export interface OverviewResponse {
     revenue: number;
     orders: number;
     approvalRate: number;
-    netMargin: number;
+    feApprovedCount: number;
+    // Modelo da planilha CPA (mesma conta do ranking e do drawer). Substituiu
+    // netMargin (net − CPA), que era uma terceira definição sob o mesmo rótulo.
+    netAfterCpaUsd: number | null;
+    netAfterCpaTotalUsd: number | null;
   }>;
   platformHealth: Array<{
     slug: string;
@@ -606,7 +621,9 @@ const ORDER_COMPUTE_SELECT = {
   fulfillmentUsd: true,
   platform: { select: { slug: true, displayName: true } },
   product: { select: { externalId: true, name: true, productType: true } },
-  affiliate: { select: { externalId: true, nickname: true } },
+  // refundCbPctOverride alimenta o NET AOV do afiliado no top-5 do overview
+  // (mesmo modelo do ranking) — ver computeTopAffiliates.
+  affiliate: { select: { externalId: true, nickname: true, refundCbPctOverride: true } },
 } satisfies Prisma.OrderSelect;
 
 type OrderWithJoins = Prisma.OrderGetPayload<{ select: typeof ORDER_COMPUTE_SELECT }>;
@@ -1033,6 +1050,9 @@ async function topAffiliatesQuery(
     cpa: Prisma.Decimal;
     orders: bigint;
     approved_orders: bigint;
+    fe_approved: bigint;
+    refund_override: Prisma.Decimal | null;
+    latest_cpa: Prisma.Decimal | null;
   }>>(Prisma.sql`
     SELECT
       a."id"             AS affiliate_id,
@@ -1043,29 +1063,54 @@ async function topAffiliatesQuery(
       COALESCE(SUM(o."netAmountUsd")   FILTER (WHERE o."status"='APPROVED'), 0)::numeric(14,2) AS net,
       COALESCE(SUM(o."cpaPaidUsd"), 0)::numeric(14,2)                                       AS cpa,
       COUNT(*)::bigint                                                                       AS orders,
-      COUNT(*) FILTER (WHERE o."status"='APPROVED')::bigint                                  AS approved_orders
+      COUNT(*) FILTER (WHERE o."status"='APPROVED')::bigint                                  AS approved_orders,
+      COUNT(*) FILTER (WHERE o."status"='APPROVED' AND o."productType"='FRONTEND')::bigint    AS fe_approved,
+      a."refundCbPctOverride"                                                                AS refund_override,
+      -- CPA negociado: último valor observado em FE+APPROVED+cpa>0. Mesma
+      -- definição do ranking (getAffiliatesSql) pros números baterem.
+      (
+        SELECT ROUND(o2."cpaPaidUsd", 2) FROM "Order" o2
+        WHERE o2."affiliateId" = a.id AND o2."status"='APPROVED'
+          AND o2."productType"='FRONTEND' AND o2."cpaPaidUsd" > 0
+          AND o2."orderedAt" >= ${filters.startDate} AND o2."orderedAt" <= ${filters.endDate}
+        ORDER BY o2."orderedAt" DESC, o2."id" DESC LIMIT 1
+      )                                                                                      AS latest_cpa
     FROM "Order" o
     JOIN "Platform"  pl ON o."platformId"  = pl.id
     JOIN "Product"   pr ON o."productId"   = pr.id
     JOIN "Affiliate" a  ON o."affiliateId" = a.id
     WHERE ${whereSql}
-    GROUP BY a."id", a."externalId", a."nickname", pl."slug"
+    GROUP BY a."id", a."externalId", a."nickname", a."refundCbPctOverride", pl."slug"
     ORDER BY revenue DESC
     LIMIT ${limit}
   `);
+  // Mesma régua do ranking e do drawer: modelo da planilha CPA, não net−CPA.
+  const pm = await getProfitModelInputs();
   return aggRows.map((r) => {
     const orders = Number(r.orders);
     const approved = Number(r.approved_orders);
-    const net = Number(r.net);
-    const cpa = Number(r.cpa);
+    const feApproved = Number(r.fe_approved);
+    const revenue = round2(Number(r.revenue));
+    const aov = feApproved > 0 ? revenue / feApproved : 0;
+    const ppBase = pm.byPlatform.get(r.platform_slug) ?? { feePct: 0, refundCbPct: 0 };
+    const ovr = r.refund_override != null ? Number(r.refund_override) : null;
+    const nAov = netAovUsd(aov, {
+      feePct: ppBase.feePct,
+      refundCbPct: ovr ?? ppBase.refundCbPct,
+      opexPct: pm.opexPct,
+    });
+    const latestCpa = r.latest_cpa != null ? round2(Number(r.latest_cpa)) : 0;
+    const nAfter = latestCpa > 0 ? round2(nAov - latestCpa) : null;
     return {
       externalId: r.external_id,
       nickname: r.nickname,
       platformSlug: r.platform_slug,
-      revenue: round2(Number(r.revenue)),
+      revenue,
       orders,
       approvalRate: round4(orders ? approved / orders : 0),
-      netMargin: round2(net - cpa),
+      feApprovedCount: feApproved,
+      netAfterCpaUsd: nAfter,
+      netAfterCpaTotalUsd: nAfter != null ? round2(nAfter * feApproved) : null,
     };
   });
 }
@@ -1091,7 +1136,7 @@ async function getOverviewLegacy(
   const daily = computeDaily(orders, filters.startDate, filters.endDate);
   const byCountry = computeByCountry(orders);
   const byProductType = computeByProductType(orders);
-  const topAffiliates = computeTopAffiliates(orders, 5);
+  const topAffiliates = await computeTopAffiliates(orders, 5);
   const platformHealth = await computePlatformHealth(orders);
   const response: OverviewResponse = {
     range: { start: filters.startDate.toISOString(), end: filters.endDate.toISOString() },
@@ -2793,6 +2838,7 @@ export async function getAffiliateDetail(
       nickname: true,
       firstSeenAt: true,
       lastOrderAt: true,
+      refundCbPctOverride: true,
       platform: { select: { slug: true } },
     },
   });
@@ -2825,7 +2871,7 @@ export async function getAffiliateDetail(
     periodWhere.productType = { in: filters.productTypes };
   }
 
-  const [periodOrders, ltvAgg, feSessionKeys] = await Promise.all([
+  const [periodOrders, ltvAgg, feSessionKeys, pm] = await Promise.all([
     db.order.findMany({
       where: periodWhere,
       select: {
@@ -2861,6 +2907,8 @@ export async function getAffiliateDetail(
         platform: { select: { slug: true } },
       },
     }),
+    // %s do modelo CPA (taxa da plataforma, refund&cb, opex, régua de status).
+    getProfitModelInputs(),
   ]);
 
   // KPIs
@@ -2871,13 +2919,20 @@ export async function getAffiliateDetail(
   let refunds = 0;
   let chargebacks = 0;
   let feApprovedCount = 0; // FE+APPROVED — denom do AOV direto
+  // CPA negociado = ÚLTIMO valor observado em FE+APPROVED+cpa>0 (mesma
+  // definição do ranking; periodOrders já vem ordenado por orderedAt asc).
+  let latestCpa = 0;
   for (const o of periodOrders) {
     net += toNumber(o.netAmountUsd);
     cpa += toNumber(o.cpaPaidUsd);
     if (o.status === 'APPROVED') {
       orders++;
       revenue += toNumber(o.grossAmountUsd);
-      if (o.productType === 'FRONTEND') feApprovedCount++;
+      if (o.productType === 'FRONTEND') {
+        feApprovedCount++;
+        const c = toNumber(o.cpaPaidUsd);
+        if (c > 0) latestCpa = Math.round(c * 100) / 100;
+      }
     } else if (o.status === 'REFUNDED') refunds++;
     else if (o.status === 'CHARGEBACK') chargebacks++;
   }
@@ -2942,6 +2997,29 @@ export async function getAffiliateDetail(
     }
   }
 
+  // AOV direto (mesmo numerador/denominador do ranking) alimenta o modelo.
+  const aovDirect = feApprovedCount > 0 ? revenue / feApprovedCount : 0;
+  const modelKpis = (() => {
+    const ppBase = pm.byPlatform.get(aff.platform.slug) ?? { feePct: 0, refundCbPct: 0 };
+    const ovr = aff.refundCbPctOverride != null ? Number(aff.refundCbPctOverride) : null;
+    const pp = { feePct: ppBase.feePct, refundCbPct: ovr ?? ppBase.refundCbPct };
+    const nAov = netAovUsd(aovDirect, { ...pp, opexPct: pm.opexPct });
+    const nAfter = latestCpa > 0 ? round2(nAov - latestCpa) : null;
+    return {
+      netAovUsd: nAov,
+      cpaPerFe: latestCpa,
+      netAfterCpaUsd: nAfter,
+      // Total do período: quanto o afiliado deixou depois de pago. Null
+      // quando não há CPA observado (afiliado organic) — melhor "—" do que
+      // um total que finge ser lucro sem custo de aquisição.
+      netAfterCpaTotalUsd: nAfter != null ? round2(nAfter * feApprovedCount) : null,
+      cpaStatus: nAfter != null ? cpaStatus(nAfter, pm.thresholds) : null,
+      refundCbPctUsed: pp.refundCbPct,
+      refundCbPctOverride: ovr,
+      opexPctUsed: pm.opexPct,
+    };
+  })();
+
   const kpis = {
     revenue: round2(revenue),
     orders,
@@ -2953,7 +3031,19 @@ export async function getAffiliateDetail(
     refundRate: round4(refunds / denom),
     cbRate: round4(chargebacks / denom),
     cpa: round2(cpa),
+    // netMargin (net − CPA) SAIU do drawer em 2026-08-12: `net` somava todos
+    // os status, então a linha de estorno da Digistore entrava negativa
+    // enquanto o CPA da venda original continuava cheio — e COGS, frete e
+    // opex ficavam de fora. Não correspondia a nenhuma conta real. Mantido no
+    // payload só pra não quebrar quem ainda lê; a régua do usuário é o modelo
+    // CPA abaixo.
     netMargin: round2(net - cpa),
+    // Modelo da planilha CPA, MESMAS contas do ranking (têm que bater
+    // número a número — é a mesma tela, dois níveis de zoom):
+    //   NET AOV        = AOV × (1 − refund&cb% − taxa da plataforma − opex%)
+    //   NET AFTER CPA  = NET AOV − CPA por venda        (por pedido)
+    //   total          = NET AFTER CPA × FEs aprovadas  (o que sobrou no período)
+    ...modelKpis,
     // AOV direto = receita PRÓPRIA do afiliado / FEs aprovadas dele.
     // Lente direta (orders onde affiliateId = afiliado), NÃO conta
     // cross-sells da sessão creditadas a outros via last-click.
@@ -3463,6 +3553,7 @@ export async function getAffiliatesLegacy(
         return {
           netAovUsd: nAov,
           netAfterCpaUsd: nAfter,
+          netAfterCpaTotalUsd: nAfter != null ? round2(nAfter * feCount) : null,
           cpaStatus: nAfter != null ? cpaStatus(nAfter, pm.thresholds) : null,
           refundCbPctUsed: pp.refundCbPct,
           refundCbPctOverride: ovr,
@@ -3857,6 +3948,8 @@ export async function getAffiliatesSql(
         return {
           netAovUsd: nAov,
           netAfterCpaUsd: nAfter,
+          // Total do período — é o número que o drawer do afiliado mostra.
+          netAfterCpaTotalUsd: nAfter != null ? round2(nAfter * feApprovedCount) : null,
           cpaStatus: nAfter != null ? cpaStatus(nAfter, pm.thresholds) : null,
           refundCbPctUsed: pp.refundCbPct,
           refundCbPctOverride: ovr,
@@ -4394,18 +4487,24 @@ function computeByProductType(
     .map(([label, value]) => ({ label, value: round2(value) }));
 }
 
-function computeTopAffiliates(orders: OrderWithJoins[], limit: number) {
+// Espelha topAffiliatesQuery pro caminho legacy do overview (usado quando há
+// filtro por SKU). Mesmo modelo da planilha CPA — ver o comentário de lá.
+async function computeTopAffiliates(orders: OrderWithJoins[], limit: number) {
   const map = new Map<
     string,
     {
       externalId: string;
       nickname: string | null;
       platformSlug: string;
+      refundCbPctOverride: number | null;
       revenue: number;
       net: number;
       cpa: number;
       orders: number;
       approvedOrders: number;
+      feApproved: number;
+      latestCpa: number;
+      latestCpaAt: number;
     }
   >();
 
@@ -4418,11 +4517,16 @@ function computeTopAffiliates(orders: OrderWithJoins[], limit: number) {
         externalId: o.affiliate.externalId,
         nickname: o.affiliate.nickname,
         platformSlug: o.platform.slug,
+        refundCbPctOverride: o.affiliate.refundCbPctOverride != null
+          ? Number(o.affiliate.refundCbPctOverride) : null,
         revenue: 0,
         net: 0,
         cpa: 0,
         orders: 0,
         approvedOrders: 0,
+        feApproved: 0,
+        latestCpa: 0,
+        latestCpaAt: 0,
       };
     entry.orders++;
     if (o.status === 'APPROVED') {
@@ -4430,22 +4534,44 @@ function computeTopAffiliates(orders: OrderWithJoins[], limit: number) {
       entry.revenue += toNumber(o.grossAmountUsd);
       entry.net += toNumber(o.netAmountUsd);
       entry.cpa += toNumber(o.cpaPaidUsd);
+      if (o.productType === 'FRONTEND') {
+        entry.feApproved++;
+        const c = toNumber(o.cpaPaidUsd);
+        const t = o.orderedAt.getTime();
+        if (c > 0 && t >= entry.latestCpaAt) {
+          entry.latestCpaAt = t;
+          entry.latestCpa = round2(c);
+        }
+      }
     }
     map.set(key, entry);
   }
 
+  const pm = await getProfitModelInputs();
   return Array.from(map.values())
     .sort((a, b) => b.revenue - a.revenue)
     .slice(0, limit)
-    .map((e) => ({
+    .map((e) => {
+      const aov = e.feApproved > 0 ? e.revenue / e.feApproved : 0;
+      const ppBase = pm.byPlatform.get(e.platformSlug) ?? { feePct: 0, refundCbPct: 0 };
+      const nAov = netAovUsd(aov, {
+        feePct: ppBase.feePct,
+        refundCbPct: e.refundCbPctOverride ?? ppBase.refundCbPct,
+        opexPct: pm.opexPct,
+      });
+      const nAfter = e.latestCpa > 0 ? round2(nAov - e.latestCpa) : null;
+      return {
       externalId: e.externalId,
       nickname: e.nickname,
       platformSlug: e.platformSlug,
       revenue: round2(e.revenue),
       orders: e.orders,
       approvalRate: round4(e.orders ? e.approvedOrders / e.orders : 0),
-      netMargin: round2(e.net - e.cpa),
-    }));
+      feApprovedCount: e.feApproved,
+      netAfterCpaUsd: nAfter,
+      netAfterCpaTotalUsd: nAfter != null ? round2(nAfter * e.feApproved) : null,
+      };
+    });
 }
 
 async function computePlatformHealth(

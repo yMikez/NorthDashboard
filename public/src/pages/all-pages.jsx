@@ -868,12 +868,26 @@ function AffiliateDrawer({ affiliateId, filters, onClose }) {
               <div className="v">{fmtCurrency(k.cpa, cur, 0)}</div>
               <div className="s">total transferido ao afiliado</div>
             </div>
+            {/* Substitui o antigo "Net margin" (net − CPA), que somava os
+                estornos no net mas não descontava o CPA da venda estornada, e
+                ignorava COGS/frete/opex. Aqui é o modelo da planilha CPA, com
+                os MESMOS números do ranking — só que somado no período. */}
             <div className="mini-kpi">
-              <div className="l">Net margin</div>
-              <div className="v" style={{ color: k.netMargin > 0 ? 'var(--success)' : 'var(--danger)' }}>
-                {fmtCurrency(k.netMargin, cur, 0)}
+              <div className="l">Net after CPA · total</div>
+              <div className="v" style={{
+                color: k.netAfterCpaTotalUsd == null ? 'var(--fg5)'
+                  : k.netAfterCpaTotalUsd < 0 ? 'var(--danger)'
+                  : k.cpaStatus === 'saudavel' ? 'var(--money)' : 'var(--warning)',
+              }}>
+                {k.netAfterCpaTotalUsd != null ? fmtCurrency(k.netAfterCpaTotalUsd, cur, 0) : '—'}
               </div>
-              <div className="s">net − CPA</div>
+              <div className="s" title={k.netAfterCpaUsd != null
+                ? `NET AOV ${fmtCurrency(k.netAovUsd, cur, 2)} = AOV ${fmtCurrency(k.aov, cur, 2)} × (1 − ${k.refundCbPctUsed}% refund&cb${k.refundCbPctOverride != null ? ' (override)' : ''} − taxa da plataforma − ${k.opexPctUsed}% opex).\nNET AFTER CPA ${fmtCurrency(k.netAfterCpaUsd, cur, 2)} = NET AOV − CPA ${fmtCurrency(k.cpaPerFe, cur, 2)}.\nTotal = × ${fmtInt(k.feApprovedCount)} FEs aprovadas.`
+                : 'Sem CPA observado no período — afiliado organic ou sem venda de front.'}>
+                {k.netAfterCpaUsd != null
+                  ? `${fmtCurrency(k.netAfterCpaUsd, cur, 0)}/venda × ${fmtInt(k.feApprovedCount)} FEs`
+                  : 'sem CPA observado no período'}
+              </div>
             </div>
             <div className="mini-kpi">
               <div className="l">AOV</div>
