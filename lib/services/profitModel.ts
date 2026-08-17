@@ -26,7 +26,29 @@ import { db } from '../db';
 // Plataformas onde o refund cria LINHA EXTRA (venda original continua
 // APPROVED) em vez de atualizar in-place. Muda o denominador das taxas:
 // APPROVED já é o total de vendas reais.
-const EXTRA_ROW_REFUND_PLATFORMS = new Set(['digistore24']);
+export const EXTRA_ROW_REFUND_PLATFORMS = new Set(['digistore24']);
+
+/**
+ * Pedidos REAIS de um recorte, descontando as linhas sintéticas.
+ *
+ * Na Digistore o estorno é uma LINHA EXTRA (a venda original segue APPROVED),
+ * então contar todas as linhas infla o denominador e dilui qualquer taxa
+ * calculada em cima dele — era o bug de "9,36% exibido vs 10,45% real".
+ * Nas plataformas in-place a linha estornada É a venda, então conta.
+ *
+ * Definição única — usada pelo modelo de lucro, pelos cards de reembolso da
+ * Visão Geral e pelas taxas por afiliado.
+ */
+export function realOrderCount(
+  platformSlug: string,
+  allOrders: number,
+  refunds: number,
+  chargebacks: number,
+): number {
+  return EXTRA_ROW_REFUND_PLATFORMS.has(platformSlug)
+    ? Math.max(0, allOrders - refunds - chargebacks)
+    : allOrders;
+}
 // Amostra mínima da coorte madura pra confiar na taxa real; abaixo disso
 // o modelo cai no refundCbPct manual da plataforma.
 const REAL_RATE_MIN_SAMPLE = 50;

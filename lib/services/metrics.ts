@@ -6,7 +6,10 @@ import {
   queryDailyMetrics,
   type DailyMetricsRow,
 } from './dailyMetrics';
-import { getProfitModelInputs, getObservedRefundCbPct, netAovUsd, cpaStatus } from './profitModel';
+import {
+  getProfitModelInputs, getObservedRefundCbPct, netAovUsd, cpaStatus,
+  realOrderCount, EXTRA_ROW_REFUND_PLATFORMS,
+} from './profitModel';
 import { DEFAULT_SUPPLIER } from './cogs';
 
 export interface MetricsFilters {
@@ -304,6 +307,9 @@ export interface AffiliateDetailResponse {
     revenue: number;
     orders: number;
     allOrders: number;
+    // Pedidos REAIS (sem as linhas sintéticas de estorno da Digistore) —
+    // denominador das três taxas abaixo.
+    realOrders: number;
     refunds: number;
     chargebacks: number;
     approvalRate: number;
@@ -359,6 +365,10 @@ export interface AffiliatesResponse {
     revenue: number;
     orders: number;
     allOrders: number;
+    // Pedidos REAIS: allOrders menos as linhas sintéticas de estorno da
+    // Digistore. É o denominador das três taxas abaixo — allOrders segue
+    // exposto só pra auditoria da diferença.
+    realOrders: number;
     refunds: number;
     chargebacks: number;
     approvalRate: number;
@@ -2872,7 +2882,10 @@ export async function getAffiliateDetail(
     else if (o.status === 'CHARGEBACK') chargebacks++;
   }
   const allOrders = periodOrders.length;
-  const denom = allOrders || 1;
+  // Denominador das taxas = pedidos REAIS (linhas sintéticas de estorno da
+  // Digistore fora). Mesma régua do ranking — ver realOrderCount.
+  const realOrders = realOrderCount(aff.platform.slug, allOrders, refunds, chargebacks);
+  const denom = realOrders || 1;
 
   // Session-AOV: pull all orders sharing parent_external_ids of this
   // affiliate's FE orders, sum APPROVED gross, divide by FE-session count.
@@ -2933,6 +2946,7 @@ export async function getAffiliateDetail(
     revenue: round2(revenue),
     orders,
     allOrders,
+    realOrders,
     refunds,
     chargebacks,
     approvalRate: round4(orders / denom),
@@ -3016,7 +3030,7 @@ export async function getAffiliateDetail(
 
   // Auto-flags (same heuristics as the legacy mock-based drawer)
   const flags: AffiliateDetailResponse['flags'] = [];
-  if (allOrders >= 10) {
+  if (realOrders >= 10) {
     if (kpis.cbRate > 0.01) {
       flags.push({
         kind: 'bad',
@@ -3228,8 +3242,13 @@ export async function getAffiliatesLegacy(
         a.net += toNumber(o.netAmountUsd);
       }
       a.cpa += toNumber(o.cpaPaidUsd);
-      a.cogs += toNumber(o.cogsUsd ?? 0);
-      a.fulfillment += toNumber(o.fulfillmentUsd ?? 0);
+      // Idem lente direta: linha sintética de estorno não repete o custo.
+      const isSynthetic = EXTRA_ROW_REFUND_PLATFORMS.has(o.platform.slug)
+        && (o.status === 'REFUNDED' || o.status === 'CHARGEBACK');
+      if (!isSynthetic) {
+        a.cogs += toNumber(o.cogsUsd ?? 0);
+        a.fulfillment += toNumber(o.fulfillmentUsd ?? 0);
+      }
     }
   }
   // ---------------- /attribution pass ----------------
@@ -3323,8 +3342,14 @@ export async function getAffiliatesLegacy(
       a.allOrders++;
       a.cpa += toNumber(o.cpaPaidUsd);
       a.net += toNumber(o.netAmountUsd);
-      a.cogs += toNumber(o.cogsUsd ?? 0);
-      a.fulfillment += toNumber(o.fulfillmentUsd ?? 0);
+      // Linha sintética de estorno (Digistore) não repete COGS/frete — a
+      // venda original já os carrega. Ver realOrderCount/NOT_SYNTHETIC_ROW.
+      const isSynthetic = EXTRA_ROW_REFUND_PLATFORMS.has(o.platform.slug)
+        && (o.status === 'REFUNDED' || o.status === 'CHARGEBACK');
+      if (!isSynthetic) {
+        a.cogs += toNumber(o.cogsUsd ?? 0);
+        a.fulfillment += toNumber(o.fulfillmentUsd ?? 0);
+      }
       if (o.status === 'APPROVED') {
         a.revenue += toNumber(o.grossAmountUsd);
         a.orders++;
@@ -3364,12 +3389,18 @@ export async function getAffiliatesLegacy(
 
   const pm = await getProfitModelInputs();
 
-  const totalRevenue = Array.from(inPeriod.values()).reduce((s, a) => s + a.revenue, 0);
-  const sortedByRev = Array.from(inPeriod.values()).sort((a, b) => b.revenue - a.revenue);
+  // "Ativo" = teve pedido REAL no período. Um afiliado cujo único registro do
+  // período foi o estorno de uma venda antiga (linha extra da Digistore) não
+  // conta como ativo nem como novo. Ver realOrderCount.
+  const activeEntries = Array.from(inPeriod.entries()).filter(
+    ([, a]) => realOrderCount(a.platformSlug, a.allOrders, a.refunds, a.chargebacks) > 0,
+  );
+  const totalRevenue = activeEntries.reduce((s, [, a]) => s + a.revenue, 0);
+  const sortedByRev = activeEntries.map(([, a]) => a).sort((a, b) => b.revenue - a.revenue);
   const top5Revenue = sortedByRev.slice(0, 5).reduce((s, a) => s + a.revenue, 0);
   const concentration = totalRevenue > 0 ? top5Revenue / totalRevenue : 0;
 
-  const nowKeys = new Set(inPeriod.keys());
+  const nowKeys = new Set(activeEntries.map(([k]) => k));
   const newAff = Array.from(nowKeys).filter((k) => !prevSeen.has(k)).length;
   const churnedAff = Array.from(prevSeen).filter((k) => !nowKeys.has(k)).length;
 
@@ -3392,7 +3423,9 @@ export async function getAffiliatesLegacy(
     const orders = a?.orders ?? 0;
     const refunds = a?.refunds ?? 0;
     const chargebacks = a?.chargebacks ?? 0;
-    const denom = allOrders || 1;
+    // Ver comentário gêmeo em getAffiliatesSql: denominador = pedidos REAIS.
+    const realOrders = realOrderCount(aff.platform.slug, allOrders, refunds, chargebacks);
+    const denom = realOrders || 1;
     return {
       externalId: aff.externalId,
       platformSlug: aff.platform.slug,
@@ -3400,11 +3433,12 @@ export async function getAffiliatesLegacy(
       revenue: round2(a?.revenue ?? 0),
       orders,
       allOrders,
+      realOrders,
       refunds,
       chargebacks,
-      approvalRate: allOrders ? round4(orders / denom) : 0,
-      refundRate: allOrders ? round4(refunds / denom) : 0,
-      cbRate: allOrders ? round4(chargebacks / denom) : 0,
+      approvalRate: realOrders ? round4(orders / denom) : 0,
+      refundRate: realOrders ? round4(refunds / denom) : 0,
+      cbRate: realOrders ? round4(chargebacks / denom) : 0,
       cpa: round2(a?.cpa ?? 0),
       // CPA negociado = ÚLTIMO cpaPaidUsd observado em FE+APPROVED+cpa>0
       // (fonte: lista de transações). Imune a refund (status filter) e a
@@ -3479,7 +3513,7 @@ export async function getAffiliatesLegacy(
 
   return {
     summary: {
-      activeNow: inPeriod.size,
+      activeNow: nowKeys.size,
       activePrev: prevSeen.size,
       concentration: round4(concentration),
       newAff,
@@ -3501,6 +3535,13 @@ export async function getAffiliatesLegacy(
 //      heap do Postgres).
 //   3. topCountry em empate de contagem: SQL desempata por código ASC.
 // ============================================================
+// Linha SINTÉTICA = o estorno que a Digistore cria como registro NOVO (a
+// venda original permanece APPROVED ao lado). Ela não é uma venda: não deve
+// somar COGS/frete (já contados na venda) nem entrar em denominador de taxa.
+// Espelha realOrderCount() do profitModel, em SQL.
+const NOT_SYNTHETIC_ROW = Prisma.sql`
+  NOT (pl."slug" = ANY(${[...EXTRA_ROW_REFUND_PLATFORMS]}) AND o."status" IN ('REFUNDED', 'CHARGEBACK'))`;
+
 export async function getAffiliatesSql(
   filters: MetricsFilters,
 ): Promise<AffiliatesResponse> {
@@ -3577,8 +3618,11 @@ export async function getAffiliatesSql(
           COUNT(*) FILTER (WHERE ${inPeriod} AND o."status" = 'CHARGEBACK')::bigint AS chargebacks,
           COALESCE(SUM(o."cpaPaidUsd") FILTER (WHERE ${inPeriod}), 0) AS cpa,
           COALESCE(SUM(o."netAmountUsd") FILTER (WHERE ${inPeriod}), 0) AS net,
-          COALESCE(SUM(o."cogsUsd") FILTER (WHERE ${inPeriod}), 0) AS cogs,
-          COALESCE(SUM(o."fulfillmentUsd") FILTER (WHERE ${inPeriod}), 0) AS fulfillment,
+          -- COGS/frete só das linhas REAIS: na Digistore a linha de estorno
+          -- carrega snapshot próprio e a venda original continua no banco, o
+          -- que contava o custo duas vezes e afundava o lucro do afiliado.
+          COALESCE(SUM(o."cogsUsd") FILTER (WHERE ${inPeriod} AND ${NOT_SYNTHETIC_ROW}), 0) AS cogs,
+          COALESCE(SUM(o."fulfillmentUsd") FILTER (WHERE ${inPeriod} AND ${NOT_SYNTHETIC_ROW}), 0) AS fulfillment,
           COALESCE(SUM(o."grossAmountUsd") FILTER (WHERE ${inPeriod} AND o."status" = 'APPROVED'), 0) AS revenue,
           COUNT(*) FILTER (WHERE ${inPeriod} AND o."status" = 'APPROVED' AND o."productType" = 'FRONTEND')::bigint AS fe_approved_count,
           COUNT(*) FILTER (WHERE ${inPeriod} AND o."status" = 'APPROVED' AND o."productType" = 'FRONTEND' AND o."cpaPaidUsd" > 0)::bigint AS fe_cpa_paid_count,
@@ -3642,6 +3686,7 @@ export async function getAffiliatesSql(
         WITH base AS (
           SELECT o.id, o."affiliateId", o."productType", o."status", o."orderedAt",
                  o."grossAmountUsd", o."netAmountUsd", o."cpaPaidUsd", o."cogsUsd", o."fulfillmentUsd",
+                 ${NOT_SYNTHETIC_ROW} AS is_real,
                  ${SESSION_KEY_SQL} AS skey
           FROM "Order" o
           JOIN "Platform" pl ON o."platformId" = pl.id
@@ -3660,8 +3705,9 @@ export async function getAffiliatesSql(
           COALESCE(SUM(b."grossAmountUsd") FILTER (WHERE b."status" = 'APPROVED'), 0) AS revenue,
           COALESCE(SUM(b."netAmountUsd") FILTER (WHERE b."status" = 'APPROVED'), 0) AS net,
           COALESCE(SUM(b."cpaPaidUsd"), 0) AS cpa,
-          COALESCE(SUM(b."cogsUsd"), 0) AS cogs,
-          COALESCE(SUM(b."fulfillmentUsd"), 0) AS fulfillment
+          -- Idem lente direta: linha sintética de estorno não repete o custo.
+          COALESCE(SUM(b."cogsUsd") FILTER (WHERE b.is_real), 0) AS cogs,
+          COALESCE(SUM(b."fulfillmentUsd") FILTER (WHERE b.is_real), 0) AS fulfillment
         FROM base b
         JOIN fe ON fe.skey = b.skey
         GROUP BY fe."affiliateId"
@@ -3717,10 +3763,17 @@ export async function getAffiliatesSql(
   }
 
   // Summary — mesmas definições da legacy, derivadas das rows agregadas.
+  const slugByAffId = new Map(affiliatesAll.map((a) => [a.id, a.platform.slug]));
   let activeNow = 0, activePrev = 0, newAff = 0, churnedAff = 0, totalRevenue = 0;
   const revenues: number[] = [];
   for (const r of aggRows) {
-    const hasPeriod = Number(r.all_orders) > 0;
+    // "Ativo" = teve pedido REAL no período. Sem isso, um afiliado cujo único
+    // registro do período foi o estorno de uma venda antiga entrava como
+    // ativo (e como "novo", se não tinha nada no período anterior).
+    const hasPeriod = realOrderCount(
+      slugByAffId.get(r.affiliate_id) ?? '',
+      Number(r.all_orders), Number(r.refunds), Number(r.chargebacks),
+    ) > 0;
     const rev = toNumber(r.revenue);
     if (hasPeriod) {
       activeNow++;
@@ -3743,7 +3796,12 @@ export async function getAffiliatesSql(
   const emptySpark = new Array(SPARK_DAYS).fill(0);
   const affiliates = affiliatesAll.map((aff) => {
     const a = aggById.get(aff.id);
-    const hasPeriod = a ? Number(a.all_orders) > 0 : false;
+    const hasPeriod = a
+      ? realOrderCount(
+          aff.platform.slug,
+          Number(a.all_orders), Number(a.refunds), Number(a.chargebacks),
+        ) > 0
+      : false;
     const att = attById.get(aff.id);
     const ltv = ltvMap.get(aff.id);
 
@@ -3751,7 +3809,12 @@ export async function getAffiliatesSql(
     const orders = a ? Number(a.approved_orders) : 0;
     const refunds = a ? Number(a.refunds) : 0;
     const chargebacks = a ? Number(a.chargebacks) : 0;
-    const denom = allOrders || 1;
+    // Denominador das taxas = pedidos REAIS. Na Digistore as linhas de
+    // estorno são registros extras, não vendas — contá-las diluía a taxa de
+    // reembolso do afiliado e afundava a de aprovação (a venda estornada
+    // aparecia nos dois lados da divisão).
+    const realOrders = realOrderCount(aff.platform.slug, allOrders, refunds, chargebacks);
+    const denom = realOrders || 1;
     const cpa = a ? toNumber(a.cpa) : 0;
     const net = a ? toNumber(a.net) : 0;
     const cogs = a ? toNumber(a.cogs) : 0;
@@ -3770,11 +3833,12 @@ export async function getAffiliatesSql(
       revenue: round2(a ? toNumber(a.revenue) : 0),
       orders,
       allOrders,
+      realOrders,
       refunds,
       chargebacks,
-      approvalRate: allOrders ? round4(orders / denom) : 0,
-      refundRate: allOrders ? round4(refunds / denom) : 0,
-      cbRate: allOrders ? round4(chargebacks / denom) : 0,
+      approvalRate: realOrders ? round4(orders / denom) : 0,
+      refundRate: realOrders ? round4(refunds / denom) : 0,
+      cbRate: realOrders ? round4(chargebacks / denom) : 0,
       cpa: round2(cpa),
       feApprovedCount,
       feCpaPaidCount: a ? Number(a.fe_cpa_paid_count) : 0,

@@ -20,7 +20,7 @@
 // Order; SMS_RECOVERY (productType) também é back.
 
 import { db } from '../db';
-import { getProfitModelInputs } from './profitModel';
+import { getProfitModelInputs, realOrderCount } from './profitModel';
 import { SMS_UTM_SOURCE } from '../connectors/sms/config';
 
 const TAUK_COMMISSION_PCT = (() => {
@@ -142,8 +142,7 @@ function reduceRefundCounts(
 
   let salesCount = 0;
   for (const [slug, a] of perPlatform) {
-    const extraRow = slug === 'digistore24';
-    salesCount += extraRow ? a.total - a.refunded - a.cb : a.total;
+    salesCount += realOrderCount(slug, a.total, a.refunded, a.cb);
   }
 
   let refundedCount = 0;

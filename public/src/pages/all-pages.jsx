@@ -485,6 +485,7 @@ function AffiliateRefundModal({ aff, onCancel, onSaved }) {
 function LeaderboardPage({ filters, onOpenAffiliate }) {
   const [sortBy, setSortBy] = useState('revenue');
   const [minOrders, setMinOrders] = useState(1);
+  const [query, setQuery] = useState('');
   const [state, setLbState] = useState({ status: 'loading', data: null, error: null });
   // Modal de override do refund&cb% por afiliado (substitui o prompt nativo).
   const [refundModal, setRefundModal] = useState(null);
@@ -528,7 +529,14 @@ function LeaderboardPage({ filters, onOpenAffiliate }) {
     return { sum, count: withCpa.length, avg: withCpa.length ? sum / withCpa.length : 0 };
   })();
 
-  const rows = all.filter((a) => a.allOrders >= minOrders).sort((a, b) => {
+  // Busca por nome OU id. Quando há termo, o mínimo de pedidos é ignorado —
+  // procurar um afiliado específico e não achar porque ele tem 2 vendas seria
+  // o pior resultado possível.
+  const q = query.trim().toLowerCase();
+  const rows = all.filter((a) => (q
+    ? ((a.nickname || '').toLowerCase().includes(q) || a.externalId.toLowerCase().includes(q))
+    : a.realOrders >= minOrders
+  )).sort((a, b) => {
     switch (sortBy) {
       case 'orders': return b.orders - a.orders;
       case 'aov': return aovOf(b) - aovOf(a);
@@ -550,7 +558,18 @@ function LeaderboardPage({ filters, onOpenAffiliate }) {
           <h2>Quem está <em>puxando o resultado</em>.</h2>
           <span className="sub">Ranking + diretório fundidos · modelo da planilha CPA: NET AOV → Net after CPA → status de renegociação</span>
         </div>
-        <div className="page-head-actions">
+        <div className="page-head-actions" style={{ flexWrap: 'wrap' }}>
+          <div className="select-btn" style={{ padding: '0 10px', width: 'min(240px, 100%)' }}>
+            <Icon name="search" size={13}/>
+            <input value={query} onChange={(e) => setQuery(e.target.value)}
+              placeholder="Buscar por nome ou ID..."
+              style={{ background: 'transparent', border: 0, color: 'var(--fg1)', outline: 'none', flex: 1, fontFamily: 'var(--f-body)', fontSize: 12 }}
+            />
+            {query && (
+              <button className="btn btn-ghost" style={{ padding: '0 4px', fontSize: 11 }}
+                title="Limpar busca" onClick={() => setQuery('')}>×</button>
+            )}
+          </div>
           <button className="btn btn-ghost" onClick={() => downloadCsv(
             `ranking-afiliados_${isoDateOnly(filters.dateRange.start)}_${isoDateOnly(filters.dateRange.end)}.csv`,
             ['#', 'Afiliado', 'Afiliado ID', 'Plataforma', 'Pedidos aprovados', 'Receita USD', 'FEs aprovadas',
@@ -629,11 +648,16 @@ function LeaderboardPage({ filters, onOpenAffiliate }) {
           ))}
         </div>
         <span className="f-label" style={{ marginLeft: 10 }}>MÍN. PEDIDOS</span>
-        <div className="seg">
+        <div className="seg" style={q ? { opacity: 0.45, pointerEvents: 'none' } : undefined}>
           {[1, 5, 10, 25].map(n => (
             <button key={n} className={minOrders === n ? 'is-active' : ''} onClick={() => setMinOrders(n)}>{n}+</button>
           ))}
         </div>
+        {q && (
+          <span className="f-label" style={{ color: 'var(--fg4)' }}>
+            busca ativa · {rows.length} {rows.length === 1 ? 'afiliado' : 'afiliados'} (mín. de pedidos ignorado)
+          </span>
+        )}
       </div>
 
       {state.status === 'error' && (
@@ -650,10 +674,10 @@ function LeaderboardPage({ filters, onOpenAffiliate }) {
                 <th>Plataforma</th>
                 <th className="num">Pedidos</th>
                 <th className="num">Receita</th>
-                <th className="num" title="AOV global = receita do funil completo atribuído (FE+UPs+DWs+bumps das sessões trazidas) ÷ número de FEs APROVADAS. Mesmo AOV que alimenta o NET AOV do modelo CPA.">AOV global</th>
-                <th>Aprovação</th>
+                <th className="num" title="AOV = receita das vendas creditadas a ESTE afiliado (FE + os upsells/downsells em que a plataforma manteve o crédito nele) ÷ FEs APROVADAS. É a lente DIRETA: cross-sell da mesma sessão que a plataforma creditou a outro afiliado não entra. Mesmo AOV que alimenta o NET AOV do modelo CPA.">AOV</th>
+                <th title="Aprovadas ÷ pedidos REAIS do período. Na Digistore o estorno é uma linha extra e não entra no denominador — a venda original já está contada.">Aprovação</th>
                 <th className="num">Reembolso</th>
-                <th className="num">Chargeback</th>
+                <th className="num" title="Chargebacks ÷ pedidos REAIS do período.">Chargeback</th>
                 <th className="num">CPA pago</th>
                 <th className="num" title="Custos operacionais % (global, modelo CPA) — editável no painel de config acima">Custos op.</th>
                 <th className="num" title="NET AOV = AOV global × (1 − refund&cb% da plataforma − taxa real da plataforma − custos operacionais %). Modelo da planilha CPA — % editáveis em Plataformas e no painel de config acima.">NET AOV</th>
@@ -705,7 +729,7 @@ function LeaderboardPage({ filters, onOpenAffiliate }) {
                       </div>
                     </td>
                     <td className="num cell-mono"
-                      title={`Taxa do MODELO CPA usada no NET AOV: ${r.refundCbPctUsed}% (${r.refundCbPctOverride != null ? 'override deste afiliado' : 'default da plataforma'}). Observada no período: ${(r.refundRate * 100).toFixed(1)}%.`}>
+                      title={`Taxa do MODELO CPA usada no NET AOV: ${r.refundCbPctUsed}% (${r.refundCbPctOverride != null ? 'override deste afiliado' : 'default da plataforma'}).\nObservada no período: ${(r.refundRate * 100).toFixed(1)}% = ${fmtInt(r.refunds)} estornos ÷ ${fmtInt(r.realOrders)} pedidos reais.${r.realOrders !== r.allOrders ? `\n(${fmtInt(r.allOrders - r.realOrders)} linhas de estorno da Digistore fora do denominador.)` : ''}\nCoorte por data da VENDA: período recente ainda vai receber reembolsos.`}>
                       {r.refundCbPctUsed}%
                       {r.refundCbPctOverride != null && <span style={{ fontSize: 8, color: 'var(--glow-cyan)', marginLeft: 3 }}>ovr</span>}
                       <span className={rfClass} style={{ fontSize: 9, marginLeft: 5, opacity: 0.75 }}>obs {(r.refundRate * 100).toFixed(1)}%</span>
@@ -821,18 +845,18 @@ function AffiliateDrawer({ affiliateId, filters, onClose }) {
             </div>
             <div className="mini-kpi">
               <div className="l">Approval rate</div>
-              <div className="v">{k.allOrders ? (k.approvalRate * 100).toFixed(1) + '%' : '—'}</div>
-              <div className="s">{fmtInt(k.allOrders)} tentativas</div>
+              <div className="v">{k.realOrders ? (k.approvalRate * 100).toFixed(1) + '%' : '—'}</div>
+              <div className="s">{fmtInt(k.realOrders)} pedidos reais</div>
             </div>
             <div className="mini-kpi">
               <div className="l">Refund rate</div>
-              <div className="v">{k.allOrders ? (k.refundRate * 100).toFixed(1) + '%' : '—'}</div>
-              <div className="s">meta &lt;6%</div>
+              <div className="v">{k.realOrders ? (k.refundRate * 100).toFixed(1) + '%' : '—'}</div>
+              <div className="s">{fmtInt(k.refunds)} de {fmtInt(k.realOrders)} · meta &lt;6%</div>
             </div>
             <div className="mini-kpi">
               <div className="l">Chargeback</div>
               <div className="v" style={{ color: k.cbRate > 0.01 ? 'var(--danger)' : 'inherit' }}>
-                {k.allOrders ? (k.cbRate * 100).toFixed(2) + '%' : '—'}
+                {k.realOrders ? (k.cbRate * 100).toFixed(2) + '%' : '—'}
               </div>
               <div className="s">limite MCC 1.0%</div>
             </div>
@@ -1084,7 +1108,7 @@ function AllAffiliatesPage({ filters, onOpenAffiliate }) {
               r.nickname || r.externalId, r.externalId, r.platformSlug,
               (r.cpaPerFe || 0) > 0 ? r.cpaPerFe : null, r.revenue, r.orders,
               aovOf(r) > 0 ? aovOf(r) : null,
-              r.allOrders ? r.refundRate * 100 : null,
+              r.realOrders ? r.refundRate * 100 : null,
               r.firstSeenAt ? fmtDateShort(r.firstSeenAt) : null,
               r.lastOrderAt ? fmtDateShort(r.lastOrderAt) : null,
             ]),
@@ -1171,7 +1195,10 @@ function AllAffiliatesPage({ filters, onOpenAffiliate }) {
                         <span style={{ color: 'var(--fg5)', fontFamily: 'var(--f-mono)', fontSize: 11 }}>—</span>
                       )}
                     </td>
-                    <td className="num cell-mono">{r.allOrders ? (r.refundRate * 100).toFixed(1) + '%' : '—'}</td>
+                    <td className="num cell-mono"
+                      title={r.realOrders ? `${fmtInt(r.refunds)} estornos ÷ ${fmtInt(r.realOrders)} pedidos reais` : undefined}>
+                      {r.realOrders ? (r.refundRate * 100).toFixed(1) + '%' : '—'}
+                    </td>
                     <td className="cell-mono">{r.firstSeenAt ? fmtDateShort(r.firstSeenAt) : '—'}</td>
                     <td className="cell-mono">{r.lastOrderAt ? fmtDateShort(r.lastOrderAt) : '—'}</td>
                     <td><Icon name="chevron-right" size={13}/></td>
