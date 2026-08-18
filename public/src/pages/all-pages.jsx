@@ -4168,19 +4168,6 @@ function UserFormDrawer({ mode, initial, isSelf, onClose, onSaved }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(null);
   const [showResetField, setShowResetField] = useState(false);
-  // Pra role NETWORK_PARTNER: lista de networks pra escolher e qual está
-  // selecionada. Carregada lazy quando role passa pra NETWORK_PARTNER.
-  const [networks, setNetworks] = useState(null); // null = ainda não carregou
-  const [networkId, setNetworkId] = useState(initial?.networkId || '');
-
-  useEffect(() => {
-    if (role !== 'NETWORK_PARTNER' || networks !== null) return;
-    let cancelled = false;
-    window.NSApi.adminListNetworks()
-      .then((data) => { if (!cancelled) setNetworks(data.networks || []); })
-      .catch(() => { if (!cancelled) setNetworks([]); });
-    return () => { cancelled = true; };
-  }, [role, networks]);
 
   function toggleTab(id) {
     setAllowedTabs((prev) => {
@@ -4211,16 +4198,10 @@ function UserFormDrawer({ mode, initial, isSelf, onClose, onSaved }) {
     setBusy(true);
     setError(null);
     try {
-      if (role === 'NETWORK_PARTNER' && !networkId) {
-        setError('selecione a network deste partner');
-        setBusy(false);
-        return;
-      }
       const payload = {
         name: name || (isCreate ? undefined : null),
         role,
         allowedTabs: role === 'MEMBER' ? Array.from(allowedTabs) : [],
-        ...(role === 'NETWORK_PARTNER' ? { networkId } : {}),
       };
       if (isCreate) {
         await window.NSApi.adminCreateUser({
@@ -4314,7 +4295,7 @@ function UserFormDrawer({ mode, initial, isSelf, onClose, onSaved }) {
           <div style={{ display: 'grid', gap: 6 }}>
             <span style={{ fontFamily: 'var(--f-mono)', fontSize: 10, letterSpacing: '0.12em', color: 'var(--fg4)' }}>PAPEL</span>
             <div className="seg" style={{ width: 'fit-content' }}>
-              {[['MEMBER', 'Member'], ['ADMIN', 'Admin'], ['NETWORK_PARTNER', 'Partner']].map(([k, l]) => (
+              {[['MEMBER', 'Member'], ['ADMIN', 'Admin']].map(([k, l]) => (
                 <button
                   key={k}
                   className={role === k ? 'is-active' : ''}
@@ -4329,39 +4310,8 @@ function UserFormDrawer({ mode, initial, isSelf, onClose, onSaved }) {
             <div style={{ fontSize: 11, color: 'var(--fg5)', fontFamily: 'var(--f-mono)' }}>
               {role === 'ADMIN' && 'Admin acessa todas as abas + gerencia outros usuários.'}
               {role === 'MEMBER' && 'Member acessa só as abas marcadas abaixo.'}
-              {role === 'NETWORK_PARTNER' && 'Partner externo de uma network. Acessa só os dados da própria network (afiliados, comissões, payouts, contrato).'}
             </div>
           </div>
-
-          {role === 'NETWORK_PARTNER' && (
-            <div style={{ display: 'grid', gap: 6 }}>
-              <span style={{ fontFamily: 'var(--f-mono)', fontSize: 10, letterSpacing: '0.12em', color: 'var(--fg4)' }}>
-                NETWORK VINCULADA
-              </span>
-              {networks === null ? (
-                <div style={{ fontSize: 12, color: 'var(--fg5)' }}>Carregando networks...</div>
-              ) : networks.length === 0 ? (
-                <div style={{ fontSize: 12, color: 'var(--warning)' }}>
-                  Nenhuma network cadastrada. Crie uma na aba <strong>Networks</strong> antes de criar um partner.
-                </div>
-              ) : (
-                <select
-                  value={networkId}
-                  onChange={(e) => setNetworkId(e.target.value)}
-                  style={{
-                    padding: '9px 12px', fontSize: 13, color: 'var(--fg1)',
-                    background: 'var(--bg)', border: '1px solid var(--border)',
-                    borderRadius: 6,
-                  }}
-                >
-                  <option value="">— escolher network —</option>
-                  {networks.map((n) => (
-                    <option key={n.id} value={n.id}>{n.name}</option>
-                  ))}
-                </select>
-              )}
-            </div>
-          )}
 
           {role === 'MEMBER' && (
             <div style={{ display: 'grid', gap: 8 }}>
