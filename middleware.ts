@@ -45,23 +45,19 @@ const SPA_ROUTES = new Set([
   '/refund-cohorts',
   '/leaderboard',
   '/all-affiliates',
-  '/networks',
   '/products',
   '/transactions',
   '/platforms',
   '/health',
   '/costs',
-  '/insights',
   '/custos',
   '/users',
   '/recovery',
   '/tauk',
   '/sms',
-  '/email',
   '/copy-optimizer',
   // /chat foi MIGRADO pra Next.js native route (app/chat/page.tsx)
   // com TS + Tailwind + shadcn. Não rewriter — deixa o Next.js servir.
-  '/network',          // partner shell base
 ]);
 
 export function middleware(req: NextRequest) {

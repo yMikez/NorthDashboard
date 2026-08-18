@@ -18,7 +18,6 @@ import {
   type MetricsFilters,
 } from './metrics';
 import { refreshDailyMetricsNow } from './dailyMetrics';
-import { getInsights } from './insights';
 
 export const TOOLS: Anthropic.Tool[] = [
   {
@@ -109,14 +108,6 @@ export const TOOLS: Anthropic.Tool[] = [
         offset: { type: 'integer', default: 0 },
       },
       required: ['start_date', 'end_date'],
-    },
-  },
-  {
-    name: 'get_insights',
-    description: 'Retorna os 27 insights automáticos já computados (profit/affiliates/funnel/operations). Use quando o usuário pergunta "o que tá rolando hoje?" ou similar, ou pra responder rapidamente sem precisar consultar dados crus.',
-    input_schema: {
-      type: 'object',
-      properties: {},
     },
   },
   {
@@ -322,8 +313,6 @@ export async function executeTool(name: string, input: ToolInput): Promise<unkno
         });
         return data;
       }
-      case 'get_insights':
-        return await getInsights();
       case 'respond_with_blocks':
         // Terminal: route.ts intercepta esta tool antes de chamar executeTool.
         // Se cair aqui é porque alguém esqueceu de filtrar — devolve ack pra

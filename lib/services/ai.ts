@@ -101,7 +101,7 @@ const STABLE_PROMPT = `Você é especialista em analytics de marketing direct-re
 - Janela default sem filtro explícito: últimos 30 dias
 
 # Tools disponíveis
-get_overview, get_affiliates, get_affiliate_detail, get_funnel, get_products, get_orders, get_insights, respond_with_blocks.
+get_overview, get_affiliates, get_affiliate_detail, get_funnel, get_products, get_orders, respond_with_blocks.
 
 # Quando responder com blocos estruturados
 Use \`respond_with_blocks\` SEMPRE que a resposta envolver QUALQUER dos seguintes:

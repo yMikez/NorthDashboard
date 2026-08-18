@@ -21,12 +21,10 @@ interface PatchBody {
   role?: unknown;
   allowedTabs?: unknown;
   active?: unknown;
-  networkId?: unknown;
 }
 
 function parseRole(v: unknown): UserRole {
   if (v === 'ADMIN') return 'ADMIN';
-  if (v === 'NETWORK_PARTNER') return 'NETWORK_PARTNER';
   return 'MEMBER';
 }
 
@@ -73,29 +71,15 @@ export async function PATCH(
       );
     }
     data.role = newRole;
-    // Promover pra admin OU virar partner limpa allowedTabs (admin acessa
-    // tudo; partner é escopado pelo networkId, não usa allowedTabs).
-    // Sair de NETWORK_PARTNER limpa networkId; só pode ter networkId quem é partner.
-    if (newRole === 'ADMIN' || newRole === 'NETWORK_PARTNER') data.allowedTabs = [];
-    if (newRole !== 'NETWORK_PARTNER') data.networkId = null;
+    // Promover pra admin limpa allowedTabs (admin acessa tudo). Qualquer
+    // troca de role sai do mundo networks (programa removido 2026-08-18):
+    // networkId é sempre limpo.
+    if (newRole === 'ADMIN') data.allowedTabs = [];
+    data.networkId = null;
   }
   if ('allowedTabs' in body) {
     const incomingRole = data.role ?? target.role;
-    data.allowedTabs = incomingRole === 'ADMIN' || incomingRole === 'NETWORK_PARTNER'
-      ? [] : sanitizeTabs(body.allowedTabs);
-  }
-  if ('networkId' in body) {
-    const incomingRole = data.role ?? target.role;
-    if (incomingRole !== 'NETWORK_PARTNER') {
-      return NextResponse.json({ error: 'networkId só vale pra role NETWORK_PARTNER' }, { status: 400 });
-    }
-    const nid = typeof body.networkId === 'string' && body.networkId ? body.networkId : null;
-    if (!nid) {
-      return NextResponse.json({ error: 'networkId obrigatório pra role NETWORK_PARTNER' }, { status: 400 });
-    }
-    const exists = await db.network.findUnique({ where: { id: nid }, select: { id: true } });
-    if (!exists) return NextResponse.json({ error: 'network não encontrada' }, { status: 400 });
-    data.networkId = nid;
+    data.allowedTabs = incomingRole === 'ADMIN' ? [] : sanitizeTabs(body.allowedTabs);
   }
   if ('active' in body) {
     const next = !!body.active;

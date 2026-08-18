@@ -11,7 +11,6 @@ function Sidebar({ active, onNav, user, open, onClose }) {
         { id: 'overview', label: 'Visão geral', icon: 'layout-dashboard' },
         { id: 'funnel',   label: 'Funil', icon: 'bar-chart-3' },
         { id: 'refund-cohorts', label: 'Reembolsos', icon: 'percent' },
-        { id: 'insights', label: 'Insights', icon: 'zap' },
         { id: 'custos',   label: 'Custos', icon: 'trending-down' },
       ]
     },
@@ -21,7 +20,6 @@ function Sidebar({ active, onNav, user, open, onClose }) {
         // Ranking + Diretório fundidos numa aba só (modelo planilha CPA).
         // 'all-affiliates' continua rota válida (redireciona pra mesma página).
         { id: 'leaderboard', label: 'Afiliados', icon: 'trophy' },
-        { id: 'networks', label: 'Networks', icon: 'layers' },
       ]
     },
     {
@@ -30,7 +28,6 @@ function Sidebar({ active, onNav, user, open, onClose }) {
         { id: 'recovery', label: 'Recuperação', icon: 'refresh' },
         { id: 'tauk', label: 'Tauk', icon: 'target' },
         { id: 'sms', label: 'SMS', icon: 'message-square' },
-        { id: 'email', label: 'Email', icon: 'mail' },
       ]
     },
     {

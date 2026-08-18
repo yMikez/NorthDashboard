@@ -10,8 +10,6 @@ import { requireAdmin } from '@/lib/auth/guard';
 import { hashPassword, validatePasswordStrength } from '@/lib/auth/password';
 import { sanitizeTabs } from '@/lib/auth/tabs';
 import { parsePagination, paginatedResponse } from '@/lib/pagination';
-import { sendPartnerWelcome } from '@/lib/services/emails/partnerWelcome';
-import { buildContext } from '@/lib/services/contractTemplate';
 import { logger } from '@/lib/logger';
 
 export const runtime = 'nodejs';
@@ -48,8 +46,6 @@ export async function GET(req: Request) {
         lastLoginAt: true,
         createdAt: true,
         createdById: true,
-        networkId: true,
-        network: { select: { id: true, name: true } },
       },
       orderBy: [{ active: 'desc' }, { createdAt: 'asc' }],
     }),
@@ -74,12 +70,12 @@ interface CreateBody {
   password?: unknown;
   role?: unknown;
   allowedTabs?: unknown;
-  networkId?: unknown;
 }
 
 function parseRole(v: unknown): UserRole {
+  // NETWORK_PARTNER saiu com a remoção do programa de networks (2026-08-18)
+  // — o enum segue no schema por causa de rows antigas, mas não se cria mais.
   if (v === 'ADMIN') return 'ADMIN';
-  if (v === 'NETWORK_PARTNER') return 'NETWORK_PARTNER';
   return 'MEMBER';
 }
 
@@ -98,8 +94,7 @@ export async function POST(req: Request) {
   const name = typeof body.name === 'string' && body.name.trim() ? body.name.trim() : null;
   const password = typeof body.password === 'string' ? body.password : '';
   const role = parseRole(body.role);
-  const allowedTabs = role === 'ADMIN' || role === 'NETWORK_PARTNER' ? [] : sanitizeTabs(body.allowedTabs);
-  const networkId = typeof body.networkId === 'string' && body.networkId ? body.networkId : null;
+  const allowedTabs = role === 'ADMIN' ? [] : sanitizeTabs(body.allowedTabs);
 
   if (!email || !email.includes('@')) {
     return NextResponse.json({ error: 'email inválido' }, { status: 400 });
@@ -108,14 +103,6 @@ export async function POST(req: Request) {
   if (pwErr) {
     return NextResponse.json({ error: pwErr }, { status: 400 });
   }
-  if (role === 'NETWORK_PARTNER' && !networkId) {
-    return NextResponse.json({ error: 'networkId obrigatório pra role NETWORK_PARTNER' }, { status: 400 });
-  }
-  if (networkId) {
-    const exists = await db.network.findUnique({ where: { id: networkId }, select: { id: true } });
-    if (!exists) return NextResponse.json({ error: 'network não encontrada' }, { status: 400 });
-  }
-
   const passwordHash = await hashPassword(password);
   try {
     const created = await db.user.create({
@@ -125,44 +112,15 @@ export async function POST(req: Request) {
         passwordHash,
         role,
         allowedTabs,
-        networkId: role === 'NETWORK_PARTNER' ? networkId : null,
         createdById: auth.user.id,
         active: true,
       },
       select: {
         id: true, email: true, name: true, role: true, allowedTabs: true,
         active: true, lastLoginAt: true, createdAt: true, createdById: true,
-        networkId: true,
       },
     });
     logger.info({ actorId: auth.user.id, userId: created.id, email, role }, 'admin.users.create');
-
-    // Welcome email pra partners. Fail-soft: se SMTP falhar, log + segue.
-    if (role === 'NETWORK_PARTNER' && created.networkId) {
-      try {
-        const network = await db.network.findUniqueOrThrow({
-          where: { id: created.networkId },
-          select: {
-            name: true, commissionType: true, commissionValue: true,
-            paymentPeriodValue: true, paymentPeriodUnit: true, contractStart: true,
-            billingEmail: true,
-          },
-        });
-        const ctx = buildContext(network, 1);
-        // Fire and forget — não bloquear a criação do user em caso de SMTP lento.
-        sendPartnerWelcome({
-          to: created.email,
-          partnerName: created.name,
-          networkName: network.name,
-          loginEmail: created.email,
-          loginPassword: password,
-          commissionDescription: ctx.commissionDescription,
-          paymentPeriodText: ctx.paymentPeriodText,
-        }).catch((err) => logger.error({ err }, '[users.create] partnerWelcome failed'));
-      } catch (err) {
-        logger.error({ err }, '[users.create] failed to dispatch welcome email');
-      }
-    }
 
     return NextResponse.json({
       user: {

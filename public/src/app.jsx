@@ -11,16 +11,13 @@ const ROUTES = {
   'recovery':       { title: 'Recuperação', em: 'de vendas',   crumbs: ['Captação', 'Recuperação'] },
   'tauk':           { title: 'Tauk',        em: 'Solutions',   crumbs: ['Captação', 'Tauk'] },
   'sms':            { title: 'SMS',         em: 'marketing',   crumbs: ['Captação', 'SMS'] },
-  'email':          { title: 'Email',       em: 'marketing',   crumbs: ['Captação', 'Email'] },
   'products':       { title: 'Produtos',     em: '',            crumbs: ['Catálogo', 'Produtos'] },
   'transactions':   { title: 'Transações',  em: 'do ledger',   crumbs: ['Catálogo', 'Transações'] },
   'platforms':      { title: 'Plataformas', em: 'conectadas',  crumbs: ['Sistema', 'Plataformas'] },
   'health':         { title: 'Saúde',       em: 'do dado',     crumbs: ['Sistema', 'Saúde do dado'] },
   'costs':          { title: 'Fulfillment', em: 'e custo de envio', crumbs: ['Sistema', 'Fulfillment'] },
   'chat':           { title: 'Análise',    em: 'com IA',         crumbs: ['Admin', 'Chat'] },
-  'insights':       { title: 'Insights',    em: 'do negócio',  crumbs: ['Análise', 'Insights'] },
   'users':          { title: 'Usuários',    em: 'do dashboard', crumbs: ['Admin', 'Usuários'] },
-  'networks':       { title: 'Networks',    em: 'parceiras',   crumbs: ['Admin', 'Networks'] },
   'copy-optimizer': { title: 'Copy',         em: 'Optimizer',   crumbs: ['Admin', 'Copy Optimizer'] },
 };
 
@@ -81,17 +78,6 @@ function decodeSet(s) { return new Set(s ? s.split(',').filter(Boolean) : []); }
 function encodeSet(set) { return Array.from(set).join(','); }
 
 function App({ user }) {
-  // NETWORK_PARTNER tem shell próprio (PartnerShell) — não compartilha a
-  // sidebar/topbar/filtros do dashboard admin/member. Bypass total.
-  if (user?.role === 'NETWORK_PARTNER') {
-    async function logout() {
-      try {
-        await fetch('/api/auth/logout', { method: 'POST' });
-      } catch (e) { /* swallow */ }
-      window.location.href = '/login';
-    }
-    return <window.PartnerShell user={user} onLogout={logout}/>;
-  }
   // Resolve a default route a partir do allowedTabs, pra MEMBER cair em
   // alguma tab que ele tenha acesso (em vez de cair em 'overview' e ver
   // página em branco).
@@ -256,7 +242,6 @@ function App({ user }) {
           {hashState.route === 'recovery'       && <RecoveryPage filters={filters}/>}
           {hashState.route === 'tauk'           && <TaukPage filters={filters}/>}
           {hashState.route === 'sms'            && <SmsPage filters={filters}/>}
-          {hashState.route === 'email'          && <ComingSoonPage channel="email"/>}
           {hashState.route === 'products'       && <ProductsPage filters={filters}/>}
           {hashState.route === 'transactions'   && <TransactionsPage filters={filters}/>}
           {hashState.route === 'platforms'      && <IntegrationsPage filters={filters}/>}
@@ -264,9 +249,7 @@ function App({ user }) {
           {hashState.route === 'costs'          && <CostsPage filters={filters}/>}
           {hashState.route === 'custos'         && <CustosPage filters={filters}/>}
           {/* 'chat' agora vive em /chat (Next.js native). Nav redireciona via window.location. */}
-          {hashState.route === 'insights'       && <InsightsPage/>}
           {hashState.route === 'users'          && <UsersPage currentUser={user}/>}
-          {hashState.route === 'networks'       && <NetworksPage/>}
           {hashState.route === 'copy-optimizer' && <CopyOptimizerPage/>}
         </div>
       </div>

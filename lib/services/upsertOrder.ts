@@ -5,7 +5,6 @@ import type { NormalizedOrder } from '../shared/types';
 import { classifyProduct, CONNECTOR_ROLE_PLATFORMS } from './productClassification';
 import { calcCogs } from './cogs';
 import { rebalanceSessionFulfillment } from './sessionFulfillment';
-import { accrueCommissionForOrder } from './networkAccrual';
 import { scheduleDailyMetricsRefresh } from './dailyMetrics';
 import { logger } from '../logger';
 
@@ -371,14 +370,6 @@ export async function upsertOrder(normalized: NormalizedOrder): Promise<UpsertOr
     : (normalized.parentExternalId ?? normalized.externalId);
   await rebalanceSessionFulfillment(platform.id, sessionKey, isSessionGrouped ? 'session' : 'anchor');
 
-  // Network commission accrual. Idempotent (UNIQUE on orderId). Only fires
-  // for FE+APPROVED orders whose affiliate is linked to a Network. Errors
-  // here are logged but don't fail the ingest — accrual can be backfilled.
-  try {
-    await accrueCommissionForOrder(result.orderId);
-  } catch (err) {
-    logger.error({ err, orderId: result.orderId }, '[upsertOrder] networkAccrual failed');
-  }
 
   // Venda nova → MV fica stale. Agenda refresh com debounce (15s) pra
   // bursts de IPN da mesma sessão coalescerem num REFRESH só. O dashboard
