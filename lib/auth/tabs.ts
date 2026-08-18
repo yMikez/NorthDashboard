@@ -8,6 +8,7 @@
 export type TabId =
   | 'overview'
   | 'funnel'
+  | 'refund-cohorts'
   | 'insights'
   | 'custos'
   | 'leaderboard'
@@ -32,6 +33,7 @@ export interface TabSpec {
 export const AVAILABLE_TABS: TabSpec[] = [
   { id: 'overview',       label: 'Visão geral',         group: 'Análise' },
   { id: 'funnel',         label: 'Funil',               group: 'Análise' },
+  { id: 'refund-cohorts', label: 'Reembolsos',          group: 'Análise' },
   { id: 'insights',       label: 'Insights',            group: 'Análise' },
   { id: 'custos',         label: 'Custos',              group: 'Análise' },
   { id: 'leaderboard',    label: 'Ranking',             group: 'Afiliados' },

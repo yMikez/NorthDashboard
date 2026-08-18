@@ -115,6 +115,13 @@ export function parseBuyGoodsIngest(payload: BuyGoodsPayload): NormalizedOrder {
     detailsUrl: notEmpty(payload.buy_url),
 
     orderedAt: parseBuyGoodsTimestamp(payload.rr_createdate),
+    // Instante do ESTORNO. O payload de refund/chargeback do BG não traz um
+    // timestamp do evento (rr_createdate é a criação do PEDIDO), então usamos
+    // a chegada do IPN — BG entrega em ~1min do evento. Sem isso, refundedAt
+    // cairia no dia da VENDA e o estorno sumiria do eixo de evento.
+    // (Observação 2026-08-18: nenhum IPN de refund do BG foi visto em prod
+    // ainda — isto é forward-proofing pro dia em que vierem.)
+    eventAt: status === 'REFUNDED' || status === 'CHARGEBACK' ? new Date() : null,
     rawMetadata: payload as unknown as Record<string, unknown>,
   };
 }

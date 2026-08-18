@@ -4,6 +4,7 @@ const { useState: useStateApp, useEffect: useEffectApp } = React;
 const ROUTES = {
   'overview':       { title: 'Visão',       em: 'geral',       crumbs: ['Análise', 'Visão geral'] },
   'funnel':         { title: 'Funil',       em: 'completo',    crumbs: ['Análise', 'Funil'] },
+  'refund-cohorts': { title: 'Reembolsos',  em: 'por coorte',  crumbs: ['Análise', 'Reembolsos'] },
   'custos':         { title: 'Custos',      em: 'e lucro',     crumbs: ['Análise', 'Custos'] },
   'leaderboard':    { title: 'Ranking',     em: 'de afiliados', crumbs: ['Afiliados', 'Ranking'] },
   'all-affiliates': { title: 'Diretório',   em: 'de afiliados', crumbs: ['Afiliados', 'Todos'] },
@@ -248,6 +249,7 @@ function App({ user }) {
         <div className="page">
           {hashState.route === 'overview'       && <OverviewPage filters={filters} setFilters={setFilters}/>}
           {hashState.route === 'funnel'         && <FunnelPage filters={filters}/>}
+          {hashState.route === 'refund-cohorts' && <RefundCohortsPage filters={filters}/>}
           {hashState.route === 'leaderboard'    && <LeaderboardPage filters={filters} onOpenAffiliate={setDrawerAff}/>}
           {/* Fundida com o Ranking (modelo planilha CPA) — rota antiga rende a mesma página. */}
           {hashState.route === 'all-affiliates' && <LeaderboardPage filters={filters} onOpenAffiliate={setDrawerAff}/>}

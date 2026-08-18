@@ -305,7 +305,7 @@ export async function upsertOrder(normalized: NormalizedOrder): Promise<UpsertOr
     where: {
       platformId_externalId: { platformId: platform.id, externalId: normalized.externalId },
     },
-    select: { id: true },
+    select: { id: true, orderedAt: true, approvedAt: true },
   });
 
   let result: UpsertOrderResult;
@@ -313,7 +313,25 @@ export async function upsertOrder(normalized: NormalizedOrder): Promise<UpsertOr
     // UPDATE: NÃO mexe em originalGrossUsd. grossAmountUsd vai ser overwritten
     // (refund/chargeback negativo); originalGrossUsd permanece o valor da
     // venda inicial pra reconciliação CB-style "Date of Event".
-    await db.order.update({ where: { id: existing.id }, data: orderData });
+    //
+    // ESTORNO em plataforma in-place (CB/JVZoo/BG/Cartpanda): o payload do
+    // evento reescreve a linha da VENDA, e o orderedAt dele é a data do
+    // EVENTO (CB/JVZoo) ou a da venda (BG/Cartpanda) — nos dois casos a
+    // resposta certa é PRESERVAR a data da venda já gravada. Sem isso o
+    // cohort de reembolso (Cohort.md) perdia o dia da venda original, e
+    // "dias até estornar" dava 0. approvedAt idem: a venda FOI aprovada;
+    // o estorno não apaga esse fato. refundedAt/chargebackAt já carregam o
+    // instante do evento via eventAt ?? normalized.orderedAt (pra CB/JVZoo
+    // o orderedAt do payload É o instante do estorno).
+    // Vale pra QUALQUER evento não-venda (refund, chargeback, cancel-rebill,
+    // INSF → PENDING/CANCELED): só evento de VENDA redefine a data da venda.
+    // Sem isso, um CANCEL-REBILL do CB reescrevia orderedAt pra data do
+    // cancelamento e tirava a venda da base do cohort (achado da revisão).
+    const isNonSaleEvent = normalized.status !== 'APPROVED';
+    const updateData = isNonSaleEvent
+      ? { ...orderData, orderedAt: existing.orderedAt, approvedAt: existing.approvedAt }
+      : orderData;
+    await db.order.update({ where: { id: existing.id }, data: updateData });
     result = {
       created: false,
       orderId: existing.id,

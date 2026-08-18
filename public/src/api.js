@@ -137,6 +137,20 @@ async function fetchOrders(filters, options = {}) {
  * zero-valued period aggregates when no orders fall in the range. UI decides
  * whether to filter by minOrders or show all.
  */
+async function fetchRefundCohorts(filters, horizon) {
+  const params = {
+    start_date: toISODate(filters.dateRange.start),
+    end_date: toISODate(filters.dateRange.end),
+    platforms: setToCSV(filters.platforms),
+    countries: setToCSV(filters.countries),
+    families: setToCSV(filters.families),
+    products: setToCSV(filters.funnels),
+    stages: setToCSV(filters.stages),
+    horizon: String(horizon || 30),
+  };
+  return fetchJSON('/api/metrics/refund-cohorts', params);
+}
+
 async function fetchAffiliates(filters) {
   const params = {
     start_date: toISODate(filters.dateRange.start),
@@ -981,6 +995,7 @@ window.NSApi = _wrapMutations({
   ordersExportUrl,
   fetchAffiliates,
   fetchAffiliateDetail,
+  fetchRefundCohorts,
   fetchPlatforms,
   adminPatchPlatformFees,
   fetchProducts,

@@ -53,6 +53,23 @@ export function parseCartpandaWebhook(wh: CartpandaWebhook): NormalizedOrder[] {
   const affSlug = notEmpty(order.affiliate_slug);
   const cust = order.customer ?? {};
   const orderedAt = parseTimestamp(order.created_at ?? order.processed_at);
+  // Instante do ESTORNO (eventos refund/chargeback): o pedido preserva
+  // created_at = data da VENDA, e o momento do estorno vem no array
+  // order.refunds (created_at da última entrada) — confirmado em payload
+  // real 2026-08-18 (refunds[0].created_at ≈ chegada do webhook). Fallback:
+  // updated_at do pedido → agora (chegada). Mesmo parseTimestamp do resto
+  // do payload — skew de fuso, se houver, é consistente entre venda/estorno.
+  // Pelo STATUS mapeado, não pelo nome: chargeback pode chegar como flag
+  // (chargeback_received=1) num evento 'order.updated' — mapStatus pega,
+  // o nome não. (Achado da revisão 2026-08-18.)
+  const isReversalEvent = orderStatus === 'REFUNDED' || orderStatus === 'CHARGEBACK'
+    || event.includes('refund') || event.includes('chargeback');
+  const eventAt = isReversalEvent
+    ? parseTimestamp(
+        lastRefundCreatedAt(order)
+          ?? (order as { updated_at?: string }).updated_at,
+      )
+    : null;
   const vendor = notEmpty(order.shop?.slug) ?? (order.shop_id != null ? String(order.shop_id) : null);
   const lines = order.line_items ?? [];
 
@@ -72,7 +89,7 @@ export function parseCartpandaWebhook(wh: CartpandaWebhook): NormalizedOrder[] {
     return [buildOrder({
       orderId, lineSuffix: 'main', productExternalId: orderId, productName: notEmpty(order.name) ?? '',
       type: 'FRONTEND', step: 1, gross, fee: feeTotal, cpa: cpaTotal, status: orderStatus,
-      baseCcy, toUsd, country, affId, affSlug, cust, order, orderedAt, vendor, event, lineRaw: null,
+      baseCcy, toUsd, country, affId, affSlug, cust, order, orderedAt, eventAt, vendor, event, lineRaw: null,
     })];
   }
 
@@ -111,6 +128,7 @@ export function parseCartpandaWebhook(wh: CartpandaWebhook): NormalizedOrder[] {
       cust,
       order,
       orderedAt,
+      eventAt,
       vendor,
       event,
       lineRaw: line,
@@ -139,6 +157,7 @@ interface BuildArgs {
   cust: NonNullable<CartpandaOrder['customer']>;
   order: CartpandaOrder;
   orderedAt: Date;
+  eventAt: Date | null;
   vendor: string | null;
   event: string;
   lineRaw: CartpandaLineItem | null;
@@ -202,6 +221,9 @@ function buildOrder(a: BuildArgs): NormalizedOrder {
     detailsUrl: notEmpty(a.order.thank_you_page),
 
     orderedAt: a.orderedAt,
+    // Só linhas efetivamente estornadas carregam o instante do evento — numa
+    // devolução parcial as linhas que continuam APPROVED não ganham eventAt.
+    eventAt: a.status === 'REFUNDED' || a.status === 'CHARGEBACK' ? a.eventAt : null,
     // rawMetadata enxuto: o payload bruto é gigante (shop_info, settings...).
     // Guardamos só evento + a linha + resumo do pedido.
     rawMetadata: {
@@ -314,6 +336,19 @@ function round2(n: number): number {
  * antigo sem fuso) → tratado como UTC. Payloads novos da Cartpanda usam ISO
  * UTC (.000000Z), então pedidos reais são inequívocos.
  */
+// created_at da última entrada de order.refunds — o instante do estorno.
+function lastRefundCreatedAt(order: CartpandaOrder): string | undefined {
+  const list = (order as { refunds?: Array<{ created_at?: string }> | null }).refunds;
+  if (!Array.isArray(list) || list.length === 0) return undefined;
+  const stamps = list.map((r) => r?.created_at).filter((v): v is string => !!v).sort();
+  return stamps[stamps.length - 1];
+}
+
+/** Exportado pro backfill de datas de estorno — regra de parse única. */
+export function parseCartpandaTimestamp(raw: string | undefined): Date {
+  return parseTimestamp(raw);
+}
+
 function parseTimestamp(raw: string | undefined): Date {
   if (!raw) return new Date();
   const s = String(raw).trim();

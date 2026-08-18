@@ -1009,6 +1009,298 @@ function AffiliateDrawer({ affiliateId, filters, onClose }) {
   );
 }
 
+// ---------- REFUND COHORTS (Cohort.md) ----------
+// Matriz: linha = dia da VENDA, coluna = dias desde a venda, célula = %
+// ACUMULADO estornado (reembolso+chargeback). Censura: coorte que ainda não
+// viveu o dia N fica em branco (≠ 0%). Curva de maturação agrega só coortes
+// maduras em cada idade. Eixos vêm da dupla lente (orderedAt=venda,
+// refundedAt=estorno) — ver lib/services/refundCohorts.ts.
+function RefundCohortsPage({ filters }) {
+  const [metric, setMetric] = useState('count');   // 'count' | 'usd'
+  const [horizon, setHorizon] = useState(30);
+  const [minN, setMinN] = useState(30);            // amostra mínima (Cohort.md §4)
+  const [state, setState] = useState({ status: 'loading', data: null, error: null });
+
+  useEffect(() => {
+    let cancelled = false;
+    setState((s) => ({ ...s, status: 'loading' }));
+    window.NSApi.fetchRefundCohorts(filters, horizon)
+      .then((data) => { if (!cancelled) setState({ status: 'ready', data, error: null }); })
+      .catch((err) => {
+        if (cancelled) return;
+        console.error('fetchRefundCohorts failed', err);
+        setState({ status: 'error', data: null, error: err.message });
+      });
+    return () => { cancelled = true; };
+  }, [horizon, filters.dateRange.start.getTime(), filters.dateRange.end.getTime(),
+      Array.from(filters.platforms).join(','), Array.from(filters.countries).join(','),
+      Array.from(filters.funnels).join(','), Array.from(filters.stages).join(','),
+      Array.from(filters.families).join(',')]);
+
+  const cur = filters.currency || 'USD';
+  const d = state.data;
+  const cohorts = d?.cohorts || [];
+  const curve = d?.curve || [];
+
+  const pctOf = (cell) => (metric === 'usd' ? cell.pctUsd : cell.pctCount);
+
+  // Escala DIVERGENTE com ponto neutro na meta de 6% (mesma régua "meta
+  // <6%" do resto do dash): abaixo → verde (--ok), acima → vermelho
+  // (--danger), saturando em 2× a meta. Fundo via color-mix em oklab
+  // (regra do design system); o NÚMERO fica em token de texto, sempre.
+  const MID = 0.06;
+  function cellBg(p) {
+    if (p <= MID) {
+      const t = Math.round((1 - p / MID) * 55);
+      return `color-mix(in oklab, var(--success) ${t}%, transparent)`;
+    }
+    const t = Math.round(Math.min(1, (p - MID) / MID) * 65);
+    return `color-mix(in oklab, var(--danger) ${t}%, transparent)`;
+  }
+
+  // Chips de maturação: valor agregado da curva nas idades de referência.
+  const matAt = (age) => {
+    const pt = curve[age];
+    if (!pt) return null;
+    const v = metric === 'usd' ? pt.pctUsd : pt.pctCount;
+    return v == null ? null : v;
+  };
+
+  // Colunas exibidas: até o horizonte, mas em passos maiores no fim pra
+  // matriz não explodir em largura (0..14 diário, depois de 2 em 2 / 5 em 5).
+  const cols = [];
+  for (let c = 0; c <= horizon; c++) {
+    if (c <= 14 || (horizon <= 30 ? c % 2 === 0 : c % 5 === 0) || c === horizon) cols.push(c);
+  }
+
+  const curveMax = Math.max(0.001, ...curve.map((pt) => {
+    const v = metric === 'usd' ? pt.pctUsd : pt.pctCount;
+    return v == null ? 0 : v;
+  }));
+
+  return (
+    <div className="page-in">
+      <div className="page-head">
+        <div className="lead">
+          <span className="eyebrow">ANÁLISE · REEMBOLSO POR COORTE</span>
+          <h2>Quando o reembolso <em>realmente acontece</em>.</h2>
+          <span className="sub">
+            cada estorno preso ao dia da VENDA original · célula em branco = coorte ainda não viveu aquele dia · inclui chargebacks
+          </span>
+        </div>
+        <div className="page-head-actions" style={{ flexWrap: 'wrap' }}>
+          <div className="seg">
+            {[['count', 'Pedidos'], ['usd', 'Valor $']].map(([k, l]) => (
+              <button key={k} className={metric === k ? 'is-active' : ''} onClick={() => setMetric(k)}>{l}</button>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      <div className="mini-kpis">
+        {[7, 14, 30].filter((a) => a <= horizon).map((age) => {
+          const v = matAt(age);
+          const pt = curve[age];
+          return (
+            <div className="mini-kpi" key={age}>
+              <div className="l">Taxa madura · D{age}</div>
+              <div className="v" style={{ color: v != null && v > MID ? 'var(--danger)' : 'inherit' }}>
+                {v != null ? (v * 100).toFixed(2) + '%' : '—'}
+              </div>
+              <div className="s">
+                {pt && pt.eligibleBaseCount > 0
+                  ? `${fmtInt(pt.eligibleBaseCount)} vendas com ${age}d+ de idade`
+                  : 'nenhuma coorte madura ainda'}
+              </div>
+            </div>
+          );
+        })}
+        <div className="mini-kpi">
+          <div className="l">Base no período</div>
+          <div className="v">{d ? fmtInt(d.totals.baseCount) : '—'}</div>
+          <div className="s">{d ? `${fmtCurrency(d.totals.baseUsd, cur, 0)} vendidos` : '…'}</div>
+        </div>
+        <div className="mini-kpi">
+          <div className="l">Estornado (matriz)</div>
+          <div className="v" style={{ color: 'var(--danger)' }}>{d ? fmtInt(d.totals.refundCount) : '—'}</div>
+          <div className="s">
+            {d ? `${fmtCurrency(d.totals.refundUsd, cur, 0)}${d.totals.beyondHorizonCount > 0 ? ` · +${fmtInt(d.totals.beyondHorizonCount)} além do horizonte` : ''}` : '…'}
+          </div>
+        </div>
+      </div>
+
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '4px 0 12px', flexWrap: 'wrap' }}>
+        <span className="f-label">HORIZONTE</span>
+        <div className="seg">
+          {[14, 30, 60, 90].map((h) => (
+            <button key={h} className={horizon === h ? 'is-active' : ''} onClick={() => setHorizon(h)}>{h}d</button>
+          ))}
+        </div>
+        <span className="f-label" style={{ marginLeft: 10 }}>AMOSTRA MÍN.</span>
+        <div className="seg">
+          {[10, 30, 50].map((n) => (
+            <button key={n} className={minN === n ? 'is-active' : ''} onClick={() => setMinN(n)}>{n}</button>
+          ))}
+        </div>
+        <span className="f-label" style={{ color: 'var(--fg5)' }}>
+          coorte com menos de {minN} vendas fica apagada — é ruído, não taxa
+        </span>
+      </div>
+
+      {state.status === 'error' && (
+        <div className="panel" style={{ color: 'var(--danger)' }}>Erro ao carregar: {state.error}</div>
+      )}
+
+      {/* Curva de maturação agregada */}
+      <div className="panel" style={{ marginBottom: 14 }}>
+        <div className="panel-head">
+          <div className="panel-title">
+            <span className="panel-eyebrow">CURVA DE MATURAÇÃO</span>
+            <div className="panel-sub">
+              % agregado estornado até o dia N — só coortes que JÁ TÊM N dias entram no ponto N (sem viés de coorte imatura)
+            </div>
+          </div>
+        </div>
+        {state.status === 'ready' && curve.length > 0 ? (
+          <MaturationCurve curve={curve} metric={metric} height={170} midline={MID} maxY={Math.max(curveMax * 1.15, MID * 1.4)}/>
+        ) : (
+          <div style={{ padding: 24, textAlign: 'center', opacity: 0.6 }}>
+            {state.status === 'loading' ? 'carregando…' : 'Sem dados no período'}
+          </div>
+        )}
+      </div>
+
+      {/* Matriz de coorte */}
+      <div className="panel" style={{ padding: 0 }}>
+        <div className="panel-head" style={{ padding: '14px 16px 8px' }}>
+          <div className="panel-title">
+            <span className="panel-eyebrow">MATRIZ DE COORTE</span>
+            <div className="panel-sub">
+              linha = dia da venda · coluna = dias desde a venda · célula = % acumulado {metric === 'usd' ? 'do VALOR vendido' : 'dos PEDIDOS'} estornado
+            </div>
+          </div>
+        </div>
+        <div className="tbl-wrap" style={{ margin: 0, padding: '0 4px 8px', maxHeight: 640, overflow: 'auto' }}>
+          <table className="tbl" style={{ borderCollapse: 'separate', borderSpacing: 2 }}>
+            <thead>
+              <tr>
+                <th style={{ position: 'sticky', left: 0, top: 0, zIndex: 4, background: 'var(--bg-raised)', minWidth: 118 }}>Venda</th>
+                <th className="num" style={{ position: 'sticky', top: 0, zIndex: 3, background: 'var(--bg-raised)', minWidth: 46 }}>Base</th>
+                {cols.map((c) => (
+                  <th key={c} className="num" style={{ position: 'sticky', top: 0, zIndex: 3, background: 'var(--bg-raised)', minWidth: 40 }}>+{c}d</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {state.status === 'loading' && <SkelTableRows rows={10} cols={cols.length + 2}/>}
+              {state.status === 'ready' && cohorts.length === 0 && (
+                <tr><td colSpan={cols.length + 2} style={{ textAlign: 'center', padding: 24, opacity: 0.6 }}>Sem vendas no período</td></tr>
+              )}
+              {state.status === 'ready' && cohorts.map((row) => {
+                const lowN = row.baseCount < minN;
+                return (
+                  <tr key={row.day}>
+                    <td className="cell-mono" style={{ position: 'sticky', left: 0, zIndex: 1, background: 'var(--bg-raised)', whiteSpace: 'nowrap' }}
+                        title={lowN ? `amostra baixa: ${row.baseCount} vendas (< ${minN})` : undefined}>
+                      {fmtDateShort(row.day)}
+                      {lowN && <span style={{ color: 'var(--warning)', marginLeft: 4 }} title={`amostra baixa (< ${minN})`}>·</span>}
+                    </td>
+                    <td className="num cell-mono" style={{ color: lowN ? 'var(--fg5)' : 'var(--fg3)' }}>
+                      {fmtInt(row.baseCount)}
+                    </td>
+                    {cols.map((c) => {
+                      const cell = row.cells[c];
+                      if (!cell) return <td key={c} className="num"/>;  // censurado
+                      const p = pctOf(cell);
+                      return (
+                        <td key={c} className="num cell-mono"
+                          title={`vendas de ${fmtDateShort(row.day)} · até ${c} dia${c === 1 ? '' : 's'}\n`
+                            + `${fmtInt(cell.cumCount)} de ${fmtInt(row.baseCount)} pedidos (${(cell.pctCount * 100).toFixed(2)}%)\n`
+                            + `${fmtCurrency(cell.cumUsd, cur, 0)} de ${fmtCurrency(row.baseUsd, cur, 0)} (${(cell.pctUsd * 100).toFixed(2)}%)`}
+                          style={{
+                            background: lowN ? 'color-mix(in oklab, var(--fg5) 10%, transparent)' : cellBg(p),
+                            color: lowN ? 'var(--fg5)' : 'var(--fg1)',
+                            borderRadius: 4,
+                            fontSize: 10.5,
+                            padding: '4px 5px',
+                          }}>
+                          {(p * 100).toFixed(1)}
+                        </td>
+                      );
+                    })}
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+        <div style={{ padding: '6px 16px 12px', fontSize: 10.5, color: 'var(--fg5)', display: 'flex', gap: 14, flexWrap: 'wrap' }}>
+          <span><span style={{ display: 'inline-block', width: 10, height: 10, borderRadius: 3, background: 'color-mix(in oklab, var(--success) 45%, transparent)', verticalAlign: '-1px' }}/> abaixo da meta (6%)</span>
+          <span><span style={{ display: 'inline-block', width: 10, height: 10, borderRadius: 3, background: 'color-mix(in oklab, var(--danger) 55%, transparent)', verticalAlign: '-1px' }}/> acima da meta</span>
+          <span><span style={{ display: 'inline-block', width: 10, height: 10, borderRadius: 3, background: 'color-mix(in oklab, var(--fg5) 10%, transparent)', verticalAlign: '-1px' }}/> amostra &lt; {minN}</span>
+          <span>célula vazia = coorte ainda não chegou naquele dia</span>
+          {d && d.totals.orphanEventCount > 0 && (
+            <span style={{ color: 'var(--warning)' }}>
+              {fmtInt(d.totals.orphanEventCount)} estorno{d.totals.orphanEventCount === 1 ? '' : 's'} de dias sem venda elegível — fora da matriz
+            </span>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// Curva de maturação: SVG único, uma série (sem legenda — o título nomeia),
+// linha na cor de acento, grade recessiva, referência tracejada na meta e
+// rótulo direto no último ponto maduro.
+function MaturationCurve({ curve, metric, height, midline, maxY }) {
+  const W = 720, H = height, PAD_L = 44, PAD_R = 16, PAD_T = 10, PAD_B = 22;
+  const pts = curve
+    .map((pt) => ({ age: pt.age, v: metric === 'usd' ? pt.pctUsd : pt.pctCount }))
+    .filter((pt) => pt.v != null);
+  if (pts.length === 0) {
+    return <div style={{ padding: 24, textAlign: 'center', opacity: 0.6 }}>Nenhuma coorte madura no período</div>;
+  }
+  const maxAge = Math.max(1, curve.length - 1);
+  const x = (age) => PAD_L + (age / maxAge) * (W - PAD_L - PAD_R);
+  const y = (v) => PAD_T + (1 - v / maxY) * (H - PAD_T - PAD_B);
+  const path = pts.map((pt, i) => `${i === 0 ? 'M' : 'L'}${x(pt.age).toFixed(1)},${y(pt.v).toFixed(1)}`).join(' ');
+  const last = pts[pts.length - 1];
+  const yTicks = [0, midline, maxY].filter((v, i, a) => a.indexOf(v) === i);
+
+  return (
+    <div style={{ overflowX: 'auto' }}>
+      <svg viewBox={`0 0 ${W} ${H}`} style={{ width: '100%', minWidth: 420, height: 'auto', display: 'block' }} role="img"
+        aria-label="Curva de maturação de reembolso">
+        {yTicks.map((v) => (
+          <g key={v}>
+            <line x1={PAD_L} x2={W - PAD_R} y1={y(v)} y2={y(v)}
+              stroke={v === midline ? 'var(--warning)' : 'var(--border-soft)'}
+              strokeDasharray={v === midline ? '4 4' : undefined} strokeWidth={1} opacity={v === midline ? 0.7 : 0.6}/>
+            <text x={PAD_L - 6} y={y(v) + 3} textAnchor="end" fontSize={9}
+              fill="var(--fg5)" fontFamily="var(--f-mono)">{(v * 100).toFixed(1)}%</text>
+          </g>
+        ))}
+        {[0, Math.round(maxAge / 2), maxAge].map((a) => (
+          <text key={a} x={x(a)} y={H - 6} textAnchor="middle" fontSize={9}
+            fill="var(--fg5)" fontFamily="var(--f-mono)">+{a}d</text>
+        ))}
+        <path d={path} fill="none" stroke="var(--accent)" strokeWidth={2} strokeLinejoin="round"/>
+        {pts.map((pt) => (
+          <circle key={pt.age} cx={x(pt.age)} cy={y(pt.v)} r={pt.age === last.age ? 3.5 : 2.2}
+            fill="var(--accent)">
+            <title>{`+${pt.age}d: ${(pt.v * 100).toFixed(2)}%`}</title>
+          </circle>
+        ))}
+        <text x={Math.min(x(last.age), W - PAD_R - 4)} y={Math.max(y(last.v) - 8, 10)} textAnchor="end"
+          fontSize={10} fontWeight={700} fill="var(--fg1)" fontFamily="var(--f-mono)">
+          {(last.v * 100).toFixed(2)}%
+        </text>
+      </svg>
+    </div>
+  );
+}
+
 // ---------- ALL AFFILIATES ----------
 function AllAffiliatesPage({ filters, onOpenAffiliate }) {
   const [query, setQuery] = useState('');
@@ -3416,6 +3708,7 @@ function FXPage({ filters }) {
 const TAB_CATALOG = [
   { group: 'Análise',   id: 'overview',       label: 'Visão geral' },
   { group: 'Análise',   id: 'funnel',         label: 'Funil' },
+  { group: 'Análise',   id: 'refund-cohorts', label: 'Reembolsos' },
   { group: 'Análise',   id: 'insights',       label: 'Insights' },
   { group: 'Afiliados', id: 'leaderboard',    label: 'Ranking' },
   { group: 'Afiliados', id: 'all-affiliates', label: 'Todos os afiliados' },
