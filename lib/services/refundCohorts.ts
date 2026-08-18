@@ -57,6 +57,18 @@ export interface CohortRow {
   // index = dias desde a venda (0..horizon); null = censurado (coorte
   // ainda não viveu esse dia).
   cells: Array<CohortCell | null>;
+  // FASE 2 (Cohort.md): onde esta coorte deve ESTABILIZAR ao completar o
+  // horizonte. Coorte madura (age >= horizon): projeção == observado.
+  projection: CohortProjection | null;
+}
+
+export interface CohortProjection {
+  pctCount: number | null;   // % final projetado (lente pedidos)
+  pctUsd: number | null;     // % final projetado (lente valor)
+  // Fração do total esperado que a idade atual já revelou (0..1) —
+  // developed=0.4 lê-se "até aqui você já viu ~40% dos estornos que virão".
+  developedCount: number | null;
+  developedUsd: number | null;
 }
 
 export interface MaturationPoint {
@@ -82,6 +94,20 @@ export interface RefundCohortsResponse {
     // Estornos em dias SEM base elegível (ex.: refund de venda pré-ingestão
     // caindo num dia sem vendas) — fora da matriz, mas visíveis no rodapé.
     orphanEventCount: number;
+  };
+  // FASE 2 — metadados da projeção (ver computeRefundProjection).
+  projection: {
+    method: 'mature-cohort pattern + bornhuetter-ferguson (cape cod prior)';
+    // Taxa final agregada projetada do PERÍODO: média base-ponderada das
+    // projeções BF por coorte — reconcilia exatamente com a coluna da matriz.
+    periodPctCount: number | null;
+    periodPctUsd: number | null;
+    // Coortes que já completaram o horizonte (projeção = observado nelas).
+    matureCohortCount: number;
+    // true quando faltou histórico pra estimar o fim da curva (nenhuma
+    // coorte viva em alguma idade) — os fatores ausentes assumem 1.0
+    // (sem desenvolvimento além do observado), então a projeção é PISO.
+    tailIncomplete: boolean;
   };
 }
 
@@ -264,6 +290,7 @@ export function assembleRefundCohorts(input: CohortAssemblyInput): RefundCohorts
         baseCount: b.count,
         baseUsd: round2(b.usd),
         cells,
+        projection: null as CohortProjection | null, // preenchida abaixo
       };
     });
 
@@ -295,5 +322,123 @@ export function assembleRefundCohorts(input: CohortAssemblyInput): RefundCohorts
     });
   }
 
-  return { todayBrt, horizonDays, cohorts, curve, totals };
+  const projection = computeRefundProjection(cohorts, horizonDays);
+
+  return { todayBrt, horizonDays, cohorts, curve, totals, projection };
+}
+
+// ─── FASE 2: projeção de maturidade (Cohort.md §Fase 2) ─────────────────────
+//
+// Pergunta: "onde a taxa desta coorte AINDA IMATURA deve estabilizar quando
+// completar o horizonte?" Dois métodos atuariais de triângulo de sinistros:
+//
+// 1. PADRÃO DE DESENVOLVIMENTO ancorado nas coortes MADURAS:
+//    developed(a) = Σ acumulado(a) ÷ Σ acumulado(M), somando SÓ coortes que
+//    já completaram o horizonte — "até o dia a, historicamente já apareceu
+//    developed(a) de tudo que vem até M". Razão de somas do MESMO conjunto
+//    de coortes: imune a viés de censura E ao caso "idade sem estorno"
+//    (que quebrava a versão em fatores encadeados: den=0 virava fator 1.0
+//    silencioso e a coorte parecia 100% desenvolvida — achado da revisão
+//    2026-08-18). Sem NENHUMA coorte madura, ancora na idade máxima
+//    observada e assume desenvolvimento 1.0 dali em diante: projeção vira
+//    PISO e a response marca tailIncomplete.
+//
+// 2. BORNHUETTER-FERGUSON com prior CAPE COD — coorte nova com 0 estornos
+//    projetaria 0 por regra de três pura (otimismo, não dado). BF:
+//    proj = observado + prior × (1 − developed(a)). O prior Cape Cod
+//    pondera pela exposição JÁ DESENVOLVIDA: Σ observado ÷ Σ base×developed
+//    — estável contra ruído precoce de coorte jovem (o prior ingênuo
+//    amplificava o próprio ruído da coorte projetada) e com a propriedade
+//    de que o agregado base-ponderado das projeções BF é EXATAMENTE o
+//    prior: o chip do período reconcilia com a coluna da matriz.
+export function computeRefundProjection(
+  cohorts: CohortRow[],
+  horizonDays: number,
+): RefundCohortsResponse['projection'] {
+  const M = horizonDays;
+
+  const lens = (pick: (c: CohortCell) => number, base: (r: CohortRow) => number) => {
+    // cum(c, j) — acumulado da coorte na idade j (limitado ao horizonte).
+    const cum = (r: CohortRow, j: number): number => {
+      const cell = r.cells[Math.min(j, M)];
+      return cell ? pick(cell) : 0;
+    };
+    const eligible = cohorts.filter((r) => base(r) > 0 && r.ageDays >= 0);
+
+    // ── Padrão de desenvolvimento: developed[a] = fração do total até M
+    //    que a idade a já revelou, das coortes-âncora. ──
+    const matureSet = eligible.filter((r) => r.ageDays >= M);
+    let tailIncomplete = false;
+    // Âncora: coortes maduras; senão, as da idade máxima observada (piso).
+    let anchorAge = M;
+    let anchorSet = matureSet;
+    if (matureSet.length === 0) {
+      tailIncomplete = true;
+      anchorAge = eligible.length
+        ? Math.max(...eligible.map((r) => Math.min(r.ageDays, M)))
+        : 0;
+      anchorSet = eligible.filter((r) => Math.min(r.ageDays, M) >= anchorAge);
+    }
+    const anchorTotal = anchorSet.reduce((s, r) => s + cum(r, anchorAge), 0);
+    const developedAt: number[] = new Array(M + 1).fill(1);
+    for (let a = 0; a < anchorAge; a++) {
+      // anchorTotal 0 = histórico sem estorno nenhum: nada desenvolve →
+      // developed 1 e o prior abaixo sai 0 (projeção = observado).
+      developedAt[a] = anchorTotal > 0
+        ? anchorSet.reduce((s, r) => s + cum(r, a), 0) / anchorTotal
+        : 1;
+    }
+    // a >= anchorAge: 1 por construção (além da âncora = piso).
+
+    // ── Prior Cape Cod: Σ observado ÷ Σ exposição desenvolvida. ──
+    let obsSum = 0;
+    let expSum = 0;
+    for (const r of eligible) {
+      const a = Math.min(r.ageDays, M);
+      obsSum += cum(r, a);
+      expSum += base(r) * developedAt[a];
+    }
+    const prior = expSum > 0 ? obsSum / expSum : 0;
+
+    // ── BF por coorte + agregado do período (reconcilia com o prior). ──
+    let projWeighted = 0;
+    let baseSum = 0;
+    const perCohort = cohorts.map((r) => {
+      const b = base(r);
+      if (b <= 0 || r.ageDays < 0) {
+        return { pct: null as number | null, developed: null as number | null };
+      }
+      const a = Math.min(r.ageDays, M);
+      const developed = developedAt[a];
+      const pct = cum(r, a) / b + prior * (1 - developed);
+      projWeighted += pct * b;
+      baseSum += b;
+      return { pct: round4(pct), developed: round4(developed) };
+    });
+    const period = baseSum > 0 ? round4(projWeighted / baseSum) : null;
+
+    return { period, perCohort, tailIncomplete };
+  };
+
+  const byCount = lens((c) => c.cumCount, (r) => r.baseCount);
+  const byUsd = lens((c) => c.cumUsd, (r) => r.baseUsd);
+
+  let mature = 0;
+  cohorts.forEach((r, i) => {
+    if (r.ageDays >= M) mature++;
+    r.projection = {
+      pctCount: byCount.perCohort[i].pct,
+      pctUsd: byUsd.perCohort[i].pct,
+      developedCount: byCount.perCohort[i].developed,
+      developedUsd: byUsd.perCohort[i].developed,
+    };
+  });
+
+  return {
+    method: 'mature-cohort pattern + bornhuetter-ferguson (cape cod prior)',
+    periodPctCount: byCount.period,
+    periodPctUsd: byUsd.period,
+    matureCohortCount: mature,
+    tailIncomplete: byCount.tailIncomplete || byUsd.tailIncomplete,
+  };
 }

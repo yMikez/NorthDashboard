@@ -1016,6 +1016,7 @@ function AffiliateDrawer({ affiliateId, filters, onClose }) {
 // maduras em cada idade. Eixos vêm da dupla lente (orderedAt=venda,
 // refundedAt=estorno) — ver lib/services/refundCohorts.ts.
 function RefundCohortsPage({ filters }) {
+  const [view, setView] = useState('painel');      // 'painel' | 'ajuda'
   const [metric, setMetric] = useState('count');   // 'count' | 'usd'
   const [horizon, setHorizon] = useState(30);
   const [minN, setMinN] = useState(30);            // amostra mínima (Cohort.md §4)
@@ -1090,12 +1091,23 @@ function RefundCohortsPage({ filters }) {
         </div>
         <div className="page-head-actions" style={{ flexWrap: 'wrap' }}>
           <div className="seg">
-            {[['count', 'Pedidos'], ['usd', 'Valor $']].map(([k, l]) => (
-              <button key={k} className={metric === k ? 'is-active' : ''} onClick={() => setMetric(k)}>{l}</button>
+            {[['painel', 'Painel'], ['ajuda', 'Como ler']].map(([k, l]) => (
+              <button key={k} className={view === k ? 'is-active' : ''} onClick={() => setView(k)}>{l}</button>
             ))}
           </div>
+          {view === 'painel' && (
+            <div className="seg">
+              {[['count', 'Pedidos'], ['usd', 'Valor $']].map(([k, l]) => (
+                <button key={k} className={metric === k ? 'is-active' : ''} onClick={() => setMetric(k)}>{l}</button>
+              ))}
+            </div>
+          )}
         </div>
       </div>
+
+      {view === 'ajuda' && <RefundCohortsHelp horizon={horizon}/>}
+
+      {view === 'painel' && <>
 
       <div className="mini-kpis">
         {[7, 14, 30].filter((a) => a <= horizon).map((age) => {
@@ -1119,6 +1131,27 @@ function RefundCohortsPage({ filters }) {
           <div className="l">Base no período</div>
           <div className="v">{d ? fmtInt(d.totals.baseCount) : '—'}</div>
           <div className="s">{d ? `${fmtCurrency(d.totals.baseUsd, cur, 0)} vendidos` : '…'}</div>
+        </div>
+        {/* FASE 2: projeção chain-ladder+BF de onde o PERÍODO estabiliza. */}
+        <div className="mini-kpi">
+          <div className="l">Projeção do período · D{d ? d.horizonDays : horizon}</div>
+          <div className="v" style={{
+            fontStyle: 'italic',
+            color: (() => {
+              const v = d ? (metric === 'usd' ? d.projection?.periodPctUsd : d.projection?.periodPctCount) : null;
+              return v != null && v > 0.06 ? 'var(--danger)' : 'inherit';
+            })(),
+          }}>
+            {(() => {
+              const v = d ? (metric === 'usd' ? d.projection?.periodPctUsd : d.projection?.periodPctCount) : null;
+              return v != null ? '~' + (v * 100).toFixed(2) + '%' : '—';
+            })()}
+          </div>
+          <div className="s">
+            {d?.projection?.tailIncomplete
+              ? 'PISO — falta histórico pro fim da curva'
+              : 'estimativa · coortes imaturas projetadas'}
+          </div>
         </div>
         <div className="mini-kpi">
           <div className="l">Estornado (matriz)</div>
@@ -1189,12 +1222,16 @@ function RefundCohortsPage({ filters }) {
                 {cols.map((c) => (
                   <th key={c} className="num" style={{ position: 'sticky', top: 0, zIndex: 3, background: 'var(--bg-raised)', minWidth: 40 }}>+{c}d</th>
                 ))}
+                <th className="num" style={{ position: 'sticky', top: 0, right: 0, zIndex: 4, background: 'var(--bg-raised)', minWidth: 56 }}
+                  title={`Onde a coorte deve ESTABILIZAR ao completar ${horizon} dias — padrão das coortes maduras + ajuste Bornhuetter-Ferguson, calculado sobre o histórico do próprio recorte. Coorte madura mostra o valor observado.`}>
+                  final D{horizon}
+                </th>
               </tr>
             </thead>
             <tbody>
-              {state.status === 'loading' && <SkelTableRows rows={10} cols={cols.length + 2}/>}
+              {state.status === 'loading' && <SkelTableRows rows={10} cols={cols.length + 3}/>}
               {state.status === 'ready' && cohorts.length === 0 && (
-                <tr><td colSpan={cols.length + 2} style={{ textAlign: 'center', padding: 24, opacity: 0.6 }}>Sem vendas no período</td></tr>
+                <tr><td colSpan={cols.length + 3} style={{ textAlign: 'center', padding: 24, opacity: 0.6 }}>Sem vendas no período</td></tr>
               )}
               {state.status === 'ready' && cohorts.map((row) => {
                 const lowN = row.baseCount < minN;
@@ -1228,6 +1265,43 @@ function RefundCohortsPage({ filters }) {
                         </td>
                       );
                     })}
+                    {(() => {
+                      const proj = row.projection;
+                      const v = proj ? (metric === 'usd' ? proj.pctUsd : proj.pctCount) : null;
+                      const dev = proj ? (metric === 'usd' ? proj.developedUsd : proj.developedCount) : null;
+                      const isMature = row.ageDays >= horizon;
+                      const piso = d?.projection?.tailIncomplete && !isMature;
+                      const stickyRight = { position: 'sticky', right: 0, zIndex: 1 };
+                      if (v == null) {
+                        return <td className="num cell-mono" style={{ ...stickyRight, background: 'var(--bg-raised)', color: 'var(--fg5)' }}>—</td>;
+                      }
+                      // Mix com a SUPERFÍCIE (não transparent): célula sticky
+                      // precisa de fundo opaco pro conteúdo não vazar por baixo.
+                      const solidBg = lowN
+                        ? 'color-mix(in oklab, var(--fg5) 10%, var(--bg-raised))'
+                        : v <= 0.06
+                          ? `color-mix(in oklab, var(--success) ${Math.round((1 - v / 0.06) * 55)}%, var(--bg-raised))`
+                          : `color-mix(in oklab, var(--danger) ${Math.round(Math.min(1, (v - 0.06) / 0.06) * 65)}%, var(--bg-raised))`;
+                      return (
+                        <td className="num cell-mono"
+                          title={isMature
+                            ? `coorte completa: ${(v * 100).toFixed(2)}% observado até D${horizon}`
+                            : `projeção: já viu ${dev != null ? Math.round(dev * 100) : '?'}% do caminho (D${Math.min(row.ageDays, horizon)} de D${horizon}).\npadrão das coortes maduras + ajuste Bornhuetter-Ferguson, sobre o histórico deste recorte.${piso ? '\nPISO: falta histórico pro fim da curva — o real tende a ser maior.' : ''}`}
+                          style={{
+                            ...stickyRight,
+                            background: solidBg,
+                            color: lowN ? 'var(--fg5)' : 'var(--fg1)',
+                            borderRadius: 4,
+                            fontSize: 10.5,
+                            padding: '4px 5px',
+                            fontStyle: isMature ? 'normal' : 'italic',
+                            borderLeft: '2px solid var(--border-soft)',
+                            fontWeight: 600,
+                          }}>
+                          {isMature ? '' : '~'}{(v * 100).toFixed(1)}{piso ? '+' : ''}
+                        </td>
+                      );
+                    })()}
                   </tr>
                 );
               })}
@@ -1239,6 +1313,7 @@ function RefundCohortsPage({ filters }) {
           <span><span style={{ display: 'inline-block', width: 10, height: 10, borderRadius: 3, background: 'color-mix(in oklab, var(--danger) 55%, transparent)', verticalAlign: '-1px' }}/> acima da meta</span>
           <span><span style={{ display: 'inline-block', width: 10, height: 10, borderRadius: 3, background: 'color-mix(in oklab, var(--fg5) 10%, transparent)', verticalAlign: '-1px' }}/> amostra &lt; {minN}</span>
           <span>célula vazia = coorte ainda não chegou naquele dia</span>
+          <span><em>~N</em> na última coluna = projeção de maturidade (ritmo das coortes maduras + BF, do próprio recorte); sem ~ = observado · <em>+</em> = piso</span>
           {d && d.totals.orphanEventCount > 0 && (
             <span style={{ color: 'var(--warning)' }}>
               {fmtInt(d.totals.orphanEventCount)} estorno{d.totals.orphanEventCount === 1 ? '' : 's'} de dias sem venda elegível — fora da matriz
@@ -1246,6 +1321,202 @@ function RefundCohortsPage({ filters }) {
           )}
         </div>
       </div>
+      </>}
+    </div>
+  );
+}
+
+// Sub-visão "Como ler": manual didático da aba de coortes — pedido do
+// usuário 2026-08-18. Zero fetch: conteúdo estático, exemplos numéricos
+// fixos (não dependem do período filtrado) e a mini-matriz reusa o mesmo
+// visual das células reais pra treinar o olho.
+function RefundCohortsHelp({ horizon }) {
+  const P = ({ children }) => (
+    <p style={{ margin: '0 0 10px', fontSize: 13, lineHeight: 1.65, color: 'var(--fg2, var(--fg1))' }}>{children}</p>
+  );
+  const H = ({ children }) => <strong style={{ color: 'var(--fg1)' }}>{children}</strong>;
+  const Mono = ({ children }) => (
+    <span className="cell-mono" style={{ fontSize: 12, color: 'var(--fg1)' }}>{children}</span>
+  );
+  // Célula de exemplo com o MESMO visual da matriz real.
+  const Cell = ({ v, tone, dim, italic }) => (
+    <td className="num cell-mono" style={{
+      background: dim ? 'color-mix(in oklab, var(--fg5) 10%, transparent)'
+        : tone === 'ok' ? 'color-mix(in oklab, var(--success) 35%, transparent)'
+        : tone === 'bad' ? 'color-mix(in oklab, var(--danger) 45%, transparent)'
+        : 'transparent',
+      color: dim ? 'var(--fg5)' : 'var(--fg1)',
+      borderRadius: 4, fontSize: 10.5, padding: '4px 7px',
+      fontStyle: italic ? 'italic' : 'normal',
+    }}>{v}</td>
+  );
+
+  const Panel = ({ eyebrow, sub, children }) => (
+    <div className="panel" style={{ marginBottom: 14 }}>
+      <div className="panel-head">
+        <div className="panel-title">
+          <span className="panel-eyebrow">{eyebrow}</span>
+          {sub && <div className="panel-sub">{sub}</div>}
+        </div>
+      </div>
+      <div style={{ padding: '0 4px' }}>{children}</div>
+    </div>
+  );
+
+  return (
+    <div>
+      <Panel eyebrow="POR QUE ESTA ABA EXISTE" sub="o problema que a taxa comum de reembolso não consegue resolver">
+        <P>
+          A taxa "normal" divide os estornos do mês pelas vendas do <em>mesmo</em> mês. Só que reembolso
+          quase nunca é da venda de hoje — ele chega dias ou semanas depois. Quando o volume de venda muda
+          rápido, essa conta quebra:
+        </P>
+        <P>
+          <H>Exemplo:</H> em julho você vendeu <Mono>1.000</Mono> pedidos. Em agosto pausou o tráfego e
+          vendeu <Mono>100</Mono>. Aí chegam <Mono>40</Mono> estornos em agosto — quase todos de vendas de
+          julho. A taxa comum de agosto mostra <Mono>40 ÷ 100 = 40%</Mono> e parece catástrofe. Mas a
+          qualidade não piorou <em>nada</em>: o denominador é que encolheu.
+        </P>
+        <P>
+          Aqui cada estorno é <H>preso ao dia da VENDA original</H>. Os 40 estornos contam contra as 1.000
+          vendas de julho (<Mono>4%</Mono>), e agosto é julgado só pelo que agosto vendeu. "Coorte" é isso:
+          a <em>safra</em> de vendas de um dia, acompanhada pelo resto da vida dela.
+        </P>
+      </Panel>
+
+      <Panel eyebrow="COMO LER A MATRIZ" sub="linha = dia da venda · coluna = dias depois da venda · célula = % acumulado">
+        <div className="tbl-wrap" style={{ margin: '0 0 10px', overflowX: 'auto' }}>
+          <table className="tbl" style={{ borderCollapse: 'separate', borderSpacing: 2, maxWidth: 560 }}>
+            <thead>
+              <tr>
+                <th style={{ minWidth: 96 }}>Venda</th>
+                <th className="num">Base</th>
+                <th className="num">+0d</th><th className="num">+7d</th>
+                <th className="num">+15d</th><th className="num">+30d</th>
+                <th className="num">final D30</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td className="cell-mono">10 de jul</td>
+                <td className="num cell-mono">200</td>
+                <Cell v="1.0" tone="ok"/><Cell v="4.5" tone="ok"/><Cell v="6.5" tone="bad"/><Cell v="8.0" tone="bad"/>
+                <Cell v="8.0" tone="bad"/>
+              </tr>
+              <tr>
+                <td className="cell-mono">05 de ago</td>
+                <td className="num cell-mono">180</td>
+                <Cell v="0.6" tone="ok"/><Cell v="2.8" tone="ok"/><td className="num"/><td className="num"/>
+                <Cell v="~6.9" tone="bad" italic/>
+              </tr>
+              <tr>
+                <td className="cell-mono">17 de ago <span style={{ color: 'var(--warning)' }}>·</span></td>
+                <td className="num cell-mono" style={{ color: 'var(--fg5)' }}>7</td>
+                <Cell v="14.3" dim/><td className="num"/><td className="num"/><td className="num"/>
+                <Cell v="~9.1" dim italic/>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <P>
+          <H>Linha 1 (10 de jul):</H> das 200 vendas do dia, <Mono>1.0%</Mono> estornou no próprio dia,
+          <Mono> 4.5%</Mono> até uma semana, <Mono>8.0%</Mono> até 30 dias. A célula é sempre
+          <H> acumulada</H> — nunca diminui da esquerda pra direita. Como a coorte já viveu os 30 dias,
+          a última coluna é o número <em>final observado</em> (sem <Mono>~</Mono>).
+        </P>
+        <P>
+          <H>Linha 2 (05 de ago):</H> as células vazias são <H>censura</H> — a coorte tem só 13 dias de
+          vida, então "+15d" e "+30d" ainda <em>não aconteceram</em>. Vazio ≠ 0%: é "cedo demais pra saber".
+          O <Mono>~6.9</Mono> em itálico é a <H>projeção</H> de onde ela deve parar.
+        </P>
+        <P>
+          <H>Linha 3 (17 de ago):</H> cinza = <H>amostra baixa</H>. 7 vendas com 1 estorno mostra
+          <Mono> 14.3%</Mono>, mas isso é ruído, não taxa — o ponto <span style={{ color: 'var(--warning)' }}>·</span> ao
+          lado da data avisa. Só leve a sério coorte acima do corte de amostra mínima que você escolheu.
+        </P>
+        <P>
+          A cor segue a <H>meta de 6%</H>: verde abaixo, vermelho acima — a mesma régua do resto do dashboard.
+        </P>
+      </Panel>
+
+      <Panel eyebrow="A CURVA DE MATURAÇÃO" sub="quanto do estorno total aparece até o dia N — a régua justa entre meses">
+        <P>
+          A curva agrega as coortes por <H>idade</H>: no ponto "+10d" só entram coortes que já viveram 10
+          dias. Isso remove o viés das coortes novas (que puxariam a média pra baixo só por serem novas).
+        </P>
+        <P>
+          <H>Como usar:</H> compare o mês atual com o anterior <em>nas mesmas idades</em>. Se a curva de
+          agosto está acima da de julho no "+7d" e no "+14d", a qualidade piorou de verdade — não é efeito
+          de volume nem de coorte imatura. Os chips <H>D7 / D14 / D30</H> no topo são exatamente esses
+          pontos da curva.
+        </P>
+      </Panel>
+
+      <Panel eyebrow="A PROJEÇÃO (~)" sub="onde a coorte nova deve ESTABILIZAR quando amadurecer">
+        <P>
+          As coortes antigas ensinam o <H>ritmo</H> do estorno. Exemplo: historicamente, até o dia 5
+          aparece <Mono>40%</Mono> de tudo que vai estornar até o dia 30. Se a coorte de 5 dias está com
+          <Mono> 3%</Mono>, a projeção é <Mono>3% ÷ 40% ≈ 7.5%</Mono> — uma regra de três com o ritmo real
+          do seu histórico (o mesmo princípio que seguradoras usam pra prever sinistros que ainda vão chegar).
+        </P>
+        <P>
+          Um ajuste extra (<em>Bornhuetter-Ferguson</em>) evita um erro bobo: coorte de ontem com 0 estornos
+          projetaria 0% — otimismo, não dado. O ajuste puxa coortes muito novas pra perto da média do
+          período até elas terem informação própria.
+        </P>
+        <P>
+          <H>Como ler:</H> <Mono>~8.2</Mono> em itálico = estimativa. Sem <Mono>~</Mono> = coorte completa,
+          valor observado. <H>"PISO"</H> no chip de projeção = falta histórico pra ver o fim da curva
+          (ex.: horizonte de 90d com só 40 dias de dados) — o número real tende a ser um pouco <em>maior</em>.
+        </P>
+      </Panel>
+
+      <Panel eyebrow="TRÊS DECISÕES QUE ESTA ABA RESOLVE" sub="exemplos práticos">
+        <P>
+          <H>1. Pegar coorte ruim cedo.</H> A coorte de terça está projetando <Mono>~12%</Mono> com 4 dias
+          de vida? Não espere 30 dias pra confirmar: abra Transações naquele dia, veja qual afiliado/campanha
+          dominou as vendas e aja agora.
+        </P>
+        <P>
+          <H>2. Julgar um mês sem viés.</H> "Agosto está com refund alto" — está mesmo? Olhe a curva nas
+          mesmas idades. Se bate com julho, o "alto" é só estorno de venda antiga caindo agora.
+        </P>
+        <P>
+          <H>3. Calibrar o modelo CPA.</H> O D30 maduro por família (use o filtro global) é o número certo
+          pro <em>refund&cb%</em> da aba Plataformas — que alimenta o NET AFTER CPA dos afiliados.
+        </P>
+      </Panel>
+
+      <Panel eyebrow="GLOSSÁRIO" sub="todos os termos da aba, sem economês">
+        <div className="tbl-wrap" style={{ margin: 0, overflowX: 'auto' }}>
+          <table className="tbl" style={{ maxWidth: 860 }}>
+            <tbody>
+              {[
+                ['Coorte', 'a "safra" de vendas de um dia, acompanhada dali em diante. Cada linha da matriz é uma coorte.'],
+                ['Base', 'quantas vendas reais a coorte tem. Na Digistore a linha de estorno é um registro extra — ela NÃO conta como venda.'],
+                ['+Nd (lag)', 'dias entre a venda e o estorno. Estorno no mesmo dia = +0d.'],
+                ['Acumulado', 'a célula soma tudo ATÉ aquele dia — por isso nunca diminui da esquerda pra direita.'],
+                ['Censura', 'célula em branco: a coorte ainda não viveu aquele dia. Diferente de 0%.'],
+                ['Coorte madura', 'já completou o horizonte — o número dela é final, não estimativa.'],
+                ['Horizonte', `a última coluna da matriz (você escolhe: 14/30/60/90 dias; agora está em ${horizon}d). Estornos depois disso aparecem no rodapé como "além do horizonte".`],
+                ['D7 / D14 / D30', 'a taxa agregada madura naquela idade — pontos da curva de maturação.'],
+                ['Amostra mínima', 'coorte com menos vendas que o corte fica cinza: 1 estorno em 5 vendas é 20% de ruído, não de taxa.'],
+                ['Meta 6%', 'a régua de cor das células (verde abaixo, vermelho acima) — mesma referência de reembolso do resto do dash.'],
+                ['Pedidos × Valor $', 'duas lentes: contagem de pedidos estornados vs dinheiro devolvido. Divergem quando há refund parcial ou quando tickets altos estornam mais.'],
+                ['Projeção (~)', 'estimativa de onde a coorte imatura estabiliza, calculada com o ritmo das suas coortes já maduras + ajuste Bornhuetter-Ferguson pra coorte muito nova.'],
+                ['Piso', 'projeção com histórico incompleto — o valor real tende a ser maior, nunca menor.'],
+                ['Inclui chargebacks', 'a matriz soma reembolso + chargeback: é tudo dinheiro que voltou, a mesma régua do modelo CPA.'],
+                ['Estornos órfãos', 'estornos de vendas anteriores ao dashboard (dia de venda desconhecido) — ficam fora da matriz e são avisados no rodapé.'],
+              ].map(([t, d2]) => (
+                <tr key={t}>
+                  <td style={{ whiteSpace: 'nowrap', fontWeight: 600, color: 'var(--fg1)', verticalAlign: 'top' }}>{t}</td>
+                  <td style={{ fontSize: 12.5, lineHeight: 1.55, color: 'var(--fg3)' }}>{d2}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </Panel>
     </div>
   );
 }
