@@ -86,7 +86,8 @@ export async function POST(req: Request) {
     }
 
     // Eventos NÃO-venda (RFND/CGBK/INSF/CANCEL-REBILL) chegam com payload
-    // do EVENTO (date = dia do refund, other_params às vezes ausente) —
+    // do EVENTO (other_params às vezes ausente; o `date` é o da VENDA
+    // original — a JVZoo não manda o instante do estorno, ver connector) —
     // a âncora recomputada sairia errada e o update arrancaria o pedido
     // da sessão de compra. Preserva sessão e papel já gravados.
     const isSaleLike = ['sale', 'bill', 'uncancel-rebill'].includes(normalized.eventType);

@@ -116,9 +116,28 @@ export async function GET(req: Request) {
     ORDER BY 1 DESC
     LIMIT 30`;
 
+  // Histograma de LAG (dias venda→estorno, BRT): a prova de vida do cohort.
+  // Plataforma saudável tem distribuição espalhada; lag 0 concentrado = a
+  // data do evento está herdando a da venda (bug classe "payload sem
+  // timestamp de estorno", ver JVZoo 2026-08-19).
+  const byLag = await db.$queryRaw<Array<{ lag: number; n: bigint }>>`
+    SELECT GREATEST(0,
+             ((COALESCE(o."refundedAt", o."chargebackAt") AT TIME ZONE 'UTC') AT TIME ZONE 'America/Sao_Paulo')::date
+             - ((o."orderedAt" AT TIME ZONE 'UTC') AT TIME ZONE 'America/Sao_Paulo')::date
+           )::int AS lag,
+           COUNT(*)::bigint AS n
+    FROM "Order" o
+    WHERE o."platformId" = ${platform.id}
+      AND o."status" IN ('REFUNDED', 'CHARGEBACK')
+      AND COALESCE(o."refundedAt", o."chargebackAt") >= ${since}
+    GROUP BY 1
+    ORDER BY 1
+    LIMIT 120`;
+
   return NextResponse.json({
     platform: slug,
     windowDays: days,
+    byLag: byLag.map((r) => ({ lag: r.lag, count: Number(r.n) })),
     byEventDay: byEventDay.map((r) => ({
       day: r.day.toISOString().slice(0, 10),
       refunds: Number(r.refunds),

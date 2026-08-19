@@ -166,3 +166,30 @@ describe('parseJvzooIngest — variações', () => {
     expect(() => parseJvzooIngest(p)).toThrow(/transaction_id/);
   });
 });
+
+describe('parseJvzooIngest — instante do estorno (eventAt)', () => {
+  // A JVZoo NÃO manda o momento do refund: o `date` do RFND é a data da
+  // VENDA original (prod 2026-08-19: RFND com date=16/08 entregue 19/08).
+  // eventAt = chegada do IPN; sem ele o estorno herdaria a data da venda
+  // (lag 0 em toda a matriz de coorte).
+  it('RFND: eventAt = agora (chegada), NÃO o date do payload', () => {
+    const before = Date.now();
+    const n = parseJvzooIngest({ ...sale, transaction_type: 'RFND' });
+    expect(n.status).toBe('REFUNDED');
+    expect(n.eventAt).not.toBeNull();
+    expect(n.eventAt!.getTime()).toBeGreaterThanOrEqual(before);
+    // orderedAt continua sendo a VENDA (payload.date de 2026-07-26)
+    expect(n.orderedAt.toISOString().slice(0, 10)).toBe('2026-07-26');
+  });
+
+  it('CGBK: idem', () => {
+    const n = parseJvzooIngest({ ...sale, transaction_type: 'CGBK' });
+    expect(n.status).toBe('CHARGEBACK');
+    expect(n.eventAt).not.toBeNull();
+  });
+
+  it('SALE/BILL: eventAt null (orderedAt JÁ é o instante do evento)', () => {
+    expect(parseJvzooIngest(sale).eventAt).toBeNull();
+    expect(parseJvzooIngest({ ...sale, transaction_type: 'BILL', transaction_id: 'R1' }).eventAt).toBeNull();
+  });
+});

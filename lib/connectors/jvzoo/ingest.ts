@@ -179,6 +179,7 @@ export function parseJvzooIngest(payload: JvzooPayload): NormalizedOrder {
   // SKUs que o classificador não reconhece, a reconciliação por sessão.
   const productType: NormalizedProductType = 'FRONTEND';
 
+  const status = mapStatus(transactionType);
   const gross = decimal(payload.total);
   const tax = decimal(payload.tax_total);
   const { affiliateUsd, platformFeeUsd } = parsePayouts(payload.transactionPayouts);
@@ -208,7 +209,7 @@ export function parseJvzooIngest(payload: JvzooPayload): NormalizedOrder {
     customerLastName: payload.customer_last_name || null,
     customerLanguage: null,
 
-    status: mapStatus(transactionType),
+    status,
     eventType: transactionType.toLowerCase() || 'unknown',
     billingType: mapBillingType(payload.product_type),
     paySequenceNo: null,
@@ -241,6 +242,14 @@ export function parseJvzooIngest(payload: JvzooPayload): NormalizedOrder {
     detailsUrl: null,
 
     orderedAt: parseJvzooTimestamp(payload.date),
+    // Instante do ESTORNO. A JVZoo NÃO manda o momento do refund em campo
+    // nenhum: o `date` do payload de RFND/CGBK é a data da VENDA original
+    // (confirmado em prod 2026-08-19: RFND com date=2026-08-16 13:54 chegou
+    // em 2026-08-19 20:26 — 3 dias depois). Sem eventAt, o fallback do
+    // upsertOrder usaria orderedAt = venda → lag 0 em todo estorno e a
+    // matriz de coorte ficava com todas as células da linha iguais. A
+    // chegada do IPN é a melhor aproximação (JVZoo entrega em minutos).
+    eventAt: status === 'REFUNDED' || status === 'CHARGEBACK' ? new Date() : null,
     rawMetadata: payload as unknown as Record<string, unknown>,
   };
 }

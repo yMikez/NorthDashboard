@@ -4,23 +4,24 @@
 //
 // O que estava errado até 2026-08-18: nessas plataformas o IPN de estorno
 // REESCREVE a linha da venda, e o upsert antigo deixava:
-//   ClickBank/JVZoo — orderedAt = data do ESTORNO (o payload do evento é a
-//     única fonte e o transactionTime/date dele é o estorno). A data da
-//     venda sumia da linha; refundedAt ficava igual (lag 0) e approvedAt
-//     era anulado.
+//   ClickBank — orderedAt = data do ESTORNO (o transactionTime do RFND é o
+//     estorno e sobrescrevia a linha); a venda sumia, lag 0, approvedAt nulo.
+//   JVZoo — o `date` do RFND é a data da VENDA, então orderedAt ficava certo
+//     por acidente, mas refundedAt = venda (lag 0) e approvedAt nulo.
 //   Cartpanda — orderedAt = venda (created_at do pedido sobrevive ao
 //     evento ✓), mas refundedAt = venda também (lag 0) e approvedAt nulo.
 //   BuyGoods — nenhum IPN de refund observado em prod (0 linhas): nada a
 //     backfillar.
 //
 // Reconstrução por plataforma:
-//   CB/JVZoo:  refundedAt := orderedAt atual (que É o instante do estorno);
-//              orderedAt/approvedAt := data da VENDA, recuperada do
-//              IngestLog do evento de venda (SALE) parseado pelo connector
-//              real. Sem log de venda (estorno de venda pré-ingestão) a
-//              linha fica como está — approvedAt null a mantém FORA do
-//              cohort, que é o comportamento certo (dia de venda
-//              desconhecido ≠ dia do estorno).
+//   ClickBank: refundedAt := orderedAt atual (o transactionTime do RFND é
+//              o estorno e sobrescreveu a linha); orderedAt/approvedAt :=
+//              data da VENDA, do IngestLog de venda parseado pelo connector
+//              real. Sem log de venda (pré-ingestão) a linha fica como está
+//              — approvedAt null a mantém FORA do cohort.
+//   JVZoo:     o `date` do RFND é a data da VENDA (2026-08-19 — a JVZoo não
+//              manda timestamp de estorno!), então o estorno vem do
+//              receivedAt do IngestLog de rfnd/cgbk; venda idem ClickBank.
 //   Cartpanda: approvedAt := orderedAt (a venda foi aprovada); refundedAt/
 //              chargebackAt := refunds[].created_at do IngestLog do evento
 //              (fallback: receivedAt do log; sem log, receivedAt não existe
@@ -43,7 +44,7 @@ export interface RefundEventDatesBackfillStats {
   alreadyCorrect: number;
   /** CB/JVZoo sem IngestLog de venda — estorno de venda pré-ingestão. */
   skippedNoSaleLog: number;
-  /** Cartpanda sem log do evento de estorno. */
+  /** Cartpanda/JVZoo sem log do evento de estorno (sem fonte do instante). */
   skippedNoEventSource: number;
   parseErrors: number;
   byPlatform: Record<string, { scanned: number; updated: number }>;
@@ -149,13 +150,36 @@ export async function backfillRefundEventDates(): Promise<RefundEventDatesBackfi
       ? parseClickBankIngest(saleLog.payload as unknown as ClickBankIngestPayload)
       : parseJvzooIngest(saleLog.payload as unknown as JvzooPayload);
     const saleAt = sale.orderedAt;
-    // O orderedAt ATUAL da linha é o instante do estorno (o evento
-    // sobrescreveu) — vira o refundedAt/chargebackAt antes de restaurarmos
-    // a venda. Se um backfill anterior já rodou (orderedAt ≈ saleAt), o
-    // refundedAt existente é mantido.
-    const eventAt = row.orderedAt.getTime() === saleAt.getTime()
-      ? null // já restaurado — não derive evento da venda
-      : row.orderedAt;
+    // Instante do ESTORNO por plataforma:
+    //   ClickBank — o transactionTime do RFND é o estorno, e ele foi parar
+    //     no orderedAt da linha (evento sobrescreveu). Se orderedAt ≈ saleAt
+    //     um backfill anterior já restaurou; mantém o refundedAt existente.
+    //   JVZoo — o `date` do RFND é a data da VENDA (descoberto 2026-08-19:
+    //     não existe timestamp de estorno no payload!), então orderedAt
+    //     NUNCA carregou o estorno. A única fonte é o receivedAt do
+    //     IngestLog do evento de estorno (JVZoo entrega em minutos).
+    let eventAt: Date | null;
+    if (slug === 'jvzoo') {
+      const revLog = await db.ingestLog.findFirst({
+        where: {
+          platformSlug: 'jvzoo',
+          externalId: row.externalId,
+          eventType: { in: ['rfnd', 'cgbk'] },
+        },
+        orderBy: { receivedAt: 'asc' },
+        select: { receivedAt: true },
+      });
+      if (!revLog) {
+        // Sem log do estorno não há fonte — deixa como está e conta.
+        stats.skippedNoEventSource++;
+        return null;
+      }
+      eventAt = revLog.receivedAt;
+    } else {
+      eventAt = row.orderedAt.getTime() === saleAt.getTime()
+        ? null // já restaurado — não derive evento da venda
+        : row.orderedAt;
+    }
     return {
       orderedAt: saleAt,
       approvedAt: saleAt,
