@@ -747,3 +747,68 @@ describe('normalizeFamily — duplicatas por capitalização', () => {
     expect(classifyProduct('x', 'Blessed kit 5 Bottles (Upgrade)', 'jvzoo').family).toBe('Blessed Kit');
   });
 });
+
+// Convenção JVZoo confirmada pelo usuário 2026-08-19: o funil é SEMPRE
+// UP01 / Up02 / Up03 + Downsell 01 / Down 02 / Down 03.
+describe('classifyProduct — JVZoo convenção UP01..Down 03', () => {
+  it('marcadores numerados com zero à esquerda', () => {
+    expect(classifyProduct('x', 'Neuro Mind Pro 6 Bottles UP01', 'jvzoo'))
+      .toMatchObject({ type: 'UPSELL', funnelStep: 2, family: 'NeuroMindPro' });
+    expect(classifyProduct('x', 'Digest Flow 6 Bottles Up 02', 'jvzoo'))
+      .toMatchObject({ type: 'UPSELL', funnelStep: 3 });
+    expect(classifyProduct('x', 'Night Calm 6 Bottles (Up03)', 'jvzoo'))
+      .toMatchObject({ type: 'UPSELL', funnelStep: 4 });
+  });
+
+  it('"Downsell 01" / "Down 02" / "Down 03" / "DS 02"', () => {
+    expect(classifyProduct('x', 'Neuro Mind Pro 3 Bottles Downsell 01', 'jvzoo'))
+      .toMatchObject({ type: 'DOWNSELL', funnelStep: 2 });
+    expect(classifyProduct('x', 'Digest Flow 3 Bottles Down 02', 'jvzoo'))
+      .toMatchObject({ type: 'DOWNSELL', funnelStep: 3 });
+    expect(classifyProduct('x', 'Night Calm 3 Bottles (Down 03)', 'jvzoo'))
+      .toMatchObject({ type: 'DOWNSELL', funnelStep: 4 });
+    expect(classifyProduct('x', 'Honey Flush 3 Bottles DS 02', 'jvzoo'))
+      .toMatchObject({ type: 'DOWNSELL', funnelStep: 3 });
+  });
+
+  it('DigestFlow sem número na JVZoo ancora no slot 2 (não existe FE dele lá)', () => {
+    expect(classifyProduct('x', 'Digest Flow 6 Bottles (Upgrade)', 'jvzoo'))
+      .toMatchObject({ type: 'UPSELL', funnelStep: 3 });
+    expect(classifyProduct('x', 'Digest Flow 3 Bottles (Last Chance)', 'jvzoo'))
+      .toMatchObject({ type: 'DOWNSELL', funnelStep: 3 });
+  });
+
+  it('DigestFlow na BuyGoods segue o default (slot 1) — âncora é só JVZoo', () => {
+    expect(classifyProduct('x', 'Digest Flow 6 Bottles (Upgrade)', 'buygoods'))
+      .toMatchObject({ type: 'UPSELL', funnelStep: 2 });
+  });
+
+  it('bundle triplo com contagem na frente: Upgrade → Up03, LastChance → Down 03', () => {
+    const up = classifyProduct('x', '1 Flex Guard + 1 Night Calm + 1 Honey Flush (Upgrade)', 'jvzoo');
+    expect(up).toMatchObject({ type: 'UPSELL', funnelStep: 4, bottles: 3 });
+    expect(up.family).toBe('FlexGuard + NightCalm + Honey Flush');
+    const dw = classifyProduct('x', '1 Flex Guard + 1 Night Calm + 1 Honey Flush (LastChance)', 'jvzoo');
+    expect(dw).toMatchObject({ type: 'DOWNSELL', funnelStep: 4, bottles: 3 });
+  });
+
+  it('bundle triplo com marcador NUMERADO respeita o número', () => {
+    expect(classifyProduct('x', '1 Flex Guard + 1 Night Calm + 1 Honey Flush (Down 02)', 'jvzoo'))
+      .toMatchObject({ type: 'DOWNSELL', funnelStep: 3 });
+  });
+
+  it('fallback sem família parseável AINDA lê o marcador (era UPSELL cego)', () => {
+    expect(classifyProduct('x', 'Mega Pack Especial (LastChance)', 'jvzoo').type).toBe('DOWNSELL');
+    expect(classifyProduct('x', 'Mega Pack Especial Down 03', 'jvzoo'))
+      .toMatchObject({ type: 'DOWNSELL', funnelStep: 4 });
+    expect(classifyProduct('x', 'Mega Pack Especial UP02', 'jvzoo'))
+      .toMatchObject({ type: 'UPSELL', funnelStep: 3 });
+    // sem marcador nenhum → default histórico (UPSELL sem etapa)
+    expect(classifyProduct('x', 'Mega Pack Especial', 'jvzoo'))
+      .toMatchObject({ type: 'UPSELL', funnelStep: null });
+  });
+
+  it('sem falso positivo: "up"/"ds" dentro de palavra não vira marcador', () => {
+    expect(classifyProduct('x', 'Syrup 2 Bottles', 'jvzoo').type).toBe('FRONTEND');
+    expect(classifyProduct('x', 'Hands 2 Bottles', 'jvzoo').type).toBe('FRONTEND');
+  });
+});

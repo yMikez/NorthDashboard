@@ -99,6 +99,14 @@ const BUYGOODS_NAME_RE =
 const COMBO_ABBREV_RE =
   /^(?<famA>[A-Za-z][A-Za-z ]*?)\s*(?<b1>\d+)\s*B\s*\+\s*(?<famB>[A-Za-z][A-Za-z ]*?)\s*(?<b2>\d+)\s*B\b\s*(?<rest>.*)$/i;
 
+// Combo com a CONTAGEM NA FRENTE de cada item — bundle triplo da JVZoo:
+//   "1 Flex Guard + 1 Night Calm + 1 Honey Flush (Upgrade)"
+// items = tudo antes do marcador entre parênteses; cada item = "N Nome".
+// Requer 2+ itens (o split valida) — nome comum "2 Bottles..." não chega
+// aqui porque o caminho BuyGoods casa antes.
+const COMBO_COUNT_FIRST_RE =
+  /^(?<items>\d+\s+[A-Za-z][A-Za-z ]*?(?:\s*\+\s*\d+\s+[A-Za-z][A-Za-z ]*?)+)\s*(?<rest>\(.*)?$/;
+
 const FAMILY_NORMALIZATIONS: Array<[RegExp, string]> = [
   [/^glycopulse$/i, 'GlycoPulse'],
   [/^glyco\s*pulse$/i, 'GlycoPulse'],
@@ -216,19 +224,26 @@ function classifyType(typeCode: string): { type: ProductType; step: number } {
 //   2) "Upgrade" / "Last Chance" sem N (formato antigo) → ancorado na família
 //   3) Sem modificador → FE
 // O caller já tratou FREE antes (não chega aqui).
+// Marcadores NUMERADOS de papel (convenção do vendor, confirmada pelo
+// usuário 2026-08-19 pra JVZoo: o funil é SEMPRE UP01/Up02/Up03 +
+// Downsell 01/Down 02/Down 03). Aceita zero à esquerda, espaço opcional e
+// as variações de grafia: Upgrade/Upsell/UP × Downsell/Down Sell/Down/DS/
+// Last Chance. \b nos dois lados evita falso positivo em palavra que
+// contém "up"/"ds" ("syrup", "hands"...).
+const UP_N_RE = /\b(?:upgrade|upsell|up)\s*0*(\d+)\b/;
+const DW_N_RE = /\b(?:down\s*sell|last\s*chance|down|ds)\s*0*(\d+)\b/;
+
 function buyGoodsType(
   family: string,
   rest: string,
+  platform?: string | null,
 ): { type: ProductType; step: number } {
   const r = rest.toLowerCase();
-  // Formato novo explícito: "Upgrade N" / "Downsell N" (N=1..9).
-  const upN = r.match(/upgrade\s*(\d+)/);
+  // Formato explícito numerado — vale pra "Upgrade 2", "UP01", "Up 02",
+  // "Downsell 01", "Down 03", "DS 2", "Last Chance 2".
+  const upN = r.match(UP_N_RE);
   if (upN) return classifyType(`UP${parseInt(upN[1], 10)}`);
-  // Captura "Downsell N" ou "Last Chance N". A versão anterior punha o número
-  // do "last chance" num grupo próprio e AINDA exigia \s*(\d+) depois — só
-  // casava com dois números seguidos, então "Last Chance 2" nunca era lido
-  // (contrariando o comentário original). Um grupo só resolve os dois.
-  const dwN = r.match(/(?:down\s*sell|last\s*chance)\s*(\d+)/);
+  const dwN = r.match(DW_N_RE);
   if (dwN) return classifyType(`DW${parseInt(dwN[1], 10)}`);
   // Formato antigo sem N → ancorado na família. "Downsell" NU entra aqui
   // junto com "Last Chance": antes a palavra sozinha não estava em lugar
@@ -240,6 +255,12 @@ function buyGoodsType(
   if (isDownsell || isUpgrade) {
     if (family === 'NightCalm') return classifyType(isDownsell ? 'DW2' : 'UP2');
     if (family === 'FlexImmuneGuard') return classifyType(isDownsell ? 'DW3' : 'UP3');
+    // JVZoo (funil NeuroMind, convenção 2026-08-19): DigestFlow não tem FE
+    // lá — "(Upgrade)"/"(Last Chance)" dele é SEMPRE o slot 2 (Up02/Down02).
+    // Só na JVZoo: na BuyGoods a mesma família pode ocupar outro slot.
+    if (platform === 'jvzoo' && family === 'DigestFlow') {
+      return classifyType(isDownsell ? 'DW2' : 'UP2');
+    }
     return classifyType(isDownsell ? 'DW1' : 'UP1');
   }
   return classifyType('FE');
@@ -386,7 +407,7 @@ export function classifyProduct(
       // FREE no nome → recuperação (email/SMS). Override de qualquer marcador.
       const t = isFree
         ? classifyType('RC')
-        : buyGoodsType(family, rest);
+        : buyGoodsType(family, rest, platform);
       return {
         family: family || null,
         type: t.type,
@@ -407,7 +428,7 @@ export function classifyProduct(
       // (→ FlexImmuneGuard, com custo cadastrado). Pares sem regra ficam com
       // o nome composto — família própria, que é o que eles são de fato.
       const family = normalizeFamily(`${famA} + ${famB}`);
-      const t = buyGoodsType(family, combo.groups.rest || '');
+      const t = buyGoodsType(family, combo.groups.rest || '', platform);
       return {
         family: family || null,
         type: t.type,
@@ -417,12 +438,65 @@ export function classifyProduct(
         bonusBottles: parseInt(combo.groups.b2, 10),
       };
     }
+
+    // Combo com a CONTAGEM NA FRENTE — convenção JVZoo do bundle de 3
+    // produtos ("1 Flex Guard + 1 Night Calm + 1 Honey Flush (Upgrade)").
+    // Nenhuma regex anterior casa (não há a palavra "Bottles" nem o "NB"
+    // colado), então esses nomes caíam no fallback cego: família null →
+    // COGS $0 e, pior, "(LastChance)" lido como UPSELL. Pela convenção do
+    // funil (2026-08-19: UP01/Up02/Up03 + Down01/02/03), o bundle triplo é
+    // o SLOT 3 quando o marcador não traz número.
+    const cf = COMBO_COUNT_FIRST_RE.exec(trimmed);
+    if (cf?.groups) {
+      const items = cf.groups.items.split('+').map((part) => {
+        const m = part.trim().match(/^(\d+)\s+(.+)$/);
+        return m ? { n: parseInt(m[1], 10), name: m[2].trim() } : null;
+      }).filter((x): x is { n: number; name: string } => x !== null);
+      if (items.length >= 2) {
+        const family = items.map((i) => normalizeFamily(i.name)).join(' + ');
+        const bottles = items.reduce((s, i) => s + i.n, 0);
+        const rest = cf.groups.rest || '';
+        const marked = buyGoodsType(family, rest, platform);
+        // Sem número no marcador → slot 3 (Up03/Down03 da convenção).
+        const t = marked.type === 'FRONTEND'
+          ? marked
+          : (UP_N_RE.test(rest.toLowerCase()) || DW_N_RE.test(rest.toLowerCase()))
+            ? marked
+            : classifyType(marked.type === 'DOWNSELL' ? 'DW3' : 'UP3');
+        return {
+          family,
+          type: t.type,
+          funnelStep: t.step,
+          variant: null,
+          bottles,
+          bonusBottles: null,
+        };
+      }
+    }
   }
 
-  // 4) No match — cross-sell or non-canonical naming. Caller decides what to
-  // do; we keep the existing productType assignment by returning UPSELL as a
-  // safe default (anything that wasn't recognized is most likely a backend
-  // SKU rather than a frontend entry point).
+  // 4) No match — cross-sell or non-canonical naming. O papel ainda pode
+  // estar ANOTADO no nome mesmo quando a família não é parseável — ler o
+  // marcador aqui evita o pior caso do fallback cego ("(LastChance)" de um
+  // SKU não reconhecido virando UPSELL, 30 pedidos JVZoo em 2026-08-19).
+  // Sem marcador nenhum, mantém o default histórico: UPSELL sem etapa
+  // (SKU desconhecido é mais provável backend que porta de entrada).
+  if (name) {
+    const raw = name.toLowerCase();
+    const dwN = raw.match(DW_N_RE);
+    if (dwN) {
+      const t = classifyType(`DW${parseInt(dwN[1], 10)}`);
+      return { family: null, type: t.type, funnelStep: t.step, variant: null, bottles: null, bonusBottles: null };
+    }
+    if (/last\s*chance|down\s*sell/.test(raw)) {
+      return { family: null, type: 'DOWNSELL', funnelStep: null, variant: null, bottles: null, bonusBottles: null };
+    }
+    const upN = raw.match(UP_N_RE);
+    if (upN) {
+      const t = classifyType(`UP${parseInt(upN[1], 10)}`);
+      return { family: null, type: t.type, funnelStep: t.step, variant: null, bottles: null, bonusBottles: null };
+    }
+  }
   return {
     family: null,
     type: 'UPSELL',
