@@ -12,7 +12,7 @@
 // a API em todo pedido adicionaria latência+custo em 100% dos casos pra
 // resolver <5%. O batch pega os mesmos gaps de forma revisável e barata.
 
-import { getAnthropicClient, ANTHROPIC_MODEL } from './ai';
+import { getAnthropicClient, ANTHROPIC_CLASSIFY_MODEL } from './ai';
 import { normalizeFamily } from './productClassification';
 import { logger } from '../logger';
 
@@ -64,9 +64,12 @@ export async function aiClassifyProducts(
       .join('\n');
 
     try {
+      // Modelo PRÓPRIO (não o do chat): o chat migrou pra Opus 5, que liga
+      // thinking adaptativo por padrão — os tokens de raciocínio contam no
+      // max_tokens e um teto baixo cortava o JSON do batch no meio.
       const resp = await client.messages.create({
-        model: ANTHROPIC_MODEL,
-        max_tokens: 2048,
+        model: ANTHROPIC_CLASSIFY_MODEL,
+        max_tokens: 8192,
         system: SYSTEM,
         messages: [{ role: 'user', content: userContent }],
       });

@@ -153,11 +153,20 @@ function App({ user }) {
   // filters por prop e o idioma da SPA é escopo global.
   useEffectApp(() => {
     try {
+      // Rótulos de dia civil: as fronteiras são meia-noite BRT (presets,
+      // ex.: fim = X+1 02:59:59Z) ou meia-noite UTC (custom). Deslocar 12h
+      // pra DENTRO do intervalo cai no meio do dia certo nas duas
+      // convenções — isoDateOnly direto no fim de um preset dava X+1 e o
+      // chat consultava um dia a mais que a tela.
+      const HALF_DAY = 12 * 3600 * 1000;
       window.NSUiState = {
         route: hashState.route,
         preset: filters.preset,
-        startDate: isoDateOnly(filters.dateRange.start),
-        endDate: isoDateOnly(filters.dateRange.end),
+        startDate: isoDateOnly(new Date(filters.dateRange.start.getTime() + HALF_DAY)),
+        endDate: isoDateOnly(new Date(filters.dateRange.end.getTime() - HALF_DAY)),
+        // Instantes exatos das queries das abas — o chat usa como default.
+        startAt: filters.dateRange.start.toISOString(),
+        endAt: filters.dateRange.end.toISOString(),
         platforms: Array.from(filters.platforms || []),
         families: Array.from(filters.families || []),
         stages: Array.from(filters.stages || []),

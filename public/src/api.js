@@ -572,6 +572,10 @@ async function aiSendMessage({ conversationId, message }, callbacks) {
   const reader = res.body.getReader();
   const decoder = new TextDecoder();
   let buffer = '';
+  // Fim explícito ('done' ou 'error'). Se o stream fechar sem nenhum dos
+  // dois (proxy derrubou, container reiniciou), avisa em vez de sumir em
+  // silêncio com a resposta.
+  let ended = false;
   while (true) {
     const { done, value } = await reader.read();
     if (done) break;
@@ -596,10 +600,15 @@ async function aiSendMessage({ conversationId, message }, callbacks) {
         case 'token':        callbacks.onToken?.(payload); break;
         case 'tool_use_start': callbacks.onToolUse?.(payload); break;
         case 'tool_use_result': callbacks.onToolUseResult?.(payload); break;
-        case 'done':         callbacks.onDone?.(payload); break;
-        case 'error':        callbacks.onError?.(payload); break;
+        case 'blocks':       callbacks.onBlocks?.(payload); break;
+        case 'truncated':    callbacks.onTruncated?.(payload); break;
+        case 'done':         ended = true; callbacks.onDone?.(payload); break;
+        case 'error':        ended = true; callbacks.onError?.(payload); break;
       }
     }
+  }
+  if (!ended) {
+    callbacks.onError?.({ message: 'A conexão caiu antes da resposta terminar. Tente de novo.' });
   }
 }
 

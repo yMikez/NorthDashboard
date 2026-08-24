@@ -6253,6 +6253,7 @@ function ChatBody({ conversationId, onConversationCreated, onMessageSent, compac
           onToolUseResult: ({ name }) => setCurrentTools((prev) => prev.map((t) =>
             t.name === name && t.state === 'running' ? { ...t, state: 'done' } : t,
           )),
+          onTruncated: () => setError('A resposta bateu no teto de tamanho e foi cortada — peça "continue" pra ver o resto.'),
           onError: ({ message }) => setError(message),
         },
       );

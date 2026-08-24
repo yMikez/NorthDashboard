@@ -56,6 +56,10 @@ export async function refreshDailyMetricsIfStale(): Promise<void> {
 }
 
 export async function refreshDailyMetricsNow(): Promise<void> {
+  // Já tem um refresh completo em voo (ex.: duas tools do chat em
+  // paralelo)? Espera ele — dois REFRESH CONCURRENTLY na mesma MV só
+  // serializam no lock do Postgres e dobram a latência.
+  if (refreshInFlight) return refreshInFlight;
   refreshInFlight = doRefresh();
   try {
     await refreshInFlight;
