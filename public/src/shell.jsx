@@ -26,7 +26,7 @@ function Sidebar({ active, onNav, user, open, onClose }) {
       label: 'Captação',
       items: [
         { id: 'recovery', label: 'Recuperação', icon: 'refresh' },
-        { id: 'tauk', label: 'Tauk', icon: 'target' },
+        { id: 'tauk', label: 'Call Center', icon: 'target' },
         { id: 'sms', label: 'SMS', icon: 'message-square' },
       ]
     },

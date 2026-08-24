@@ -10,7 +10,9 @@
 //
 // BACK = fontes de recuperação/retenção, cada uma com receita−custo:
 //   recovery   → vendas aprovadas de afiliados de recuperação − comissão %
-//   tauk       → TaukSale − comissão Tauk (env TAUK_COMMISSION_PCT, 35%)
+//   tauk       → CallCenterSale(provider tauk) − comissão Tauk (35%)
+//   logicall   → CallCenterSale(provider logicall) − comissão Logicall
+//                (configurável; ver integrationSettings)
 //   sms        → vendas aprovadas com trafficSource=smsbrdcst (custo 0 —
 //                o custo do Twilio não passa pelo dash)
 //   salesbound → placeholder 0 (fonte ainda não integrada)
@@ -22,11 +24,7 @@
 import { db } from '../db';
 import { getProfitModelInputs, realOrderCount } from './profitModel';
 import { SMS_UTM_SOURCE } from '../connectors/sms/config';
-
-const TAUK_COMMISSION_PCT = (() => {
-  const v = Number(process.env.TAUK_COMMISSION_PCT ?? '0.35');
-  return Number.isFinite(v) && v >= 0 && v <= 1 ? v : 0.35;
-})();
+import { getProviderCommission, getLogicallApiKey } from './integrationSettings';
 
 function round2(n: number): number {
   return Math.round(n * 100) / 100;
@@ -188,19 +186,24 @@ export async function getProfitSplit(filters: ProfitSplitFilters): Promise<Profi
   };
   const hasOrderScope = Object.keys(orderScope).length > 0;
 
-  const [pm, recoveryAffs, taukAgg] = await Promise.all([
+  const [pm, recoveryAffs, callCenterAgg, taukComm, logicallComm] = await Promise.all([
     getProfitModelInputs(),
     db.recoveryAffiliate.findMany({
       where: { enabled: true },
       select: { affiliateId: true, commissionPct: true },
     }),
+    // Vendas dos parceiros de call center (Tauk + Logicall), só as sem
+    // estorno — cada um com a própria comissão.
     hasOrderScope
-      ? Promise.resolve(null)
-      : db.taukSale.aggregate({
-          where: { purchasedAt: range },
-          _sum: { amountUsd: true },
-          _count: { _all: true },
+      ? Promise.resolve([] as Array<{ provider: string; _sum: { amountUsd: unknown; refundedUsd: unknown } }>)
+      : db.callCenterSale.groupBy({
+          by: ['provider'],
+          where: { purchasedAt: range, status: 'APPROVED' },
+          // refundedUsd em linha APPROVED = refund PARCIAL → abate da receita.
+          _sum: { amountUsd: true, refundedUsd: true },
         }),
+    getProviderCommission('tauk'),
+    getProviderCommission('logicall'),
   ]);
   const recoveryIds = recoveryAffs.map((r) => r.affiliateId);
   const recoveryPct = new Map(recoveryAffs.map((r) => [r.affiliateId, Number(r.commissionPct)]));
@@ -299,7 +302,14 @@ export async function getProfitSplit(filters: ProfitSplitFilters): Promise<Profi
   }
   const frontProfit = round2(frontModelNet - frontCpaTotal);
 
-  const taukGross = taukAgg?._sum.amountUsd ? Number(taukAgg._sum.amountUsd) : 0;
+  const ccGross = (provider: string) => {
+    const g = callCenterAgg.find((r) => r.provider === provider);
+    const gross = g?._sum.amountUsd ? Number(g._sum.amountUsd) : 0;
+    const partial = g?._sum.refundedUsd ? Number(g._sum.refundedUsd) : 0;
+    return Math.max(0, gross - partial);
+  };
+  const taukGross = ccGross('tauk');
+  const logicallGross = ccGross('logicall');
   const smsGross = smsAgg._sum.grossAmountUsd ? Number(smsAgg._sum.grossAmountUsd) : 0;
   let recoveryGross = 0;
   let recoveryCost = 0;
@@ -311,12 +321,17 @@ export async function getProfitSplit(filters: ProfitSplitFilters): Promise<Profi
 
   const sources = [
     { key: 'recovery', label: 'Recuperação', grossUsd: round2(recoveryGross), costUsd: round2(recoveryCost), netUsd: round2(recoveryGross - recoveryCost), available: true },
-    // Tauk some quando há filtro de ordem ativo (venda Tauk não carrega
-    // plataforma/produto — melhor omitir do que somar um global no card
-    // filtrado).
+    // Call center some quando há filtro de ordem ativo (venda de parceiro
+    // não carrega plataforma — melhor omitir do que somar um global no
+    // card filtrado).
     ...(hasOrderScope
       ? []
-      : [{ key: 'tauk', label: 'Tauk', grossUsd: round2(taukGross), costUsd: round2(taukGross * TAUK_COMMISSION_PCT), netUsd: round2(taukGross * (1 - TAUK_COMMISSION_PCT)), available: true }]),
+      : [
+          { key: 'tauk', label: 'Tauk', grossUsd: round2(taukGross), costUsd: round2(taukGross * taukComm.pct), netUsd: round2(taukGross * (1 - taukComm.pct)), available: true },
+          // Sem chave configurada a fonte aparece como indisponível; comissão
+          // ASSUMIDA (não configurada) vai explícita no label.
+          { key: 'logicall', label: logicallComm.assumed ? 'Logicall (comissão assumida 35%)' : 'Logicall', grossUsd: round2(logicallGross), costUsd: round2(logicallGross * logicallComm.pct), netUsd: round2(logicallGross * (1 - logicallComm.pct)), available: logicallGross > 0 || Boolean(await getLogicallApiKey()) },
+        ]),
     { key: 'sms', label: 'SMS', grossUsd: round2(smsGross), costUsd: 0, netUsd: round2(smsGross), available: true },
     { key: 'salesbound', label: 'SalesBound', grossUsd: 0, costUsd: 0, netUsd: 0, available: false },
     { key: 'email', label: 'Email', grossUsd: 0, costUsd: 0, netUsd: 0, available: false },

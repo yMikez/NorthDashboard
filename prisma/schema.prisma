@@ -958,18 +958,45 @@ model CallCenterWatch {
 // tem produto/ID de transação e as vendas podem também transitar pela
 // plataforma principal — modelo separado evita dupla contagem nas métricas
 // de receita. Aba própria "Tauk" lê daqui.
-model TaukSale {
+// Vendas recuperadas por PARCEIROS DE CALL CENTER (telefone/SMS). Nasceu
+// como TaukSale (2026-07-06) e virou multi-provider em 2026-08-24 quando a
+// Logicall entrou — a tabela física foi RENOMEADA na migration (dados
+// preservados). Fica FORA de Order de propósito: uma venda recuperada pode
+// também transitar pela plataforma principal (dupla contagem).
+//
+//   provider 'tauk'     — webhook GET → n8n → /api/ingest/tauk. Sem ID de
+//                         transação nem produto; chave = email|data.
+//   provider 'logicall' — polling da API deles (lib/services/logicallSync):
+//                         tem transactionId, produto/SKU, agente, refund.
+model CallCenterSale {
   id                String   @id @default(cuid())
-  // Chave de dedup: email|purchase-date normalizados (payload não tem ID).
-  // Reenvio do mesmo evento faz upsert, não duplica.
+  // Dedup: tauk = email|purchase-date; logicall = "logicall:<transactionId>".
   externalKey       String   @unique
+  provider          String   @default("tauk")
+  // ID nativo do parceiro quando existe (logicall transactionId) + pedido.
+  externalId        String?
+  orderId           String?
+  // APPROVED | REFUNDED | CHARGEBACK — só a Logicall reporta estorno.
+  status            String   @default("APPROVED")
+  refundedAt        DateTime?
+  refundedUsd       Decimal? @db.Decimal(12, 2)
   email             String?
   firstName         String?
   lastName          String?
   phone             String?
   address           String?
+  state             String?
+  country           String?
   amountUsd         Decimal  @db.Decimal(12, 2)
   fulfillmentStatus String?
+  // Produto (Logicall manda items[]): nome/SKU crus + família/potes pelo
+  // classificador — habilita filtro por família e, no futuro, COGS.
+  productName       String?
+  productSku        String?
+  family            String?
+  bottles           Int?
+  // Agente do call center (Logicall: "LC-1287", ou "lc-ai-process" = IA).
+  agentName         String?
   purchasedAt       DateTime
   receivedAt        DateTime @default(now())
   updatedAt         DateTime @updatedAt
@@ -977,4 +1004,14 @@ model TaukSale {
 
   @@index([purchasedAt])
   @@index([email])
+  @@index([provider, purchasedAt])
+}
+
+// Configuração de integrações editável pela UI (chave da API Logicall,
+// comissões dos parceiros). Env var de mesmo propósito SOBRESCREVE o valor
+// daqui — ver lib/services/integrationSettings.ts.
+model IntegrationSetting {
+  key       String   @id
+  value     String
+  updatedAt DateTime @updatedAt
 }

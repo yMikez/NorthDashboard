@@ -9,7 +9,7 @@ const ROUTES = {
   'leaderboard':    { title: 'Ranking',     em: 'de afiliados', crumbs: ['Afiliados', 'Ranking'] },
   'all-affiliates': { title: 'Diretório',   em: 'de afiliados', crumbs: ['Afiliados', 'Todos'] },
   'recovery':       { title: 'Recuperação', em: 'de vendas',   crumbs: ['Captação', 'Recuperação'] },
-  'tauk':           { title: 'Tauk',        em: 'Solutions',   crumbs: ['Captação', 'Tauk'] },
+  'tauk':           { title: 'Call Center', em: 'Tauk + Logicall', crumbs: ['Captação', 'Call Center'] },
   'sms':            { title: 'SMS',         em: 'marketing',   crumbs: ['Captação', 'SMS'] },
   'products':       { title: 'Produtos',     em: '',            crumbs: ['Catálogo', 'Produtos'] },
   'transactions':   { title: 'Transações',  em: 'do ledger',   crumbs: ['Catálogo', 'Transações'] },
@@ -240,7 +240,7 @@ function App({ user }) {
           {/* Fundida com o Ranking (modelo planilha CPA) — rota antiga rende a mesma página. */}
           {hashState.route === 'all-affiliates' && <LeaderboardPage filters={filters} onOpenAffiliate={setDrawerAff}/>}
           {hashState.route === 'recovery'       && <RecoveryPage filters={filters}/>}
-          {hashState.route === 'tauk'           && <TaukPage filters={filters}/>}
+          {hashState.route === 'tauk'           && <CallCenterPage filters={filters} user={user}/>}
           {hashState.route === 'sms'            && <SmsPage filters={filters}/>}
           {hashState.route === 'products'       && <ProductsPage filters={filters}/>}
           {hashState.route === 'transactions'   && <TransactionsPage filters={filters}/>}

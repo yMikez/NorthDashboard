@@ -37,7 +37,8 @@ export const AVAILABLE_TABS: TabSpec[] = [
   // Captação: fontes novas de receita (recuperação/SMS/email). sms/email são
   // placeholders "em breve" — a tab já existe pra permissão ficar pronta.
   { id: 'recovery',       label: 'Recuperação',         group: 'Captação' },
-  { id: 'tauk',           label: 'Tauk',                group: 'Captação' },
+  // id 'tauk' preservado (permissões) — a aba virou Call Center (Tauk + Logicall).
+  { id: 'tauk',           label: 'Call Center',         group: 'Captação' },
   { id: 'sms',            label: 'SMS',                 group: 'Captação' },
   { id: 'products',       label: 'Produtos',            group: 'Catálogo' },
   { id: 'transactions',   label: 'Transações',          group: 'Catálogo' },

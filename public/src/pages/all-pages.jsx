@@ -3983,7 +3983,7 @@ const TAB_CATALOG = [
   { group: 'Afiliados', id: 'leaderboard',    label: 'Ranking' },
   { group: 'Afiliados', id: 'all-affiliates', label: 'Todos os afiliados' },
   { group: 'Captação',  id: 'recovery',       label: 'Recuperação' },
-  { group: 'Captação',  id: 'tauk',           label: 'Tauk' },
+  { group: 'Captação',  id: 'tauk',           label: 'Call Center' },
   { group: 'Captação',  id: 'sms',            label: 'SMS' },
   { group: 'Catálogo',  id: 'products',       label: 'Produtos' },
   { group: 'Catálogo',  id: 'transactions',   label: 'Transações' },
@@ -7263,6 +7263,9 @@ function RecoveryPage({ filters }) {
 // ─────────────────────────────────────────────────────────────────────────────
 
 function taukStatusStyle(status) {
+  const up = String(status || '').toUpperCase();
+  if (up === 'CHARGEBACK') return { bg: 'rgba(229,72,77,0.16)', fg: 'var(--danger)', border: 'rgba(229,72,77,0.45)' };
+  if (up === 'PENDING' || up === 'PROCESSING') return { bg: 'rgba(255,180,0,0.14)', fg: 'var(--warning)', border: 'rgba(255,180,0,0.40)' };
   const s = String(status || '').toUpperCase();
   if (s === 'HOLD') return { bg: 'color-mix(in oklab, var(--warning) 12%, transparent)', fg: 'var(--warning)', border: 'color-mix(in oklab, var(--warning) 35%, transparent)' };
   if (s === 'SHIPPED' || s === 'FULFILLED' || s === 'DELIVERED') {
@@ -7276,6 +7279,8 @@ function taukStatusStyle(status) {
 
 function TaukStatusBadge({ status }) {
   const st = taukStatusStyle(status);
+  // (CHARGEBACK/PENDING/PROCESSING entraram com a Logicall — taukStatusStyle
+  // abaixo já os conhece; este wrapper só renderiza.)
   return (
     <span style={{
       fontFamily: 'var(--f-mono)', fontSize: 9.5, fontWeight: 600, letterSpacing: '0.06em',
@@ -7296,35 +7301,72 @@ function fmtTaukWhen(iso) {
   } catch (e) { return iso; }
 }
 
-function TaukPage({ filters }) {
+// Aba "Call Center" — vendas recuperadas por PARCEIROS de telefone/SMS:
+// Tauk (webhook via n8n, desde 2026-07) e Logicall (polling da API deles,
+// desde 2026-08-22). Substitui a TaukPage. Endpoint e id da tab seguem
+// 'tauk' (permissões dos usuários apontam pra ele).
+const CC_PROVIDER_META = {
+  tauk:     { label: 'Tauk',     color: 'var(--accent)' },
+  logicall: { label: 'Logicall', color: 'var(--warning)' },
+};
+
+function CcProviderBadge({ provider }) {
+  const m = CC_PROVIDER_META[provider] || { label: provider, color: 'var(--fg4)' };
+  return (
+    <span style={{
+      fontFamily: 'var(--f-mono)', fontSize: 9.5, fontWeight: 700, letterSpacing: '0.08em',
+      textTransform: 'uppercase', padding: '2px 7px', borderRadius: 'var(--r-full)',
+      color: m.color, border: `1px solid color-mix(in oklab, ${m.color} 40%, transparent)`,
+      background: `color-mix(in oklab, ${m.color} 10%, transparent)`, whiteSpace: 'nowrap',
+    }}>{m.label}</span>
+  );
+}
+
+function CallCenterPage({ filters, user }) {
+  const [provider, setProvider] = useState('all');
   const [data, setData] = useState({ status: 'loading', m: null, err: null });
   const [refresh, setRefresh] = useState(0);
+  const isAdmin = user?.role === 'ADMIN';
 
   useEffect(() => {
     let cancelled = false;
     setData((d) => ({ ...d, status: 'loading' }));
-    window.NSApi.fetchTauk(filters)
+    window.NSApi.fetchTauk(filters, provider)
       .then((m) => { if (!cancelled) setData({ status: 'ready', m, err: null }); })
       .catch((err) => { if (!cancelled) setData({ status: 'error', m: null, err: err.message || 'erro' }); });
     return () => { cancelled = true; };
-  }, [filters.dateRange.start.getTime(), filters.dateRange.end.getTime(), refresh]);
+  }, [filters.dateRange.start.getTime(), filters.dateRange.end.getTime(), refresh, provider]);
 
   const m = data.m;
+  // KPIs do recorte: totais quando "Todos", senão o parceiro selecionado.
+  const k = m ? (provider === 'all' ? m.totals : (m.providers.find((p) => p.provider === provider) || m.totals)) : null;
+  const sync = m?.logicallSync;
 
   return (
     <div className="page-in">
       <div className="page-head">
         <div className="lead">
-          <span className="eyebrow">AFILIADOS · TAUK SOLUTIONS</span>
-          <h2>Tauk <em>· recuperação</em></h2>
-          <span className="sub">Vendas recuperadas pela Tauk (telefone/SMS) reportadas via webhook. Respeita o filtro de período.</span>
+          <span className="eyebrow">CAPTAÇÃO · CALL CENTER</span>
+          <h2>Call Center <em>· Tauk + Logicall</em></h2>
+          <span className="sub">
+            Vendas recuperadas por telefone/SMS pelos parceiros. Tauk chega por webhook; Logicall é puxada da API deles a cada 30 min. Respeita o filtro de período.
+          </span>
         </div>
-        <div className="page-head-actions">
+        <div className="page-head-actions" style={{ flexWrap: 'wrap' }}>
+          <div className="seg">
+            {[['all', 'Todos'], ['tauk', 'Tauk'], ['logicall', 'Logicall']].map(([kk, l]) => (
+              <button key={kk} className={provider === kk ? 'is-active' : ''} onClick={() => setProvider(kk)}>{l}</button>
+            ))}
+          </div>
           <button className="btn btn-ghost" onClick={() => setRefresh((n) => n + 1)}><Icon name="refresh" size={12}/> Recarregar</button>
         </div>
       </div>
 
       {data.status === 'error' && <div className="panel" style={{ color: 'var(--danger)', marginBottom: 12 }}>Erro: {data.err}</div>}
+
+      {/* Painel admin fica FORA do bloco de dados: se a integração derrubar o
+          GET (migration, API fora), o admin ainda vê status e consegue agir. */}
+      {isAdmin && <LogicallIntegrationPanel sync={sync} onChanged={() => setRefresh((n) => n + 1)}/>}
 
       {data.status === 'loading' && !m && (
         <>
@@ -7334,34 +7376,133 @@ function TaukPage({ filters }) {
         </>
       )}
 
-      {m && (
-        <>
+      {m && k && (
+        <div style={{ opacity: data.status === 'loading' ? 0.45 : 1, transition: 'opacity .15s' }}>
           <div className="grid-2" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', marginBottom: 12 }}>
-            <CopyKpi label="VENDAS RECUPERADAS" value={fmtInt(m.kpis.sales)}/>
-            <CopyKpi label="RECEITA" value={fmtCurrency(m.kpis.grossUsd, 'USD', 2)}/>
-            <CopyKpi label="TICKET MÉDIO" value={fmtCurrency(m.kpis.aovUsd, 'USD', 2)}/>
-            <CopyKpi label={`COMISSÃO TAUK (${Math.round((m.kpis.commissionPct ?? 0.35) * 100)}%)`} value={fmtCurrency(m.kpis.commissionUsd ?? 0, 'USD', 2)} tone="danger"/>
-            <CopyKpi label="LÍQUIDO (pós-comissão)" value={fmtCurrency(m.kpis.netUsd ?? 0, 'USD', 2)} tone="ok"/>
-            <CopyKpi label="EM HOLD (não enviadas)" value={fmtInt(m.kpis.holdCount)} tone={m.kpis.holdCount > 0 ? 'danger' : undefined}/>
+            <CopyKpi label="VENDAS RECUPERADAS" value={fmtInt(k.sales)} sub={k.refundedCount > 0 ? `${fmtInt(k.approved)} sem estorno` : undefined}/>
+            <CopyKpi label="RECEITA" value={fmtCurrency(k.grossUsd, 'USD', 2)}/>
+            <CopyKpi label="TICKET MÉDIO" value={fmtCurrency(k.aovUsd, 'USD', 2)}/>
+            <CopyKpi
+              label={`COMISSÃO (${Math.round((k.commissionPct || 0) * 100)}%)${k.commissionAssumed ? ' · assumida' : ''}`}
+              value={fmtCurrency(k.commissionUsd || 0, 'USD', 2)} tone="danger"
+              sub={k.commissionAssumed ? 'Logicall sem % configurada — usando 35%' : undefined}/>
+            <CopyKpi label="LÍQUIDO (pós-comissão)" value={fmtCurrency(k.netUsd || 0, 'USD', 2)} tone="ok"/>
+            <CopyKpi label="PENDENTES (HOLD/PENDING)" value={fmtInt(k.pendingCount)} tone={k.pendingCount > 0 ? 'danger' : undefined}/>
+            <CopyKpi label="ESTORNOS" value={fmtInt(k.refundedCount)} sub={k.refundedCount > 0 ? fmtCurrency(k.refundedUsd, 'USD', 0) : 'só a Logicall reporta'}/>
+          </div>
+
+          {/* Por parceiro — sempre os dois, mesmo com filtro, pra comparar. */}
+          <div className="panel" style={{ padding: 0, marginBottom: 12 }}>
+            <div className="panel-head" style={{ padding: '12px 14px 0' }}>
+              <div className="panel-title">Por parceiro</div>
+            </div>
+            <div className="tbl-wrap" style={{ margin: 0, padding: '0 4px' }}>
+              <table className="tbl">
+                <thead><tr>
+                  <th>Parceiro</th><th className="num">Vendas</th><th className="num">Receita</th><th className="num">Ticket</th>
+                  <th className="num">Comissão</th><th className="num">Líquido</th><th className="num">Pendentes</th><th className="num">Estornos</th><th>Integração</th>
+                </tr></thead>
+                <tbody>
+                  {m.providers.map((p) => {
+                    const integ = p.provider === 'tauk'
+                      ? { ok: true, text: 'webhook via n8n' }
+                      : !sync?.configured ? { ok: false, text: 'chave não configurada' }
+                      : sync.running ? { ok: true, text: 'sincronizando agora…' }
+                      : sync.lastOk === false ? { ok: false, text: `última sync falhou: ${sync.lastError || '?'}` }
+                      : sync.lastRunAt ? { ok: true, text: `sync ${fmtTaukWhen(sync.lastRunAt)}` }
+                      : { ok: false, text: 'aguardando 1ª sync' };
+                    return (
+                      <tr key={p.provider} style={{ opacity: provider !== 'all' && provider !== p.provider ? 0.55 : 1 }}>
+                        <td><CcProviderBadge provider={p.provider}/></td>
+                        <td className="num cell-mono">{fmtInt(p.sales)}</td>
+                        <td className="num cell-mono" style={{ color: 'var(--money)' }}>{fmtCurrency(p.grossUsd, 'USD', 0)}</td>
+                        <td className="num cell-mono">{p.aovUsd ? fmtCurrency(p.aovUsd, 'USD', 0) : '—'}</td>
+                        <td className="num cell-mono" title={p.commissionAssumed ? 'comissão ASSUMIDA (não configurada)' : `fonte: acordo configurado`}>
+                          {Math.round(p.commissionPct * 100)}%{p.commissionAssumed ? '?' : ''} · {fmtCurrency(p.commissionUsd, 'USD', 0)}
+                        </td>
+                        <td className="num cell-mono">{fmtCurrency(p.netUsd, 'USD', 0)}</td>
+                        <td className="num cell-mono" style={{ color: p.pendingCount > 0 ? 'var(--warning)' : undefined }}>{fmtInt(p.pendingCount)}</td>
+                        <td className="num cell-mono">{p.refundedCount ? `${fmtInt(p.refundedCount)} · ${fmtCurrency(p.refundedUsd, 'USD', 0)}` : '—'}</td>
+                        <td style={{ fontSize: 11, color: integ.ok ? 'var(--fg4)' : 'var(--danger)' }}>{integ.text}</td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
           </div>
 
           {m.daily.length > 0 && (
             <div className="panel" style={{ marginBottom: 12 }}>
               <div className="panel-head">
                 <div className="panel-title">
-                  <span className="panel-eyebrow">RECEITA RECUPERADA · POR DIA</span>
+                  <span className="panel-eyebrow">RECEITA RECUPERADA · POR DIA · POR PARCEIRO</span>
                   <div className="panel-metric" style={{ fontSize: 14, color: 'var(--fg3)' }}>
                     {m.daily.length} {m.daily.length === 1 ? 'dia' : 'dias'} com venda no período
                   </div>
                 </div>
               </div>
               <NSTimeSeries height={220} currency="USD"
-                data={m.daily.map((d) => ({ date: d.date, receita: d.grossUsd }))}
-                series={[{ key: 'receita', label: 'Receita', color: 'var(--accent)' }]}/>
+                data={m.daily.map((d) => ({ date: d.date, tauk: d.tauk, logicall: d.logicall }))}
+                series={[
+                  { key: 'tauk', label: 'Tauk', color: CC_PROVIDER_META.tauk.color },
+                  { key: 'logicall', label: 'Logicall', color: CC_PROVIDER_META.logicall.color },
+                ]}/>
             </div>
           )}
 
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 2fr', gap: 12, alignItems: 'start' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: 12, alignItems: 'start', marginBottom: 12 }}>
+            {/* Agentes — só a Logicall informa. IA × humano é a leitura que interessa. */}
+            <div className="panel" style={{ padding: 0 }}>
+              <div className="panel-head" style={{ padding: '12px 14px 0' }}>
+                <div className="panel-title">Por agente <span style={{ color: 'var(--fg5)', fontSize: 10, marginLeft: 6 }}>Logicall · IA × humano</span></div>
+              </div>
+              <div className="tbl-wrap" style={{ margin: 0, padding: '0 4px', maxHeight: 320, overflowY: 'auto' }}>
+                <table className="tbl">
+                  <thead><tr><th>Agente</th><th className="num">Vendas</th><th className="num">Receita</th><th className="num">Ticket</th></tr></thead>
+                  <tbody>
+                    {m.byAgent.length === 0 && (
+                      <tr><td colSpan={4} style={{ textAlign: 'center', padding: 16, opacity: 0.6 }}>Sem dado de agente no período (a Tauk não informa).</td></tr>
+                    )}
+                    {m.byAgent.map((a) => (
+                      <tr key={a.agent}>
+                        <td className="cell-mono" style={{ fontSize: 11 }}>
+                          {a.agent}
+                          {a.isAi && <span style={{ marginLeft: 6, fontSize: 9, fontWeight: 700, color: 'var(--accent)', letterSpacing: '0.08em' }}>IA</span>}
+                        </td>
+                        <td className="num">{fmtInt(a.sales)}</td>
+                        <td className="num" style={{ color: 'var(--money)' }}>{fmtCurrency(a.grossUsd, 'USD', 0)}</td>
+                        <td className="num">{fmtCurrency(a.aovUsd, 'USD', 0)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            <div className="panel" style={{ padding: 0 }}>
+              <div className="panel-head" style={{ padding: '12px 14px 0' }}>
+                <div className="panel-title">Por produto <span style={{ color: 'var(--fg5)', fontSize: 10, marginLeft: 6 }}>Logicall</span></div>
+              </div>
+              <div className="tbl-wrap" style={{ margin: 0, padding: '0 4px', maxHeight: 320, overflowY: 'auto' }}>
+                <table className="tbl">
+                  <thead><tr><th>Produto</th><th className="num">Vendas</th><th className="num">Receita</th></tr></thead>
+                  <tbody>
+                    {m.byProduct.length === 0 && (
+                      <tr><td colSpan={3} style={{ textAlign: 'center', padding: 16, opacity: 0.6 }}>Sem dado de produto no período (a Tauk não informa).</td></tr>
+                    )}
+                    {m.byProduct.map((p) => (
+                      <tr key={p.product}>
+                        <td>{p.product}{p.family && <span style={{ color: 'var(--fg5)', fontSize: 10, marginLeft: 6 }}>{p.family}</span>}</td>
+                        <td className="num">{fmtInt(p.sales)}</td>
+                        <td className="num" style={{ color: 'var(--money)' }}>{fmtCurrency(p.grossUsd, 'USD', 0)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
             <div className="panel" style={{ padding: 0 }}>
               <div className="panel-head" style={{ padding: '12px 14px 0' }}>
                 <div className="panel-title">Por status de fulfillment</div>
@@ -7384,46 +7525,188 @@ function TaukPage({ filters }) {
                 </table>
               </div>
             </div>
+          </div>
 
-            <div className="panel" style={{ padding: 0 }}>
-              <div className="panel-head" style={{ padding: '12px 14px 0' }}>
-                <div className="panel-title">Vendas recentes <span style={{ color: 'var(--fg5)', fontSize: 10, marginLeft: 6 }}>últimas {m.recent.length} do período · horário BRT</span></div>
-              </div>
-              <div className="tbl-wrap" style={{ margin: 0, padding: '0 4px', maxHeight: 420, overflowY: 'auto' }}>
-                <table className="tbl">
-                  <thead><tr><th>Quando</th><th>Cliente</th><th>Contato</th><th className="num">Valor</th><th>Status</th></tr></thead>
-                  <tbody>
-                    {m.recent.length === 0 && (
-                      <tr><td colSpan={5} style={{ textAlign: 'center', padding: 16, opacity: 0.6 }}>
-                        Nenhuma venda da Tauk no período. Assim que o webhook deles disparar, aparece aqui.
-                      </td></tr>
-                    )}
-                    {m.recent.map((r) => (
-                      <tr key={r.id}>
-                        <td className="cell-mono" style={{ fontSize: 11 }}>{fmtTaukWhen(r.purchasedAt)}</td>
-                        <td>{r.name}</td>
-                        <td className="cell-mono" style={{ fontSize: 10.5, color: 'var(--fg4)' }}>
-                          {r.email || '—'}{r.phone ? <span style={{ color: 'var(--fg5)' }}> · {r.phone}</span> : null}
-                        </td>
-                        <td className="num" style={{ color: 'var(--money)' }}>{fmtCurrency(r.amountUsd, 'USD', 2)}</td>
-                        <td><TaukStatusBadge status={r.fulfillmentStatus}/></td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
+          <div className="panel" style={{ padding: 0, marginBottom: 12 }}>
+            <div className="panel-head" style={{ padding: '12px 14px 0' }}>
+              <div className="panel-title">Vendas recentes <span style={{ color: 'var(--fg5)', fontSize: 10, marginLeft: 6 }}>últimas {m.recent.length} do período · horário BRT</span></div>
+            </div>
+            <div className="tbl-wrap" style={{ margin: 0, padding: '0 4px', maxHeight: 460, overflowY: 'auto' }}>
+              <table className="tbl">
+                <thead><tr><th>Quando</th><th>Parceiro</th><th>Cliente</th><th>Produto</th><th>Agente</th><th className="num">Valor</th><th>Status</th></tr></thead>
+                <tbody>
+                  {m.recent.length === 0 && (
+                    <tr><td colSpan={7} style={{ textAlign: 'center', padding: 16, opacity: 0.6 }}>Nenhuma venda de call center no período.</td></tr>
+                  )}
+                  {m.recent.map((r) => (
+                    <tr key={r.id} style={{ opacity: r.status === 'APPROVED' ? 1 : 0.6 }}>
+                      <td className="cell-mono" style={{ fontSize: 11 }}>{fmtTaukWhen(r.purchasedAt)}</td>
+                      <td><CcProviderBadge provider={r.provider}/></td>
+                      <td>
+                        {r.name}
+                        <div className="cell-mono" style={{ fontSize: 10, color: 'var(--fg5)' }}>{r.email || '—'}{r.phone ? ` · ${r.phone}` : ''}</div>
+                      </td>
+                      <td style={{ fontSize: 11.5 }}>{r.productName || <span style={{ color: 'var(--fg5)' }}>—</span>}</td>
+                      <td className="cell-mono" style={{ fontSize: 10.5 }}>{r.agentName || <span style={{ color: 'var(--fg5)' }}>—</span>}</td>
+                      <td className="num" style={{ color: r.status === 'APPROVED' ? 'var(--money)' : 'var(--danger)', textDecoration: r.status === 'APPROVED' ? 'none' : 'line-through' }}
+                        title={r.placeholder ? 'estorno recebido antes da venda ser sincronizada — a venda entra no próximo backfill' : (r.refundedUsd && r.status === 'APPROVED' ? `refund parcial: −${fmtCurrency(r.refundedUsd, 'USD', 2)}` : undefined)}>
+                        {r.placeholder ? '—' : fmtCurrency(r.amountUsd, 'USD', 2)}
+                        {r.refundedUsd && r.status === 'APPROVED' ? <span style={{ fontSize: 9.5, color: 'var(--warning)', marginLeft: 4 }}>−{fmtCurrency(r.refundedUsd, 'USD', 0)}</span> : null}
+                      </td>
+                      <td>
+                        {r.status !== 'APPROVED'
+                          ? <TaukStatusBadge status={r.status}/>
+                          : <TaukStatusBadge status={r.fulfillmentStatus}/>}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
             </div>
           </div>
 
           <div style={{ marginTop: 10, fontFamily: 'var(--f-mono)', fontSize: 10, color: 'var(--fg5)', lineHeight: 1.6 }}>
-            Fonte: webhook da Tauk Solutions (via n8n). Comissão = receita × {Math.round((m.kpis.commissionPct ?? 0.35) * 100)}%
-            sobre cada venda recuperada (acordo comercial); líquido = receita − comissão. Números FORA das métricas
-            de receita das plataformas — sem produto/ID de transação no feed, uma venda recuperada pode também
-            transitar pela plataforma principal; manter separado evita dupla contagem. Horários convertidos de
-            Eastern (EUA) pra UTC/BRT.
+            Fontes: Tauk = webhook (via n8n), sem produto nem ID de transação; Logicall = API de transações (polling: janela de 3 dias
+            a cada 30 min + releitura de 45 dias uma vez por dia, idempotente por ID). Comissão = receita × % de cada parceiro sobre
+            cada venda recuperada; líquido = receita − comissão. Estornos (só a Logicall reporta): total tira a venda inteira,
+            parcial abate só o valor devolvido — e entram pela DATA DA VENDA (coorte), diferente dos cards de reembolso da Visão
+            Geral (data do estorno). Números FORA das métricas das plataformas (uma venda recuperada pode também transitar pela
+            plataforma principal — separado evita dupla contagem). Horários convertidos de Eastern (EUA) pra BRT.
           </div>
-        </>
+        </div>
       )}
+    </div>
+  );
+}
+
+// Painel admin: estado da integração Logicall, sync manual/backfill e a
+// configuração (chave da API, comissões) — gravada no banco; env sobrescreve.
+function LogicallIntegrationPanel({ sync, onChanged }) {
+  const [settings, setSettings] = useState(null);
+  const [apiKey, setApiKey] = useState('');
+  const [lcPct, setLcPct] = useState('');
+  const [taukPct, setTaukPct] = useState('');
+  const [range, setRange] = useState({ start: '', end: '' });
+  const [busy, setBusy] = useState(null);
+  const [msg, setMsg] = useState(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    window.NSApi.adminListIntegrationSettings()
+      .then((d) => { if (!cancelled) setSettings(d); })
+      .catch(() => { if (!cancelled) setSettings({ settings: [], envOverrides: {} }); });
+    return () => { cancelled = true; };
+  }, []);
+
+  const current = (key) => settings?.settings?.find((s) => s.key === key);
+  const envLocked = (key) => Boolean(settings?.envOverrides?.[key]);
+
+  async function save(key, value, clearFn) {
+    setBusy(key); setMsg(null);
+    try {
+      await window.NSApi.adminSaveIntegrationSetting(key, value);
+      const d = await window.NSApi.adminListIntegrationSettings();
+      setSettings(d); clearFn && clearFn('');
+      setMsg({ ok: true, text: value ? 'salvo' : 'apagado' });
+      onChanged && onChanged();
+    } catch (e) { setMsg({ ok: false, text: e.message }); }
+    finally { setBusy(null); }
+  }
+  async function runSync(withRange) {
+    setBusy('sync'); setMsg(null);
+    try {
+      const r = await window.NSApi.adminLogicallSync(withRange && range.start && range.end ? range : undefined);
+      setMsg({ ok: true, text: `sync ${r.startDate}→${r.endDate}: ${r.fetched} transações · ${r.created} novas · ${r.updated} atualizadas · ${r.reversalsApplied} estornos${r.skipped ? ` · ${r.skipped} ignoradas` : ''}` });
+      onChanged && onChanged();
+    } catch (e) { setMsg({ ok: false, text: e.message }); }
+    finally { setBusy(null); }
+  }
+
+  const inputStyle = {
+    padding: '7px 10px', fontSize: 12, color: 'var(--fg1)', background: 'var(--bg)',
+    border: '1px solid var(--border)', borderRadius: 6, fontFamily: 'var(--f-mono)', minWidth: 0,
+  };
+  const row = { display: 'grid', gridTemplateColumns: '180px 1fr auto', gap: 8, alignItems: 'center' };
+
+  return (
+    <div className="panel" style={{ marginBottom: 12 }}>
+      <div className="panel-head">
+        <div className="panel-title">
+          <span className="panel-eyebrow">INTEGRAÇÃO LOGICALL · ADMIN</span>
+          <div className="panel-sub">
+            {!sync?.configured
+              ? 'Chave da API não configurada — a sincronização está desligada.'
+              : sync.running
+                ? 'Sincronizando agora…'
+              : sync.lastRunAt
+                ? `Última sync ${fmtTaukWhen(sync.lastRunAt)} · ${sync.lastOk ? 'ok' : `ERRO: ${sync.lastError || '?'}`}${sync.lastStats ? ` · ${sync.lastStats.fetched ?? 0} transações (${sync.lastStats.startDate}→${sync.lastStats.endDate})` : ''}`
+                : 'Configurada · aguardando a primeira rodada (até 30 min após o boot).'}
+          </div>
+        </div>
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+          <button className="btn btn-ghost" disabled={busy === 'sync'} onClick={() => runSync(false)}>
+            <Icon name="refresh" size={12}/> {busy === 'sync' ? 'sincronizando…' : 'Sincronizar agora'}
+          </button>
+        </div>
+      </div>
+
+      <div style={{ display: 'grid', gap: 10, padding: '4px 0' }}>
+        <div style={row}>
+          <span className="f-label">BACKFILL (datas)</span>
+          <div style={{ display: 'flex', gap: 6 }}>
+            <input type="date" style={inputStyle} value={range.start} onChange={(e) => setRange((r) => ({ ...r, start: e.target.value }))}/>
+            <input type="date" style={inputStyle} value={range.end} onChange={(e) => setRange((r) => ({ ...r, end: e.target.value }))}/>
+          </div>
+          <button className="btn btn-ghost" disabled={busy === 'sync' || !range.start || !range.end} onClick={() => runSync(true)}>Puxar intervalo</button>
+        </div>
+
+        <div style={row}>
+          <span className="f-label">CHAVE DA API</span>
+          <input type="password" style={inputStyle} value={apiKey} onChange={(e) => setApiKey(e.target.value)}
+            placeholder={envLocked('logicall.apiKey') ? 'definida por env (LOGICALL_API_KEY)' : (current('logicall.apiKey')?.value || 'cole a key da Logicall')}
+            disabled={envLocked('logicall.apiKey')}/>
+          <div style={{ display: 'flex', gap: 6 }}>
+            <button className="btn btn-ghost" disabled={busy != null || !apiKey || envLocked('logicall.apiKey')} onClick={() => save('logicall.apiKey', apiKey, setApiKey)}>Salvar</button>
+            {current('logicall.apiKey') && !envLocked('logicall.apiKey') && (
+              <button className="btn btn-ghost" disabled={busy != null} title="apagar a chave (desliga a sync)" onClick={() => save('logicall.apiKey', '', setApiKey)}>Limpar</button>
+            )}
+          </div>
+        </div>
+
+        <div style={row}>
+          <span className="f-label">COMISSÃO LOGICALL %</span>
+          <input type="number" min="0" max="100" step="0.5" style={inputStyle} value={lcPct} onChange={(e) => setLcPct(e.target.value)}
+            placeholder={envLocked('logicall.commissionPct') ? 'definida por env' : (current('logicall.commissionPct')?.value || '35 (assumida)')}
+            disabled={envLocked('logicall.commissionPct')}/>
+          <div style={{ display: 'flex', gap: 6 }}>
+            <button className="btn btn-ghost" disabled={busy != null || !lcPct || envLocked('logicall.commissionPct')} onClick={() => save('logicall.commissionPct', lcPct, setLcPct)}>Salvar</button>
+            {current('logicall.commissionPct') && !envLocked('logicall.commissionPct') && (
+              <button className="btn btn-ghost" disabled={busy != null} title="voltar ao default (35% assumido)" onClick={() => save('logicall.commissionPct', '', setLcPct)}>Limpar</button>
+            )}
+          </div>
+        </div>
+
+        <div style={row}>
+          <span className="f-label">COMISSÃO TAUK %</span>
+          <input type="number" min="0" max="100" step="0.5" style={inputStyle} value={taukPct} onChange={(e) => setTaukPct(e.target.value)}
+            placeholder={envLocked('tauk.commissionPct') ? 'definida por env (TAUK_COMMISSION_PCT)' : (current('tauk.commissionPct')?.value || '35 (acordo)')}
+            disabled={envLocked('tauk.commissionPct')}/>
+          <div style={{ display: 'flex', gap: 6 }}>
+            <button className="btn btn-ghost" disabled={busy != null || !taukPct || envLocked('tauk.commissionPct')} onClick={() => save('tauk.commissionPct', taukPct, setTaukPct)}>Salvar</button>
+            {current('tauk.commissionPct') && !envLocked('tauk.commissionPct') && (
+              <button className="btn btn-ghost" disabled={busy != null} title="voltar ao default (35%)" onClick={() => save('tauk.commissionPct', '', setTaukPct)}>Limpar</button>
+            )}
+          </div>
+        </div>
+
+        {msg && <div style={{ fontFamily: 'var(--f-mono)', fontSize: 11, color: msg.ok ? 'var(--success)' : 'var(--danger)' }}>{msg.text}</div>}
+        <div style={{ fontFamily: 'var(--f-mono)', fontSize: 10, color: 'var(--fg5)', lineHeight: 1.6 }}>
+          Comissões aqui são em PERCENTUAL (35 = 35%). A chave e as comissões ficam no banco (IntegrationSetting); variável de
+          ambiente de mesmo nome sobrescreve (nela a comissão é fração, ex.: 0.35). A sincronização automática roda no próprio
+          servidor: janela de 3 dias a cada 30 min + releitura de 45 dias uma vez por dia (fulfillment e chargeback marcados
+          semanas depois). Fuso da Logicall assumido como Eastern (EUA) — se o dia da venda parecer deslocado vs o painel deles, é isso.
+        </div>
+      </div>
     </div>
   );
 }
@@ -7928,5 +8211,5 @@ Object.assign(window, {
   ProductsPage, TransactionsPage, IntegrationsPage, FXPage, UsersPage,
   HealthPage, CostsPage,
   ChatPage, ChatWidget,
-  CopyOptimizerPage, RecoveryPage, TaukPage, SmsPage,
+  CopyOptimizerPage, RecoveryPage, CallCenterPage, SmsPage,
 });

@@ -170,7 +170,7 @@ function ProfitSplitPanel({ filters, cur, onData }) {
         <div className="mini-kpi">
           <div className="l">Lucro BACK (retenção)</div>
           <div className="v" style={{ color: 'var(--money)' }}>{fmtCurrency(d.back.profitUsd, cur, 0)}</div>
-          <div className="s">recuperação + Tauk + SMS · líquido de comissões</div>
+          <div className="s">recuperação + call center (Tauk/Logicall) + SMS · líquido de comissões</div>
         </div>
         <div className="mini-kpi">
           <div className="l">Total da operação</div>

@@ -7,11 +7,12 @@
 // Aceita JSON ({"Fulfillment Status": "HOLD", ...}), form-urlencoded, ou —
 // tolerância extra — os campos direto na querystring desta própria URL.
 // Grava IngestLog (platformSlug 'tauk') e faz UPSERT em TaukSale por
-// externalKey (email|purchase-date) — reenvio não duplica.
+// externalKey (email|purchase-date) — reenvio não duplica. Desde 2026-08-24
+// a tabela é CallCenterSale (multi-provider) — Tauk grava provider='tauk'.
 //
 // De propósito NÃO cria Order: payload sem produto/ID de transação, e a
 // venda pode também transitar pela plataforma principal (dupla contagem).
-// A aba "Tauk" lê TaukSale direto.
+// A aba "Call Center" lê CallCenterSale direto.
 
 import { NextResponse } from 'next/server';
 import { db } from '@/lib/db';
@@ -61,10 +62,11 @@ export async function POST(req: Request) {
 
   try {
     const sale = parseTaukPayload(data);
-    await db.taukSale.upsert({
+    await db.callCenterSale.upsert({
       where: { externalKey: sale.externalKey },
       create: {
         externalKey: sale.externalKey,
+        provider: 'tauk',
         email: sale.email,
         firstName: sale.firstName,
         lastName: sale.lastName,

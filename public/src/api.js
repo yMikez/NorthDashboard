@@ -699,12 +699,37 @@ function fetchRecovery(filters) {
   return coGet(`/api/metrics/recovery?${qs}`);
 }
 // Tauk Solutions (recuperação por telefone/SMS) — aba própria.
-function fetchTauk(filters) {
+// Aba Call Center (Tauk + Logicall). Endpoint segue /api/metrics/tauk (id da
+// tab preservado). `provider` = 'all' | 'tauk' | 'logicall'.
+function fetchTauk(filters, provider = 'all') {
   const qs = new URLSearchParams({
     start_date: toISODate(filters.dateRange.start),
     end_date: toISODate(filters.dateRange.end),
+    provider,
   });
   return coGet(`/api/metrics/tauk?${qs}`);
+}
+// Logicall: sync manual (admin). Sem datas = janela deslizante default.
+async function adminLogicallSync(range) {
+  const qs = range ? `?start=${encodeURIComponent(range.start)}&end=${encodeURIComponent(range.end)}` : '';
+  const res = await fetch(`/api/admin/logicall-sync${qs}`, { method: 'POST', headers: { Accept: 'application/json' } });
+  const body = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(body.message || body.error || `${res.status} logicallSync`);
+  return body;
+}
+async function adminListIntegrationSettings() {
+  const res = await fetch('/api/admin/integration-settings', { headers: { Accept: 'application/json' } });
+  if (!res.ok) throw new Error(`${res.status} integrationSettings`);
+  return res.json();
+}
+async function adminSaveIntegrationSetting(key, value) {
+  const res = await fetch('/api/admin/integration-settings', {
+    method: 'PUT', headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+    body: JSON.stringify({ key, value }),
+  });
+  const body = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(body.error || `${res.status} saveSetting`);
+  return body;
 }
 // SMS health (Mautic → n8n → Twilio) — aba própria. `extra` leva os
 // filtros locais da tela: { brand, campaign } (slug da campanha).
@@ -782,6 +807,9 @@ window.NSApi = _wrapMutations({
   applyCopyRulesToAll,
   fetchRecovery,
   fetchTauk,
+  adminLogicallSync,
+  adminListIntegrationSettings,
+  adminSaveIntegrationSetting,
   fetchSms,
   fetchCallCenter,
   addCallCenterWatch,
