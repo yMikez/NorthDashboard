@@ -49,6 +49,8 @@ function truncFunnelName(name, max = 28) {
 function FunnelPage({ filters }) {
   const [state, setFunState] = useState({ status: 'loading', data: null, error: null });
   const [selected, setSelected] = useState('all');
+  // 'periodo' = filtro global (como sempre); 'janelas' = K janelas de N dias até uma data, com comparativos.
+  const [funMode, setFunMode] = useState('periodo');
 
   useEffect(() => {
     let cancelled = false;
@@ -100,10 +102,19 @@ function FunnelPage({ filters }) {
           <span className="eyebrow">FUNNEL ANALYTICS</span>
           <h2>Front-end <em>até backend</em>.</h2>
           <span className="sub">
-            {selected === 'all'
-              ? '100% = vendas iniciais · take rates relativas ao FE'
-              : `Funil isolado: ${view.name}`}
+            {funMode === 'janelas'
+              ? 'janelas de N dias até uma data, cada uma comparada com a anterior · take rates relativas ao FE'
+              : selected === 'all'
+                ? '100% = vendas iniciais · take rates relativas ao FE'
+                : `Funil isolado: ${view.name}`}
           </span>
+        </div>
+        <div className="page-head-actions">
+          <div className="seg">
+            {[['periodo', 'Período (filtro)'], ['janelas', 'Janelas & comparativo']].map(([k, l]) => (
+              <button key={k} className={funMode === k ? 'is-active' : ''} onClick={() => setFunMode(k)}>{l}</button>
+            ))}
+          </div>
         </div>
       </div>
 
@@ -144,6 +155,9 @@ function FunnelPage({ filters }) {
         </div>
       )}
 
+      {funMode === 'janelas' && <FunnelWindowsView filters={filters} family={selected}/>}
+
+      {funMode === 'periodo' && (<>
       <div className="mini-kpis">
         <div className="mini-kpi">
           <div className="l">Frontend orders</div>
@@ -323,6 +337,7 @@ function FunnelPage({ filters }) {
           </div>
         </div>
       )}
+      </>)}
     </div>
   );
 }

@@ -707,6 +707,14 @@ async function fetchAffiliateExplain(filters, key, { window = 7, internal = fals
     platforms: setToCSV(filters.platforms), families: setToCSV(filters.families),
   });
 }
+// Funil por janelas (Janela 1..K de N dias) — mesmos filtros de dimensão do funil.
+async function fetchFunnelSequence(filters, { window = 7, count = 3, anchor = null, today = false } = {}) {
+  return fetchJSON('/api/metrics/funnel/sequence', {
+    window: String(window), count: String(count), anchor: anchor || null, today: today ? '1' : '0',
+    platforms: setToCSV(filters.platforms), countries: setToCSV(filters.countries),
+    products: setToCSV(filters.funnels), families: setToCSV(filters.families),
+  });
+}
 // K janelas consecutivas de N dias (Janela 1..K) + evolução/saúde/reativação.
 async function fetchAffiliateSequence(filters, { window = 7, count = 3, view = 'partner', internal = false, today = false, anchor = null } = {}) {
   return fetchJSON('/api/metrics/affiliate-analysis/sequence', {
@@ -871,6 +879,7 @@ window.NSApi = _wrapMutations({
   fetchAffiliateAnalysis,
   fetchAffiliateExplain,
   fetchAffiliateSequence,
+  fetchFunnelSequence,
   adminListAffiliateIdentity,
   adminAffiliateIdentity,
   fetchRefundCohorts,
