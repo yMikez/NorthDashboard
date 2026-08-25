@@ -1,4 +1,4 @@
-/* global React, Icon, NSTimeSeries, NSBarRank, Sparkline, CpaStatusChip, fmtCurrency, fmtInt, fmtPct, SkelMiniKpis, SkelChartPanel, SkelTablePanel, SkelDrawerLoading, downloadCsv, AaContactForm, AffiliateIdentityDrawer, AaSequenceView, AaEvolutionView, AaHealthView, AiOriginChip */
+/* global React, Icon, NSTimeSeries, NSBarRank, Sparkline, CpaStatusChip, fmtCurrency, fmtInt, fmtPct, SkelMiniKpis, SkelChartPanel, SkelTablePanel, SkelDrawerLoading, downloadCsv, AaContactForm, AffiliateIdentityDrawer, AaSequenceView, AaEvolutionView, AaHealthView, AaTopsByWindow, AiOriginChip */
 /* Análise de afiliados — quem sobe, quem cai e por quê.
    Ranking por métrica (receita/vendas/AOV/reembolso/Net após CPA), janelas
    de 3/7/15/30/60 dias (cada uma vs a anterior), identidade unificada entre
@@ -79,7 +79,8 @@ function AaEmpty({ children }) {
 // ── Página ──────────────────────────────────────────────────────────────
 
 function AffiliateAnalysisPage({ filters, user }) {
-  const isAdmin = user?.role === 'ADMIN';
+  // Quem tem a aba gerencia identidades/contato (não só admin) — 2026-08-25.
+  const isAdmin = !!user;
   const [win, setWin] = useStateAA(7);
   const [view, setView] = useStateAA('partner');
   const [metric, setMetric] = useStateAA('revenue');
@@ -119,7 +120,6 @@ function AffiliateAnalysisPage({ filters, user }) {
 
   // Sequência (janelas/evolução/saúde): só busca quando um desses modos está ativo.
   useEffectAA(() => {
-    if (mode === 'ranking') return undefined;
     let cancelled = false;
     setSeqState((s) => ({ ...s, status: 'loading' }));
     window.NSApi.fetchAffiliateSequence(filters, { window: win, count, view, internal, today, anchor: anchor || null })
@@ -239,13 +239,13 @@ function AffiliateAnalysisPage({ filters, user }) {
           </label>
         )}
         <button className="btn btn-ghost" onClick={() => setTick((t) => t + 1)} title="Recarregar"><Icon name="refresh" size={13}/></button>
-        {mode !== 'ranking' && (
+        {true && (
           <>
             <span className="f-label" style={{ marginLeft: 6 }}>QUANTAS JANELAS</span>
             <div className="seg">
               {[2, 3, 4, 6, 8].map((k) => <button key={k} className={count === k ? 'is-active' : ''} onClick={() => setCount(k)}>{k}</button>)}
             </div>
-            <span style={{ fontSize: 11, color: 'var(--fg5)' }}>= {count} × {win} dias, a última terminando {effectiveAnchor || anchor || (today ? 'hoje' : 'ontem')}</span>
+            <span style={{ fontSize: 11, color: 'var(--fg5)' }}>= {count} × {win} dias, a última terminando {effectiveAnchor || anchor || (today ? 'hoje' : 'ontem')}{mode === 'ranking' ? ' · tops por janela abaixo do ranking' : ''}</span>
           </>
         )}
       </div>
@@ -447,6 +447,9 @@ function AffiliateAnalysisPage({ filters, user }) {
               </table>
             </div>
           </div>
+
+          {/* Tops por janela (sequência J1..JK) logo abaixo do ranking */}
+          {seq && <AaTopsByWindow seq={seq} onOpen={openEntity}/>}
         </div>
       )}
 

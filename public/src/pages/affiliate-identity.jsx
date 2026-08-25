@@ -336,27 +336,48 @@ function AiSuggestions({ d, busy, act }) {
 
 function AiAccountSearch({ allAccounts, exclude = [], onPick, placeholder = 'buscar conta por nome, ID ou e-mail…', autoFocus }) {
   const [q, setQ] = useStateAI('');
+  const term = q.trim().toLowerCase();
   const hits = useMemoAI(() => {
-    const s = q.trim().toLowerCase();
-    if (s.length < 2) return [];
+    if (term.length < 2) return [];
     const ex = new Set(exclude);
+    const score = (a) => {
+      const n = (a.nickname || '').toLowerCase();
+      if (n === term || a.externalId.toLowerCase() === term) return 0;
+      if (n.startsWith(term)) return 1;
+      return 2;
+    };
     return allAccounts
-      .filter((a) => !ex.has(a.id) && ((a.nickname || '').toLowerCase().includes(s) || a.externalId.toLowerCase().includes(s) || (a.email || '').toLowerCase().includes(s)))
-      .slice(0, 10);
-  }, [q, allAccounts, exclude.join(',')]);
+      .filter((a) => !ex.has(a.id) && ((a.nickname || '').toLowerCase().includes(term) || a.externalId.toLowerCase().includes(term) || (a.email || '').toLowerCase().includes(term)))
+      .sort((x, y) => score(x) - score(y) || (y.revenue30d || 0) - (x.revenue30d || 0))
+      .slice(0, 12);
+  }, [term, allAccounts, exclude.join(',')]);
   return (
     <div>
       <div style={{ position: 'relative' }}>
-        <span style={{ position: 'absolute', left: 9, top: 8, color: 'var(--fg5)' }}><Icon name="search" size={12}/></span>
-        <input style={{ ...AI_INPUT, paddingLeft: 26 }} placeholder={placeholder} value={q} autoFocus={autoFocus} onChange={(e) => setQ(e.target.value)}/>
+        <span style={{ position: 'absolute', left: 10, top: 9, color: 'var(--fg5)' }}><Icon name="search" size={13}/></span>
+        <input style={{ ...AI_INPUT, paddingLeft: 30, fontSize: 13 }} placeholder={placeholder} value={q} autoFocus={autoFocus} onChange={(e) => setQ(e.target.value)}/>
+        {q && <button className="btn btn-ghost" style={{ position: 'absolute', right: 4, top: 3, padding: '2px 8px' }} onClick={() => setQ('')} title="Limpar">×</button>}
       </div>
-      {q.trim().length >= 2 && (
-        <div style={{ marginTop: 6, border: '1px solid var(--border-soft)', borderRadius: 10, overflow: 'hidden' }}>
-          {hits.length === 0 && <div style={{ padding: 10, fontSize: 11, color: 'var(--fg5)' }}>nada encontrado</div>}
+      {term.length > 0 && term.length < 2 && (
+        <div style={{ marginTop: 6, fontSize: 11, color: 'var(--fg5)' }}>digite pelo menos 2 caracteres</div>
+      )}
+      {term.length >= 2 && (
+        <div style={{ marginTop: 6, border: '1px solid var(--border-soft)', borderRadius: 12, overflow: 'hidden', background: 'var(--bg-raised)' }}>
+          <div style={{ padding: '6px 12px', fontSize: 10, color: 'var(--fg5)', letterSpacing: '0.06em', textTransform: 'uppercase', borderBottom: '1px solid var(--border-soft)' }}>
+            {hits.length === 0 ? 'nada encontrado' : `${hits.length} resultado${hits.length > 1 ? 's' : ''} — clique pra selecionar`}
+          </div>
           {hits.map((a) => (
-            <button key={a.id} className="btn btn-ghost" style={{ display: 'block', width: '100%', textAlign: 'left', borderRadius: 0, padding: '4px 10px', borderBottom: '1px solid var(--border-soft)' }} onClick={() => { onPick(a); setQ(''); }}>
-              <AiAccount a={a} extra={a.partnerName ? `parceiro: ${a.partnerName}` : null} dense/>
-            </button>
+            <div key={a.id} role="button" tabIndex={0}
+              onClick={() => { onPick(a); setQ(''); }}
+              onKeyDown={(e) => { if (e.key === 'Enter') { onPick(a); setQ(''); } }}
+              style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 12px', cursor: 'pointer', borderBottom: '1px solid var(--border-soft)' }}
+              onMouseEnter={(e) => { e.currentTarget.style.background = 'color-mix(in oklab, var(--accent) 8%, transparent)'; }}
+              onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; }}>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <AiAccount a={a} extra={a.partnerName ? `parceiro: ${a.partnerName}` : null}/>
+              </div>
+              <span className="btn btn-ghost" style={{ fontSize: 11, flex: 'none' }}>+ selecionar</span>
+            </div>
           ))}
         </div>
       )}
@@ -460,16 +481,19 @@ function AiManualLink({ allAccounts, busy, act }) {
         <li>Opcional: dê um nome e contato. Se alguma conta já tiver parceiro, as outras entram nele.</li>
         <li>Clique em <b>Vincular</b>.</li>
       </ol>
-      <AiAccountSearch allAccounts={allAccounts} exclude={pick.map((a) => a.id)} onPick={(a) => setPick((p) => [...p, a])}/>
-      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, margin: '10px 0' }}>
-        {pick.length === 0 && <span style={{ fontSize: 11, color: 'var(--fg5)' }}>nenhuma conta selecionada</span>}
-        {pick.map((a) => (
-          <span key={a.id} className="badge neutral" style={{ display: 'inline-flex', gap: 6, alignItems: 'center', padding: '4px 8px' }}>
-            <AiPlat slug={a.platformSlug}/> {a.nickname || a.externalId}{a.partnerName ? <span style={{ color: 'var(--accent)' }}>({a.partnerName})</span> : null}
-            <button className="btn btn-ghost" style={{ padding: '0 4px' }} onClick={() => setPick((p) => p.filter((x) => x.id !== a.id))}>×</button>
-          </span>
-        ))}
+      <div style={{ border: '1px dashed var(--border)', borderRadius: 12, padding: '10px 12px', marginBottom: 10, minHeight: 52 }}>
+        <div style={{ fontSize: 10, color: 'var(--fg5)', letterSpacing: '0.06em', textTransform: 'uppercase', marginBottom: 6 }}>
+          Selecionadas · {pick.length}{pick.length === 1 ? ' (falta pelo menos mais uma, ou um contato)' : ''}
+        </div>
+        {pick.length === 0 && <span style={{ fontSize: 12, color: 'var(--fg5)' }}>nenhuma conta selecionada — busque abaixo</span>}
+        <div style={{ display: 'grid', gap: 4 }}>
+          {pick.map((a) => (
+            <AiAccount key={a.id} a={a} dense extra={a.partnerName ? `parceiro: ${a.partnerName}` : null} onRemove={() => setPick((p) => p.filter((x) => x.id !== a.id))}/>
+          ))}
+        </div>
       </div>
+      <AiAccountSearch allAccounts={allAccounts} exclude={pick.map((a) => a.id)} onPick={(a) => setPick((p) => [...p, a])} autoFocus/>
+      <div style={{ height: 10 }}/>
       {merging && (
         <div style={{ fontSize: 12, color: 'var(--warning)', marginBottom: 10, padding: '8px 10px', border: '1px solid color-mix(in oklab, var(--warning) 35%, transparent)', borderRadius: 10 }}>
           <Icon name="alert-triangle" size={12}/> Isso vai <b>fundir</b> os parceiros {partnersInPick.map(([, n]) => `"${n}"`).join(' e ')}: todas as contas ficam em <b>{partnersInPick[0][1]}</b> (o primeiro selecionado) e os outros parceiros somem. Contato/notas dos outros se perdem.

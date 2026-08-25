@@ -661,6 +661,15 @@ export interface EvolutionEntry {
   migrationHint: { otherKey: string; otherName: string } | null;
 }
 
+export interface SlowingEntry {
+  key: string; name: string; kind: 'partner' | 'affiliate'; platforms: string[];
+  state: 'parou' | 'caindo';
+  peakRevenue: number; peakIndex: number; peakSales: number;
+  lastRevenue: number; lastSales: number; lastActiveIndex: number;
+  dropPct: number; // vs pico (negativo)
+  revenue: Array<number | null>;
+}
+
 export interface AffiliateSequenceResponse {
   asOf: string;
   window: WindowDays;
@@ -672,6 +681,8 @@ export interface AffiliateSequenceResponse {
   transitions: Transition[];
   evolution: EvolutionEntry[];
   reactivation: Array<ReactivationEntry & { platforms: string[] }>;
+  /** Quem está parando de rodar: sumiu na última janela ou caiu ≥ 50% vs o pico e segue caindo. */
+  slowing: SlowingEntry[];
   health: { notes: HealthNote[]; risk: string };
 }
 
@@ -808,10 +819,36 @@ export async function getAffiliateSequence(opts: SequenceOptions): Promise<Affil
   const notes = windows.map((_, i) => healthNote(i, totals, transitions, labels));
   const reactivation = reactivationList(series).slice(0, 60).map((r) => ({ ...r, platforms: platformsOf.get(r.key) ?? [] }));
 
+  // Quem está parando de rodar (Evolução): pico ≥ $500 e, na última janela,
+  // zero vendas ("parou") ou ≤ 50% do pico ainda caindo ("caindo").
+  const slowing: SlowingEntry[] = [];
+  for (const s of series) {
+    const rev = s.metrics.map((m) => (m && m.revenue > 0 ? m.revenue : null));
+    const idx = rev.map((v, i) => (v != null ? i : -1)).filter((i) => i >= 0);
+    if (!idx.length) continue;
+    const K = rev.length;
+    const peakIndex = idx.reduce((b, i) => (rev[i]! > rev[b]! ? i : b), idx[0]);
+    const peak = rev[peakIndex]!;
+    if (peak < 500 || peakIndex === K - 1) continue;
+    const last = rev[K - 1];
+    const lastActive = idx[idx.length - 1];
+    let state: SlowingEntry['state'] | null = null;
+    if (last == null) state = 'parou';
+    else if (last <= 0.5 * peak && (rev[K - 2] == null || last < rev[K - 2]!)) state = 'caindo';
+    if (!state) continue;
+    slowing.push({
+      key: s.key, name: s.name, kind: kindOf.get(s.key)!, platforms: platformsOf.get(s.key) ?? [],
+      state, peakRevenue: round2(peak), peakIndex, peakSales: s.metrics[peakIndex]!.sales,
+      lastRevenue: round2(last ?? 0), lastSales: s.metrics[K - 1]?.sales ?? 0, lastActiveIndex: lastActive,
+      dropPct: round4(((last ?? 0) - peak) / peak), revenue: rev,
+    });
+  }
+  slowing.sort((a, b) => b.peakRevenue - a.peakRevenue);
+
   return {
     asOf: (opts.now ?? new Date()).toISOString(),
     window: opts.window, count, anchor: brtDateStr(raw.lastDayStart), view: opts.view, includeInternal: opts.includeInternal,
-    windows, transitions, evolution, reactivation,
+    windows, transitions, evolution, reactivation, slowing: slowing.slice(0, 80),
     health: { notes, risk: riskText(totals, transitions) },
   };
 }

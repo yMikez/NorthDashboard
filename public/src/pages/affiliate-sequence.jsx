@@ -157,6 +157,109 @@ function AaSequenceView({ seq, onOpen, cur = 'USD' }) {
   );
 }
 
+
+// ── Tops por janela (abaixo do ranking) ─────────────────────────────────
+function AaTopsByWindow({ seq, onOpen, cur = 'USD', top = 10 }) {
+  return (
+    <div className="panel" style={{ marginTop: 14 }}>
+      <div className="panel-head">
+        <div className="panel-title">
+          <span className="panel-eyebrow">TOPS POR JANELA · {seq.count} × {seq.window} DIAS</span>
+          <span className="panel-sub">top {top} por receita em cada janela, da mais antiga pra mais recente · clique pra ver o porquê daquela janela · ajuste "quantas janelas" na barra acima</span>
+        </div>
+      </div>
+      <div style={{ display: 'grid', gridTemplateColumns: `repeat(auto-fit, minmax(220px, 1fr))`, gap: 12 }}>
+        {seq.windows.map((w) => {
+          const prev = seq.windows[w.index - 1];
+          const prevRank = prev ? new Map(prev.rows.map((r) => [r.key, r.rank])) : null;
+          return (
+            <div key={w.index} style={{ border: '1px solid var(--border-soft)', borderRadius: 12, overflow: 'hidden' }}>
+              <div style={{ padding: '8px 12px', borderBottom: '1px solid var(--border-soft)', display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 8 }}>
+                <div>
+                  <div style={{ fontWeight: 700, fontSize: 12 }}>{w.label}</div>
+                  <div style={{ fontFamily: 'var(--f-mono)', fontSize: 10, color: 'var(--fg5)' }}>{asShortRange(w)}</div>
+                </div>
+                <div className="mono" style={{ fontSize: 12, color: 'var(--money)', fontWeight: 700 }}>{fmtCurrency(w.totals.revenue, cur, 0)}</div>
+              </div>
+              {w.rows.length === 0 && <div style={{ padding: 12, fontSize: 11, color: 'var(--fg5)' }}>sem vendas</div>}
+              {w.rows.slice(0, top).map((r) => {
+                const pr = prevRank ? prevRank.get(r.key) : undefined;
+                const d = pr != null ? pr - r.rank : null;
+                return (
+                  <div key={r.key} onClick={() => onOpen?.(r.key, w.end)} style={{ display: 'grid', gridTemplateColumns: '28px 1fr auto', gap: 8, alignItems: 'center', padding: '5px 12px', fontSize: 12, cursor: 'pointer', borderBottom: '1px solid var(--border-soft)' }}
+                    onMouseEnter={(e) => { e.currentTarget.style.background = 'color-mix(in oklab, var(--accent) 8%, transparent)'; }}
+                    onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; }}>
+                    <span className="mono" style={{ color: 'var(--fg5)', fontSize: 11 }}>#{r.rank}</span>
+                    <span style={{ minWidth: 0 }}>
+                      <span style={{ fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', display: 'block' }}>{r.name}</span>
+                      <span style={{ fontSize: 10, color: 'var(--fg5)', display: 'flex', gap: 4, alignItems: 'center' }}>
+                        {r.platforms.map((p) => <AaPlat key={p} slug={p}/>)}
+                        <span>{fmtInt(r.m.sales)} vendas</span>
+                        {d != null && d !== 0 && <span style={{ color: d > 0 ? 'var(--success)' : 'var(--danger)' }}>{d > 0 ? '▲' : '▼'}{Math.abs(d)}</span>}
+                        {prevRank && pr == null && <span style={{ color: 'var(--accent)' }}>novo</span>}
+                      </span>
+                    </span>
+                    <span className="mono" style={{ color: 'var(--money)', fontWeight: 600, whiteSpace: 'nowrap' }}>{fmtCurrency(r.m.revenue, cur, 0)}</span>
+                  </div>
+                );
+              })}
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+// ── Quem está parando de rodar (Evolução) ───────────────────────────────
+function AaSlowingPanel({ seq, onOpen, cur = 'USD' }) {
+  const [show, setShow] = useStateAS('all'); // all | parou | caindo
+  const list = (seq.slowing || []).filter((r) => show === 'all' || r.state === show);
+  const labels = seq.windows.map((w) => `J${w.index + 1}`);
+  const nParou = (seq.slowing || []).filter((r) => r.state === 'parou').length;
+  const nCaindo = (seq.slowing || []).filter((r) => r.state === 'caindo').length;
+  return (
+    <div className="panel" style={{ marginBottom: 14, padding: 0, border: '1px solid color-mix(in oklab, var(--danger) 30%, var(--border))' }}>
+      <div className="panel-head" style={{ padding: '12px 16px 6px', flexWrap: 'wrap', gap: 8 }}>
+        <div className="panel-title">
+          <span className="panel-eyebrow" style={{ color: 'var(--danger)' }}>⚠ QUEM ESTÁ PARANDO DE RODAR</span>
+          <span className="panel-sub">pico ≥ $500 em alguma janela e, na última, <b>parou</b> (zero vendas) ou está <b>caindo</b> (≤ 50% do pico e ainda descendo) · clique pra ver o porquê</span>
+        </div>
+        <div className="seg">
+          {[['all', `Todos · ${(seq.slowing || []).length}`], ['parou', `Parou · ${nParou}`], ['caindo', `Caindo · ${nCaindo}`]].map(([k, l]) => (
+            <button key={k} className={show === k ? 'is-active' : ''} onClick={() => setShow(k)}>{l}</button>
+          ))}
+        </div>
+      </div>
+      {list.length === 0 && <div style={{ padding: 16 }}><AaEmpty>Ninguém parando de rodar nas janelas escolhidas — base saudável.</AaEmpty></div>}
+      {list.length > 0 && (
+        <div className="tbl-wrap" style={{ maxHeight: 420 }}>
+          <table className="tbl">
+            <thead><tr><th>Afiliado</th><th>Plat.</th><th>Estado</th><th className="num">Pico</th><th className="num">Última janela</th><th className="num">vs pico</th><th>Receita por janela</th></tr></thead>
+            <tbody>
+              {list.map((r) => (
+                <tr key={r.key} onClick={() => onOpen?.(r.key, seq.windows[r.state === 'parou' ? r.lastActiveIndex : seq.windows.length - 1]?.end)} style={{ cursor: 'pointer' }}>
+                  <td style={{ fontWeight: 600 }}>{r.kind === 'partner' && <span style={{ color: 'var(--accent)', marginRight: 4 }}><Icon name="link" size={10}/></span>}{r.name}</td>
+                  <td style={{ whiteSpace: 'nowrap' }}>{r.platforms.map((p) => <span key={p} style={{ marginRight: 3 }}><AaPlat slug={p}/></span>)}</td>
+                  <td>
+                    <span style={{ fontFamily: 'var(--f-mono)', fontSize: 10, fontWeight: 700, padding: '2px 8px', borderRadius: 'var(--r-full)', color: r.state === 'parou' ? 'var(--danger)' : 'var(--warning)', background: `color-mix(in oklab, ${r.state === 'parou' ? 'var(--danger)' : 'var(--warning)'} 12%, transparent)` }}>
+                      {r.state === 'parou' ? `● parou (última venda J${r.lastActiveIndex + 1})` : '● caindo'}
+                    </span>
+                  </td>
+                  <td className="num cell-mono" style={{ color: 'var(--money)' }}>{fmtCurrency(r.peakRevenue, cur, 0)} <span style={{ color: 'var(--fg5)', fontSize: 10 }}>J{r.peakIndex + 1}</span></td>
+                  <td className="num cell-mono">{fmtCurrency(r.lastRevenue, cur, 0)} <span style={{ color: 'var(--fg5)', fontSize: 10 }}>{fmtInt(r.lastSales)} vendas</span></td>
+                  <td className="num cell-mono" style={{ color: 'var(--danger)' }}>▼ {(Math.abs(r.dropPct) * 100).toFixed(0)}%</td>
+                  <td style={{ minWidth: 120 }}><AaBars values={r.revenue} labels={labels} height={32}/></td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ── Evolução · Comentários ──────────────────────────────────────────────
 function AaEvolutionView({ seq, onOpen, cur = 'USD' }) {
   const [filter, setFilter] = useStateAS('all');
@@ -172,6 +275,7 @@ function AaEvolutionView({ seq, onOpen, cur = 'USD' }) {
       <div style={{ fontSize: 12, color: 'var(--fg4)', lineHeight: 1.6, padding: '12px 14px', border: '1px solid var(--border-soft)', borderRadius: 12, marginBottom: 12 }}>
         Todo afiliado que esteve no <b>Top 10</b> em pelo menos uma das {seq.windows.length} janelas está listado abaixo, ordenado por relevância. As barras mostram a receita em {labels.join(' / ')} (barra vazia = não vendeu naquela janela). Os comentários são gerados pelas regras da própria análise — números, ranks, aprovação e Net após CPA.
       </div>
+      <AaSlowingPanel seq={seq} onOpen={onOpen} cur={cur}/>
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 14 }}>
         <button className={`btn btn-ghost ${filter === 'all' ? 'is-active' : ''}`} style={{ fontSize: 11 }} onClick={() => setFilter('all')}>Todos · {seq.evolution.length}</button>
         {Object.entries(AS_TAG).filter(([k]) => counts[k]).map(([k, t]) => (
@@ -299,4 +403,4 @@ function AaHealthView({ seq, onOpen, cur = 'USD' }) {
   );
 }
 
-Object.assign(window, { AaSequenceView, AaEvolutionView, AaHealthView, AaBars });
+Object.assign(window, { AaSequenceView, AaEvolutionView, AaHealthView, AaBars, AaTopsByWindow, AaSlowingPanel });

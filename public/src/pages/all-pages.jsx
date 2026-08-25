@@ -483,7 +483,8 @@ function AffiliateRefundModal({ aff, onCancel, onSaved }) {
 }
 
 function LeaderboardPage({ filters, onOpenAffiliate, user }) {
-  const isAdmin = user?.role === 'ADMIN';
+  // Quem tem a aba gerencia identidades/contato (não só admin) — 2026-08-25.
+  const isAdmin = !!user;
   const [sortBy, setSortBy] = useState('revenue');
   const [minOrders, setMinOrders] = useState(1);
   const [query, setQuery] = useState('');

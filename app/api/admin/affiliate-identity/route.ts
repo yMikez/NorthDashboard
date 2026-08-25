@@ -12,7 +12,7 @@
 //        restore_dismissed {}
 
 import { NextResponse } from 'next/server';
-import { requireAdmin } from '@/lib/auth/guard';
+import { requireAnyTab } from '@/lib/auth/guard';
 import {
   listAffiliateIdentity, linkAffiliates, unlinkAffiliate, updatePartner, setAffiliateInternal, backfillAffiliateEmails,
   dismissSuggestion, restoreDismissed,
@@ -23,8 +23,12 @@ export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 export const maxDuration = 120;
 
+// Qualquer usuário com acesso às abas de afiliados pode unificar contas e
+// preencher contato/origem (decisão do usuário, 2026-08-25).
+const TABS = ['affiliate-analysis', 'leaderboard', 'all-affiliates'] as const;
+
 export async function GET() {
-  const auth = await requireAdmin();
+  const auth = await requireAnyTab([...TABS]);
   if (!auth.ok) return auth.response;
   return NextResponse.json(await listAffiliateIdentity());
 }
@@ -47,7 +51,7 @@ const str = (v: unknown): string | undefined => (typeof v === 'string' ? v : und
 const strOrNull = (v: unknown): string | null | undefined => (v === null ? null : typeof v === 'string' ? v : undefined);
 
 export async function POST(req: Request) {
-  const auth = await requireAdmin();
+  const auth = await requireAnyTab([...TABS]);
   if (!auth.ok) return auth.response;
   let body: Body;
   try { body = (await req.json()) as Body; } catch { return NextResponse.json({ error: 'invalid body' }, { status: 400 }); }

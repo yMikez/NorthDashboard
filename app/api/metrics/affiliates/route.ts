@@ -39,7 +39,8 @@ export async function GET(req: Request) {
   // unify=1: contas do mesmo AffiliatePartner viram uma linha só (com
   // `accounts` por plataforma). Contato só pra admin → chave de cache própria.
   const unify = searchParams.get('unify') === '1';
-  const includeContact = auth.user.role === 'ADMIN';
+  // Contato visível pra quem tem a aba (mesma regra de quem pode unificar).
+  const includeContact = !!auth.user;
   const cacheParams = new URLSearchParams(searchParams);
   if (unify) cacheParams.set('_contact', includeContact ? '1' : '0');
 

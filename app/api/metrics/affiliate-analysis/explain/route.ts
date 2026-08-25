@@ -22,7 +22,8 @@ export async function GET(req: Request) {
   }
   const p = parseAnalysisParams(searchParams);
   if (!p.window) return NextResponse.json({ error: 'window deve ser um inteiro de 1 a 90' }, { status: 400 });
-  const includeContact = auth.user.role === 'ADMIN';
+  // Contato visível pra quem tem a aba (mesma regra de quem pode unificar).
+  const includeContact = !!auth.user;
   const cacheParams = new URLSearchParams(searchParams);
   cacheParams.set('_contact', includeContact ? '1' : '0');
   return respondCached('affiliate-analysis/explain', cacheParams, async () => {
