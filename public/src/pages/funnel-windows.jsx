@@ -1,4 +1,4 @@
-/* global React, Icon, fmtCurrency, fmtInt, fmtPct, SkelMiniKpis, SkelTablePanel */
+/* global React, Icon, fmtCurrency, fmtInt, fmtPct, SkelMiniKpis, SkelTablePanel, FunnelChart */
 /* Funil por JANELAS (Janela 1..K de N dias até uma data): cards por janela,
    comparativo entre janelas com a leitura da causa (volume de FEs × AOV de
    sessão + estágio que mais mexeu) e tabela etapa × janela.
@@ -112,6 +112,65 @@ function FunnelWindowsView({ filters, family }) {
                 </div>
               );
             })}
+          </div>
+
+          {sectionTitle('FUNIL EM BARRAS · UMA JANELA AO LADO DA OUTRA')}
+          <div style={{ display: 'grid', gridTemplateColumns: `repeat(auto-fit, minmax(${seq.windows.length > 3 ? 300 : 360}px, 1fr))`, gap: 12 }}>
+            {seq.windows.map((w) => {
+              const sc = scopeOf(w);
+              return (
+                <div key={w.index} className="panel" style={{ padding: '10px 12px' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 8, marginBottom: 6 }}>
+                    <div>
+                      <div style={{ fontWeight: 700, fontSize: 12 }}>{w.label}</div>
+                      <div style={{ fontFamily: 'var(--f-mono)', fontSize: 10, color: 'var(--fg5)' }}>{fwShort(w)}</div>
+                    </div>
+                    <div style={{ textAlign: 'right' }}>
+                      <div className="mono" style={{ fontSize: 12, color: 'var(--money)', fontWeight: 700 }}>{fmtCurrency(sc.summary.totalRevenue, cur, 0)}</div>
+                      <div style={{ fontSize: 10, color: 'var(--fg5)' }}>{fmtInt(sc.summary.feGroups)} FEs · AOV {fmtCurrency(sc.summary.aov, cur, 0)}</div>
+                    </div>
+                  </div>
+                  <FunnelChart stages={sc.stages.map((st) => ({ label: st.label, volume: st.volume, revenue: st.revenue }))} currency={cur}/>
+                </div>
+              );
+            })}
+          </div>
+
+          {sectionTitle('TAKE RATE POR ETAPA · JANELA A JANELA')}
+          <div className="panel">
+            <div style={{ fontSize: 11, color: 'var(--fg4)', marginBottom: 10 }}>Uma barra por janela em cada etapa (J1 = mais antiga, última em destaque). Comprimento = take rate relativa às FEs da própria janela.</div>
+            {(() => {
+              const ids = [];
+              for (const w of seq.windows) for (const st of backend(scopeOf(w).stages)) if (!ids.some((x) => x.id === st.id)) ids.push({ id: st.id, label: st.label });
+              const maxTake = Math.max(0.05, ...seq.windows.flatMap((w) => backend(scopeOf(w).stages).map((st) => st.takeRate)));
+              const K = seq.windows.length;
+              if (!ids.length) return <div style={{ fontSize: 12, color: 'var(--fg5)' }}>Sem etapas de backend nas janelas.</div>;
+              return ids.map((st) => (
+                <div key={st.id} style={{ display: 'grid', gridTemplateColumns: '90px 1fr', gap: 12, alignItems: 'center', padding: '8px 0', borderTop: '1px solid var(--border-soft)' }}>
+                  <div style={{ fontWeight: 700, fontSize: 12 }}>{st.label}</div>
+                  <div style={{ display: 'grid', gap: 3 }}>
+                    {seq.windows.map((w, i) => {
+                      const x = scopeOf(w).stages.find((y) => y.id === st.id);
+                      const take = x ? x.takeRate : 0;
+                      const prev = i > 0 ? (scopeOf(seq.windows[i - 1]).stages.find((y) => y.id === st.id) || null) : null;
+                      const last = i === K - 1;
+                      return (
+                        <div key={w.index} style={{ display: 'grid', gridTemplateColumns: '28px 1fr 150px', gap: 8, alignItems: 'center' }}>
+                          <span style={{ fontFamily: 'var(--f-mono)', fontSize: 10, color: last ? 'var(--accent)' : 'var(--fg5)', fontWeight: last ? 700 : 400 }}>J{i + 1}</span>
+                          <div style={{ height: 12, borderRadius: 4, background: 'color-mix(in oklab, var(--fg4) 12%, transparent)', overflow: 'hidden' }}>
+                            <div style={{ width: `${Math.max(1, (take / maxTake) * 100)}%`, height: '100%', borderRadius: 4, background: last ? 'var(--accent)' : 'color-mix(in oklab, var(--accent) 55%, var(--bg))' }}/>
+                          </div>
+                          <span className="mono" style={{ fontSize: 11, whiteSpace: 'nowrap' }}>
+                            {fmtPct(take, 1)} <span style={{ color: 'var(--fg5)' }}>· {fmtInt(x ? x.volume : 0)}</span>
+                            {prev && <span style={{ marginLeft: 6 }}><FwDelta value={take - prev.takeRate} kind="pp"/></span>}
+                          </span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              ));
+            })()}
           </div>
 
           {scope.transitions.length > 0 && (
