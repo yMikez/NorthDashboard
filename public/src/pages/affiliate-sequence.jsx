@@ -64,6 +64,7 @@ function AsDelta({ value }) {
 // ── Janelas (tabela por janela) ─────────────────────────────────────────
 function AaSequenceView({ seq, onOpen, cur = 'USD' }) {
   const [idx, setIdx] = useStateAS(seq.windows.length - 1);
+  const sectionTitle = (x) => <div className="eyebrow" style={{ fontSize: 10, margin: '4px 0 8px', color: 'var(--accent)' }}>{x}</div>;
   const [showAll, setShowAll] = useStateAS(false);
   const w = seq.windows[Math.min(idx, seq.windows.length - 1)];
   const rows = showAll ? w.rows : w.rows.slice(0, 25);
@@ -74,6 +75,17 @@ function AaSequenceView({ seq, onOpen, cur = 'USD' }) {
   const tone = (n) => (n == null ? 'var(--fg5)' : n < 0 ? 'var(--danger)' : 'var(--money)');
   return (
     <>
+      {sectionTitle(`COMO CADA JANELA SE COMPORTOU (${seq.count} × ${seq.window} DIAS)`)}
+      <AaWindowCards seq={seq} cur={cur}/>
+      {seq.transitions.length > 0 && (
+        <>
+          <div style={{ height: 14 }}/>
+          {sectionTitle('COMPARATIVO ENTRE JANELAS — DE ONDE VEIO A VARIAÇÃO')}
+          <AaTransitionCards seq={seq} cur={cur}/>
+        </>
+      )}
+      <div style={{ height: 18 }}/>
+      {sectionTitle('TABELA POR JANELA — escolha a janela')}
       <div className="seg" style={{ marginBottom: 12, flexWrap: 'wrap' }}>
         {seq.windows.map((x) => (
           <button key={x.index} className={x.index === w.index ? 'is-active' : ''} onClick={() => { setIdx(x.index); setShowAll(false); }}>
@@ -317,6 +329,56 @@ function AaEvolutionView({ seq, onOpen, cur = 'USD' }) {
   );
 }
 
+
+// Cards por janela (linha do tempo) — usados em Janelas e Saúde.
+function AaWindowCards({ seq, cur = 'USD' }) {
+  const toneColor = { pos: 'var(--success)', neg: 'var(--danger)', neutral: 'var(--fg4)' };
+  return (
+      <div style={{ display: 'grid', gridTemplateColumns: `repeat(auto-fit, minmax(240px, 1fr))`, gap: 12 }}>
+      {seq.windows.map((w) => {
+        const n = seq.health.notes.find((x) => x.index === w.index);
+        return (
+          <div key={w.index} className="panel" style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            <div style={{ fontFamily: 'var(--f-mono)', fontSize: 10, color: 'var(--fg5)', letterSpacing: '0.08em' }}>{w.label.toUpperCase()} · {w.start} → {w.end}</div>
+            {n && <div style={{ fontWeight: 700, fontSize: 13, color: toneColor[n.tone] }}>{n.title}</div>}
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+              {[[fmtCurrency(w.totals.revenue, cur, 0), 'Receita'], [fmtInt(w.totals.sales), 'Pedidos'], [fmtInt(w.active), 'Afiliados ativos'], [fmtPct(w.concentrationTop10, 1), 'Concentração Top 10']].map(([v, l]) => (
+                <div key={l}><div className="mono" style={{ fontSize: 16, fontWeight: 700 }}>{v}</div><div style={{ fontSize: 10, color: 'var(--fg5)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>{l}</div></div>
+              ))}
+            </div>
+            {n && <div style={{ fontSize: 12, color: 'var(--fg3)', lineHeight: 1.55 }}>{n.text}</div>}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+// Transições Janela i → i+1 (retidos / novos / churn) com a leitura da causa.
+function AaTransitionCards({ seq, cur = 'USD' }) {
+  return (
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: 12 }}>
+      {seq.transitions.map((t) => {
+        const up = (t.retainedChangePct ?? 0) >= 0;
+        const Row = ({ l, v, color }) => <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, fontSize: 12, padding: '4px 0', borderBottom: '1px solid var(--border-soft)' }}><span style={{ color: 'var(--fg4)' }}>{l}</span><b className="mono" style={{ color }}>{v}</b></div>;
+        return (
+          <div key={t.to} className="panel">
+            <h5 style={{ margin: '0 0 8px', fontSize: 13, color: 'var(--accent)' }}>Janela {t.from + 1} → {t.to + 1}</h5>
+            <Row l="Afiliados retidos (ativos nas duas janelas)" v={fmtInt(t.retained)}/>
+            <Row l="Novos afiliados" v={`+${fmtInt(t.newCount)}`} color="var(--success)"/>
+            <Row l="Afiliados que sumiram (churn)" v={`−${fmtInt(t.churnCount)}`} color="var(--danger)"/>
+            <Row l="Receita trazida por novos" v={fmtCurrency(t.revenueNew, cur, 0)}/>
+            <Row l="Receita perdida com churn" v={fmtCurrency(t.revenueChurn, cur, 0)}/>
+            <Row l="Receita dos retidos (antes → depois)" v={`${fmtCurrency(t.revenueRetainedBefore, cur, 0)} → ${fmtCurrency(t.revenueRetainedAfter, cur, 0)}`}/>
+            <Row l="Variação de receita dos retidos" v={t.retainedChangePct == null ? '—' : `${up ? '▲' : '▼'} ${(Math.abs(t.retainedChangePct) * 100).toFixed(1).replace('.', ',')}%`} color={up ? 'var(--success)' : 'var(--danger)'}/>
+            <div style={{ fontSize: 12, color: 'var(--fg3)', lineHeight: 1.55, marginTop: 8 }}>{t.note}</div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 // ── Saúde da empresa ────────────────────────────────────────────────────
 function AaHealthView({ seq, onOpen, cur = 'USD' }) {
   const toneColor = { pos: 'var(--success)', neg: 'var(--danger)', neutral: 'var(--fg4)' };
@@ -326,44 +388,10 @@ function AaHealthView({ seq, onOpen, cur = 'USD' }) {
   return (
     <>
       {sectionTitle(`LINHA DO TEMPO — COMO CADA JANELA SE COMPORTOU (${seq.window} DIAS CADA)`)}
-      <div style={{ display: 'grid', gridTemplateColumns: `repeat(auto-fit, minmax(240px, 1fr))`, gap: 12 }}>
-        {seq.windows.map((w) => {
-          const n = seq.health.notes.find((x) => x.index === w.index);
-          return (
-            <div key={w.index} className="panel" style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-              <div style={{ fontFamily: 'var(--f-mono)', fontSize: 10, color: 'var(--fg5)', letterSpacing: '0.08em' }}>{w.label.toUpperCase()} · {w.start} → {w.end}</div>
-              {n && <div style={{ fontWeight: 700, fontSize: 13, color: toneColor[n.tone] }}>{n.title}</div>}
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
-                {[[fmtCurrency(w.totals.revenue, cur, 0), 'Receita'], [fmtInt(w.totals.sales), 'Pedidos'], [fmtInt(w.active), 'Afiliados ativos'], [fmtPct(w.concentrationTop10, 1), 'Concentração Top 10']].map(([v, l]) => (
-                  <div key={l}><div className="mono" style={{ fontSize: 16, fontWeight: 700 }}>{v}</div><div style={{ fontSize: 10, color: 'var(--fg5)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>{l}</div></div>
-                ))}
-              </div>
-              {n && <div style={{ fontSize: 12, color: 'var(--fg3)', lineHeight: 1.55 }}>{n.text}</div>}
-            </div>
-          );
-        })}
-      </div>
+      <AaWindowCards seq={seq} cur={cur}/>
 
       {sectionTitle('DINÂMICA DA BASE DE AFILIADOS')}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: 12 }}>
-        {seq.transitions.map((t) => {
-          const up = (t.retainedChangePct ?? 0) >= 0;
-          const Row = ({ l, v, color }) => <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, fontSize: 12, padding: '4px 0', borderBottom: '1px solid var(--border-soft)' }}><span style={{ color: 'var(--fg4)' }}>{l}</span><b className="mono" style={{ color }}>{v}</b></div>;
-          return (
-            <div key={t.to} className="panel">
-              <h5 style={{ margin: '0 0 8px', fontSize: 13, color: 'var(--accent)' }}>Janela {t.from + 1} → {t.to + 1}</h5>
-              <Row l="Afiliados retidos (ativos nas duas janelas)" v={fmtInt(t.retained)}/>
-              <Row l="Novos afiliados" v={`+${fmtInt(t.newCount)}`} color="var(--success)"/>
-              <Row l="Afiliados que sumiram (churn)" v={`−${fmtInt(t.churnCount)}`} color="var(--danger)"/>
-              <Row l="Receita trazida por novos" v={fmtCurrency(t.revenueNew, cur, 0)}/>
-              <Row l="Receita perdida com churn" v={fmtCurrency(t.revenueChurn, cur, 0)}/>
-              <Row l="Receita dos retidos (antes → depois)" v={`${fmtCurrency(t.revenueRetainedBefore, cur, 0)} → ${fmtCurrency(t.revenueRetainedAfter, cur, 0)}`}/>
-              <Row l="Variação de receita dos retidos" v={t.retainedChangePct == null ? '—' : `${up ? '▲' : '▼'} ${(Math.abs(t.retainedChangePct) * 100).toFixed(1).replace('.', ',')}%`} color={up ? 'var(--success)' : 'var(--danger)'}/>
-              <div style={{ fontSize: 12, color: 'var(--fg3)', lineHeight: 1.55, marginTop: 8 }}>{t.note}</div>
-            </div>
-          );
-        })}
-      </div>
+      <AaTransitionCards seq={seq} cur={cur}/>
 
       <div style={{ marginTop: 14, padding: '14px 16px', borderRadius: 12, border: '1px solid color-mix(in oklab, var(--danger) 35%, transparent)', background: 'color-mix(in oklab, var(--danger) 6%, transparent)', fontSize: 13, lineHeight: 1.65, color: 'var(--fg2)' }}>
         <b style={{ color: 'var(--danger)' }}>Risco estrutural de concentração:</b> {seq.health.risk.replace(/^Risco estrutural de concentração:\s*/, '')}

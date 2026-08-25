@@ -188,11 +188,6 @@ function AffiliateAnalysisPage({ filters, user }) {
               <button key={k} className={view === k ? 'is-active' : ''} onClick={() => setView(k)}>{l}</button>
             ))}
           </div>
-          <div className="seg">
-            {[['ranking', 'Ranking'], ['janelas', 'Janelas'], ['evolucao', 'Evolução · Comentários'], ['saude', 'Saúde da empresa']].map(([k, l]) => (
-              <button key={k} className={mode === k ? 'is-active' : ''} onClick={() => setMode(k)}>{l}</button>
-            ))}
-          </div>
           {isAdmin && (
             <button className="btn btn-ghost" onClick={() => setIdentityOpen(true)} title="Unificar contas, contatos, internos">
               <Icon name="users" size={13}/> Identidades
@@ -201,6 +196,24 @@ function AffiliateAnalysisPage({ filters, user }) {
         </div>
       </div>
 
+      {/* Seletor de visão — em destaque, acima dos controles de janela */}
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 10 }}>
+        {[
+          ['ranking', 'Ranking', 'janela atual vs anterior · tops por janela'],
+          ['janelas', 'Janelas & comparativo', 'cards por janela · de onde veio a variação · tabela por janela'],
+          ['evolucao', 'Evolução · Comentários', 'quem sobe, quem cai, quem está parando — com texto'],
+          ['saude', 'Saúde da empresa', 'linha do tempo · dinâmica da base · risco · reativação'],
+        ].map(([k, l, d]) => (
+          <button key={k} onClick={() => setMode(k)} style={{
+            flex: '1 1 200px', textAlign: 'left', cursor: 'pointer', padding: '10px 14px', borderRadius: 12,
+            border: `1px solid ${mode === k ? 'var(--accent)' : 'var(--border)'}`,
+            background: mode === k ? 'color-mix(in oklab, var(--accent) 10%, transparent)' : 'var(--bg-raised)', color: 'var(--fg1)',
+          }}>
+            <div style={{ fontWeight: 700, fontSize: 13, color: mode === k ? 'var(--accent)' : 'var(--fg1)' }}>{l}</div>
+            <div style={{ fontSize: 11, color: 'var(--fg4)', marginTop: 2 }}>{d}</div>
+          </button>
+        ))}
+      </div>
       <div className="panel" style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 10, padding: '10px 14px', marginBottom: 14 }}>
         <span className="f-label">JANELA</span>
         <div className="seg">
