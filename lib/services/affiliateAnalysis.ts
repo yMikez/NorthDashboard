@@ -78,6 +78,7 @@ export interface AnalysisRow {
   platforms: string[];
   accounts: AccountRef[];
   contact: { email: string | null; phone: string | null } | null;
+  origin: { type: string; ref: string | null } | null;
   internal: boolean;
   cur: WindowMetrics;
   prev: WindowMetrics;
@@ -116,7 +117,7 @@ export interface AffiliateAnalysisResponse {
 }
 
 export interface AffiliateExplainResponse {
-  entity: Pick<AnalysisRow, 'key' | 'kind' | 'name' | 'platforms' | 'accounts' | 'contact' | 'internal'> & { partnerId: string | null; notes: string | null };
+  entity: Pick<AnalysisRow, 'key' | 'kind' | 'name' | 'platforms' | 'accounts' | 'contact' | 'origin' | 'internal'> & { partnerId: string | null; notes: string | null };
   window: WindowDays;
   anchor: string;
   includeToday: boolean;
@@ -142,7 +143,11 @@ interface AffMeta {
   partnerId: string | null;
   isInternal: boolean | null;
   refundCbPctOverride: number | null;
-  partner: { id: string; displayName: string; email: string | null; phone: string | null; notes: string | null } | null;
+  partner: { id: string; displayName: string; email: string | null; phone: string | null; notes: string | null; originType: string | null; originRef: string | null } | null;
+}
+
+function originOf(p: AffMeta['partner']): { type: string; ref: string | null } | null {
+  return p?.originType ? { type: p.originType, ref: p.originRef } : null;
 }
 
 interface RawData {
@@ -253,7 +258,7 @@ async function loadRaw(opts: AnalysisOptions, affiliateIds?: string[], coverageD
       select: {
         id: true, externalId: true, nickname: true, email: true, partnerId: true, isInternal: true,
         refundCbPctOverride: true, platform: { select: { slug: true } },
-        partner: { select: { id: true, displayName: true, email: true, phone: true, notes: true } },
+        partner: { select: { id: true, displayName: true, email: true, phone: true, notes: true, originType: true, originRef: true } },
       },
     }),
     getProfitModelInputs(),
@@ -459,6 +464,7 @@ export async function getAffiliateAnalysis(opts: AnalysisOptions): Promise<Affil
       platforms: [...new Set(accounts.map((a) => a.platformSlug))],
       accounts,
       contact: opts.includeContact ? { email: e.partner?.email ?? accounts.find((a) => a.email)?.email ?? null, phone: e.partner?.phone ?? null } : null,
+      origin: originOf(e.partner),
       internal: accounts.every((a) => a.internal),
       cur: w.cur, prev: w.prev,
       delta: {
@@ -602,6 +608,7 @@ export async function getAffiliateExplain(key: string, opts: AnalysisOptions): P
       platforms: [...new Set(accounts.map((a) => a.platformSlug))],
       accounts,
       contact: opts.includeContact ? { email: e.partner?.email ?? accounts.find((a) => a.email)?.email ?? null, phone: e.partner?.phone ?? null } : null,
+      origin: originOf(e.partner),
       internal: accounts.every((a) => a.internal),
       partnerId: resolved.partnerId,
       notes: opts.includeContact ? e.partner?.notes ?? null : null,

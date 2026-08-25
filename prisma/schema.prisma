@@ -144,12 +144,24 @@ model Affiliate {
 // Pessoa/empresa por trás de uma ou mais contas de afiliado (uma por
 // plataforma). Contato é OPCIONAL — serve pra ter o dado à mão e pra
 // cruzar contas; nada depende dele.
+// De onde o afiliado veio: indicação (originRef = quem indicou), Instagram
+// (originRef = @perfil opcional), plataforma (originRef = slug de uma
+// Platform do dashboard) ou outro (originRef = descrição).
+enum AffiliateOrigin {
+  INDICACAO
+  INSTAGRAM
+  PLATAFORMA
+  OUTRO
+}
+
 model AffiliatePartner {
   id          String   @id @default(cuid())
   displayName String
   email       String?
   phone       String?
   notes       String?
+  originType  AffiliateOrigin?
+  originRef   String?
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 

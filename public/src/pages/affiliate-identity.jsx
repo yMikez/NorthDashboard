@@ -11,6 +11,46 @@ const { useState: useStateAI, useEffect: useEffectAI, useMemo: useMemoAI } = Rea
 const AI_INPUT = { background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: 8, padding: '7px 10px', color: 'var(--fg1)', fontFamily: 'var(--f-body)', fontSize: 12, width: '100%' };
 const AI_AV = { display: 'inline-grid', placeItems: 'center', borderRadius: '50%', color: '#fff', fontWeight: 700, fontFamily: 'var(--f-mono)', flex: 'none' };
 const AI_PLAT = { clickbank: 'CB', digistore24: 'D24', buygoods: 'BG', cartpanda: 'CP', jvzoo: 'JVZ' };
+const AI_PLAT_NAMES = { clickbank: 'ClickBank', digistore24: 'Digistore24', buygoods: 'BuyGoods', cartpanda: 'Cartpanda', jvzoo: 'JVZoo' };
+// Origem do afiliado (de onde ele veio) — vive no parceiro.
+const AI_ORIGIN = {
+  INDICACAO:  { label: 'Indicação',  icon: 'users',  refLabel: 'Quem indicou', refPlaceholder: 'nome de quem indicou' },
+  INSTAGRAM:  { label: 'Instagram',  icon: 'link',   refLabel: '@perfil (opcional)', refPlaceholder: '@perfil' },
+  PLATAFORMA: { label: 'Plataforma', icon: 'plug',   refLabel: 'Qual plataforma', refPlaceholder: '' },
+  OUTRO:      { label: 'Outro',      icon: 'info',   refLabel: 'Descreva', refPlaceholder: 'ex.: evento, rede de parceiros' },
+};
+function aiOriginText(o) {
+  if (!o || !o.type) return null;
+  const t = AI_ORIGIN[o.type] || { label: o.type };
+  const ref = o.type === 'PLATAFORMA' ? (AI_PLAT_NAMES[o.ref] || o.ref) : o.ref;
+  return ref ? `${t.label} · ${ref}` : t.label;
+}
+function AiOriginChip({ origin, size = 10 }) {
+  const text = aiOriginText(origin);
+  if (!text) return null;
+  const t = AI_ORIGIN[origin.type] || { icon: 'info' };
+  return (
+    <span title={`Origem do afiliado: ${text}`} style={{
+      display: 'inline-flex', alignItems: 'center', gap: 4, fontFamily: 'var(--f-mono)', fontSize: size, fontWeight: 600,
+      padding: '1px 7px', borderRadius: 'var(--r-full)', whiteSpace: 'nowrap',
+      color: 'var(--gold)', background: 'color-mix(in oklab, var(--gold) 12%, transparent)', border: '1px solid color-mix(in oklab, var(--gold) 35%, transparent)',
+    }}><Icon name={t.icon} size={size}/> {text}</span>
+  );
+}
+// Lista de plataformas do dashboard (uma vez por sessão) pro select de origem.
+let aiPlatformOptionsCache = null;
+function useAiPlatformOptions() {
+  const [opts, setOpts] = useStateAI(aiPlatformOptionsCache || Object.entries(AI_PLAT_NAMES).map(([slug, name]) => ({ slug, name })));
+  useEffectAI(() => {
+    if (aiPlatformOptionsCache) return;
+    window.NSApi.fetchFilterOptions().then((o) => {
+      const raw = (o && (o.platforms || o.platformOptions)) || [];
+      const list = raw.map((p) => (typeof p === 'string' ? { slug: p, name: AI_PLAT_NAMES[p] || p } : { slug: p.slug || p.value || p.id, name: p.displayName || p.label || p.name || AI_PLAT_NAMES[p.slug] || p.slug })).filter((p) => p.slug);
+      if (list.length) { aiPlatformOptionsCache = list; setOpts(list); }
+    }).catch(() => {});
+  }, []);
+  return opts;
+}
 const AI_CONF = {
   alta:  { label: 'ALTA · mesmo e-mail',        tone: 'var(--success)', hint: 'O e-mail do afiliado é igual nas duas contas. Quase certeza de ser a mesma pessoa.' },
   media: { label: 'MÉDIA · mesmo nome',         tone: 'var(--warning)', hint: 'Nome/nick idêntico em plataformas diferentes. Confira antes de unificar.' },
@@ -74,9 +114,13 @@ function AiField({ label, k, placeholder, type = 'text', f, setF, onEnter }) {
 }
 
 function AaContactForm({ title = 'CONTATO', initial, onSave, onCancel, busy, submitLabel = 'Salvar', showName = true, compact = false }) {
-  const [f, setF] = useStateAI({ displayName: '', email: '', phone: '', notes: '', ...(initial || {}) });
-  useEffectAI(() => { setF({ displayName: '', email: '', phone: '', notes: '', ...(initial || {}) }); }, [initial?.displayName, initial?.email, initial?.phone, initial?.notes]);
+  const blank = { displayName: '', email: '', phone: '', notes: '', originType: '', originRef: '' };
+  const [f, setF] = useStateAI({ ...blank, ...(initial || {}) });
+  useEffectAI(() => { setF({ ...blank, ...(initial || {}) }); }, [initial?.displayName, initial?.email, initial?.phone, initial?.notes, initial?.originType, initial?.originRef]);
   const common = { f, setF, onEnter: () => onSave?.(f) };
+  const platforms = useAiPlatformOptions();
+  const originMeta = f.originType ? AI_ORIGIN[f.originType] : null;
+  const labelStyle = { display: 'flex', flexDirection: 'column', gap: 4, fontSize: 10, color: 'var(--fg5)', letterSpacing: '0.06em', textTransform: 'uppercase', fontWeight: 600 };
   return (
     <div className={compact ? '' : 'panel'} style={compact ? {} : { marginBottom: 12 }}>
       {title && <div className="panel-eyebrow" style={{ marginBottom: 8 }}>{title}</div>}
@@ -85,6 +129,25 @@ function AaContactForm({ title = 'CONTATO', initial, onSave, onCancel, busy, sub
         <AiField label="E-mail principal" k="email" placeholder="opcional" type="email" {...common}/>
         <AiField label="Telefone / WhatsApp" k="phone" placeholder="opcional" {...common}/>
         <AiField label="Notas" k="notes" placeholder="opcional (ex.: gerente, fuso, condições)" {...common}/>
+        <label style={labelStyle}>
+          Origem do afiliado
+          <select style={AI_INPUT} value={f.originType} onChange={(e) => setF({ ...f, originType: e.target.value, originRef: '' })}>
+            <option value="">— sem origem —</option>
+            {Object.entries(AI_ORIGIN).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}
+          </select>
+        </label>
+        {originMeta && f.originType === 'PLATAFORMA' && (
+          <label style={labelStyle}>
+            {originMeta.refLabel}
+            <select style={AI_INPUT} value={f.originRef} onChange={(e) => setF({ ...f, originRef: e.target.value })}>
+              <option value="">— escolha —</option>
+              {platforms.map((p) => <option key={p.slug} value={p.slug}>{p.name}</option>)}
+            </select>
+          </label>
+        )}
+        {originMeta && f.originType !== 'PLATAFORMA' && (
+          <AiField label={originMeta.refLabel} k="originRef" placeholder={originMeta.refPlaceholder} {...common}/>
+        )}
       </div>
       <div style={{ display: 'flex', gap: 6, marginTop: 10, alignItems: 'center' }}>
         <button className="btn" disabled={busy} onClick={() => onSave?.(f)}>{busy ? '…' : submitLabel}</button>
@@ -326,6 +389,7 @@ function AiPartners({ d, allAccounts, busy, act }) {
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
                   <span style={{ fontWeight: 700, fontSize: 14 }}>{p.displayName}</span>
                   {p.accounts.map((a) => <AiPlat key={a.id} slug={a.platformSlug} title={a.nickname || a.externalId}/>)}
+                  <AiOriginChip origin={p.origin}/>
                   <span className="mono" style={{ fontSize: 11, color: 'var(--money)', marginLeft: 'auto' }}>{fmtCurrency(p.revenue30d, 'USD', 0)} <span style={{ color: 'var(--fg5)' }}>30d</span></span>
                 </div>
                 {editing !== p.id && (
@@ -340,9 +404,9 @@ function AiPartners({ d, allAccounts, busy, act }) {
             </div>
             {editing === p.id && (
               <div style={{ marginTop: 10 }}>
-                <AaContactForm compact title={null} initial={{ displayName: p.displayName, email: p.email || '', phone: p.phone || '', notes: p.notes || '' }} busy={busy}
+                <AaContactForm compact title={null} initial={{ displayName: p.displayName, email: p.email || '', phone: p.phone || '', notes: p.notes || '', originType: p.origin?.type || '', originRef: p.origin?.ref || '' }} busy={busy}
                   onCancel={() => setEditing(null)}
-                  onSave={(f) => act(async () => { await window.NSApi.adminAffiliateIdentity('update', { partnerId: p.id, displayName: f.displayName, email: f.email || null, phone: f.phone || null, notes: f.notes || null }); setEditing(null); }, '✓ contato salvo')}/>
+                  onSave={(f) => act(async () => { await window.NSApi.adminAffiliateIdentity('update', { partnerId: p.id, displayName: f.displayName, email: f.email || null, phone: f.phone || null, notes: f.notes || null, originType: f.originType || null, originRef: f.originRef || null }); setEditing(null); }, '✓ contato salvo')}/>
               </div>
             )}
             <div style={{ marginTop: 8, borderTop: '1px solid var(--border-soft)', paddingTop: 6 }}>
@@ -449,6 +513,7 @@ function AffiliatePartnerDrawer({ row, filters, isAdmin, onClose, onOpenAccount,
               <div className="sub" style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
                 {accounts.map((a) => <AiPlat key={`${a.platformSlug}:${a.externalId}`} slug={a.platformSlug} title={a.nickname || a.externalId}/>)}
                 <span>{accounts.length} contas</span>
+                <AiOriginChip origin={row.origin}/>
                 {isAdmin && row.contact && (row.contact.email || row.contact.phone) && !editing && (
                   <span style={{ fontFamily: 'var(--f-mono)', fontSize: 11 }}>
                     {row.contact.email && <span><Icon name="mail" size={11}/> {row.contact.email}</span>}
@@ -465,9 +530,9 @@ function AffiliatePartnerDrawer({ row, filters, isAdmin, onClose, onOpenAccount,
           <AiToast msg={msg}/>
           {isAdmin && editing && row.partnerId && (
             <AaContactForm title="CONTATO DO PARCEIRO (opcional)" busy={busy}
-              initial={{ displayName: name, email: row.contact?.email || '', phone: row.contact?.phone || '', notes: row.contact?.notes || '' }}
+              initial={{ displayName: name, email: row.contact?.email || '', phone: row.contact?.phone || '', notes: row.contact?.notes || '', originType: row.origin?.type || '', originRef: row.origin?.ref || '' }}
               onCancel={() => setEditing(false)}
-              onSave={(f) => act(async () => { await window.NSApi.adminAffiliateIdentity('update', { partnerId: row.partnerId, displayName: f.displayName, email: f.email || null, phone: f.phone || null, notes: f.notes || null }); setEditing(false); }, '✓ contato salvo')}/>
+              onSave={(f) => act(async () => { await window.NSApi.adminAffiliateIdentity('update', { partnerId: row.partnerId, displayName: f.displayName, email: f.email || null, phone: f.phone || null, notes: f.notes || null, originType: f.originType || null, originRef: f.originRef || null }); setEditing(false); }, '✓ contato salvo')}/>
           )}
 
           <div className="mini-kpis">
@@ -534,4 +599,4 @@ function AffiliatePartnerDrawer({ row, filters, isAdmin, onClose, onOpenAccount,
   );
 }
 
-Object.assign(window, { AaContactForm, AffiliateIdentityDrawer, AffiliatePartnerDrawer });
+Object.assign(window, { AaContactForm, AffiliateIdentityDrawer, AffiliatePartnerDrawer, AiOriginChip });

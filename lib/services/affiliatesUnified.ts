@@ -15,6 +15,7 @@ import type { AffiliatesResponse } from './metrics';
 export type AffiliateRow = AffiliatesResponse['affiliates'][number];
 
 export interface PartnerContact { email: string | null; phone: string | null; notes: string | null }
+export interface PartnerOriginRef { type: string; ref: string | null }
 
 export interface UnifiedAffiliateRow extends AffiliateRow {
   key: string;               // `${slug}:${externalId}` (solta) | `partner:<id>`
@@ -23,6 +24,7 @@ export interface UnifiedAffiliateRow extends AffiliateRow {
   platforms: string[];
   accounts: AffiliateRow[];  // 1 = conta solta
   contact: PartnerContact | null; // só admin
+  origin: PartnerOriginRef | null; // indicação / instagram / plataforma / outro
 }
 
 export interface UnifiedAffiliatesResponse extends Omit<AffiliatesResponse, 'affiliates'> {
@@ -112,19 +114,19 @@ export function mergeAffiliateRows(accounts: AffiliateRow[], partnerName: string
 /** Agrupa as linhas por parceiro (pura). `partnerOf(key)` → {id, name, contact} | null. */
 export function groupAffiliateRows(
   rows: AffiliateRow[],
-  partnerOf: (key: string) => { id: string; name: string; contact: PartnerContact | null } | null,
+  partnerOf: (key: string) => { id: string; name: string; contact: PartnerContact | null; origin?: PartnerOriginRef | null } | null,
   thresholds: ProfitThresholds,
 ): UnifiedAffiliateRow[] {
-  const byPartner = new Map<string, { name: string; contact: PartnerContact | null; accounts: AffiliateRow[] }>();
+  const byPartner = new Map<string, { name: string; contact: PartnerContact | null; origin: PartnerOriginRef | null; accounts: AffiliateRow[] }>();
   const out: UnifiedAffiliateRow[] = [];
   for (const r of rows) {
     const key = `${r.platformSlug}:${r.externalId}`;
     const p = partnerOf(key);
     if (!p) {
-      out.push({ ...r, key, partnerId: null, partnerName: null, platforms: [r.platformSlug], accounts: [r], contact: null });
+      out.push({ ...r, key, partnerId: null, partnerName: null, platforms: [r.platformSlug], accounts: [r], contact: null, origin: null });
       continue;
     }
-    const g = byPartner.get(p.id) ?? { name: p.name, contact: p.contact, accounts: [] };
+    const g = byPartner.get(p.id) ?? { name: p.name, contact: p.contact, origin: p.origin ?? null, accounts: [] };
     g.accounts.push(r);
     byPartner.set(p.id, g);
   }
@@ -139,6 +141,7 @@ export function groupAffiliateRows(
       platforms: [...new Set(accounts.map((a) => a.platformSlug))], // maior receita primeiro
       accounts,
       contact: g.contact,
+      origin: g.origin,
     });
   }
   out.sort((a, b) => b.revenue - a.revenue);
@@ -156,17 +159,18 @@ export async function unifyAffiliates(data: AffiliatesResponse, includeContact: 
       where: { partnerId: { not: null } },
       select: {
         externalId: true, platform: { select: { slug: true } }, partnerId: true,
-        partner: { select: { id: true, displayName: true, email: true, phone: true, notes: true } },
+        partner: { select: { id: true, displayName: true, email: true, phone: true, notes: true, originType: true, originRef: true } },
       },
     }),
     getProfitModelInputs(),
   ]);
-  const map = new Map<string, { id: string; name: string; contact: PartnerContact | null }>();
+  const map = new Map<string, { id: string; name: string; contact: PartnerContact | null; origin: PartnerOriginRef | null }>();
   for (const a of linked) {
     if (!a.partner) continue;
     map.set(`${a.platform.slug}:${a.externalId}`, {
       id: a.partner.id, name: a.partner.displayName,
       contact: includeContact ? { email: a.partner.email, phone: a.partner.phone, notes: a.partner.notes } : null,
+      origin: a.partner.originType ? { type: a.partner.originType, ref: a.partner.originRef } : null,
     });
   }
   const affiliates = groupAffiliateRows(baseRows, (k) => map.get(k) ?? null, pm.thresholds);

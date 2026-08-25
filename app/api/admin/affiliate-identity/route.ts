@@ -5,7 +5,7 @@
 //   POST /api/admin/affiliate-identity  { action, ... }
 //        link     { affiliateIds: string[], partnerId?, displayName?, email?, phone? }
 //        unlink   { affiliateId }
-//        update   { partnerId, displayName?, email?, phone?, notes? }
+//        update   { partnerId, displayName?, email?, phone?, notes?, originType?, originRef? }  (originType null limpa a origem)
 //        internal { affiliateId, value: true|false|null }
 //        backfill {}   ← importa affiliate_email (JVZoo) e auto-vincula por e-mail
 //        dismiss  { affiliateIds: [a, b] }   ← "Ignorar" sugestão
@@ -38,6 +38,8 @@ interface Body {
   email?: unknown;
   phone?: unknown;
   notes?: unknown;
+  originType?: unknown;
+  originRef?: unknown;
   value?: unknown;
 }
 
@@ -56,6 +58,7 @@ export async function POST(req: Request) {
         const res = await linkAffiliates({
           affiliateIds: ids, partnerId: str(body.partnerId) ?? null,
           displayName: str(body.displayName) ?? null, email: strOrNull(body.email), phone: strOrNull(body.phone), notes: strOrNull(body.notes),
+          originType: strOrNull(body.originType), originRef: strOrNull(body.originRef),
         });
         return NextResponse.json({ ok: true, ...res });
       }
@@ -70,6 +73,7 @@ export async function POST(req: Request) {
         if (!id) return NextResponse.json({ error: 'partnerId obrigatório' }, { status: 400 });
         await updatePartner(id, {
           displayName: str(body.displayName), email: strOrNull(body.email), phone: strOrNull(body.phone), notes: strOrNull(body.notes),
+          originType: strOrNull(body.originType), originRef: strOrNull(body.originRef),
         });
         return NextResponse.json({ ok: true });
       }

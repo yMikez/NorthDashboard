@@ -733,7 +733,7 @@ function LeaderboardPage({ filters, onOpenAffiliate, user }) {
                       <span className="cell-aff">
                         <span className="av" style={{ background: avatarColor(r.externalId) }}>{initials(displayName)}</span>
                         <span className="meta">
-                          <span className="nm">{displayName}{r.accounts && r.accounts.length > 1 && <span title="contas unificadas" style={{ marginLeft: 5, color: 'var(--accent)', verticalAlign: -1 }}><Icon name="link" size={10}/></span>}</span>
+                          <span className="nm">{displayName}{r.accounts && r.accounts.length > 1 && <span title="contas unificadas" style={{ marginLeft: 5, color: 'var(--accent)', verticalAlign: -1 }}><Icon name="link" size={10}/></span>}{r.origin && <span style={{ marginLeft: 6 }}><AiOriginChip origin={r.origin} size={9}/></span>}</span>
                           <span className="id">{r.accounts && r.accounts.length > 1 ? `${r.accounts.length} contas · ${r.accounts.map((c) => c.externalId).join(' · ')}` : r.externalId}{isAdmin && r.contact?.email ? ` · ${r.contact.email}` : ''}</span>
                         </span>
                       </span>

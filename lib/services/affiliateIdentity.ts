@@ -7,7 +7,7 @@
 // Toda mutação limpa o cache de respostas (o ranking unificado depende).
 
 import { db } from '../db';
-import { Prisma } from '@prisma/client';
+import { Prisma, type AffiliateOrigin } from '@prisma/client';
 import { clearResponseCache } from '../cache/responseCache';
 import { logger } from '../logger';
 import {
@@ -36,14 +36,45 @@ function toIdentity(a: AffRow): IdentityAffiliate {
 
 export type IdentityAccount = IdentityAffiliate & { internal: boolean; internalGuess: boolean; revenue30d: number };
 
+export interface PartnerOrigin { type: AffiliateOrigin; ref: string | null }
+
 export interface PartnerView {
   id: string;
   displayName: string;
   email: string | null;
   phone: string | null;
   notes: string | null;
+  origin: PartnerOrigin | null;
   accounts: IdentityAccount[];
   revenue30d: number;
+}
+
+const ORIGIN_TYPES: AffiliateOrigin[] = ['INDICACAO', 'INSTAGRAM', 'PLATAFORMA', 'OUTRO'];
+
+/**
+ * Valida a origem: tipo do enum (ou null = limpar); INDICACAO exige quem
+ * indicou; PLATAFORMA exige slug de uma Platform existente; INSTAGRAM e
+ * OUTRO aceitam ref livre (opcional pro Instagram).
+ */
+export async function normalizeOrigin(type: string | null | undefined, ref: string | null | undefined): Promise<{ originType: AffiliateOrigin | null; originRef: string | null } | undefined> {
+  if (type === undefined) return undefined; // não mexe
+  if (type === null || type === '') return { originType: null, originRef: null };
+  const t = String(type).toUpperCase() as AffiliateOrigin;
+  if (!ORIGIN_TYPES.includes(t)) throw new Error('origem inválida (indicacao | instagram | plataforma | outro)');
+  const r = (ref ?? '').trim();
+  if (t === 'INDICACAO' && !r) throw new Error('indicação: informe quem indicou');
+  if (t === 'PLATAFORMA') {
+    const slug = r.toLowerCase();
+    const p = await db.platform.findUnique({ where: { slug }, select: { slug: true } });
+    if (!p) throw new Error(`plataforma "${r}" não existe no dashboard`);
+    return { originType: t, originRef: slug };
+  }
+  if (t === 'OUTRO' && !r) throw new Error('outro: descreva a origem');
+  return { originType: t, originRef: r || null };
+}
+
+export function originOf(p: { originType: AffiliateOrigin | null; originRef: string | null } | null | undefined): PartnerOrigin | null {
+  return p?.originType ? { type: p.originType, ref: p.originRef } : null;
 }
 
 export type IdentitySuggestion = Omit<LinkSuggestion, 'a' | 'b'> & { a: IdentityAccount; b: IdentityAccount };
@@ -88,7 +119,7 @@ export async function listAffiliateIdentity(): Promise<AffiliateIdentityList> {
   const partnerViews: PartnerView[] = partners.map((p) => {
     const accounts = (byPartner.get(p.id) ?? []).sort((x, y) => y.revenue30d - x.revenue30d);
     return {
-      id: p.id, displayName: p.displayName, email: p.email, phone: p.phone, notes: p.notes,
+      id: p.id, displayName: p.displayName, email: p.email, phone: p.phone, notes: p.notes, origin: originOf(p),
       accounts, revenue30d: Math.round(accounts.reduce((n, a) => n + a.revenue30d, 0) * 100) / 100,
     };
   }).sort((x, y) => y.revenue30d - x.revenue30d);
@@ -142,6 +173,8 @@ export async function linkAffiliates(input: {
   email?: string | null;
   phone?: string | null;
   notes?: string | null;
+  originType?: string | null;
+  originRef?: string | null;
 }): Promise<{ partnerId: string; linked: number; merged: number }> {
   const ids = [...new Set(input.affiliateIds.filter((x) => typeof x === 'string' && x))];
   if (!ids.length) throw new Error('nenhuma conta informada');
@@ -156,7 +189,8 @@ export async function linkAffiliates(input: {
     phone: input.phone?.trim() || undefined,
     notes: input.notes?.trim() || undefined,
   };
-  const hasContact = !!(contactGiven.displayName || contactGiven.email || contactGiven.phone || contactGiven.notes);
+  const origin = await normalizeOrigin(input.originType, input.originRef);
+  const hasContact = !!(contactGiven.displayName || contactGiven.email || contactGiven.phone || contactGiven.notes || (origin && origin.originType));
 
   let partnerId = input.partnerId ?? null;
   if (partnerId) {
@@ -174,6 +208,7 @@ export async function linkAffiliates(input: {
           email: contactGiven.email ?? accounts.map((a) => normalizeEmail(a.email)).find(Boolean) ?? null,
           phone: contactGiven.phone ?? null,
           notes: contactGiven.notes ?? null,
+          ...(origin ?? {}),
         },
         select: { id: true },
       });
@@ -203,6 +238,7 @@ export async function linkAffiliates(input: {
           ...(contactGiven.email ? { email: contactGiven.email } : {}),
           ...(contactGiven.phone ? { phone: contactGiven.phone } : {}),
           ...(contactGiven.notes ? { notes: contactGiven.notes } : {}),
+          ...(origin && origin.originType ? origin : {}),
         },
       });
     }
@@ -225,8 +261,11 @@ export async function unlinkAffiliate(affiliateId: string): Promise<void> {
 
 export async function updatePartner(id: string, patch: {
   displayName?: string; email?: string | null; phone?: string | null; notes?: string | null;
+  originType?: string | null; originRef?: string | null;
 }): Promise<void> {
   const data: Prisma.AffiliatePartnerUpdateInput = {};
+  const origin = await normalizeOrigin(patch.originType, patch.originRef);
+  if (origin) { data.originType = origin.originType; data.originRef = origin.originRef; }
   if (patch.displayName !== undefined) {
     const n = patch.displayName.trim();
     if (!n) throw new Error('nome não pode ficar vazio');

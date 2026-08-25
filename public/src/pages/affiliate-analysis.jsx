@@ -1,4 +1,4 @@
-/* global React, Icon, NSTimeSeries, NSBarRank, Sparkline, CpaStatusChip, fmtCurrency, fmtInt, fmtPct, SkelMiniKpis, SkelChartPanel, SkelTablePanel, SkelDrawerLoading, downloadCsv, AaContactForm, AffiliateIdentityDrawer, AaSequenceView, AaEvolutionView, AaHealthView */
+/* global React, Icon, NSTimeSeries, NSBarRank, Sparkline, CpaStatusChip, fmtCurrency, fmtInt, fmtPct, SkelMiniKpis, SkelChartPanel, SkelTablePanel, SkelDrawerLoading, downloadCsv, AaContactForm, AffiliateIdentityDrawer, AaSequenceView, AaEvolutionView, AaHealthView, AiOriginChip */
 /* Análise de afiliados — quem sobe, quem cai e por quê.
    Ranking por métrica (receita/vendas/AOV/reembolso/Net após CPA), janelas
    de 3/7/15/30/60 dias (cada uma vs a anterior), identidade unificada entre
@@ -412,6 +412,7 @@ function AffiliateAnalysisPage({ filters, user }) {
                             {r.kind === 'partner' && <span title="contas unificadas" style={{ marginRight: 4, color: 'var(--accent)' }}><Icon name="link" size={11}/></span>}
                             {r.name}
                             {r.internal && <span style={{ marginLeft: 6, fontSize: 9, color: 'var(--fg5)' }}>interno</span>}
+                            {r.origin && <span style={{ marginLeft: 6 }}><AiOriginChip origin={r.origin} size={9}/></span>}
                           </div>
                           <div style={{ fontSize: 10, color: 'var(--fg5)', fontFamily: 'var(--f-mono)' }}>
                             {r.accounts.length > 1 ? `${r.accounts.length} contas` : r.accounts[0]?.externalId}
@@ -503,12 +504,12 @@ function AaExplainDrawer({ entityKey, win, filters, internal, today, anchor, isA
   };
   const saveContactWith = (form) => act(async () => {
     if (d.entity.partnerId) {
-      await window.NSApi.adminAffiliateIdentity('update', { partnerId: d.entity.partnerId, displayName: form.displayName, email: form.email || null, phone: form.phone || null, notes: form.notes || null });
+      await window.NSApi.adminAffiliateIdentity('update', { partnerId: d.entity.partnerId, displayName: form.displayName, email: form.email || null, phone: form.phone || null, notes: form.notes || null, originType: form.originType || null, originRef: form.originRef || null });
     } else {
       // Conta solta: cria um parceiro só com ela pra guardar o contato.
       // Só manda o que veio preenchido (vazio não apaga nada).
       const body = { affiliateIds: [d.entity.accounts[0].id] };
-      for (const k of ['displayName', 'email', 'phone', 'notes']) if ((form[k] || '').trim()) body[k] = form[k].trim();
+      for (const k of ['displayName', 'email', 'phone', 'notes', 'originType', 'originRef']) if ((form[k] || '').trim()) body[k] = form[k].trim();
       await window.NSApi.adminAffiliateIdentity('link', body);
     }
     setEditing(false);
@@ -525,6 +526,7 @@ function AaExplainDrawer({ entityKey, win, filters, internal, today, anchor, isA
               {d ? d.entity.name : '…'}
               {d && d.entity.platforms.map((p) => <AaPlat key={p} slug={p}/>)}
               {d && <AaTrend tag={d.trend}/>}
+              {d && <AiOriginChip origin={d.entity.origin}/>}
             </h3>
             {d && d.entity.contact && (d.entity.contact.email || d.entity.contact.phone) && !editing && (
               <div style={{ fontSize: 11, color: 'var(--fg4)', marginTop: 4, fontFamily: 'var(--f-mono)' }}>
@@ -546,7 +548,7 @@ function AaExplainDrawer({ entityKey, win, filters, internal, today, anchor, isA
           {isAdmin && d && editing && (
             <AaContactForm
               title="CONTATO DO PARCEIRO (opcional)"
-              initial={{ displayName: d.entity.name || '', email: d.entity.contact?.email || '', phone: d.entity.contact?.phone || '', notes: d.entity.notes || '' }}
+              initial={{ displayName: d.entity.name || '', email: d.entity.contact?.email || '', phone: d.entity.contact?.phone || '', notes: d.entity.notes || '', originType: d.entity.origin?.type || '', originRef: d.entity.origin?.ref || '' }}
               busy={busy}
               onCancel={() => setEditing(false)}
               onSave={saveContactWith}
