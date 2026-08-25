@@ -26,6 +26,7 @@ const options = {
     'public/src/pages/overview.jsx',
     'public/src/pages/custos.jsx',
     'public/src/pages/all-pages.jsx',
+    'public/src/pages/affiliate-analysis.jsx',
     'public/src/app.jsx',
   ],
   outdir: 'public/dist',
@@ -101,6 +102,7 @@ function checkGlobals() {
   for (const f of [
     'public/src/app.jsx', 'public/src/shell.jsx', 'public/src/pages/all-pages.jsx',
     'public/src/pages/overview.jsx', 'public/src/pages/custos.jsx',
+    'public/src/pages/affiliate-analysis.jsx',
   ]) {
     for (const m of read(f).matchAll(/NSApi\.(\w+)/g)) {
       if (!exported.has(m[1])) errors.push(`${f} usa NSApi.${m[1]}, que não existe no export do api.js`);

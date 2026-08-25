@@ -28,6 +28,9 @@ export interface NormalizedOrder {
 
   affiliateExternalId: string | null;
   affiliateNickname: string | null;
+  // E-mail do AFILIADO (não do comprador) quando a plataforma manda — hoje
+  // só JVZoo. Alimenta Affiliate.email (auto-vínculo entre plataformas).
+  affiliateEmail?: string | null;
 
   customerExternalId: string | null;
   customerEmail: string | null;

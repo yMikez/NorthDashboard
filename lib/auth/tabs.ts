@@ -12,6 +12,7 @@ export type TabId =
   | 'custos'
   | 'leaderboard'
   | 'all-affiliates'
+  | 'affiliate-analysis'
   | 'recovery'
   | 'tauk'
   | 'sms'
@@ -34,6 +35,7 @@ export const AVAILABLE_TABS: TabSpec[] = [
   { id: 'custos',         label: 'Custos',              group: 'Análise' },
   { id: 'leaderboard',    label: 'Ranking',             group: 'Afiliados' },
   { id: 'all-affiliates', label: 'Todos os afiliados',  group: 'Afiliados' },
+  { id: 'affiliate-analysis', label: 'Análise',         group: 'Afiliados' },
   // Captação: fontes novas de receita (recuperação/SMS/email). sms/email são
   // placeholders "em breve" — a tab já existe pra permissão ficar pronta.
   { id: 'recovery',       label: 'Recuperação',         group: 'Captação' },

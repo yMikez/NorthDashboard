@@ -3982,6 +3982,7 @@ const TAB_CATALOG = [
   { group: 'Análise',   id: 'refund-cohorts', label: 'Reembolsos' },
   { group: 'Afiliados', id: 'leaderboard',    label: 'Ranking' },
   { group: 'Afiliados', id: 'all-affiliates', label: 'Todos os afiliados' },
+  { group: 'Afiliados', id: 'affiliate-analysis', label: 'Análise' },
   { group: 'Captação',  id: 'recovery',       label: 'Recuperação' },
   { group: 'Captação',  id: 'tauk',           label: 'Call Center' },
   { group: 'Captação',  id: 'sms',            label: 'SMS' },

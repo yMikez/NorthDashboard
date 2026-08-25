@@ -250,4 +250,59 @@ function NSTimeSeries({
   );
 }
 
-Object.assign(window, { NSTimeSeries });
+// ---------- NSBarRank ----------
+// Barras horizontais de ranking (top N por métrica). Mesmo motor/tokens do
+// NSTimeSeries. props:
+//   items:  [{ label, value, color?, sub? }]   (ordem = ordem de exibição)
+//   format: 'money'|'money2'|'int'|'pct', currency, height (auto por linha)
+function NSBarRank({ items, format = 'money', currency = 'USD', height }) {
+  const R = window.Recharts;
+  if (!R) {
+    return <div style={{ padding: 24, color: 'var(--fg5)', fontSize: 12 }}>Biblioteca de gráficos não carregada.</div>;
+  }
+  const rows = (items || []).map((it) => ({ ...it, value: Number(it.value) || 0 }));
+  if (!rows.length) {
+    return <div style={{ padding: 24, color: 'var(--fg5)', fontSize: 12 }}>Sem dados na janela.</div>;
+  }
+  const { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, Cell, CartesianGrid, LabelList } = R;
+  const h = height || Math.max(140, rows.length * 26 + 28);
+  const accent = nsTok('--accent', '#3EB7D4');
+  const hot = nsTok('--hot', '#E0653A');
+  const fg = nsTok('--fg4', '#8a8f98');
+  const line = nsTok('--border-soft', '#333');
+  const tooltip = ({ active, payload }) => {
+    if (!active || !payload || !payload.length) return null;
+    const p = payload[0].payload;
+    return (
+      <div style={{
+        background: 'var(--bg-elev)', border: '1px solid var(--border)', borderRadius: 10, padding: '8px 10px',
+        boxShadow: 'var(--shadow-md)', fontSize: 12, color: 'var(--fg1)',
+      }}>
+        <div style={{ fontWeight: 600, marginBottom: 2 }}>{p.label}</div>
+        <div className="mono">{nsFmtValue(format, p.value, currency)}</div>
+        {p.sub && <div style={{ color: 'var(--fg4)', fontSize: 11, marginTop: 2 }}>{p.sub}</div>}
+      </div>
+    );
+  };
+  return (
+    <div style={{ width: '100%', height: h }}>
+      <ResponsiveContainer>
+        <BarChart data={rows} layout="vertical" margin={{ top: 4, right: 64, bottom: 4, left: 4 }} barCategoryGap={5}>
+          <CartesianGrid horizontal={false} strokeDasharray="3 3" stroke={line}/>
+          <XAxis type="number" tick={{ fill: fg, fontSize: 10, fontFamily: 'var(--f-mono)' }}
+                 tickFormatter={(v) => nsFmtAxis(format, v, currency)} axisLine={false} tickLine={false}/>
+          <YAxis type="category" dataKey="label" width={150} interval={0}
+                 tick={{ fill: fg, fontSize: 11 }} axisLine={false} tickLine={false}/>
+          <Tooltip cursor={{ fill: nsAlpha(accent, 0.08) }} content={tooltip}/>
+          <Bar dataKey="value" radius={[0, 4, 4, 0]} isAnimationActive={false}>
+            {rows.map((r, i) => <Cell key={i} fill={r.color || (r.value < 0 ? hot : accent)}/>)}
+            <LabelList dataKey="value" position="right" formatter={(v) => nsFmtValue(format, v, currency)}
+                       style={{ fill: fg, fontSize: 10, fontFamily: 'var(--f-mono)' }}/>
+          </Bar>
+        </BarChart>
+      </ResponsiveContainer>
+    </div>
+  );
+}
+
+Object.assign(window, { NSTimeSeries, NSBarRank });

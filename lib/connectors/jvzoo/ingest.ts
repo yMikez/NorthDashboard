@@ -201,6 +201,9 @@ export function parseJvzooIngest(payload: JvzooPayload): NormalizedOrder {
 
     affiliateExternalId: payload.affiliate_id || null,
     affiliateNickname: payload.affiliate_name || null,
+    // JVZoo é a única plataforma que manda o e-mail do afiliado — chave
+    // do vínculo entre contas na Análise de afiliados.
+    affiliateEmail: payload.affiliate_email?.trim().toLowerCase() || null,
 
     // Sem buyer id no payload — email é o identificador estável.
     customerExternalId: payload.customer_email || null,

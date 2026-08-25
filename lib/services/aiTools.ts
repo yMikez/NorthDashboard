@@ -39,6 +39,8 @@ import { getFulfillment } from './fulfillment';
 import { getHealth } from './health';
 import { getProfitSplit } from './profitSplit';
 import { getFamilies } from './families';
+import { getAffiliateAnalysis, getAffiliateExplain } from './affiliateAnalysis';
+import { isWindowDays } from './affiliateAnalysisCore';
 import { stagesParam } from '../shared/queryParams';
 import { db } from '../db';
 import { logger } from '../logger';
@@ -113,6 +115,27 @@ export const TOOLS: Anthropic.Tool[] = [
       ...DATE_PROPS, ...SCOPE_PROPS,
     },
     ['external_id'],
+  ),
+  tool(
+    'get_affiliate_analysis',
+    'Análise de afiliados por JANELAS FIXAS (3, 7, 15, 30 ou 60 dias, fechando ontem), cada uma comparada com a janela anterior de mesmo tamanho: ranking com receita, vendas, AOV, aprovação, reembolso, CPA, Net após CPA, tendência (novo/breakout/crescimento/estável/volátil/queda/queda forte/churn) e o principal motivo da variação (topDriver). view=partner soma as contas da mesma pessoa em plataformas diferentes (identidade unificada); view=platform mostra cada conta. Retorna também `windows` (totais das 5 janelas) e cada linha traz `key` (use em get_affiliate_explain). As janelas fecham ONTEM (último dia completo, BRT). Mesmos números da aba Análise de afiliados. Não recebe datas — use `window`.',
+    {
+      window: { type: 'integer', enum: [3, 7, 15, 30, 60], description: 'Tamanho da janela em dias (default 7)' },
+      view: { type: 'string', enum: ['partner', 'platform'], description: 'partner = contas unificadas (default); platform = por conta' },
+      include_internal: { type: 'boolean', description: 'Incluir pseudo-afiliados internos (tracking de produto). Default false.' },
+      platforms: SCOPE_PROPS.platforms, families: SCOPE_PROPS.families,
+    },
+  ),
+  tool(
+    'get_affiliate_explain',
+    'POR QUÊ um afiliado/parceiro subiu ou caiu: drivers ordenados por impacto (volume de fronts × AOV — decomposição exata da Δreceita —, ticket do front, take rate de upsell, dias com venda, aprovação, reembolso, CPA renegociado, mix de família), janelas 3/7/15/30/60, série diária atual × anterior, quebra por família e por conta. `key` vem de get_affiliate_analysis (partner:<id> ou aff:<id>).',
+    {
+      key: { type: 'string', description: 'Chave da entidade: partner:<id> ou aff:<id>' },
+      window: { type: 'integer', enum: [3, 7, 15, 30, 60], description: 'Tamanho da janela em dias (default 7)' },
+      include_internal: { type: 'boolean', description: 'Incluir contas internas do parceiro (default false, igual ao ranking)' },
+      platforms: SCOPE_PROPS.platforms, families: SCOPE_PROPS.families,
+    },
+    ['key'],
   ),
   tool(
     'get_funnel',
@@ -322,6 +345,10 @@ export interface ToolInput {
   horizon?: number;
   brand?: string;
   campaign?: string;
+  window?: number;
+  view?: string;
+  include_internal?: boolean;
+  key?: string;
 }
 
 /**
@@ -584,6 +611,30 @@ const HANDLERS: Record<string, Handler> = {
     const externalId = resolved?.externalId ?? id;
     const detail = await getAffiliateDetail(externalId, filters, hint ?? resolved?.platform.slug);
     return detail ?? { error: 'affiliate_not_found', message: `Afiliado "${id}" não encontrado no período. Tente get_affiliates com search.` };
+  },
+  async get_affiliate_analysis(input) {
+    const win = Number(input.window) || 7;
+    if (!isWindowDays(win)) return { error: 'invalid_input', message: 'window deve ser 3, 7, 15, 30 ou 60' };
+    const data = await getAffiliateAnalysis({
+      window: win, view: input.view === 'platform' ? 'platform' : 'partner',
+      includeInternal: input.include_internal === true,
+      platformSlugs: strList(input.platforms), families: strList(input.families),
+      includeContact: false,
+    });
+    // Série diária e sparklines são pra gráfico — fora do payload do modelo.
+    const { daily: _daily, topKeys: _topKeys, ...rest } = data;
+    return { ...rest, rows: data.rows.map(({ sparkline: _s, ...r }) => r) };
+  },
+  async get_affiliate_explain(input) {
+    const key = typeof input.key === 'string' ? input.key.trim() : '';
+    if (!/^(partner|aff):[A-Za-z0-9_-]+$/.test(key)) return { error: 'invalid_input', message: 'key deve ser partner:<id> ou aff:<id> (veja get_affiliate_analysis)' };
+    const win = Number(input.window) || 7;
+    if (!isWindowDays(win)) return { error: 'invalid_input', message: 'window deve ser 3, 7, 15, 30 ou 60' };
+    const r = await getAffiliateExplain(key, {
+      window: win, view: 'partner', includeInternal: input.include_internal === true,
+      platformSlugs: strList(input.platforms), families: strList(input.families), includeContact: false,
+    });
+    return r ?? { error: 'not_found', message: `entidade ${key} não encontrada` };
   },
   async get_funnel(input, ctx) {
     return getFunnel(parseFilters(input, ctx));

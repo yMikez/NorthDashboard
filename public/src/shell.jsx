@@ -20,6 +20,7 @@ function Sidebar({ active, onNav, user, open, onClose }) {
         // Ranking + Diretório fundidos numa aba só (modelo planilha CPA).
         // 'all-affiliates' continua rota válida (redireciona pra mesma página).
         { id: 'leaderboard', label: 'Afiliados', icon: 'trophy' },
+        { id: 'affiliate-analysis', label: 'Análise', icon: 'trending-up' },
       ]
     },
     {

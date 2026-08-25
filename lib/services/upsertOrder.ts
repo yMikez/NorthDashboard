@@ -6,6 +6,7 @@ import { classifyProduct, CONNECTOR_ROLE_PLATFORMS } from './productClassificati
 import { calcCogs } from './cogs';
 import { rebalanceSessionFulfillment } from './sessionFulfillment';
 import { scheduleDailyMetricsRefresh } from './dailyMetrics';
+import { autoLinkAffiliateByEmail } from './affiliateIdentity';
 import { logger } from '../logger';
 
 export interface UpsertOrderResult {
@@ -166,16 +167,27 @@ export async function upsertOrder(normalized: NormalizedOrder): Promise<UpsertOr
         platformId: platform.id,
         externalId: normalized.affiliateExternalId,
         nickname: normalized.affiliateNickname,
+        email: normalized.affiliateEmail ?? undefined,
         firstSeenAt: normalized.orderedAt,
         lastOrderAt: normalized.orderedAt,
       },
       update: {
         nickname: normalized.affiliateNickname ?? undefined,
+        email: normalized.affiliateEmail ?? undefined,
         lastOrderAt: normalized.orderedAt,
       },
-      select: { id: true },
+      select: { id: true, partnerId: true },
     });
     affiliateId = affiliate.id;
+    // Conta nova com e-mail conhecido → tenta vincular a um parceiro já
+    // existente com o mesmo e-mail (outra plataforma). Nunca falha o IPN.
+    if (normalized.affiliateEmail && !affiliate.partnerId) {
+      try {
+        await autoLinkAffiliateByEmail(affiliate.id, normalized.affiliateEmail);
+      } catch (err) {
+        logger.warn({ err, affiliateId }, '[upsertOrder] auto-link por e-mail falhou');
+      }
+    }
   }
 
   let customerId: string | null = null;

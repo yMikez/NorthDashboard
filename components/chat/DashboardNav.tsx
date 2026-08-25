@@ -11,11 +11,8 @@ import * as React from 'react';
 import {
   LayoutDashboard,
   BarChart3,
-  Zap,
   TrendingDown,
   Trophy,
-  Users,
-  Layers,
   Package,
   Receipt,
   Plug,
@@ -45,16 +42,14 @@ const GROUPS: NavGroup[] = [
     items: [
       { id: 'overview', label: 'Visão geral', href: '/overview', icon: LayoutDashboard },
       { id: 'funnel', label: 'Funil', href: '/funnel', icon: BarChart3 },
-      { id: 'insights', label: 'Insights', href: '/insights', icon: Zap },
       { id: 'custos', label: 'Custos', href: '/custos', icon: TrendingDown },
     ],
   },
   {
     label: 'Afiliados',
     items: [
-      { id: 'leaderboard', label: 'Ranking', href: '/leaderboard', icon: Trophy },
-      { id: 'all-affiliates', label: 'Todos os afiliados', href: '/all-affiliates', icon: Users },
-      { id: 'networks', label: 'Networks', href: '/networks', icon: Layers },
+      { id: 'leaderboard', label: 'Afiliados', href: '/leaderboard', icon: Trophy },
+      { id: 'affiliate-analysis', label: 'Análise', href: '/affiliate-analysis', icon: BarChart3 },
     ],
   },
   {

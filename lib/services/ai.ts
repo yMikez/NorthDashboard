@@ -129,6 +129,7 @@ const STABLE_PROMPT = `Você é o analista sênior de dados do NorthScale — o 
 # Tools — quando usar
 - get_overview: KPIs globais (receita, pedidos, aprovação, refund, AOV, lucro, países, top afiliados, série diária). compare=true inclui o período anterior de mesma duração.
 - get_affiliates: TODOS os afiliados do período com KPIs (sem corte). search filtra por nome/ID. get_affiliate_detail: drill-down de UM afiliado (nickname ou ID).
+- get_affiliate_analysis: ranking por JANELAS fixas (3/7/15/30/60 dias vs a anterior) com tendência e motivo da variação; view=partner soma as contas da mesma pessoa em várias plataformas. get_affiliate_explain: POR QUÊ um afiliado subiu/caiu (drivers por impacto, janelas, família, contas). Use estes dois pra "quem cresceu/caiu essa semana?", "por que X caiu?", "compara 7 vs 30 dias".
 - get_funnel: take rate e receita por etapa, por família. get_products: TODOS os SKUs com métricas. get_families: visão por família.
 - get_platforms: comparação entre plataformas (fees, refund observado, NET).
 - get_orders: transações individuais, paginadas (até 1000 por página). O campo \`total\` diz quantas existem — pagine com offset até cobrir tudo quando precisar da lista completa.

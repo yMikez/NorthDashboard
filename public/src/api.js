@@ -690,6 +690,24 @@ async function coSend(path, method, body) {
   return res.json();
 }
 
+// ---------- Análise de afiliados ----------
+// Janelas fixas (3/7/15/30/60 dias terminando hoje) — só plataforma/família
+// do filtro global entram; o período global não se aplica.
+async function fetchAffiliateAnalysis(filters, { window = 7, view = 'partner', internal = false, today = false } = {}) {
+  return fetchJSON('/api/metrics/affiliate-analysis', {
+    window: String(window), view, internal: internal ? '1' : '0', today: today ? '1' : '0',
+    platforms: setToCSV(filters.platforms), families: setToCSV(filters.families),
+  });
+}
+async function fetchAffiliateExplain(filters, key, { window = 7, internal = false, today = false } = {}) {
+  return fetchJSON('/api/metrics/affiliate-analysis/explain', {
+    key, window: String(window), internal: internal ? '1' : '0', today: today ? '1' : '0',
+    platforms: setToCSV(filters.platforms), families: setToCSV(filters.families),
+  });
+}
+async function adminListAffiliateIdentity() { return coGet('/api/admin/affiliate-identity'); }
+async function adminAffiliateIdentity(action, body) { return coSend('/api/admin/affiliate-identity', 'POST', { action, ...(body || {}) }); }
+
 function fetchCopyFunnel(params = {}) {
   const qs = new URLSearchParams();
   for (const [k, v] of Object.entries(params)) { if (v !== null && v !== undefined && v !== '') qs.set(k, v); }
@@ -841,6 +859,10 @@ window.NSApi = _wrapMutations({
   ordersExportUrl,
   fetchAffiliates,
   fetchAffiliateDetail,
+  fetchAffiliateAnalysis,
+  fetchAffiliateExplain,
+  adminListAffiliateIdentity,
+  adminAffiliateIdentity,
   fetchRefundCohorts,
   fetchPlatforms,
   adminPatchPlatformFees,

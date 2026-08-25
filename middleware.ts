@@ -45,6 +45,7 @@ const SPA_ROUTES = new Set([
   '/refund-cohorts',
   '/leaderboard',
   '/all-affiliates',
+  '/affiliate-analysis',
   '/products',
   '/transactions',
   '/platforms',

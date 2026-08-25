@@ -1,0 +1,814 @@
+/* global React, Icon, NSTimeSeries, NSBarRank, Sparkline, CpaStatusChip, CopyKpi, fmtCurrency, fmtInt, fmtPct, SkelMiniKpis, SkelChartPanel, SkelTablePanel, SkelDrawerLoading, downloadCsv */
+/* Análise de afiliados — quem sobe, quem cai e por quê.
+   Ranking por métrica (receita/vendas/AOV/reembolso/Net após CPA), janelas
+   de 3/7/15/30/60 dias (cada uma vs a anterior), identidade unificada entre
+   plataformas (parceiro = contas somadas), gráficos e drivers da variação.
+   API: /api/metrics/affiliate-analysis (+ /explain), /api/admin/affiliate-identity. */
+
+const { useState: useStateAA, useEffect: useEffectAA, useMemo: useMemoAA } = React;
+
+const AA_WINDOWS = [3, 7, 15, 30, 60];
+// [id, label, valor(cur), formato, asc(menor é melhor)]
+const AA_METRICS = [
+  ['revenue',     'Receita',       (m) => m.revenue,                'money',  false],
+  ['sales',       'Vendas',        (m) => m.sales,                  'int',    false],
+  ['aov',         'AOV',           (m) => m.aov,                    'money2', false],
+  ['refundRate',  'Reembolso',     (m) => m.refundRate,             'pct',    true],
+  ['netAfterCpa', 'Net após CPA',  (m) => (m.netAfterCpa == null ? -1e12 : m.netAfterCpa), 'money2', false],
+];
+const AA_TREND = {
+  novo:        { label: 'Novo',          tone: 'var(--accent)' },
+  churn:       { label: 'Saiu do radar', tone: 'var(--danger)' },
+  breakout:    { label: 'Breakout',      tone: 'var(--success)' },
+  crescimento: { label: 'Crescimento',   tone: 'var(--success)' },
+  estavel:     { label: 'Estável',       tone: 'var(--fg4)' },
+  volatil:     { label: 'Volátil',       tone: 'var(--warning)' },
+  queda:       { label: 'Queda',         tone: 'var(--warning)' },
+  queda_forte: { label: 'Queda forte',   tone: 'var(--danger)' },
+};
+const AA_INPUT = { background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: 8, padding: '6px 9px', color: 'var(--fg1)', fontFamily: 'var(--f-body)', fontSize: 12 };
+const AA_PLAT = { clickbank: 'CB', digistore24: 'D24', buygoods: 'BG', cartpanda: 'CP', jvzoo: 'JVZ' };
+
+function aaFmt(format, v, cur = 'USD') {
+  if (v == null || Number.isNaN(v)) return '—';
+  if (format === 'int') return fmtInt(v);
+  if (format === 'pct') return fmtPct(v, 1);
+  if (format === 'money2') return fmtCurrency(v, cur, 2);
+  return fmtCurrency(v, cur, 0);
+}
+function aaPctStr(f) { return (f * 100).toFixed(1).replace('.', ',') + '%'; }
+
+// Variação: relativa (fração) ou em pontos percentuais / $ conforme kind.
+function AaDelta({ value, kind = 'rel', invert = false, size = 10 }) {
+  if (value == null) return <span style={{ color: 'var(--fg5)', fontSize: size }}>—</span>;
+  const good = invert ? value <= 0 : value >= 0;
+  const flat = Math.abs(value) < (kind === 'rel' ? 0.002 : kind === 'pp' ? 0.0005 : 0.5);
+  const color = flat ? 'var(--fg4)' : good ? 'var(--success)' : 'var(--danger)';
+  const arrow = flat ? '■' : value >= 0 ? '▲' : '▼';
+  let text;
+  if (kind === 'rel') text = aaPctStr(Math.abs(value));
+  else if (kind === 'pp') text = (Math.abs(value) * 100).toFixed(1).replace('.', ',') + ' pp';
+  else text = fmtCurrency(Math.abs(value), 'USD', kind === 'money2' ? 2 : 0);
+  return <span className="mono" style={{ color, fontSize: size, whiteSpace: 'nowrap' }}>{arrow} {text}</span>;
+}
+
+function AaTrend({ tag }) {
+  const t = AA_TREND[tag] || { label: tag || '—', tone: 'var(--fg4)' };
+  return (
+    <span style={{
+      fontFamily: 'var(--f-mono)', fontSize: 9, fontWeight: 700, letterSpacing: '0.05em', textTransform: 'uppercase',
+      padding: '2px 7px', borderRadius: 'var(--r-full)', whiteSpace: 'nowrap',
+      color: t.tone, background: `color-mix(in oklab, ${t.tone} 12%, transparent)`, border: `1px solid color-mix(in oklab, ${t.tone} 35%, transparent)`,
+    }}>{t.label}</span>
+  );
+}
+
+function AaPlat({ slug }) {
+  return (
+    <span title={slug} style={{
+      fontFamily: 'var(--f-mono)', fontSize: 9, fontWeight: 700, padding: '1px 6px', borderRadius: 6,
+      color: 'var(--fg3)', background: 'color-mix(in oklab, var(--fg4) 12%, transparent)', border: '1px solid var(--border-soft)',
+    }}>{AA_PLAT[slug] || slug}</span>
+  );
+}
+
+function AaEmpty({ children }) {
+  return <div style={{ padding: '22px 12px', textAlign: 'center', color: 'var(--fg5)', fontSize: 12, border: '1px dashed var(--border)', borderRadius: 12 }}>{children}</div>;
+}
+
+// ── Página ──────────────────────────────────────────────────────────────
+
+function AffiliateAnalysisPage({ filters, user }) {
+  const isAdmin = user?.role === 'ADMIN';
+  const [win, setWin] = useStateAA(7);
+  const [view, setView] = useStateAA('partner');
+  const [metric, setMetric] = useStateAA('revenue');
+  const [internal, setInternal] = useStateAA(false);
+  const [today, setToday] = useStateAA(false);
+  const [query, setQuery] = useStateAA('');
+  const [state, setState] = useStateAA({ status: 'loading', data: null, error: null });
+  const [tick, setTick] = useStateAA(0);
+  const [openKey, setOpenKey] = useStateAA(null);
+  const [identityOpen, setIdentityOpen] = useStateAA(false);
+
+  const platformsKey = Array.from(filters.platforms || []).join(',');
+  const familiesKey = Array.from(filters.families || []).join(',');
+
+  useEffectAA(() => {
+    let cancelled = false;
+    setState((s) => ({ ...s, status: 'loading' }));
+    window.NSApi.fetchAffiliateAnalysis(filters, { window: win, view, internal, today })
+      .then((data) => { if (!cancelled) setState({ status: 'ready', data, error: null }); })
+      .catch((err) => { if (!cancelled) setState({ status: 'error', data: null, error: err.message }); });
+    return () => { cancelled = true; };
+  }, [win, view, internal, today, tick, platformsKey, familiesKey]);
+
+  const data = state.data;
+  const rows = data?.rows || [];
+  const mdef = AA_METRICS.find((m) => m[0] === metric) || AA_METRICS[0];
+  const [, mLabel, mValue, mFormat, mAsc] = mdef;
+
+  // Ranking client-side: posição na janela atual e na anterior pela métrica.
+  const ranked = useMemoAA(() => {
+    const rankOf = (pick) => {
+      const arr = rows.filter((r) => pick(r).sales > 0);
+      arr.sort((a, b) => {
+        const d = mValue(pick(a)) - mValue(pick(b));
+        if (d !== 0) return mAsc ? d : -d;
+        return pick(b).revenue - pick(a).revenue;
+      });
+      const m = new Map();
+      arr.forEach((r, i) => m.set(r.key, i + 1));
+      return m;
+    };
+    const cur = rankOf((r) => r.cur);
+    const prev = rankOf((r) => r.prev);
+    const q = query.trim().toLowerCase();
+    const list = rows
+      .filter((r) => !q || r.name.toLowerCase().includes(q) || r.accounts.some((a) => a.externalId.toLowerCase().includes(q) || (a.nickname || '').toLowerCase().includes(q) || (a.email || '').toLowerCase().includes(q)))
+      .map((r) => ({ ...r, rank: cur.get(r.key) || null, prevRank: prev.get(r.key) || null }))
+      .sort((a, b) => (a.rank || 1e9) - (b.rank || 1e9));
+    return list;
+  }, [rows, metric, query]);
+
+  const win0 = data?.windows?.find((w) => w.days === win);
+  const bars = useMemoAA(() => ranked.filter((r) => r.rank).slice(0, 15).map((r) => ({
+    label: r.name.length > 22 ? r.name.slice(0, 21) + '…' : r.name,
+    value: metric === 'netAfterCpa' ? (r.cur.netAfterCpa ?? 0) : mValue(r.cur),
+    sub: `#${r.rank}${r.prevRank ? ` (antes #${r.prevRank})` : ''} · ${r.platforms.map((p) => AA_PLAT[p] || p).join('+')}`,
+  })), [ranked, metric]);
+
+  const exportCsv = () => {
+    const headers = ['#', 'Nome', 'Plataformas', 'Tendência', 'Vendas', 'Vendas ant.', 'Receita', 'Receita ant.', 'AOV', 'Aprovação', 'Reembolso', 'CPA/venda', 'Net após CPA', 'Net após CPA total', 'Status', 'E-mail', 'Telefone', 'Por quê'];
+    const body = ranked.map((r) => [r.rank, r.name, r.platforms.join('+'), AA_TREND[r.trend]?.label || r.trend, r.cur.sales, r.prev.sales, r.cur.revenue, r.prev.revenue, r.cur.aov, r.cur.approvalRate, r.cur.refundRate, r.cur.cpaPerFe, r.cur.netAfterCpa ?? '', r.cur.netAfterCpaTotal ?? '', r.cur.cpaStatus || '', r.contact?.email || '', r.contact?.phone || '', r.topDriver ? `${r.topDriver.title}: ${r.topDriver.detail}` : '']);
+    downloadCsv(`analise-afiliados-${win}d-${data?.todayBrt || ''}.csv`, headers, body);
+  };
+
+  const loading = state.status === 'loading';
+
+  return (
+    <div className="page-in">
+      <div className="page-head">
+        <div className="lead">
+          <span className="eyebrow">AFILIADOS · ANÁLISE</span>
+          <h2>Quem sobe, quem cai — <em>e por quê</em>.</h2>
+          <span className="sub">
+            janelas fixas fechando ONTEM (último dia completo, BRT), cada uma comparada com a janela anterior de mesmo tamanho · o período global não se aplica aqui · plataforma/família do filtro global valem
+          </span>
+        </div>
+        <div className="page-head-actions" style={{ flexWrap: 'wrap', gap: 8 }}>
+          <div className="seg">
+            {[['partner', 'Unificados'], ['platform', 'Por plataforma']].map(([k, l]) => (
+              <button key={k} className={view === k ? 'is-active' : ''} onClick={() => setView(k)}>{l}</button>
+            ))}
+          </div>
+          <div className="seg">
+            {AA_WINDOWS.map((w) => (
+              <button key={w} className={win === w ? 'is-active' : ''} onClick={() => setWin(w)}>{w}d</button>
+            ))}
+          </div>
+          {isAdmin && (
+            <button className="btn btn-ghost" onClick={() => setIdentityOpen(true)} title="Unificar contas, contatos, internos">
+              <Icon name="users" size={13}/> Identidades
+            </button>
+          )}
+        </div>
+      </div>
+
+      {state.status === 'error' && (
+        <div className="panel" style={{ color: 'var(--danger)', fontSize: 12 }}>Erro ao carregar: {state.error}</div>
+      )}
+
+      {loading && !data && (
+        <>
+          <SkelMiniKpis n={6}/>
+          <SkelChartPanel height={260} title="Comparativo"/>
+          <SkelTablePanel rows={10} cols={12} title="Ranking"/>
+        </>
+      )}
+
+      {data && (
+        <div style={{ opacity: loading ? 0.45 : 1, transition: 'opacity .2s' }}>
+          {/* KPIs da janela */}
+          {win0 && (
+            <div className="grid-2" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: 10, marginBottom: 14 }}>
+              <AaKpi label={`Receita · ${win}d`} value={fmtCurrency(win0.cur.revenue, 'USD', 0)} money delta={win0.prev.revenue ? (win0.cur.revenue - win0.prev.revenue) / win0.prev.revenue : null} sub={`antes ${fmtCurrency(win0.prev.revenue, 'USD', 0)}`}/>
+              <AaKpi label="Vendas" value={fmtInt(win0.cur.sales)} delta={win0.prev.sales ? (win0.cur.sales - win0.prev.sales) / win0.prev.sales : null} sub={`${fmtInt(win0.cur.feApproved)} FEs`}/>
+              <AaKpi label="AOV" value={fmtCurrency(win0.cur.aov, 'USD', 2)} money delta={win0.prev.aov ? (win0.cur.aov - win0.prev.aov) / win0.prev.aov : null} sub={`antes ${fmtCurrency(win0.prev.aov, 'USD', 2)}`}/>
+              <AaKpi label="Reembolso" value={fmtPct(win0.cur.refundRate, 1)} delta={win0.prev.realOrders ? win0.cur.refundRate - win0.prev.refundRate : null} deltaKind="pp" invert sub={`${fmtInt(win0.cur.refunds)} estornos`}/>
+              <AaKpi label="Net após CPA (total)" value={win0.cur.netAfterCpaTotal == null ? '—' : fmtCurrency(win0.cur.netAfterCpaTotal, 'USD', 0)} money delta={win0.cur.netAfterCpaTotal != null && win0.prev.netAfterCpaTotal != null ? win0.cur.netAfterCpaTotal - win0.prev.netAfterCpaTotal : null} deltaKind="money" sub={win0.cur.netAfterCpa == null ? 'sem CPA conhecido' : `${fmtCurrency(win0.cur.netAfterCpa, 'USD', 2)} por FE`}/>
+              <AaKpi label="Ativos" value={fmtInt(data.summary.active)} delta={data.summary.activePrev ? (data.summary.active - data.summary.activePrev) / data.summary.activePrev : null} sub={`${data.summary.newCount} novos · ${data.summary.churnCount} sumiram · top 10 = ${fmtPct(data.summary.concentrationTop10, 0)}`}/>
+            </div>
+          )}
+
+          {/* Comparativo por janela (todos os afiliados visíveis) */}
+          <div className="panel" style={{ padding: 0, marginBottom: 14 }}>
+            <div className="panel-head" style={{ padding: '12px 16px 6px' }}>
+              <div className="panel-title">
+                <span className="panel-eyebrow">COMPARATIVO POR JANELA</span>
+                <span className="panel-sub">cada linha = últimos N dias vs os N dias anteriores · clique pra trocar a janela do ranking</span>
+              </div>
+            </div>
+            <div className="tbl-wrap">
+              <table className="tbl">
+                <thead><tr>
+                  <th>Janela</th><th>Período</th>
+                  <th className="num">Receita</th><th className="num">Δ</th>
+                  <th className="num">Vendas</th><th className="num">Δ</th>
+                  <th className="num">AOV</th><th className="num">Δ</th>
+                  <th className="num">Reembolso</th><th className="num">Δ</th>
+                  <th className="num">Net após CPA</th><th className="num">Δ</th>
+                  <th className="num">Ativos</th>
+                </tr></thead>
+                <tbody>
+                  {data.windows.map((w) => (
+                    <tr key={w.days} onClick={() => setWin(w.days)} style={{ cursor: 'pointer', background: w.days === win ? 'color-mix(in oklab, var(--accent) 8%, transparent)' : undefined }}>
+                      <td className="cell-mono" style={{ fontWeight: 700 }}>{w.days} dias</td>
+                      <td style={{ fontSize: 11, color: 'var(--fg4)' }}>{w.start} → {w.end} <span style={{ color: 'var(--fg5)' }}>vs {w.prevStart} → {w.prevEnd}</span></td>
+                      <td className="num cell-mono" style={{ color: 'var(--money)' }}>{fmtCurrency(w.cur.revenue, 'USD', 0)}</td>
+                      <td className="num"><AaDelta value={w.prev.revenue ? (w.cur.revenue - w.prev.revenue) / w.prev.revenue : null}/></td>
+                      <td className="num cell-mono">{fmtInt(w.cur.sales)}</td>
+                      <td className="num"><AaDelta value={w.prev.sales ? (w.cur.sales - w.prev.sales) / w.prev.sales : null}/></td>
+                      <td className="num cell-mono">{fmtCurrency(w.cur.aov, 'USD', 2)}</td>
+                      <td className="num"><AaDelta value={w.prev.aov ? (w.cur.aov - w.prev.aov) / w.prev.aov : null}/></td>
+                      <td className="num cell-mono">{fmtPct(w.cur.refundRate, 1)}</td>
+                      <td className="num"><AaDelta value={w.prev.realOrders ? w.cur.refundRate - w.prev.refundRate : null} kind="pp" invert/></td>
+                      <td className="num cell-mono" style={{ color: w.cur.netAfterCpaTotal == null ? 'var(--fg5)' : w.cur.netAfterCpaTotal >= 0 ? 'var(--money)' : 'var(--danger)' }}>{w.cur.netAfterCpaTotal == null ? '—' : fmtCurrency(w.cur.netAfterCpaTotal, 'USD', 0)}</td>
+                      <td className="num"><AaDelta value={w.cur.netAfterCpaTotal != null && w.prev.netAfterCpaTotal != null ? w.cur.netAfterCpaTotal - w.prev.netAfterCpaTotal : null} kind="money"/></td>
+                      <td className="num cell-mono">{w.active} <span style={{ color: 'var(--fg5)' }}>/ {w.activePrev}</span></td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          {/* Gráficos */}
+          <div className="grid-2" style={{ marginBottom: 14 }}>
+            <div className="panel">
+              <div className="panel-head">
+                <div className="panel-title">
+                  <span className="panel-eyebrow">RECEITA DIÁRIA · TOP 8 DA JANELA</span>
+                  <span className="panel-sub">clique na legenda pra esconder/mostrar</span>
+                </div>
+              </div>
+              <NSTimeSeries
+                data={data.daily}
+                series={[{ key: 'total', label: 'Total', kind: 'area' }, ...data.topKeys.map((t) => ({ key: t.key, label: t.name.length > 18 ? t.name.slice(0, 17) + '…' : t.name, kind: 'line' }))]}
+                height={280} format="money" toggles brush={false}
+              />
+            </div>
+            <div className="panel">
+              <div className="panel-head">
+                <div className="panel-title">
+                  <span className="panel-eyebrow">TOP 15 · {mLabel.toUpperCase()}</span>
+                  <span className="panel-sub">{mAsc ? 'menor é melhor' : 'maior é melhor'} · janela de {win} dias</span>
+                </div>
+              </div>
+              <NSBarRank items={bars} format={mFormat}/>
+            </div>
+          </div>
+
+          {/* Ranking */}
+          <div className="panel" style={{ padding: 0 }}>
+            <div className="panel-head" style={{ padding: '12px 16px 6px', flexWrap: 'wrap', gap: 8 }}>
+              <div className="panel-title">
+                <span className="panel-eyebrow">RANKING · {win} DIAS · {view === 'partner' ? 'CONTAS UNIFICADAS' : 'POR PLATAFORMA'}</span>
+                <span className="panel-sub">
+                  {fmtInt(ranked.length)} {view === 'partner' ? 'parceiros' : 'contas'} com atividade ·
+                  {data.summary.internalExcluded > 0 && !internal ? ` ${data.summary.internalExcluded} internos excluídos (${fmtCurrency(data.summary.internalRevenueExcluded, 'USD', 0)}) · ` : ' '}
+                  clique numa linha pra ver o porquê
+                </span>
+              </div>
+              <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+                <div className="seg">
+                  {AA_METRICS.map(([k, l]) => (
+                    <button key={k} className={metric === k ? 'is-active' : ''} onClick={() => setMetric(k)}>{l}</button>
+                  ))}
+                </div>
+                <label style={{ display: 'flex', gap: 6, alignItems: 'center', fontSize: 11, color: 'var(--fg4)', cursor: 'pointer' }}>
+                  <input type="checkbox" checked={internal} onChange={(e) => setInternal(e.target.checked)}/> incluir internos
+                </label>
+                <label title="Hoje ainda está em andamento — comparar com dias cheios vicia os Δ" style={{ display: 'flex', gap: 6, alignItems: 'center', fontSize: 11, color: 'var(--fg4)', cursor: 'pointer' }}>
+                  <input type="checkbox" checked={today} onChange={(e) => setToday(e.target.checked)}/> incluir hoje (parcial)
+                </label>
+                <input style={AA_INPUT} placeholder="buscar nome, ID, e-mail…" value={query} onChange={(e) => setQuery(e.target.value)} style={{ width: 190, fontSize: 12 }}/>
+                <button className="btn btn-ghost" onClick={exportCsv} title="Exportar CSV"><Icon name="download" size={13}/></button>
+                <button className="btn btn-ghost" onClick={() => setTick((t) => t + 1)} title="Recarregar"><Icon name="refresh" size={13}/></button>
+              </div>
+            </div>
+            <div className="tbl-wrap" style={{ maxHeight: 720 }}>
+              <table className="tbl tbl--sticky-first">
+                <thead><tr>
+                  <th>#</th><th>{view === 'partner' ? 'Parceiro' : 'Conta'}</th><th>Plat.</th><th>Tendência</th>
+                  <th className="num">Vendas</th><th className="num">Δ</th>
+                  <th className="num">Receita</th><th className="num">Δ</th>
+                  <th className="num">AOV</th><th className="num">Δ</th>
+                  <th className="num">Aprov.</th>
+                  <th className="num">Reemb.</th><th className="num">Δ</th>
+                  <th className="num">CPA/venda</th>
+                  <th className="num">Net após CPA</th><th className="num">Δ</th>
+                  <th>Status</th><th>Por quê</th><th>{win}d</th>
+                </tr></thead>
+                <tbody>
+                  {ranked.length === 0 && (
+                    <tr><td colSpan={19}><AaEmpty>Nenhum afiliado com atividade nesta janela{query ? ' pra essa busca' : ''}.</AaEmpty></td></tr>
+                  )}
+                  {ranked.map((r) => {
+                    const rankDelta = r.rank && r.prevRank ? r.prevRank - r.rank : null;
+                    return (
+                      <tr key={r.key} onClick={() => setOpenKey(r.key)} style={{ cursor: 'pointer' }}>
+                        <td className="cell-mono" style={{ whiteSpace: 'nowrap' }}>
+                          {r.rank ? `#${r.rank}` : '—'}
+                          {rankDelta != null && rankDelta !== 0 && (
+                            <span style={{ marginLeft: 4, fontSize: 9, color: rankDelta > 0 ? 'var(--success)' : 'var(--danger)' }}>{rankDelta > 0 ? '▲' : '▼'}{Math.abs(rankDelta)}</span>
+                          )}
+                          {r.rank && !r.prevRank && <span style={{ marginLeft: 4, fontSize: 9, color: 'var(--accent)' }}>novo</span>}
+                        </td>
+                        <td style={{ maxWidth: 220 }}>
+                          <div style={{ fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                            {r.kind === 'partner' && <span title="contas unificadas" style={{ marginRight: 4, color: 'var(--accent)' }}><Icon name="link" size={11}/></span>}
+                            {r.name}
+                            {r.internal && <span style={{ marginLeft: 6, fontSize: 9, color: 'var(--fg5)' }}>interno</span>}
+                          </div>
+                          <div style={{ fontSize: 10, color: 'var(--fg5)', fontFamily: 'var(--f-mono)' }}>
+                            {r.accounts.length > 1 ? `${r.accounts.length} contas` : r.accounts[0]?.externalId}
+                            {r.contact?.email ? ` · ${r.contact.email}` : ''}
+                          </div>
+                        </td>
+                        <td style={{ whiteSpace: 'nowrap' }}>{r.platforms.map((p) => <span key={p} style={{ marginRight: 3 }}><AaPlat slug={p}/></span>)}</td>
+                        <td><AaTrend tag={r.trend}/></td>
+                        <td className="num cell-mono">{fmtInt(r.cur.sales)}</td>
+                        <td className="num"><AaDelta value={r.delta.sales}/></td>
+                        <td className="num cell-mono" style={{ color: 'var(--money)', fontWeight: 600 }}>{fmtCurrency(r.cur.revenue, 'USD', 0)}</td>
+                        <td className="num"><AaDelta value={r.delta.revenue}/></td>
+                        <td className="num cell-mono">{fmtCurrency(r.cur.aov, 'USD', 2)}</td>
+                        <td className="num"><AaDelta value={r.delta.aov}/></td>
+                        <td className="num cell-mono">{fmtPct(r.cur.approvalRate, 0)}</td>
+                        <td className="num cell-mono" style={{ color: r.cur.refundRate > 0.15 ? 'var(--danger)' : undefined }}>{fmtPct(r.cur.refundRate, 1)}</td>
+                        <td className="num"><AaDelta value={r.delta.refundRate} kind="pp" invert/></td>
+                        <td className="num cell-mono">{r.cur.cpaPerFe > 0 ? fmtCurrency(r.cur.cpaPerFe, 'USD', 0) : '—'}</td>
+                        <td className="num cell-mono" style={{ color: r.cur.netAfterCpa == null ? 'var(--fg5)' : r.cur.netAfterCpa >= 0 ? 'var(--money)' : 'var(--danger)' }}>
+                          {r.cur.netAfterCpa == null ? '—' : fmtCurrency(r.cur.netAfterCpa, 'USD', 2)}
+                        </td>
+                        <td className="num"><AaDelta value={r.delta.netAfterCpa} kind="money2"/></td>
+                        <td><CpaStatusChip status={r.cur.cpaStatus}/></td>
+                        <td style={{ maxWidth: 260, fontSize: 11, color: 'var(--fg3)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={r.topDriver ? r.topDriver.detail : ''}>
+                          {r.topDriver ? <><b style={{ color: r.topDriver.tone === 'up' ? 'var(--success)' : r.topDriver.tone === 'down' ? 'var(--danger)' : 'var(--fg3)' }}>{r.topDriver.title}</b> · {r.topDriver.detail}</> : <span style={{ color: 'var(--fg5)' }}>sem variação relevante</span>}
+                        </td>
+                        <td><Sparkline data={r.sparkline} width={70} height={20}/></td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {openKey && (
+        <AaExplainDrawer entityKey={openKey} win={win} filters={filters} internal={internal} today={today} isAdmin={isAdmin} onClose={() => setOpenKey(null)} onChanged={() => setTick((t) => t + 1)}/>
+      )}
+      {identityOpen && (
+        <AaIdentityDrawer onClose={() => setIdentityOpen(false)} onChanged={() => setTick((t) => t + 1)}/>
+      )}
+    </div>
+  );
+}
+
+function AaKpi({ label, value, sub, money, delta, deltaKind = 'rel', invert = false }) {
+  return (
+    <div className="panel" style={{ padding: '12px 14px' }}>
+      <div style={{ fontSize: 10, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--fg5)', fontWeight: 600, marginBottom: 4 }}>{label}</div>
+      <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, flexWrap: 'wrap' }}>
+        <div className="mono" style={{ fontFamily: 'var(--f-display)', fontSize: 22, fontWeight: 700, color: money ? 'var(--money)' : 'var(--fg1)' }}>{value}</div>
+        <AaDelta value={delta} kind={deltaKind} invert={invert} size={11}/>
+      </div>
+      {sub && <div style={{ fontSize: 11, color: 'var(--fg4)', marginTop: 2 }}>{sub}</div>}
+    </div>
+  );
+}
+
+// ── Drawer "por quê" ────────────────────────────────────────────────────
+
+function AaExplainDrawer({ entityKey, win, filters, internal, today, isAdmin, onClose, onChanged }) {
+  const [state, setState] = useStateAA({ status: 'loading', data: null, error: null });
+  const [tick, setTick] = useStateAA(0);
+  const [editing, setEditing] = useStateAA(false);
+  const [form, setForm] = useStateAA({ displayName: '', email: '', phone: '', notes: '' });
+  const [busy, setBusy] = useStateAA(false);
+  const [msg, setMsg] = useStateAA(null);
+
+  useEffectAA(() => {
+    let cancelled = false;
+    setState((s) => ({ ...s, status: 'loading' }));
+    window.NSApi.fetchAffiliateExplain(filters, entityKey, { window: win, internal, today })
+      .then((data) => {
+        if (cancelled) return;
+        if (data?.error) { setState({ status: 'error', data: null, error: 'não encontrado' }); return; }
+        setState({ status: 'ready', data, error: null });
+        setForm({ displayName: data.entity.name || '', email: data.entity.contact?.email || '', phone: data.entity.contact?.phone || '', notes: data.entity.notes || '' });
+      })
+      .catch((err) => { if (!cancelled) setState({ status: 'error', data: null, error: err.message }); });
+    return () => { cancelled = true; };
+  }, [entityKey, win, tick, internal, today, Array.from(filters.platforms || []).join(','), Array.from(filters.families || []).join(',')]);
+
+  const d = state.data;
+  const act = async (fn, okMsg) => {
+    setBusy(true); setMsg(null);
+    try { await fn(); setMsg({ ok: true, text: okMsg }); setTick((t) => t + 1); onChanged?.(); }
+    catch (err) { setMsg({ ok: false, text: err.message }); }
+    finally { setBusy(false); }
+  };
+  const saveContact = () => act(async () => {
+    if (d.entity.partnerId) {
+      await window.NSApi.adminAffiliateIdentity('update', { partnerId: d.entity.partnerId, displayName: form.displayName, email: form.email || null, phone: form.phone || null, notes: form.notes || null });
+    } else {
+      // Conta solta: cria um parceiro só com ela pra guardar o contato.
+      await window.NSApi.adminAffiliateIdentity('link', { affiliateIds: [d.entity.accounts[0].id], partnerId: null, displayName: form.displayName, email: form.email || null, phone: form.phone || null });
+    }
+    setEditing(false);
+  }, '✓ contato salvo');
+
+  return (
+    <>
+      <div className="drawer-backdrop" onClick={onClose}/>
+      <div className="drawer" style={{ width: 820, maxWidth: '100vw' }}>
+        <div className="drawer-head">
+          <div style={{ minWidth: 0 }}>
+            <div className="eyebrow" style={{ fontSize: 10 }}>POR QUÊ · {win} DIAS{d ? ` · ${d.range.start} → ${d.range.end}` : ''}</div>
+            <h3 style={{ margin: '4px 0 0', display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+              {d ? d.entity.name : '…'}
+              {d && d.entity.platforms.map((p) => <AaPlat key={p} slug={p}/>)}
+              {d && <AaTrend tag={d.trend}/>}
+            </h3>
+            {d && d.entity.contact && (d.entity.contact.email || d.entity.contact.phone) && !editing && (
+              <div style={{ fontSize: 11, color: 'var(--fg4)', marginTop: 4, fontFamily: 'var(--f-mono)' }}>
+                {d.entity.contact.email && <span><Icon name="mail" size={11}/> {d.entity.contact.email}</span>}
+                {d.entity.contact.phone && <span style={{ marginLeft: 10 }}><Icon name="user" size={11}/> {d.entity.contact.phone}</span>}
+              </div>
+            )}
+          </div>
+          <div style={{ display: 'flex', gap: 6 }}>
+            {isAdmin && d && !editing && <button className="btn btn-ghost" onClick={() => setEditing(true)}><Icon name="edit" size={12}/> Contato</button>}
+            <button className="btn btn-ghost" onClick={onClose}><Icon name="x" size={14}/></button>
+          </div>
+        </div>
+        <div className="drawer-body">
+          {state.status === 'loading' && !d && <SkelDrawerLoading/>}
+          {state.status === 'error' && <div style={{ color: 'var(--danger)', fontSize: 12 }}>Erro: {state.error}</div>}
+          {msg && <div style={{ fontSize: 12, color: msg.ok ? 'var(--success)' : 'var(--danger)', marginBottom: 8 }}>{msg.text}</div>}
+
+          {isAdmin && d && editing && (
+            <div className="panel" style={{ marginBottom: 12 }}>
+              <div className="panel-eyebrow">CONTATO DO PARCEIRO (opcional)</div>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 8, marginTop: 8 }}>
+                <input style={AA_INPUT} placeholder="Nome" value={form.displayName} onChange={(e) => setForm({ ...form, displayName: e.target.value })}/>
+                <input style={AA_INPUT} placeholder="E-mail principal" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })}/>
+                <input style={AA_INPUT} placeholder="Telefone" value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })}/>
+                <input style={AA_INPUT} placeholder="Notas" value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })}/>
+              </div>
+              <div style={{ display: 'flex', gap: 6, marginTop: 8 }}>
+                <button className="btn" disabled={busy} onClick={saveContact}>Salvar</button>
+                <button className="btn btn-ghost" onClick={() => setEditing(false)}>Cancelar</button>
+              </div>
+            </div>
+          )}
+
+          {d && (
+            <>
+              <div className="grid-2" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: 8, marginBottom: 12 }}>
+                <AaKpi label="Receita" value={fmtCurrency(d.cur.revenue, 'USD', 0)} money delta={d.prev.revenue ? (d.cur.revenue - d.prev.revenue) / d.prev.revenue : null} sub={`antes ${fmtCurrency(d.prev.revenue, 'USD', 0)}`}/>
+                <AaKpi label="Vendas / FEs" value={`${fmtInt(d.cur.sales)} / ${fmtInt(d.cur.feApproved)}`} delta={d.prev.feApproved ? (d.cur.feApproved - d.prev.feApproved) / d.prev.feApproved : null} sub={`antes ${fmtInt(d.prev.sales)} / ${fmtInt(d.prev.feApproved)}`}/>
+                <AaKpi label="AOV" value={fmtCurrency(d.cur.aov, 'USD', 2)} money delta={d.prev.aov ? (d.cur.aov - d.prev.aov) / d.prev.aov : null} sub={`front ${fmtCurrency(d.cur.feTicket, 'USD', 0)} + back ${fmtCurrency(d.cur.backendPerFe, 'USD', 0)}`}/>
+                <AaKpi label="Aprovação" value={fmtPct(d.cur.approvalRate, 1)} delta={d.prev.realOrders ? d.cur.approvalRate - d.prev.approvalRate : null} deltaKind="pp" sub={`antes ${fmtPct(d.prev.approvalRate, 1)}`}/>
+                <AaKpi label="Reembolso" value={fmtPct(d.cur.refundRate, 1)} delta={d.prev.realOrders ? d.cur.refundRate - d.prev.refundRate : null} deltaKind="pp" invert sub={`${fmtInt(d.cur.refunds)} estornos · CB ${fmtPct(d.cur.cbRate, 1)}`}/>
+                <AaKpi label="Net após CPA" value={d.cur.netAfterCpa == null ? '—' : fmtCurrency(d.cur.netAfterCpa, 'USD', 2)} money delta={d.cur.netAfterCpa != null && d.prev.netAfterCpa != null ? d.cur.netAfterCpa - d.prev.netAfterCpa : null} deltaKind="money2" sub={`CPA ${d.cur.cpaPerFe ? fmtCurrency(d.cur.cpaPerFe, 'USD', 0) : '—'} · NET AOV ${fmtCurrency(d.cur.netAov, 'USD', 0)} · total ${d.cur.netAfterCpaTotal == null ? '—' : fmtCurrency(d.cur.netAfterCpaTotal, 'USD', 0)}`}/>
+              </div>
+
+              <div className="panel" style={{ marginBottom: 12 }}>
+                <div className="panel-head">
+                  <div className="panel-title">
+                    <span className="panel-eyebrow">POR QUÊ</span>
+                    <span className="panel-sub">o que explica a variação vs a janela anterior, do maior efeito pro menor · Δreceita = volume × AOV (decomposição exata)</span>
+                  </div>
+                </div>
+                {d.drivers.length === 0 && <AaEmpty>Sem variação relevante entre as duas janelas.</AaEmpty>}
+                {d.drivers.map((dr, i) => (
+                  <div key={i} style={{ display: 'grid', gridTemplateColumns: '10px 1fr auto', gap: 10, alignItems: 'start', padding: '8px 0', borderTop: i ? '1px solid var(--border-soft)' : 'none' }}>
+                    <span style={{ marginTop: 5, width: 8, height: 8, borderRadius: 99, background: dr.tone === 'up' ? 'var(--success)' : dr.tone === 'down' ? 'var(--danger)' : 'var(--fg4)' }}/>
+                    <div>
+                      <div style={{ fontWeight: 600, fontSize: 13 }}>{dr.title}</div>
+                      <div style={{ fontSize: 12, color: 'var(--fg3)' }}>{dr.detail}</div>
+                    </div>
+                    <div className="mono" style={{ fontSize: 12, color: dr.impactUsd == null ? 'var(--fg5)' : dr.impactUsd >= 0 ? 'var(--success)' : 'var(--danger)', whiteSpace: 'nowrap' }}>
+                      {dr.impactUsd == null ? '' : (dr.impactUsd >= 0 ? '+' : '−') + fmtCurrency(Math.abs(dr.impactUsd), 'USD', 0)}
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              <div className="panel" style={{ marginBottom: 12 }}>
+                <div className="panel-head">
+                  <div className="panel-title">
+                    <span className="panel-eyebrow">JANELA ATUAL × ANTERIOR</span>
+                    <span className="panel-sub">receita por dia, as duas janelas sobrepostas (dia 1 = primeiro dia de cada janela)</span>
+                  </div>
+                </div>
+                <NSTimeSeries
+                  data={d.daily.map((x) => ({ date: x.date, atual: x.atual, anterior: x.anterior }))}
+                  series={[{ key: 'atual', label: 'Atual', kind: 'area' }, { key: 'anterior', label: 'Anterior', kind: 'line' }]}
+                  height={200} format="money" brush={false}
+                />
+              </div>
+
+              <div className="panel" style={{ padding: 0, marginBottom: 12 }}>
+                <div className="panel-head" style={{ padding: '12px 16px 6px' }}>
+                  <div className="panel-title"><span className="panel-eyebrow">POR JANELA</span><span className="panel-sub">3 · 7 · 15 · 30 · 60 dias, cada uma vs a anterior</span></div>
+                </div>
+                <div className="tbl-wrap">
+                  <table className="tbl">
+                    <thead><tr>
+                      <th>Janela</th><th className="num">Receita</th><th className="num">Δ</th><th className="num">Vendas</th><th className="num">Δ</th>
+                      <th className="num">AOV</th><th className="num">Δ</th><th className="num">Reemb.</th><th className="num">Δ</th><th className="num">Net após CPA</th><th className="num">Δ</th>
+                    </tr></thead>
+                    <tbody>
+                      {d.windows.map((w) => (
+                        <tr key={w.days} style={{ background: w.days === win ? 'color-mix(in oklab, var(--accent) 8%, transparent)' : undefined }}>
+                          <td className="cell-mono" style={{ fontWeight: 700 }}>{w.days}d</td>
+                          <td className="num cell-mono" style={{ color: 'var(--money)' }}>{fmtCurrency(w.revenue, 'USD', 0)}</td>
+                          <td className="num"><AaDelta value={w.prevRevenue ? (w.revenue - w.prevRevenue) / w.prevRevenue : null}/></td>
+                          <td className="num cell-mono">{fmtInt(w.sales)}</td>
+                          <td className="num"><AaDelta value={w.prevSales ? (w.sales - w.prevSales) / w.prevSales : null}/></td>
+                          <td className="num cell-mono">{fmtCurrency(w.aov, 'USD', 2)}</td>
+                          <td className="num"><AaDelta value={w.prevAov ? (w.aov - w.prevAov) / w.prevAov : null}/></td>
+                          <td className="num cell-mono">{fmtPct(w.refundRate, 1)}</td>
+                          <td className="num"><AaDelta value={w.prevSales ? w.refundRate - w.prevRefundRate : null} kind="pp" invert/></td>
+                          <td className="num cell-mono" style={{ color: w.netAfterCpa == null ? 'var(--fg5)' : w.netAfterCpa >= 0 ? 'var(--money)' : 'var(--danger)' }}>{w.netAfterCpa == null ? '—' : fmtCurrency(w.netAfterCpa, 'USD', 2)}</td>
+                          <td className="num"><AaDelta value={w.netAfterCpa != null && w.prevNetAfterCpa != null ? w.netAfterCpa - w.prevNetAfterCpa : null} kind="money2"/></td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
+              <div className="grid-2" style={{ gap: 12 }}>
+                <div className="panel" style={{ padding: 0 }}>
+                  <div className="panel-head" style={{ padding: '12px 16px 6px' }}>
+                    <div className="panel-title"><span className="panel-eyebrow">POR FAMÍLIA</span><span className="panel-sub">receita e share, atual vs anterior</span></div>
+                  </div>
+                  <div className="tbl-wrap">
+                    <table className="tbl">
+                      <thead><tr><th>Família</th><th className="num">Receita</th><th className="num">Δ</th><th className="num">Share</th><th className="num">antes</th></tr></thead>
+                      <tbody>
+                        {d.byFamily.length === 0 && <tr><td colSpan={5} style={{ color: 'var(--fg5)', fontSize: 12 }}>—</td></tr>}
+                        {d.byFamily.map((f) => (
+                          <tr key={f.family}>
+                            <td>{f.family}</td>
+                            <td className="num cell-mono" style={{ color: 'var(--money)' }}>{fmtCurrency(f.revenue, 'USD', 0)}</td>
+                            <td className="num"><AaDelta value={f.prevRevenue ? (f.revenue - f.prevRevenue) / f.prevRevenue : null}/></td>
+                            <td className="num cell-mono">{fmtPct(f.share, 0)}</td>
+                            <td className="num cell-mono" style={{ color: 'var(--fg5)' }}>{fmtPct(f.prevShare, 0)}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+                <div className="panel" style={{ padding: 0 }}>
+                  <div className="panel-head" style={{ padding: '12px 16px 6px' }}>
+                    <div className="panel-title"><span className="panel-eyebrow">CONTAS</span><span className="panel-sub">{d.entity.accounts.length > 1 ? 'uma linha por plataforma' : 'conta única'}</span></div>
+                  </div>
+                  <div className="tbl-wrap">
+                    <table className="tbl">
+                      <thead><tr><th>Conta</th><th className="num">Receita</th><th className="num">Δ</th><th className="num">Net/FE</th><th>Tend.</th>{isAdmin && <th></th>}</tr></thead>
+                      <tbody>
+                        {d.byAccount.map((a) => (
+                          <tr key={a.account.id}>
+                            <td>
+                              <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+                                <AaPlat slug={a.account.platformSlug}/>
+                                <span style={{ fontWeight: 600 }}>{a.account.nickname || a.account.externalId}</span>
+                                {a.account.internal && <span style={{ fontSize: 9, color: 'var(--fg5)' }}>interno</span>}
+                              </div>
+                              <div style={{ fontSize: 10, color: 'var(--fg5)', fontFamily: 'var(--f-mono)' }}>ID {a.account.externalId}{a.account.email ? ` · ${a.account.email}` : ''}</div>
+                            </td>
+                            <td className="num cell-mono" style={{ color: 'var(--money)' }}>{fmtCurrency(a.cur.revenue, 'USD', 0)}</td>
+                            <td className="num"><AaDelta value={a.prev.revenue ? (a.cur.revenue - a.prev.revenue) / a.prev.revenue : null}/></td>
+                            <td className="num cell-mono">{a.cur.netAfterCpa == null ? '—' : fmtCurrency(a.cur.netAfterCpa, 'USD', 2)}</td>
+                            <td><AaTrend tag={a.trend}/></td>
+                            {isAdmin && (
+                              <td style={{ whiteSpace: 'nowrap' }}>
+                                {d.entity.accounts.length > 1 && (
+                                  <button className="btn btn-ghost" disabled={busy} title="Desvincular esta conta do parceiro" onClick={() => act(() => window.NSApi.adminAffiliateIdentity('unlink', { affiliateId: a.account.id }), '✓ conta desvinculada')}>
+                                    <Icon name="x" size={11}/>
+                                  </button>
+                                )}
+                                <button className="btn btn-ghost" disabled={busy} title={a.account.internal ? 'Marcar como afiliado real' : 'Marcar como interno (sai do ranking)'} onClick={() => act(() => window.NSApi.adminAffiliateIdentity('internal', { affiliateId: a.account.id, value: !a.account.internal }), '✓ atualizado')}>
+                                  <Icon name={a.account.internal ? 'eye' : 'alert-triangle'} size={11}/>
+                                </button>
+                              </td>
+                            )}
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              </div>
+            </>
+          )}
+        </div>
+      </div>
+    </>
+  );
+}
+
+// ── Drawer de identidades (admin) ───────────────────────────────────────
+
+function AaIdentityDrawer({ onClose, onChanged }) {
+  const [state, setState] = useStateAA({ status: 'loading', data: null, error: null });
+  const [tick, setTick] = useStateAA(0);
+  const [busy, setBusy] = useStateAA(false);
+  const [msg, setMsg] = useStateAA(null);
+  const [tab, setTab] = useStateAA('sugestoes');
+  const [pick, setPick] = useStateAA([]);      // contas selecionadas pro vínculo manual
+  const [q, setQ] = useStateAA('');
+  const [editPartner, setEditPartner] = useStateAA(null);
+
+  useEffectAA(() => {
+    let cancelled = false;
+    setState((s) => ({ ...s, status: 'loading' }));
+    window.NSApi.adminListAffiliateIdentity()
+      .then((data) => { if (!cancelled) setState({ status: 'ready', data, error: null }); })
+      .catch((err) => { if (!cancelled) setState({ status: 'error', data: null, error: err.message }); });
+    return () => { cancelled = true; };
+  }, [tick]);
+
+  const d = state.data;
+  const act = async (fn, okMsg) => {
+    setBusy(true); setMsg(null);
+    try { const r = await fn(); setMsg({ ok: true, text: typeof okMsg === 'function' ? okMsg(r) : okMsg }); setTick((t) => t + 1); onChanged?.(); }
+    catch (err) { setMsg({ ok: false, text: err.message }); }
+    finally { setBusy(false); }
+  };
+  const accountLabel = (a) => `${AA_PLAT[a.platformSlug] || a.platformSlug} · ${a.nickname || a.externalId}${a.nickname && a.nickname !== a.externalId ? ` (${a.externalId})` : ''}`;
+  const allAccounts = useMemoAA(() => {
+    if (!d) return [];
+    const linked = d.partners.flatMap((p) => p.accounts.map((a) => ({ ...a, partnerName: p.displayName })));
+    return [...d.unlinked, ...linked];
+  }, [d]);
+  const searchHits = useMemoAA(() => {
+    const s = q.trim().toLowerCase();
+    if (!s) return [];
+    return allAccounts.filter((a) => (a.nickname || '').toLowerCase().includes(s) || a.externalId.toLowerCase().includes(s) || (a.email || '').toLowerCase().includes(s)).slice(0, 12);
+  }, [q, allAccounts]);
+
+  return (
+    <>
+      <div className="drawer-backdrop" onClick={onClose}/>
+      <div className="drawer" style={{ width: 820, maxWidth: '100vw' }}>
+        <div className="drawer-head">
+          <div>
+            <div className="eyebrow" style={{ fontSize: 10 }}>IDENTIDADES · UNIFICAÇÃO ENTRE PLATAFORMAS</div>
+            <h3 style={{ margin: '4px 0 0' }}>Contas → parceiros</h3>
+            {d && <div style={{ fontSize: 11, color: 'var(--fg4)', marginTop: 4 }}>{d.stats.partners} parceiros · {d.stats.linkedAccounts} contas vinculadas · {d.stats.unlinkedAccounts} soltas · {d.stats.withEmail} com e-mail · {d.stats.internal} internos</div>}
+          </div>
+          <div style={{ display: 'flex', gap: 6 }}>
+            <button className="btn btn-ghost" disabled={busy} title="Importa affiliate_email das ordens JVZoo e vincula contas com o mesmo e-mail" onClick={() => act(() => window.NSApi.adminAffiliateIdentity('backfill', {}), (r) => `✓ ${r.updated} e-mails importados · ${r.linked} contas vinculadas · ${r.partnersCreated} parceiros novos`)}>
+              <Icon name="refresh" size={12}/> Importar e-mails + auto-vincular
+            </button>
+            <button className="btn btn-ghost" onClick={onClose}><Icon name="x" size={14}/></button>
+          </div>
+        </div>
+        <div className="drawer-body">
+          {msg && <div style={{ fontSize: 12, color: msg.ok ? 'var(--success)' : 'var(--danger)', marginBottom: 8 }}>{msg.text}</div>}
+          {state.status === 'loading' && !d && <SkelDrawerLoading/>}
+          {state.status === 'error' && <div style={{ color: 'var(--danger)', fontSize: 12 }}>Erro: {state.error}</div>}
+          {d && (
+            <>
+              <div className="seg" style={{ marginBottom: 12 }}>
+                {[['sugestoes', `Sugestões (${d.suggestions.length})`], ['manual', 'Vincular manualmente'], ['parceiros', `Parceiros (${d.partners.length})`]].map(([k, l]) => (
+                  <button key={k} className={tab === k ? 'is-active' : ''} onClick={() => setTab(k)}>{l}</button>
+                ))}
+              </div>
+
+              {tab === 'sugestoes' && (
+                <div className="panel" style={{ padding: 0 }}>
+                  <div className="panel-head" style={{ padding: '12px 16px 6px' }}>
+                    <div className="panel-title"><span className="panel-eyebrow">PARES PROVÁVEIS</span><span className="panel-sub">alta = mesmo e-mail · média = mesmo nome em plataformas diferentes · baixa = sobrenome/token em comum — confira antes de unificar</span></div>
+                  </div>
+                  {d.suggestions.length === 0 && <div style={{ padding: 16 }}><AaEmpty>Nenhuma sugestão pendente. Use "Vincular manualmente" pra casos que a heurística não pega.</AaEmpty></div>}
+                  {d.suggestions.length > 0 && (
+                    <div className="tbl-wrap" style={{ maxHeight: 520 }}>
+                      <table className="tbl">
+                        <thead><tr><th>Conta A</th><th>Conta B</th><th>Motivo</th><th>Conf.</th><th></th></tr></thead>
+                        <tbody>
+                          {d.suggestions.map((s, i) => (
+                            <tr key={i}>
+                              <td style={{ fontSize: 12 }}>{accountLabel(s.a)}{s.a.partnerId && <span style={{ fontSize: 9, color: 'var(--accent)', marginLeft: 4 }}>já em parceiro</span>}</td>
+                              <td style={{ fontSize: 12 }}>{accountLabel(s.b)}{s.b.partnerId && <span style={{ fontSize: 9, color: 'var(--accent)', marginLeft: 4 }}>já em parceiro</span>}</td>
+                              <td style={{ fontSize: 11, color: 'var(--fg4)' }}>{s.evidence}</td>
+                              <td><span className={`badge ${s.confidence === 'alta' ? 'ok' : s.confidence === 'media' ? 'warn' : 'neutral'}`}>{s.confidence}</span></td>
+                              <td><button className="btn" disabled={busy} onClick={() => act(() => window.NSApi.adminAffiliateIdentity('link', { affiliateIds: [s.a.id, s.b.id] }), '✓ contas unificadas')}>Unificar</button></td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {tab === 'manual' && (
+                <div className="panel">
+                  <div className="panel-eyebrow">VÍNCULO MANUAL</div>
+                  <div style={{ fontSize: 12, color: 'var(--fg4)', margin: '4px 0 10px' }}>Busque e selecione 2+ contas (de qualquer plataforma) que são a mesma pessoa. Se alguma já estiver num parceiro, as outras entram nele.</div>
+                  <input style={AA_INPUT} placeholder="buscar por nome, ID ou e-mail…" value={q} onChange={(e) => setQ(e.target.value)} style={{ width: '100%', marginBottom: 8 }}/>
+                  {searchHits.length > 0 && (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 4, marginBottom: 10 }}>
+                      {searchHits.map((a) => (
+                        <button key={a.id} className="btn btn-ghost" style={{ justifyContent: 'flex-start', fontSize: 12 }} onClick={() => setPick((p) => p.some((x) => x.id === a.id) ? p : [...p, a])}>
+                          + {accountLabel(a)}{a.partnerName ? <span style={{ color: 'var(--accent)', marginLeft: 6, fontSize: 10 }}>({a.partnerName})</span> : null}{a.internal ? <span style={{ color: 'var(--fg5)', marginLeft: 6, fontSize: 10 }}>interno</span> : null}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 10 }}>
+                    {pick.map((a) => (
+                      <span key={a.id} className="badge neutral" style={{ display: 'inline-flex', gap: 6, alignItems: 'center' }}>
+                        {accountLabel(a)} <button className="btn btn-ghost" style={{ padding: '0 4px' }} onClick={() => setPick((p) => p.filter((x) => x.id !== a.id))}>×</button>
+                      </span>
+                    ))}
+                    {pick.length === 0 && <span style={{ fontSize: 11, color: 'var(--fg5)' }}>nenhuma conta selecionada</span>}
+                  </div>
+                  <button className="btn" disabled={busy || pick.length < 2} onClick={() => act(async () => { await window.NSApi.adminAffiliateIdentity('link', { affiliateIds: pick.map((a) => a.id) }); setPick([]); setQ(''); }, '✓ contas unificadas')}>
+                    Vincular {pick.length >= 2 ? `${pick.length} contas` : ''}
+                  </button>
+                </div>
+              )}
+
+              {tab === 'parceiros' && (
+                <div className="panel" style={{ padding: 0 }}>
+                  <div className="panel-head" style={{ padding: '12px 16px 6px' }}>
+                    <div className="panel-title"><span className="panel-eyebrow">PARCEIROS</span><span className="panel-sub">nome, contato e contas de cada um · clique no lápis pra editar</span></div>
+                  </div>
+                  {d.partners.length === 0 && <div style={{ padding: 16 }}><AaEmpty>Nenhum parceiro ainda. Unifique contas nas sugestões ou manualmente.</AaEmpty></div>}
+                  <div className="tbl-wrap" style={{ maxHeight: 520 }}>
+                    <table className="tbl">
+                      <thead><tr><th>Parceiro</th><th>Contato</th><th>Contas</th><th></th></tr></thead>
+                      <tbody>
+                        {d.partners.map((p) => (
+                          <tr key={p.id}>
+                            <td style={{ fontWeight: 600 }}>
+                              {editPartner?.id === p.id
+                                ? <input style={AA_INPUT} value={editPartner.displayName} onChange={(e) => setEditPartner({ ...editPartner, displayName: e.target.value })}/>
+                                : p.displayName}
+                            </td>
+                            <td style={{ fontSize: 11, fontFamily: 'var(--f-mono)', color: 'var(--fg3)' }}>
+                              {editPartner?.id === p.id ? (
+                                <div style={{ display: 'grid', gap: 4 }}>
+                                  <input style={AA_INPUT} placeholder="e-mail" value={editPartner.email} onChange={(e) => setEditPartner({ ...editPartner, email: e.target.value })}/>
+                                  <input style={AA_INPUT} placeholder="telefone" value={editPartner.phone} onChange={(e) => setEditPartner({ ...editPartner, phone: e.target.value })}/>
+                                  <input style={AA_INPUT} placeholder="notas" value={editPartner.notes} onChange={(e) => setEditPartner({ ...editPartner, notes: e.target.value })}/>
+                                </div>
+                              ) : (
+                                <>{p.email || <span style={{ color: 'var(--fg5)' }}>sem e-mail</span>}{p.phone ? ` · ${p.phone}` : ''}{p.notes ? <div style={{ color: 'var(--fg5)' }}>{p.notes}</div> : null}</>
+                              )}
+                            </td>
+                            <td style={{ fontSize: 11 }}>
+                              {p.accounts.map((a) => (
+                                <div key={a.id} style={{ display: 'flex', gap: 6, alignItems: 'center', whiteSpace: 'nowrap' }}>
+                                  <AaPlat slug={a.platformSlug}/> {a.nickname || a.externalId}
+                                  <button className="btn btn-ghost" style={{ padding: '0 4px' }} title="Desvincular" disabled={busy} onClick={() => act(() => window.NSApi.adminAffiliateIdentity('unlink', { affiliateId: a.id }), '✓ desvinculada')}>×</button>
+                                </div>
+                              ))}
+                            </td>
+                            <td style={{ whiteSpace: 'nowrap' }}>
+                              {editPartner?.id === p.id ? (
+                                <>
+                                  <button className="btn" disabled={busy} onClick={() => act(async () => { await window.NSApi.adminAffiliateIdentity('update', { partnerId: p.id, displayName: editPartner.displayName, email: editPartner.email || null, phone: editPartner.phone || null, notes: editPartner.notes || null }); setEditPartner(null); }, '✓ salvo')}>Salvar</button>
+                                  <button className="btn btn-ghost" onClick={() => setEditPartner(null)}>Cancelar</button>
+                                </>
+                              ) : (
+                                <button className="btn btn-ghost" onClick={() => setEditPartner({ id: p.id, displayName: p.displayName, email: p.email || '', phone: p.phone || '', notes: p.notes || '' })}><Icon name="edit" size={12}/></button>
+                              )}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
+            </>
+          )}
+        </div>
+      </div>
+    </>
+  );
+}
+
+Object.assign(window, { AffiliateAnalysisPage });

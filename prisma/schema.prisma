@@ -110,6 +110,20 @@ model Affiliate {
   // (default global). Editável na aba Afiliados (admin).
   refundCbPctOverride Decimal? @db.Decimal(5, 2)
 
+  // ── Identidade unificada (aba Análise de afiliados, 2026-08-25) ──
+  // A mesma pessoa roda contas em várias plataformas (ex.: "Eduardo Godoy"
+  // na JVZoo e "edugodoy…" na Digistore). partnerId agrupa as contas num
+  // AffiliatePartner (contato + métricas somadas). NULL = conta solta.
+  partnerId   String?
+  partner     AffiliatePartner? @relation(fields: [partnerId], references: [id], onDelete: SetNull)
+  // E-mail do afiliado quando a plataforma manda (hoje só JVZoo
+  // `affiliate_email`). Chave do auto-vínculo entre contas.
+  email       String?
+  // Pseudo-afiliado INTERNO (tracking de produto/orgânico, ex.
+  // "neuromindpro12", ID "0") — sai do ranking. NULL = decide a heurística
+  // (isInternalGuess); true/false = decisão manual do admin.
+  isInternal  Boolean?
+
   platform    Platform            @relation(fields: [platformId], references: [id])
   orders      Order[]
   // Network attachment is 1:1 — an affiliate belongs to at most one
@@ -123,6 +137,25 @@ model Affiliate {
 
   @@unique([platformId, externalId])
   @@index([lastOrderAt])
+  @@index([partnerId])
+  @@index([email])
+}
+
+// Pessoa/empresa por trás de uma ou mais contas de afiliado (uma por
+// plataforma). Contato é OPCIONAL — serve pra ter o dado à mão e pra
+// cruzar contas; nada depende dele.
+model AffiliatePartner {
+  id          String   @id @default(cuid())
+  displayName String
+  email       String?
+  phone       String?
+  notes       String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  affiliates  Affiliate[]
+
+  @@index([email])
 }
 
 // Afiliado de recuperação: marca quem traz vendas via SMS/email recovery e a
