@@ -1,4 +1,4 @@
-/* global React, Icon, NSTimeSeries, NSBarRank, Sparkline, CpaStatusChip, fmtCurrency, fmtInt, fmtPct, SkelMiniKpis, SkelChartPanel, SkelTablePanel, SkelDrawerLoading, downloadCsv, AaContactForm, AffiliateIdentityDrawer */
+/* global React, Icon, NSTimeSeries, NSBarRank, Sparkline, CpaStatusChip, fmtCurrency, fmtInt, fmtPct, SkelMiniKpis, SkelChartPanel, SkelTablePanel, SkelDrawerLoading, downloadCsv, AaContactForm, AffiliateIdentityDrawer, AaSequenceView, AaEvolutionView, AaHealthView */
 /* Análise de afiliados — quem sobe, quem cai e por quê.
    Ranking por métrica (receita/vendas/AOV/reembolso/Net após CPA), janelas
    de 3/7/15/30/60 dias (cada uma vs a anterior), identidade unificada entre
@@ -85,10 +85,24 @@ function AffiliateAnalysisPage({ filters, user }) {
   const [metric, setMetric] = useStateAA('revenue');
   const [internal, setInternal] = useStateAA(false);
   const [today, setToday] = useStateAA(false);
+  // Modo: ranking (janela atual vs anterior) | janelas (sequência J1..JK) | evolucao | saude
+  const [mode, setMode] = useStateAA('ranking');
+  const [count, setCount] = useStateAA(3);
+  // Janela personalizada: N dias (1–90) terminando na data-âncora ('' = ontem/hoje).
+  const [anchor, setAnchor] = useStateAA('');
+  const [anchorInput, setAnchorInput] = useStateAA('');
+  const [customWin, setCustomWin] = useStateAA('');
+  const [seqState, setSeqState] = useStateAA({ status: 'idle', data: null, error: null });
   const [query, setQuery] = useStateAA('');
   const [state, setState] = useStateAA({ status: 'loading', data: null, error: null });
   const [tick, setTick] = useStateAA(0);
-  const [openKey, setOpenKey] = useStateAA(null);
+  const [openKey, setOpenKey] = useStateAA(null); // { key, anchor } — anchor = último dia da janela clicada
+  // Abre o "por quê" de uma entidade; anchorOverride = fim da janela clicada
+  // (Janelas/Saúde), senão a âncora da página.
+  const openEntity = (key, anchorOverride) => setOpenKey(key ? { key, anchor: anchorOverride || anchor || null } : null);
+  // Âncora EFETIVA (a que o servidor usou) — o input pode ter valor que o
+  // servidor corrigiu (futuro/inválido).
+  const effectiveAnchor = (mode === 'ranking' ? state.data?.anchor : seqState.data?.anchor) || null;
   const [identityOpen, setIdentityOpen] = useStateAA(false);
 
   const platformsKey = Array.from(filters.platforms || []).join(',');
@@ -97,11 +111,23 @@ function AffiliateAnalysisPage({ filters, user }) {
   useEffectAA(() => {
     let cancelled = false;
     setState((s) => ({ ...s, status: 'loading' }));
-    window.NSApi.fetchAffiliateAnalysis(filters, { window: win, view, internal, today })
+    window.NSApi.fetchAffiliateAnalysis(filters, { window: win, view, internal, today, anchor: anchor || null })
       .then((data) => { if (!cancelled) setState({ status: 'ready', data, error: null }); })
       .catch((err) => { if (!cancelled) setState({ status: 'error', data: null, error: err.message }); });
     return () => { cancelled = true; };
-  }, [win, view, internal, today, tick, platformsKey, familiesKey]);
+  }, [win, view, internal, today, anchor, tick, platformsKey, familiesKey]);
+
+  // Sequência (janelas/evolução/saúde): só busca quando um desses modos está ativo.
+  useEffectAA(() => {
+    if (mode === 'ranking') return undefined;
+    let cancelled = false;
+    setSeqState((s) => ({ ...s, status: 'loading' }));
+    window.NSApi.fetchAffiliateSequence(filters, { window: win, count, view, internal, today, anchor: anchor || null })
+      .then((data) => { if (!cancelled) setSeqState({ status: 'ready', data, error: null }); })
+      .catch((err) => { if (!cancelled) setSeqState({ status: 'error', data: null, error: err.message }); });
+    return () => { cancelled = true; };
+  }, [mode, win, count, view, internal, today, anchor, tick, platformsKey, familiesKey]);
+  const seq = seqState.data;
 
   const data = state.data;
   const rows = data?.rows || [];
@@ -153,7 +179,7 @@ function AffiliateAnalysisPage({ filters, user }) {
           <span className="eyebrow">AFILIADOS · ANÁLISE</span>
           <h2>Quem sobe, quem cai — <em>e por quê</em>.</h2>
           <span className="sub">
-            janelas fixas fechando ONTEM (último dia completo, BRT), cada uma comparada com a janela anterior de mesmo tamanho · o período global não se aplica aqui · plataforma/família do filtro global valem
+            janelas de N dias (presets ou personalizada) fechando no dia escolhido — por padrão ONTEM, último dia completo em BRT — cada uma comparada com a anterior de mesmo tamanho · o período global não se aplica aqui · plataforma/família do filtro global valem
           </span>
         </div>
         <div className="page-head-actions" style={{ flexWrap: 'wrap', gap: 8 }}>
@@ -163,8 +189,8 @@ function AffiliateAnalysisPage({ filters, user }) {
             ))}
           </div>
           <div className="seg">
-            {AA_WINDOWS.map((w) => (
-              <button key={w} className={win === w ? 'is-active' : ''} onClick={() => setWin(w)}>{w}d</button>
+            {[['ranking', 'Ranking'], ['janelas', 'Janelas'], ['evolucao', 'Evolução · Comentários'], ['saude', 'Saúde da empresa']].map(([k, l]) => (
+              <button key={k} className={mode === k ? 'is-active' : ''} onClick={() => setMode(k)}>{l}</button>
             ))}
           </div>
           {isAdmin && (
@@ -175,11 +201,74 @@ function AffiliateAnalysisPage({ filters, user }) {
         </div>
       </div>
 
-      {state.status === 'error' && (
+      <div className="panel" style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 10, padding: '10px 14px', marginBottom: 14 }}>
+        <span className="f-label">JANELA</span>
+        <div className="seg">
+          {AA_WINDOWS.map((w) => (
+            <button key={w} className={win === w ? 'is-active' : ''} onClick={() => { setWin(w); setCustomWin(''); }}>{w}d</button>
+          ))}
+        </div>
+        <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, color: 'var(--fg4)' }} title="Qualquer tamanho de 1 a 90 dias">
+          personalizada
+          <input type="number" min={1} max={90} value={customWin} placeholder="N dias" style={{ ...AA_INPUT, width: 78 }}
+            onChange={(e) => setCustomWin(e.target.value)}
+            onKeyDown={(e) => { if (e.key === 'Enter') { const n = parseInt(customWin, 10); if (n >= 1 && n <= 90) setWin(n); } }}
+            onBlur={() => { const n = parseInt(customWin, 10); if (n >= 1 && n <= 90) setWin(n); }}/>
+          {!AA_WINDOWS.includes(win) && <span className="mono" style={{ color: 'var(--accent)' }}>{win}d ativa</span>}
+          {customWin !== '' && !(parseInt(customWin, 10) >= 1 && parseInt(customWin, 10) <= 90) && <span style={{ color: 'var(--warning)' }}>use 1 a 90</span>}
+        </label>
+        <span className="f-label" style={{ marginLeft: 6 }}>ATÉ O DIA</span>
+        <input type="date" value={anchorInput} min="2024-01-01" max={data?.todayBrt || undefined} style={{ ...AA_INPUT, width: 150 }} title="Último dia da janela: a análise olha N dias pra trás a partir daqui (e compara com os N dias anteriores)"
+          onChange={(e) => {
+            const v = e.target.value;
+            setAnchorInput(v);
+            // Só aplica data completa, ano plausível e não-futura (o picker
+            // do Chrome emite anos parciais enquanto se digita).
+            if (!v) { setAnchor(''); return; }
+            if (/^\d{4}-\d{2}-\d{2}$/.test(v) && parseInt(v.slice(0, 4), 10) >= 2024 && (!data?.todayBrt || v <= data.todayBrt)) setAnchor(v);
+          }}/>
+        {anchor
+          ? <button className="btn btn-ghost" style={{ fontSize: 11 }} onClick={() => { setAnchor(''); setAnchorInput(''); }}>× voltar pra {today ? 'hoje' : 'ontem'}</button>
+          : <span style={{ fontSize: 11, color: 'var(--fg5)' }}>{today ? 'hoje (parcial)' : 'ontem (último dia completo)'}{anchorInput && !anchor ? <span style={{ color: 'var(--warning)', marginLeft: 6 }}>data inválida ou futura — ignorada</span> : null}</span>}
+        <label style={{ display: 'flex', gap: 6, alignItems: 'center', fontSize: 11, color: 'var(--fg4)', cursor: 'pointer', marginLeft: 6 }}>
+          <input type="checkbox" checked={internal} onChange={(e) => setInternal(e.target.checked)}/> incluir internos
+        </label>
+        {!anchor && (
+          <label title="Hoje ainda está em andamento — comparar com dias cheios vicia os Δ" style={{ display: 'flex', gap: 6, alignItems: 'center', fontSize: 11, color: 'var(--fg4)', cursor: 'pointer' }}>
+            <input type="checkbox" checked={today} onChange={(e) => setToday(e.target.checked)}/> incluir hoje (parcial)
+          </label>
+        )}
+        <button className="btn btn-ghost" onClick={() => setTick((t) => t + 1)} title="Recarregar"><Icon name="refresh" size={13}/></button>
+        {mode !== 'ranking' && (
+          <>
+            <span className="f-label" style={{ marginLeft: 6 }}>QUANTAS JANELAS</span>
+            <div className="seg">
+              {[2, 3, 4, 6, 8].map((k) => <button key={k} className={count === k ? 'is-active' : ''} onClick={() => setCount(k)}>{k}</button>)}
+            </div>
+            <span style={{ fontSize: 11, color: 'var(--fg5)' }}>= {count} × {win} dias, a última terminando {effectiveAnchor || anchor || (today ? 'hoje' : 'ontem')}</span>
+          </>
+        )}
+      </div>
+
+      {mode !== 'ranking' && (
+        <>
+          {seqState.status === 'error' && <div className="panel" style={{ color: 'var(--danger)', fontSize: 12 }}>Erro ao carregar: {seqState.error}</div>}
+          {!seq && seqState.status === 'loading' && <><SkelMiniKpis n={4}/><SkelTablePanel rows={8} cols={10} title="Janelas"/></>}
+          {seq && (
+            <div style={{ opacity: seqState.status === 'loading' ? 0.45 : 1, transition: 'opacity .2s' }}>
+              {mode === 'janelas' && <AaSequenceView key={`${seq.count}:${seq.window}:${seq.anchor}`} seq={seq} onOpen={openEntity}/>}
+              {mode === 'evolucao' && <AaEvolutionView seq={seq} onOpen={openEntity}/>}
+              {mode === 'saude' && <AaHealthView seq={seq} onOpen={openEntity}/>}
+            </div>
+          )}
+        </>
+      )}
+
+      {mode === 'ranking' && state.status === 'error' && (
         <div className="panel" style={{ color: 'var(--danger)', fontSize: 12 }}>Erro ao carregar: {state.error}</div>
       )}
 
-      {loading && !data && (
+      {mode === 'ranking' && loading && !data && (
         <>
           <SkelMiniKpis n={6}/>
           <SkelChartPanel height={260} title="Comparativo"/>
@@ -187,7 +276,7 @@ function AffiliateAnalysisPage({ filters, user }) {
         </>
       )}
 
-      {data && (
+      {mode === 'ranking' && data && (
         <div style={{ opacity: loading ? 0.45 : 1, transition: 'opacity .2s' }}>
           {/* KPIs da janela */}
           {win0 && (
@@ -286,15 +375,8 @@ function AffiliateAnalysisPage({ filters, user }) {
                     <button key={k} className={metric === k ? 'is-active' : ''} onClick={() => setMetric(k)}>{l}</button>
                   ))}
                 </div>
-                <label style={{ display: 'flex', gap: 6, alignItems: 'center', fontSize: 11, color: 'var(--fg4)', cursor: 'pointer' }}>
-                  <input type="checkbox" checked={internal} onChange={(e) => setInternal(e.target.checked)}/> incluir internos
-                </label>
-                <label title="Hoje ainda está em andamento — comparar com dias cheios vicia os Δ" style={{ display: 'flex', gap: 6, alignItems: 'center', fontSize: 11, color: 'var(--fg4)', cursor: 'pointer' }}>
-                  <input type="checkbox" checked={today} onChange={(e) => setToday(e.target.checked)}/> incluir hoje (parcial)
-                </label>
                 <input style={{ ...AA_INPUT, width: 190 }} placeholder="buscar nome, ID, e-mail…" value={query} onChange={(e) => setQuery(e.target.value)}/>
                 <button className="btn btn-ghost" onClick={exportCsv} title="Exportar CSV"><Icon name="download" size={13}/></button>
-                <button className="btn btn-ghost" onClick={() => setTick((t) => t + 1)} title="Recarregar"><Icon name="refresh" size={13}/></button>
               </div>
             </div>
             <div className="tbl-wrap" style={{ maxHeight: 720 }}>
@@ -317,7 +399,7 @@ function AffiliateAnalysisPage({ filters, user }) {
                   {ranked.map((r) => {
                     const rankDelta = r.rank && r.prevRank ? r.prevRank - r.rank : null;
                     return (
-                      <tr key={r.key} onClick={() => setOpenKey(r.key)} style={{ cursor: 'pointer' }}>
+                      <tr key={r.key} onClick={() => openEntity(r.key)} style={{ cursor: 'pointer' }}>
                         <td className="cell-mono" style={{ whiteSpace: 'nowrap' }}>
                           {r.rank ? `#${r.rank}` : '—'}
                           {rankDelta != null && rankDelta !== 0 && (
@@ -368,7 +450,7 @@ function AffiliateAnalysisPage({ filters, user }) {
       )}
 
       {openKey && (
-        <AaExplainDrawer entityKey={openKey} win={win} filters={filters} internal={internal} today={today} isAdmin={isAdmin} onClose={() => setOpenKey(null)} onChanged={() => setTick((t) => t + 1)}/>
+        <AaExplainDrawer entityKey={openKey.key} win={win} filters={filters} internal={internal} today={today} anchor={openKey.anchor} isAdmin={isAdmin} onClose={() => setOpenKey(null)} onChanged={() => setTick((t) => t + 1)}/>
       )}
       {identityOpen && (
         <AffiliateIdentityDrawer onClose={() => setIdentityOpen(false)} onChanged={() => setTick((t) => t + 1)}/>
@@ -392,7 +474,7 @@ function AaKpi({ label, value, sub, money, delta, deltaKind = 'rel', invert = fa
 
 // ── Drawer "por quê" ────────────────────────────────────────────────────
 
-function AaExplainDrawer({ entityKey, win, filters, internal, today, isAdmin, onClose, onChanged }) {
+function AaExplainDrawer({ entityKey, win, filters, internal, today, anchor, isAdmin, onClose, onChanged }) {
   const [state, setState] = useStateAA({ status: 'loading', data: null, error: null });
   const [tick, setTick] = useStateAA(0);
   const [editing, setEditing] = useStateAA(false);
@@ -402,7 +484,7 @@ function AaExplainDrawer({ entityKey, win, filters, internal, today, isAdmin, on
   useEffectAA(() => {
     let cancelled = false;
     setState((s) => ({ ...s, status: 'loading' }));
-    window.NSApi.fetchAffiliateExplain(filters, entityKey, { window: win, internal, today })
+    window.NSApi.fetchAffiliateExplain(filters, entityKey, { window: win, internal, today, anchor: anchor || null })
       .then((data) => {
         if (cancelled) return;
         if (data?.error) { setState({ status: 'error', data: null, error: 'não encontrado' }); return; }
@@ -410,7 +492,7 @@ function AaExplainDrawer({ entityKey, win, filters, internal, today, isAdmin, on
       })
       .catch((err) => { if (!cancelled) setState({ status: 'error', data: null, error: err.message }); });
     return () => { cancelled = true; };
-  }, [entityKey, win, tick, internal, today, Array.from(filters.platforms || []).join(','), Array.from(filters.families || []).join(',')]);
+  }, [entityKey, win, tick, internal, today, anchor, Array.from(filters.platforms || []).join(','), Array.from(filters.families || []).join(',')]);
 
   const d = state.data;
   const act = async (fn, okMsg) => {

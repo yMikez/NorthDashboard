@@ -19,7 +19,7 @@ export async function GET(req: Request) {
   if (!auth.ok) return auth.response;
   const { searchParams } = new URL(req.url);
   const p = parseAnalysisParams(searchParams);
-  if (!p.window) return NextResponse.json({ error: 'window deve ser 3, 7, 15, 30 ou 60' }, { status: 400 });
+  if (!p.window) return NextResponse.json({ error: 'window deve ser um inteiro de 1 a 90' }, { status: 400 });
   const includeContact = auth.user.role === 'ADMIN';
   // Contato/e-mail só pra admin → a chave de cache precisa distinguir.
   const cacheParams = new URLSearchParams(searchParams);

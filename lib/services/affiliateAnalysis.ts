@@ -1,23 +1,27 @@
 // Análise de afiliados — camada de banco + orquestração.
 //
-// UMA query afiliado × dia (BRT) sobre os últimos 121 dias alimenta todas as
-// janelas (3/7/15/30/60 dias, cada uma vs a anterior de mesmo tamanho),
-// sparklines, séries e o comparativo — sem re-consultar por janela.
-// Por padrão as janelas fecham ONTEM (último dia completo): comparar hoje
-// parcial com dias cheios viciava todos os Δ e etiquetava todo mundo como
-// "queda" de madrugada. `includeToday` liga o dia corrente.
+// UMA query afiliado × dia (BRT) sobre a cobertura necessária alimenta todas
+// as janelas (presets 3/7/15/30/60 + personalizada 1..90, cada uma vs a
+// anterior de mesmo tamanho), sparklines, séries, o comparativo e a
+// SEQUÊNCIA (Janela 1..K) — sem re-consultar por janela.
+// A última janela termina em `anchor` (data escolhida) ou ONTEM (último dia
+// completo); `includeToday` liga o dia corrente quando não há âncora.
 // Visão "partner" soma as contas do mesmo AffiliatePartner (identidade
 // unificada); visão "platform" mostra cada conta separada.
 
 import { Prisma } from '@prisma/client';
 import { db } from '../db';
 import { getProfitModelInputs, type ProfitModelInputs } from './profitModel';
-import { effectiveInternal } from './affiliateIdentityCore';
+import { effectiveInternal, suggestLinks, type IdentityAffiliate } from './affiliateIdentityCore';
 import {
   COVERAGE_DAYS, WINDOWS, windowRanges, sumRange, latestCpaInRange, metricsFor, mergeMetrics,
   pctDelta, trendTag, explainChange, ZERO_BUCKET, round2, round4,
   type WindowDays, type Bucket, type WindowMetrics, type Driver, type TrendTag, type RateInputs, type WindowRange,
 } from './affiliateAnalysisCore';
+import {
+  sequenceRanges, narrateEntity, transitionBetween, healthNote, riskText, reactivationList,
+  type EntitySeries, type SeqTag, type Transition, type HealthNote, type ReactivationEntry, type WindowTotals,
+} from './affiliateSequenceCore';
 
 const DAY_MS = 86_400_000;
 const BRT_OFFSET_MS = 3 * 3600 * 1000;
@@ -30,12 +34,18 @@ export function brtDayStart(d: Date): Date {
 function brtDateStr(d: Date): string {
   return new Date(d.getTime() - BRT_OFFSET_MS).toISOString().slice(0, 10);
 }
+function parseBrtDay(ymd: string): Date | null {
+  const t = Date.parse(ymd + 'T00:00:00Z');
+  return Number.isNaN(t) ? null : new Date(t + BRT_OFFSET_MS);
+}
 
 export interface AnalysisOptions {
   window: WindowDays;
   view: 'partner' | 'platform';
   includeInternal: boolean;
   includeToday?: boolean;
+  /** YYYY-MM-DD: último dia da janela atual (janela personalizada). */
+  anchor?: string;
   platformSlugs?: string[];
   families?: string[];
   includeContact: boolean;
@@ -90,6 +100,7 @@ export interface AffiliateAnalysisResponse {
   asOf: string;
   todayBrt: string;
   window: WindowDays;
+  anchor: string; // último dia da janela atual (YYYY-MM-DD BRT)
   view: 'partner' | 'platform';
   includeInternal: boolean;
   includeToday: boolean;
@@ -107,6 +118,7 @@ export interface AffiliateAnalysisResponse {
 export interface AffiliateExplainResponse {
   entity: Pick<AnalysisRow, 'key' | 'kind' | 'name' | 'platforms' | 'accounts' | 'contact' | 'internal'> & { partnerId: string | null; notes: string | null };
   window: WindowDays;
+  anchor: string;
   includeToday: boolean;
   range: { start: string; end: string; prevStart: string; prevEnd: string };
   cur: WindowMetrics;
@@ -135,7 +147,8 @@ interface AffMeta {
 
 interface RawData {
   coverageStart: Date;
-  lastIdx: number;      // último dia das janelas (ontem, ou hoje com includeToday)
+  lastIdx: number;      // último dia das janelas (âncora, ontem, ou hoje com includeToday)
+  lastDayStart: Date;
   affiliates: Map<string, AffMeta>;
   days: Map<string, Map<number, Bucket>>;              // affiliateId → dayIdx → bucket
   families: Map<string, Map<number, Map<string, { revenue: number; sales: number }>>>; // affiliateId → dayIdx → family
@@ -143,13 +156,23 @@ interface RawData {
   pm: ProfitModelInputs;
 }
 
-async function loadRaw(opts: AnalysisOptions, affiliateIds?: string[]): Promise<RawData> {
+/** Último dia das janelas: âncora (nunca no futuro), senão ontem/hoje. */
+function resolveLastDay(opts: AnalysisOptions): Date {
   const now = opts.now ?? new Date();
   const todayStart = brtDayStart(now);
-  const coverageStart = new Date(todayStart.getTime() - (COVERAGE_DAYS - 1) * DAY_MS);
-  const end = new Date(todayStart.getTime() + DAY_MS - 1);
-  const todayIdx = COVERAGE_DAYS - 1;
-  const lastIdx = opts.includeToday ? todayIdx : todayIdx - 1;
+  if (opts.anchor) {
+    const a = parseBrtDay(opts.anchor);
+    if (a && a.getTime() <= todayStart.getTime()) return a;
+  }
+  return opts.includeToday ? todayStart : new Date(todayStart.getTime() - DAY_MS);
+}
+
+async function loadRaw(opts: AnalysisOptions, affiliateIds?: string[], coverageDays = COVERAGE_DAYS): Promise<RawData> {
+  const lastDayStart = resolveLastDay(opts);
+  const days = Math.max(coverageDays, 2 * opts.window, COVERAGE_DAYS);
+  const coverageStart = new Date(lastDayStart.getTime() - (days - 1) * DAY_MS);
+  const end = new Date(lastDayStart.getTime() + DAY_MS - 1);
+  const lastIdx = days - 1;
 
   const conds: Prisma.Sql[] = [
     Prisma.sql`o."affiliateId" IS NOT NULL`,
@@ -245,20 +268,20 @@ async function loadRaw(opts: AnalysisOptions, affiliateIds?: string[]): Promise<
       partner: a.partner,
     });
   }
-  const days = new Map<string, Map<number, Bucket>>();
+  const dayMaps = new Map<string, Map<number, Bucket>>();
   for (const r of dayRows) {
-    if (r.day_idx < 0 || r.day_idx > todayIdx) continue;
-    const m = days.get(r.affiliate_id) ?? new Map<number, Bucket>();
+    if (r.day_idx < 0 || r.day_idx > lastIdx) continue;
+    const m = dayMaps.get(r.affiliate_id) ?? new Map<number, Bucket>();
     m.set(r.day_idx, {
       allOrders: r.all_orders, approved: r.approved, refunds: r.refunds, chargebacks: r.chargebacks,
       revenue: r.revenue, net: r.net, cpa: r.cpa, feApproved: r.fe_approved, feAll: r.fe_all,
       backendApproved: r.backend_approved, feRevenue: r.fe_revenue, backendRevenue: r.backend_revenue,
     });
-    days.set(r.affiliate_id, m);
+    dayMaps.set(r.affiliate_id, m);
   }
   const families = new Map<string, Map<number, Map<string, { revenue: number; sales: number }>>>();
   for (const r of famRows) {
-    if (r.day_idx < 0 || r.day_idx > todayIdx) continue;
+    if (r.day_idx < 0 || r.day_idx > lastIdx) continue;
     const byDay = families.get(r.affiliate_id) ?? new Map();
     const byFam = byDay.get(r.day_idx) ?? new Map<string, { revenue: number; sales: number }>();
     byFam.set(r.family, { revenue: r.revenue, sales: r.sales });
@@ -271,7 +294,7 @@ async function loadRaw(opts: AnalysisOptions, affiliateIds?: string[]): Promise<
     m.set(r.day_idx, r.cpa);
     cpa.set(r.affiliate_id, m);
   }
-  return { coverageStart, lastIdx, affiliates, days, families, cpa, pm };
+  return { coverageStart, lastIdx, lastDayStart, affiliates, days: dayMaps, families, cpa, pm };
 }
 
 // ── cálculo por entidade ────────────────────────────────────────────────
@@ -293,23 +316,40 @@ function ratesFor(a: AffMeta, pm: ProfitModelInputs): RateInputs {
   };
 }
 
-function accountMetrics(raw: RawData, a: AffMeta, days: WindowDays): { cur: WindowMetrics; prev: WindowMetrics; dailyCur: number[]; dailyPrev: number[]; salesCur: number[]; salesPrev: number[] } {
-  const { cur, prev } = windowRanges(days, raw.lastIdx);
+/** Métricas de UMA conta num intervalo arbitrário (+ série diária). */
+function accountRange(raw: RawData, a: AffMeta, r: WindowRange): { m: WindowMetrics; daily: number[]; sales: number[] } {
   const dayMap = raw.days.get(a.id) ?? new Map<number, Bucket>();
-  const c = sumRange(dayMap, cur);
-  const p = sumRange(dayMap, prev);
+  const s = sumRange(dayMap, r);
   const cpaMap = raw.cpa.get(a.id) ?? new Map<number, number>();
-  const rates = ratesFor(a, raw.pm);
-  const salesOf = (r: WindowRange) => {
-    const out: number[] = [];
-    for (let d = r.from; d <= r.to; d++) out.push(dayMap.get(d)?.approved ?? 0);
-    return out;
+  const sales: number[] = [];
+  for (let d = r.from; d <= r.to; d++) sales.push(dayMap.get(d)?.approved ?? 0);
+  const days = r.to - r.from + 1;
+  return { m: metricsFor(s.bucket, s.activeDays, days, latestCpaInRange(cpaMap, r), ratesFor(a, raw.pm)), daily: s.daily, sales };
+}
+
+function entityRange(raw: RawData, e: Entity, r: WindowRange): { m: WindowMetrics; daily: number[]; sales: number[] } {
+  const parts = e.accountIds.map((id) => accountRange(raw, raw.affiliates.get(id)!, r));
+  const len = r.to - r.from + 1;
+  const sumSeries = (pick: (p: typeof parts[number]) => number[]) => {
+    const out = new Array<number>(len).fill(0);
+    for (const p of parts) pick(p).forEach((v, i) => { out[i] += v; });
+    return out.map(round2);
   };
-  return {
-    cur: metricsFor(c.bucket, c.activeDays, days, latestCpaInRange(cpaMap, cur), rates),
-    prev: metricsFor(p.bucket, p.activeDays, days, latestCpaInRange(cpaMap, prev), rates),
-    dailyCur: c.daily, dailyPrev: p.daily, salesCur: salesOf(cur), salesPrev: salesOf(prev),
-  };
+  return { m: mergeMetrics(parts.map((p) => p.m), raw.pm.thresholds), daily: sumSeries((p) => p.daily), sales: sumSeries((p) => p.sales) };
+}
+
+function accountMetrics(raw: RawData, a: AffMeta, days: WindowDays) {
+  const { cur, prev } = windowRanges(days, raw.lastIdx);
+  const c = accountRange(raw, a, cur);
+  const p = accountRange(raw, a, prev);
+  return { cur: c.m, prev: p.m, dailyCur: c.daily, dailyPrev: p.daily, salesCur: c.sales, salesPrev: p.sales };
+}
+
+function entityWindow(raw: RawData, e: Entity, days: WindowDays) {
+  const { cur, prev } = windowRanges(days, raw.lastIdx);
+  const c = entityRange(raw, e, cur);
+  const p = entityRange(raw, e, prev);
+  return { cur: c.m, prev: p.m, dailyCur: c.daily, dailyPrev: p.daily, salesCur: c.sales, salesPrev: p.sales };
 }
 
 function familyTotals(raw: RawData, ids: string[], r: WindowRange): Map<string, { revenue: number; sales: number }> {
@@ -327,23 +367,6 @@ function familyTotals(raw: RawData, ids: string[], r: WindowRange): Map<string, 
     }
   }
   return out;
-}
-
-function entityWindow(raw: RawData, e: Entity, days: WindowDays) {
-  const parts = e.accountIds.map((id) => accountMetrics(raw, raw.affiliates.get(id)!, days));
-  const cur = mergeMetrics(parts.map((p) => p.cur), raw.pm.thresholds);
-  const prev = mergeMetrics(parts.map((p) => p.prev), raw.pm.thresholds);
-  const len = parts[0]?.dailyCur.length ?? days;
-  const sumSeries = (pick: (p: typeof parts[number]) => number[]) => {
-    const out = new Array<number>(len).fill(0);
-    for (const p of parts) pick(p).forEach((v, i) => { out[i] += v; });
-    return out.map(round2);
-  };
-  return {
-    cur, prev,
-    dailyCur: sumSeries((p) => p.dailyCur), dailyPrev: sumSeries((p) => p.dailyPrev),
-    salesCur: sumSeries((p) => p.salesCur), salesPrev: sumSeries((p) => p.salesPrev),
-  };
 }
 
 function toRef(a: AffMeta, includeContact: boolean): AccountRef {
@@ -374,8 +397,12 @@ function buildEntities(raw: RawData, view: 'partner' | 'platform', includeIntern
   return { entities, excludedIds };
 }
 
-function compactWindows(raw: RawData, e: Entity): WindowCompact[] {
-  return WINDOWS.map((days) => {
+function windowList(custom: WindowDays): WindowDays[] {
+  return [...new Set<number>([...WINDOWS, custom])].sort((a, b) => a - b);
+}
+
+function compactWindows(raw: RawData, e: Entity, custom: WindowDays): WindowCompact[] {
+  return windowList(custom).map((days) => {
     const w = entityWindow(raw, e, days);
     return {
       days,
@@ -389,10 +416,13 @@ function compactWindows(raw: RawData, e: Entity): WindowCompact[] {
   });
 }
 
+function dateAt(raw: RawData, idx: number): string {
+  return brtDateStr(new Date(raw.coverageStart.getTime() + idx * DAY_MS));
+}
+
 function rangeStrings(raw: RawData, days: WindowDays) {
   const { cur, prev } = windowRanges(days, raw.lastIdx);
-  const at = (idx: number) => brtDateStr(new Date(raw.coverageStart.getTime() + idx * DAY_MS));
-  return { start: at(cur.from), end: at(cur.to), prevStart: at(prev.from), prevEnd: at(prev.to) };
+  return { start: dateAt(raw, cur.from), end: dateAt(raw, cur.to), prevStart: dateAt(raw, prev.from), prevEnd: dateAt(raw, prev.to) };
 }
 
 function emptyMetrics(days: WindowDays, pm: ProfitModelInputs): WindowMetrics {
@@ -401,6 +431,10 @@ function emptyMetrics(days: WindowDays, pm: ProfitModelInputs): WindowMetrics {
 
 function hasActivity(m: WindowMetrics): boolean {
   return m.sales > 0 || m.realOrders > 0 || m.revenue !== 0;
+}
+
+function entityPlatforms(raw: RawData, e: Entity): string[] {
+  return [...new Set(e.accountIds.map((id) => raw.affiliates.get(id)!.slug))];
 }
 
 // ── API pública ─────────────────────────────────────────────────────────
@@ -438,13 +472,13 @@ export async function getAffiliateAnalysis(opts: AnalysisOptions): Promise<Affil
       trend: trendTag(w.cur, w.prev, w.dailyCur),
       topDriver: drivers[0] ?? null,
       sparkline: w.dailyCur,
-      windows: compactWindows(raw, e),
+      windows: compactWindows(raw, e, days),
     });
   }
   rows.sort((a, b) => b.cur.revenue - a.cur.revenue || b.prev.revenue - a.prev.revenue);
 
   // Totais por janela (soma das entidades visíveis).
-  const windows: AnalysisWindowTotals[] = WINDOWS.map((wd) => {
+  const windows: AnalysisWindowTotals[] = windowList(days).map((wd) => {
     const per = entities.map((e) => entityWindow(raw, e, wd));
     const cur = per.length ? mergeMetrics(per.map((p) => p.cur), raw.pm.thresholds) : emptyMetrics(wd, raw.pm);
     const prev = per.length ? mergeMetrics(per.map((p) => p.prev), raw.pm.thresholds) : emptyMetrics(wd, raw.pm);
@@ -461,7 +495,7 @@ export async function getAffiliateAnalysis(opts: AnalysisOptions): Promise<Affil
   const totalSeries = new Array<number>(days).fill(0);
   for (const r of rows) r.sparkline.forEach((v, i) => { totalSeries[i] += v; });
   for (let i = 0; i < days; i++) {
-    const row: Record<string, number | string> = { date: brtDateStr(new Date(raw.coverageStart.getTime() + (curRange.from + i) * DAY_MS)), total: round2(totalSeries[i]) };
+    const row: Record<string, number | string> = { date: dateAt(raw, curRange.from + i), total: round2(totalSeries[i]) };
     for (const t of topKeys) row[t.key] = rows.find((r) => r.key === t.key)?.sparkline[i] ?? 0;
     daily.push(row);
   }
@@ -484,7 +518,7 @@ export async function getAffiliateAnalysis(opts: AnalysisOptions): Promise<Affil
   return {
     asOf: (opts.now ?? new Date()).toISOString(),
     todayBrt: brtDateStr(opts.now ?? new Date()),
-    window: days, view: opts.view, includeInternal: opts.includeInternal, includeToday: !!opts.includeToday,
+    window: days, anchor: brtDateStr(raw.lastDayStart), view: opts.view, includeInternal: opts.includeInternal, includeToday: !opts.anchor && !!opts.includeToday,
     range: rangeStrings(raw, days),
     summary: {
       entities: rows.length,
@@ -555,7 +589,7 @@ export async function getAffiliateExplain(key: string, opts: AnalysisOptions): P
   const accounts = metas.map((m) => toRef(m, opts.includeContact));
   const rs = rangeStrings(raw, days);
   const daily = w.dailyCur.map((v, i) => ({
-    date: brtDateStr(new Date(raw.coverageStart.getTime() + (curRange.from + i) * DAY_MS)),
+    date: dateAt(raw, curRange.from + i),
     atual: v, anterior: w.dailyPrev[i] ?? 0, atualVendas: w.salesCur[i] ?? 0, anteriorVendas: w.salesPrev[i] ?? 0,
   }));
   const byAccount = metas.map((m) => {
@@ -573,14 +607,204 @@ export async function getAffiliateExplain(key: string, opts: AnalysisOptions): P
       notes: opts.includeContact ? e.partner?.notes ?? null : null,
     },
     window: days,
-    includeToday: !!opts.includeToday,
+    anchor: brtDateStr(raw.lastDayStart),
+    includeToday: !opts.anchor && !!opts.includeToday,
     range: rs,
     cur: w.cur, prev: w.prev,
     trend: trendTag(w.cur, w.prev, w.dailyCur),
     drivers: explainChange(w.cur, w.prev, toRev(famCur), toRev(famPrev)),
-    windows: compactWindows(raw, e),
+    windows: compactWindows(raw, e, days),
     daily,
     byFamily,
     byAccount,
+  };
+}
+
+// ── SEQUÊNCIA de janelas (Janela 1..K) — evolução, saúde, reativação ────
+
+export interface SequenceOptions extends AnalysisOptions { count: number }
+
+export interface SequenceWindowRow { key: string; name: string; kind: 'partner' | 'affiliate'; platforms: string[]; rank: number; m: WindowMetrics }
+
+export interface SequenceWindow {
+  index: number;
+  label: string;
+  start: string;
+  end: string;
+  totals: WindowMetrics;
+  active: number;
+  concentrationTop10: number;
+  topShare2: number;
+  internalExcluded: number;
+  internalRevenueExcluded: number;
+  rows: SequenceWindowRow[]; // todas as entidades com atividade, por receita
+}
+
+export interface EvolutionPoint {
+  revenue: number; sales: number; feApproved: number; aov: number; approvalRate: number; refundRate: number;
+  cpaPerFe: number; netAfterCpa: number | null; netAfterCpaTotal: number | null; cpaStatus: WindowMetrics['cpaStatus']; rank: number | null;
+}
+
+export interface EvolutionEntry {
+  key: string; name: string; kind: 'partner' | 'affiliate'; platforms: string[];
+  tag: SeqTag; title: string; text: string;
+  deltas: Array<number | null>;
+  per: Array<EvolutionPoint | null>;
+  bestRank: number | null;
+  migrationHint: { otherKey: string; otherName: string } | null;
+}
+
+export interface AffiliateSequenceResponse {
+  asOf: string;
+  window: WindowDays;
+  count: number;
+  anchor: string;
+  view: 'partner' | 'platform';
+  includeInternal: boolean;
+  windows: SequenceWindow[];
+  transitions: Transition[];
+  evolution: EvolutionEntry[];
+  reactivation: Array<ReactivationEntry & { platforms: string[] }>;
+  health: { notes: HealthNote[]; risk: string };
+}
+
+export async function getAffiliateSequence(opts: SequenceOptions): Promise<AffiliateSequenceResponse> {
+  const count = Math.min(Math.max(Math.trunc(opts.count) || 3, 2), 8);
+  const raw = await loadRaw(opts, undefined, count * opts.window);
+  const { entities, excludedIds } = buildEntities(raw, opts.view, opts.includeInternal);
+  const ranges = sequenceRanges(opts.window, count, raw.lastIdx);
+  const labels = ranges.map((_, i) => `Janela ${i + 1}`);
+
+  // Métricas de cada entidade em cada janela.
+  const perEntity = new Map<string, Array<WindowMetrics>>();
+  for (const e of entities) perEntity.set(e.key, ranges.map((r) => entityRange(raw, e, r).m));
+  const platformsOf = new Map(entities.map((e) => [e.key, entityPlatforms(raw, e)]));
+  const nameOf = new Map(entities.map((e) => [e.key, e.name]));
+  const kindOf = new Map(entities.map((e) => [e.key, e.kind]));
+
+  const windows: SequenceWindow[] = ranges.map((r, i) => {
+    const rows: SequenceWindowRow[] = entities
+      .map((e) => ({ key: e.key, name: e.name, kind: e.kind, platforms: platformsOf.get(e.key)!, rank: 0, m: perEntity.get(e.key)![i] }))
+      // Só quem VENDEU na janela entra no ranking dela (uma janela só com
+      // estorno não é venda — ficaria "#45 · $0 · reemb. 100%").
+      .filter((x) => x.m.sales > 0 || x.m.revenue > 0)
+      .sort((a, b) => b.m.revenue - a.m.revenue || b.m.sales - a.m.sales);
+    rows.forEach((x, idx) => { x.rank = idx + 1; });
+    const totals = rows.length ? mergeMetrics(rows.map((x) => x.m), raw.pm.thresholds) : emptyMetrics(opts.window, raw.pm);
+    const totalRev = rows.reduce((n, x) => n + x.m.revenue, 0);
+    const top10 = rows.slice(0, 10).reduce((n, x) => n + x.m.revenue, 0);
+    const top2 = rows.slice(0, 2).reduce((n, x) => n + x.m.revenue, 0);
+    let internalExcluded = 0; let internalRevenueExcluded = 0;
+    for (const id of excludedIds) {
+      const m = raw.days.get(id);
+      if (!m) continue;
+      let rev = 0; let orders = 0;
+      for (let d = r.from; d <= r.to; d++) { rev += m.get(d)?.revenue ?? 0; orders += m.get(d)?.allOrders ?? 0; }
+      if (orders > 0) { internalExcluded++; internalRevenueExcluded += rev; }
+    }
+    return {
+      index: i, label: labels[i], start: dateAt(raw, r.from), end: dateAt(raw, r.to),
+      totals, active: rows.filter((x) => x.m.sales > 0).length,
+      concentrationTop10: totalRev > 0 ? round4(top10 / totalRev) : 0,
+      topShare2: totalRev > 0 ? round4(top2 / totalRev) : 0,
+      internalExcluded, internalRevenueExcluded: round2(internalRevenueExcluded),
+      rows,
+    };
+  });
+
+  const transitions: Transition[] = [];
+  for (let i = 1; i < windows.length; i++) {
+    const toRows = (w: SequenceWindow) => w.rows.map((x) => ({ key: x.key, name: x.name, revenue: x.m.revenue, sales: x.m.sales }));
+    transitions.push(transitionBetween(toRows(windows[i - 1]), toRows(windows[i]), i - 1, i));
+  }
+
+  // Séries por entidade (null = sem venda na janela) + ranks.
+  const rankOf = windows.map((w) => new Map(w.rows.map((x) => [x.key, x.rank])));
+  const series: EntitySeries[] = entities.map((e) => {
+    const ms = perEntity.get(e.key)!;
+    return {
+      key: e.key, name: e.name,
+      metrics: ms.map((m) => (m.sales > 0 || m.revenue > 0 ? m : null)),
+      ranks: ms.map((_, i) => rankOf[i].get(e.key) ?? null),
+    };
+  });
+
+  // Evolução: quem esteve no Top 10 de alguma janela.
+  const evoKeys = new Set<string>();
+  for (const w of windows) w.rows.slice(0, 10).forEach((x) => evoKeys.add(x.key));
+  // Pistas de migração de conta (visão por plataforma): pares sugeridos
+  // pela identidade cujas trajetórias se espelham (um desaba quando o
+  // outro aparece/salta na mesma transição).
+  const migration = new Map<string, { otherKey: string; otherName: string }>();
+  if (opts.view === 'platform') {
+    const idList: IdentityAffiliate[] = entities.map((e) => {
+      const a = raw.affiliates.get(e.accountIds[0])!;
+      return { id: a.id, platformSlug: a.slug, externalId: a.externalId, nickname: a.nickname, email: a.email, partnerId: a.partnerId, isInternal: a.isInternal, lastOrderAt: null };
+    });
+    const seriesByKey = new Map(series.map((s) => [s.key, s]));
+    for (const sug of suggestLinks(idList, { max: 400 })) {
+      const ka = `aff:${sug.a.id}`; const kb = `aff:${sug.b.id}`;
+      if (!evoKeys.has(ka) && !evoKeys.has(kb)) continue;
+      const sa = seriesByKey.get(ka); const sb = seriesByKey.get(kb);
+      if (!sa || !sb) continue;
+      const rev = (s: EntitySeries) => s.metrics.map((m) => m?.revenue ?? 0);
+      const ra = rev(sa); const rb = rev(sb);
+      // Piso: quem desaba tinha ≥ $2k e quem sobe chega a ≥ 25% disso (senão
+      // uma venda de $40 de um homônimo virava "migração de conta").
+      const MIN_DROP_BASE = 2000;
+      for (let i = 1; i < count; i++) {
+        const aDrop = ra[i - 1] >= MIN_DROP_BASE && ra[i] <= 0.4 * ra[i - 1];
+        const bJump = rb[i] >= 0.25 * ra[i - 1] && (rb[i - 1] === 0 || rb[i] >= 2 * rb[i - 1]);
+        const bDrop = rb[i - 1] >= MIN_DROP_BASE && rb[i] <= 0.4 * rb[i - 1];
+        const aJump = ra[i] >= 0.25 * rb[i - 1] && (ra[i - 1] === 0 || ra[i] >= 2 * ra[i - 1]);
+        const strong = sug.confidence !== 'baixa';
+        if ((aDrop && bJump && (strong || rb[i] >= 0.5 * ra[i - 1])) || (bDrop && aJump && (strong || ra[i] >= 0.5 * rb[i - 1]))) {
+          migration.set(ka, { otherKey: kb, otherName: sb.name });
+          migration.set(kb, { otherKey: ka, otherName: sa.name });
+          break;
+        }
+      }
+    }
+  }
+  const evolution: EvolutionEntry[] = series
+    .filter((s) => evoKeys.has(s.key))
+    .map((s) => {
+      const n = narrateEntity(s, labels, raw.pm.thresholds);
+      const hint = migration.get(s.key) ?? null;
+      const text = hint
+        ? `${n.text} Importante: essa mudança acontece quase no mesmo instante em que "${hint.otherName}" faz o movimento oposto — nomes parecidos e trajetórias espelhadas sugerem a mesma pessoa migrando de conta ou link de rastreamento. Vale confirmar com o afiliado e unificar as contas em Identidades.`
+        : n.text;
+      const ranks = s.ranks.filter((r): r is number => r != null);
+      return {
+        key: s.key, name: s.name, kind: kindOf.get(s.key)!, platforms: platformsOf.get(s.key)!,
+        tag: n.tag, title: n.title, text, deltas: n.deltas,
+        per: s.metrics.map((m, i) => (m ? {
+          revenue: m.revenue, sales: m.sales, feApproved: m.feApproved, aov: m.aov, approvalRate: m.approvalRate, refundRate: m.refundRate,
+          cpaPerFe: m.cpaPerFe, netAfterCpa: m.netAfterCpa, netAfterCpaTotal: m.netAfterCpaTotal, cpaStatus: m.cpaStatus, rank: s.ranks[i],
+        } : null)),
+        bestRank: ranks.length ? Math.min(...ranks) : null,
+        migrationHint: hint,
+      };
+    })
+    .sort((a, b) => {
+      const order: SeqTag[] = ['breakout', 'novo', 'crescimento', 'volatil', 'estagnado', 'queda', 'queda_forte', 'churn', 'estavel'];
+      const oa = order.indexOf(a.tag); const ob = order.indexOf(b.tag);
+      if (oa !== ob) return oa - ob;
+      const la = a.per[a.per.length - 1]?.revenue ?? 0; const lb = b.per[b.per.length - 1]?.revenue ?? 0;
+      return lb - la;
+    });
+
+  const totals: WindowTotals[] = windows.map((w) => ({
+    revenue: w.totals.revenue, sales: w.totals.sales, active: w.active, concentrationTop10: w.concentrationTop10,
+    topShare2: w.topShare2, topNames: w.rows.slice(0, 2).map((x) => x.name),
+  }));
+  const notes = windows.map((_, i) => healthNote(i, totals, transitions, labels));
+  const reactivation = reactivationList(series).slice(0, 60).map((r) => ({ ...r, platforms: platformsOf.get(r.key) ?? [] }));
+
+  return {
+    asOf: (opts.now ?? new Date()).toISOString(),
+    window: opts.window, count, anchor: brtDateStr(raw.lastDayStart), view: opts.view, includeInternal: opts.includeInternal,
+    windows, transitions, evolution, reactivation,
+    health: { notes, risk: riskText(totals, transitions) },
   };
 }

@@ -21,7 +21,7 @@ export async function GET(req: Request) {
     return NextResponse.json({ error: 'key inválida (partner:<id> | aff:<id>)' }, { status: 400 });
   }
   const p = parseAnalysisParams(searchParams);
-  if (!p.window) return NextResponse.json({ error: 'window deve ser 3, 7, 15, 30 ou 60' }, { status: 400 });
+  if (!p.window) return NextResponse.json({ error: 'window deve ser um inteiro de 1 a 90' }, { status: 400 });
   const includeContact = auth.user.role === 'ADMIN';
   const cacheParams = new URLSearchParams(searchParams);
   cacheParams.set('_contact', includeContact ? '1' : '0');

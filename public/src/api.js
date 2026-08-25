@@ -695,15 +695,22 @@ async function coSend(path, method, body) {
 // ---------- Análise de afiliados ----------
 // Janelas fixas (3/7/15/30/60 dias terminando hoje) — só plataforma/família
 // do filtro global entram; o período global não se aplica.
-async function fetchAffiliateAnalysis(filters, { window = 7, view = 'partner', internal = false, today = false } = {}) {
+async function fetchAffiliateAnalysis(filters, { window = 7, view = 'partner', internal = false, today = false, anchor = null } = {}) {
   return fetchJSON('/api/metrics/affiliate-analysis', {
-    window: String(window), view, internal: internal ? '1' : '0', today: today ? '1' : '0',
+    window: String(window), view, internal: internal ? '1' : '0', today: today ? '1' : '0', anchor: anchor || null,
     platforms: setToCSV(filters.platforms), families: setToCSV(filters.families),
   });
 }
-async function fetchAffiliateExplain(filters, key, { window = 7, internal = false, today = false } = {}) {
+async function fetchAffiliateExplain(filters, key, { window = 7, internal = false, today = false, anchor = null } = {}) {
   return fetchJSON('/api/metrics/affiliate-analysis/explain', {
-    key, window: String(window), internal: internal ? '1' : '0', today: today ? '1' : '0',
+    key, window: String(window), internal: internal ? '1' : '0', today: today ? '1' : '0', anchor: anchor || null,
+    platforms: setToCSV(filters.platforms), families: setToCSV(filters.families),
+  });
+}
+// K janelas consecutivas de N dias (Janela 1..K) + evolução/saúde/reativação.
+async function fetchAffiliateSequence(filters, { window = 7, count = 3, view = 'partner', internal = false, today = false, anchor = null } = {}) {
+  return fetchJSON('/api/metrics/affiliate-analysis/sequence', {
+    window: String(window), count: String(count), view, internal: internal ? '1' : '0', today: today ? '1' : '0', anchor: anchor || null,
     platforms: setToCSV(filters.platforms), families: setToCSV(filters.families),
   });
 }
@@ -863,6 +870,7 @@ window.NSApi = _wrapMutations({
   fetchAffiliateDetail,
   fetchAffiliateAnalysis,
   fetchAffiliateExplain,
+  fetchAffiliateSequence,
   adminListAffiliateIdentity,
   adminAffiliateIdentity,
   fetchRefundCohorts,

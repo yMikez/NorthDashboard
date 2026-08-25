@@ -16,13 +16,17 @@
 
 import { netAovUsd, cpaStatus, realOrderCount, type CpaStatus, type ProfitThresholds } from './profitModel';
 
+// Presets de janela; qualquer tamanho 1..90 é aceito (janela personalizada).
 export const WINDOWS = [3, 7, 15, 30, 60] as const;
-export type WindowDays = (typeof WINDOWS)[number];
-export const COVERAGE_DAYS = 121; // 2 × 60 dias completos + hoje
+export type WindowDays = number;
+export const MAX_WINDOW_DAYS = 90;
+export const COVERAGE_DAYS = 120; // mínimo: 2 × 60 (janela atual + anterior do maior preset)
 
-export function isWindowDays(n: unknown): n is WindowDays {
-  return typeof n === 'number' && (WINDOWS as readonly number[]).includes(n);
+export function isValidWindow(n: unknown): n is number {
+  return typeof n === 'number' && Number.isInteger(n) && n >= 1 && n <= MAX_WINDOW_DAYS;
 }
+/** @deprecated use isValidWindow */
+export const isWindowDays = isValidWindow;
 
 export interface Bucket {
   allOrders: number;
@@ -126,6 +130,8 @@ export interface WindowMetrics {
   netAfterCpa: number | null;
   netAfterCpaTotal: number | null;
   cpaStatus: CpaStatus | null;
+  /** FEs das contas COM CPA conhecido (base do Net após CPA por FE). */
+  feWithCpa: number;
   activeDays: number;
   days: number;
 }
@@ -162,6 +168,7 @@ export function metricsFor(bucket: Bucket, activeDays: number, days: number, cpa
     netAfterCpa: nAfter,
     netAfterCpaTotal: nAfter != null ? round2(nAfter * fe) : null,
     cpaStatus: nAfter != null ? cpaStatus(nAfter, rates.thresholds) : null,
+    feWithCpa: nAfter != null ? fe : 0,
     activeDays,
     days,
   };
@@ -182,7 +189,9 @@ export function mergeMetrics(parts: WindowMetrics[], thresholds: ProfitThreshold
   const denom = realOrders || 1;
   const revenue = sum((m) => m.revenue);
   const withCpa = parts.filter((m) => m.netAfterCpaTotal != null);
-  const feWithCpa = withCpa.reduce((n, m) => n + m.feApproved, 0);
+  // Base = FEs com CPA de cada parte (uma parte já mesclada carrega só as
+  // FEs das contas com CPA — senão um parceiro misto diluía o Net por FE).
+  const feWithCpa = withCpa.reduce((n, m) => n + (m.feWithCpa || m.feApproved), 0);
   const nAfterTotal = withCpa.length ? round2(withCpa.reduce((n, m) => n + (m.netAfterCpaTotal ?? 0), 0)) : null;
   const nAfter = nAfterTotal != null && feWithCpa > 0 ? round2(nAfterTotal / feWithCpa) : null;
   const wavg = (f: (m: WindowMetrics) => number) => (fe > 0 ? round2(parts.reduce((n, m) => n + f(m) * m.feApproved, 0) / fe) : 0);
@@ -190,7 +199,8 @@ export function mergeMetrics(parts: WindowMetrics[], thresholds: ProfitThreshold
   // NET AOV − CPA/venda = Net após CPA também no parceiro.
   const cpaBase = feWithCpa > 0 ? withCpa : parts;
   const cpaBaseFe = feWithCpa > 0 ? feWithCpa : fe;
-  const wavgCpaBase = (f: (m: WindowMetrics) => number) => (cpaBaseFe > 0 ? round2(cpaBase.reduce((n, m) => n + f(m) * m.feApproved, 0) / cpaBaseFe) : 0);
+  const baseFeOf = (m: WindowMetrics) => (feWithCpa > 0 ? (m.feWithCpa || m.feApproved) : m.feApproved);
+  const wavgCpaBase = (f: (m: WindowMetrics) => number) => (cpaBaseFe > 0 ? round2(cpaBase.reduce((n, m) => n + f(m) * baseFeOf(m), 0) / cpaBaseFe) : 0);
   return {
     sales: sum((m) => m.sales),
     feApproved: fe,
@@ -212,6 +222,7 @@ export function mergeMetrics(parts: WindowMetrics[], thresholds: ProfitThreshold
     netAfterCpa: nAfter,
     netAfterCpaTotal: nAfterTotal,
     cpaStatus: nAfter != null ? cpaStatus(nAfter, thresholds) : null,
+    feWithCpa,
     activeDays: Math.max(...parts.map((m) => m.activeDays)),
     days: parts[0].days,
   };
