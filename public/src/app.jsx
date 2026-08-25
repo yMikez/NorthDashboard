@@ -246,9 +246,9 @@ function App({ user }) {
           {hashState.route === 'overview'       && <OverviewPage filters={filters} setFilters={setFilters}/>}
           {hashState.route === 'funnel'         && <FunnelPage filters={filters}/>}
           {hashState.route === 'refund-cohorts' && <RefundCohortsPage filters={filters}/>}
-          {hashState.route === 'leaderboard'    && <LeaderboardPage filters={filters} onOpenAffiliate={setDrawerAff}/>}
+          {hashState.route === 'leaderboard'    && <LeaderboardPage filters={filters} onOpenAffiliate={setDrawerAff} user={user}/>}
           {/* Fundida com o Ranking (modelo planilha CPA) — rota antiga rende a mesma página. */}
-          {hashState.route === 'all-affiliates' && <LeaderboardPage filters={filters} onOpenAffiliate={setDrawerAff}/>}
+          {hashState.route === 'all-affiliates' && <LeaderboardPage filters={filters} onOpenAffiliate={setDrawerAff} user={user}/>}
           {hashState.route === 'affiliate-analysis' && <AffiliateAnalysisPage filters={filters} user={user}/>}
           {hashState.route === 'recovery'       && <RecoveryPage filters={filters}/>}
           {hashState.route === 'tauk'           && <CallCenterPage filters={filters} user={user}/>}

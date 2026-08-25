@@ -158,6 +158,17 @@ model AffiliatePartner {
   @@index([email])
 }
 
+// Par de contas que o admin decidiu NÃO unificar ("Ignorar" na tela de
+// identidades). Chave ordenada (a < b) pra o par ser único.
+model AffiliateLinkDismiss {
+  id           String   @id @default(cuid())
+  affiliateAId String
+  affiliateBId String
+  createdAt    DateTime @default(now())
+
+  @@unique([affiliateAId, affiliateBId])
+}
+
 // Afiliado de recuperação: marca quem traz vendas via SMS/email recovery e a
 // % de comissão que recebe sobre cada venda aprovada. Seção "Recuperação".
 model RecoveryAffiliate {

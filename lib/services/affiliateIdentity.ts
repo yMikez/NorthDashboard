@@ -34,42 +34,74 @@ function toIdentity(a: AffRow): IdentityAffiliate {
   };
 }
 
+export type IdentityAccount = IdentityAffiliate & { internal: boolean; internalGuess: boolean; revenue30d: number };
+
 export interface PartnerView {
   id: string;
   displayName: string;
   email: string | null;
   phone: string | null;
   notes: string | null;
-  accounts: Array<IdentityAffiliate & { internal: boolean }>;
+  accounts: IdentityAccount[];
+  revenue30d: number;
 }
+
+export type IdentitySuggestion = Omit<LinkSuggestion, 'a' | 'b'> & { a: IdentityAccount; b: IdentityAccount };
 
 export interface AffiliateIdentityList {
   partners: PartnerView[];
-  unlinked: Array<IdentityAffiliate & { internal: boolean; internalGuess: boolean }>;
-  suggestions: LinkSuggestion[];
+  unlinked: IdentityAccount[];
+  suggestions: IdentitySuggestion[];
+  dismissedCount: number;
   stats: { partners: number; linkedAccounts: number; unlinkedAccounts: number; withEmail: number; internal: number };
+}
+
+function pairKeyOf(a: string, b: string): [string, string] {
+  return a < b ? [a, b] : [b, a];
 }
 
 export async function listAffiliateIdentity(): Promise<AffiliateIdentityList> {
   // Parceiro sem conta nenhuma (corrida entre dois IPNs, desvínculo antigo)
-  // não serve pra nada — some daqui em vez de poluir a lista.
-  await db.affiliatePartner.deleteMany({ where: { affiliates: { none: {} } } });
-  const [affs, partners] = await Promise.all([
+  // não serve pra nada — some daqui em vez de poluir a lista. Só os com
+  // mais de 1 min: um linkAffiliates em andamento cria o parceiro antes de
+  // vincular as contas, e um GET concorrente não pode apagá-lo no meio.
+  await db.affiliatePartner.deleteMany({ where: { affiliates: { none: {} }, createdAt: { lt: new Date(Date.now() - 60_000) } } });
+  const since30 = new Date(Date.now() - 30 * 86_400_000);
+  const [affs, partners, dismissed, rev30] = await Promise.all([
     db.affiliate.findMany({ select: AFF_SELECT, orderBy: { lastOrderAt: { sort: 'desc', nulls: 'last' } } }),
     db.affiliatePartner.findMany({ orderBy: { updatedAt: 'desc' } }),
+    db.affiliateLinkDismiss.findMany({ select: { affiliateAId: true, affiliateBId: true } }),
+    db.order.groupBy({
+      by: ['affiliateId'],
+      where: { status: 'APPROVED', orderedAt: { gte: since30 }, affiliateId: { not: null } },
+      _sum: { grossAmountUsd: true },
+    }),
   ]);
+  const revById = new Map<string, number>();
+  for (const r of rev30) if (r.affiliateId) revById.set(r.affiliateId, Number(r._sum.grossAmountUsd ?? 0));
+  const enrich = (a: IdentityAffiliate): IdentityAccount => ({
+    ...a, internal: effectiveInternal(a), internalGuess: isInternalGuess(a), revenue30d: Math.round((revById.get(a.id) ?? 0) * 100) / 100,
+  });
   const ids = affs.map(toIdentity);
-  const byPartner = new Map<string, IdentityAffiliate[]>();
-  for (const a of ids) if (a.partnerId) byPartner.set(a.partnerId, [...(byPartner.get(a.partnerId) ?? []), a]);
-  const partnerViews: PartnerView[] = partners.map((p) => ({
-    id: p.id, displayName: p.displayName, email: p.email, phone: p.phone, notes: p.notes,
-    accounts: (byPartner.get(p.id) ?? []).map((a) => ({ ...a, internal: effectiveInternal(a) })),
-  }));
-  const unlinked = ids.filter((a) => !a.partnerId).map((a) => ({ ...a, internal: effectiveInternal(a), internalGuess: isInternalGuess(a) }));
+  const byPartner = new Map<string, IdentityAccount[]>();
+  for (const a of ids) if (a.partnerId) byPartner.set(a.partnerId, [...(byPartner.get(a.partnerId) ?? []), enrich(a)]);
+  const partnerViews: PartnerView[] = partners.map((p) => {
+    const accounts = (byPartner.get(p.id) ?? []).sort((x, y) => y.revenue30d - x.revenue30d);
+    return {
+      id: p.id, displayName: p.displayName, email: p.email, phone: p.phone, notes: p.notes,
+      accounts, revenue30d: Math.round(accounts.reduce((n, a) => n + a.revenue30d, 0) * 100) / 100,
+    };
+  }).sort((x, y) => y.revenue30d - x.revenue30d);
+  const unlinked = ids.filter((a) => !a.partnerId).map(enrich).sort((x, y) => y.revenue30d - x.revenue30d);
+  const dismissedKeys = new Set(dismissed.map((d) => `${d.affiliateAId}|${d.affiliateBId}`));
+  const suggestions = suggestLinks(ids)
+    .filter((s) => !dismissedKeys.has(pairKeyOf(s.a.id, s.b.id).join('|')))
+    .map((s) => ({ ...s, a: enrich(s.a), b: enrich(s.b) }));
   return {
     partners: partnerViews,
     unlinked,
-    suggestions: suggestLinks(ids),
+    suggestions,
+    dismissedCount: dismissed.length,
     stats: {
       partners: partners.length,
       linkedAccounts: ids.filter((a) => a.partnerId).length,
@@ -78,6 +110,21 @@ export async function listAffiliateIdentity(): Promise<AffiliateIdentityList> {
       internal: ids.filter((a) => effectiveInternal(a)).length,
     },
   };
+}
+
+/** "Ignorar" uma sugestão: o par some da lista até ser restaurado. */
+export async function dismissSuggestion(aId: string, bId: string): Promise<void> {
+  const [affiliateAId, affiliateBId] = pairKeyOf(aId, bId);
+  await db.affiliateLinkDismiss.upsert({
+    where: { affiliateAId_affiliateBId: { affiliateAId, affiliateBId } },
+    create: { affiliateAId, affiliateBId },
+    update: {},
+  });
+}
+
+export async function restoreDismissed(): Promise<number> {
+  const r = await db.affiliateLinkDismiss.deleteMany({});
+  return r.count;
 }
 
 /**
@@ -94,11 +141,22 @@ export async function linkAffiliates(input: {
   displayName?: string | null;
   email?: string | null;
   phone?: string | null;
-}): Promise<{ partnerId: string; linked: number }> {
+  notes?: string | null;
+}): Promise<{ partnerId: string; linked: number; merged: number }> {
   const ids = [...new Set(input.affiliateIds.filter((x) => typeof x === 'string' && x))];
   if (!ids.length) throw new Error('nenhuma conta informada');
-  const accounts = await db.affiliate.findMany({ where: { id: { in: ids } }, select: AFF_SELECT });
-  if (accounts.length !== ids.length) throw new Error('conta não encontrada');
+  const found = await db.affiliate.findMany({ where: { id: { in: ids } }, select: AFF_SELECT });
+  if (found.length !== ids.length) throw new Error('conta não encontrada');
+  // Na ordem em que o admin selecionou — o parceiro da PRIMEIRA conta é o
+  // que sobrevive numa fusão (a UI mostra isso antes de confirmar).
+  const accounts = ids.map((id) => found.find((a) => a.id === id)!);
+  const contactGiven = {
+    displayName: input.displayName?.trim() || undefined,
+    email: normalizeEmail(input.email) ?? undefined,
+    phone: input.phone?.trim() || undefined,
+    notes: input.notes?.trim() || undefined,
+  };
+  const hasContact = !!(contactGiven.displayName || contactGiven.email || contactGiven.phone || contactGiven.notes);
 
   let partnerId = input.partnerId ?? null;
   if (partnerId) {
@@ -109,13 +167,13 @@ export async function linkAffiliates(input: {
     if (existing.length) {
       partnerId = existing[0];
     } else {
-      const hasContact = !!(input.displayName?.trim() || normalizeEmail(input.email) || input.phone?.trim());
       if (ids.length < 2 && !hasContact) throw new Error('pra criar um parceiro novo informe pelo menos 2 contas (ou um contato)');
       const created = await db.affiliatePartner.create({
         data: {
-          displayName: (input.displayName ?? '').trim() || pickPartnerName(accounts.map(toIdentity)),
-          email: normalizeEmail(input.email) ?? accounts.map((a) => normalizeEmail(a.email)).find(Boolean) ?? null,
-          phone: input.phone?.trim() || null,
+          displayName: contactGiven.displayName || pickPartnerName(accounts.map(toIdentity)),
+          email: contactGiven.email ?? accounts.map((a) => normalizeEmail(a.email)).find(Boolean) ?? null,
+          phone: contactGiven.phone ?? null,
+          notes: contactGiven.notes ?? null,
         },
         select: { id: true },
       });
@@ -135,19 +193,22 @@ export async function linkAffiliates(input: {
       // Mover conta: só apaga parceiro de origem que ficou vazio.
       await tx.affiliatePartner.deleteMany({ where: { id: { in: others }, affiliates: { none: {} } } });
     }
-    if (input.displayName?.trim() || input.email !== undefined || input.phone !== undefined) {
+    // Contato: só grava o que veio preenchido — nunca apaga e-mail/telefone
+    // que o parceiro já tinha (o vínculo manual manda os campos vazios).
+    if (hasContact) {
       await tx.affiliatePartner.update({
         where: { id: partnerId! },
         data: {
-          ...(input.displayName?.trim() ? { displayName: input.displayName.trim() } : {}),
-          ...(input.email !== undefined ? { email: normalizeEmail(input.email) } : {}),
-          ...(input.phone !== undefined ? { phone: input.phone?.trim() || null } : {}),
+          ...(contactGiven.displayName ? { displayName: contactGiven.displayName } : {}),
+          ...(contactGiven.email ? { email: contactGiven.email } : {}),
+          ...(contactGiven.phone ? { phone: contactGiven.phone } : {}),
+          ...(contactGiven.notes ? { notes: contactGiven.notes } : {}),
         },
       });
     }
   });
   clearResponseCache();
-  return { partnerId: partnerId!, linked: ids.length };
+  return { partnerId: partnerId!, linked: ids.length, merged: merge ? others.length : 0 };
 }
 
 export async function unlinkAffiliate(affiliateId: string): Promise<void> {

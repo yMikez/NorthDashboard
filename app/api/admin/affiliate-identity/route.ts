@@ -8,11 +8,14 @@
 //        update   { partnerId, displayName?, email?, phone?, notes? }
 //        internal { affiliateId, value: true|false|null }
 //        backfill {}   ← importa affiliate_email (JVZoo) e auto-vincula por e-mail
+//        dismiss  { affiliateIds: [a, b] }   ← "Ignorar" sugestão
+//        restore_dismissed {}
 
 import { NextResponse } from 'next/server';
 import { requireAdmin } from '@/lib/auth/guard';
 import {
   listAffiliateIdentity, linkAffiliates, unlinkAffiliate, updatePartner, setAffiliateInternal, backfillAffiliateEmails,
+  dismissSuggestion, restoreDismissed,
 } from '@/lib/services/affiliateIdentity';
 import { logger } from '@/lib/logger';
 
@@ -52,7 +55,7 @@ export async function POST(req: Request) {
         const ids = Array.isArray(body.affiliateIds) ? body.affiliateIds.filter((x): x is string => typeof x === 'string') : [];
         const res = await linkAffiliates({
           affiliateIds: ids, partnerId: str(body.partnerId) ?? null,
-          displayName: str(body.displayName) ?? null, email: strOrNull(body.email), phone: strOrNull(body.phone),
+          displayName: str(body.displayName) ?? null, email: strOrNull(body.email), phone: strOrNull(body.phone), notes: strOrNull(body.notes),
         });
         return NextResponse.json({ ok: true, ...res });
       }
@@ -81,6 +84,16 @@ export async function POST(req: Request) {
       case 'backfill': {
         const res = await backfillAffiliateEmails();
         return NextResponse.json({ ok: true, ...res });
+      }
+      case 'dismiss': {
+        const ids = Array.isArray(body.affiliateIds) ? body.affiliateIds.filter((x): x is string => typeof x === 'string') : [];
+        if (ids.length !== 2) return NextResponse.json({ error: 'affiliateIds deve ter exatamente 2 contas' }, { status: 400 });
+        await dismissSuggestion(ids[0], ids[1]);
+        return NextResponse.json({ ok: true });
+      }
+      case 'restore_dismissed': {
+        const count = await restoreDismissed();
+        return NextResponse.json({ ok: true, restored: count });
       }
       default:
         return NextResponse.json({ error: 'action inválida' }, { status: 400 });

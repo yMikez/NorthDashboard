@@ -1,4 +1,4 @@
-/* global React, Icon, NSTimeSeries, NSBarRank, Sparkline, CpaStatusChip, CopyKpi, fmtCurrency, fmtInt, fmtPct, SkelMiniKpis, SkelChartPanel, SkelTablePanel, SkelDrawerLoading, downloadCsv */
+/* global React, Icon, NSTimeSeries, NSBarRank, Sparkline, CpaStatusChip, fmtCurrency, fmtInt, fmtPct, SkelMiniKpis, SkelChartPanel, SkelTablePanel, SkelDrawerLoading, downloadCsv, AaContactForm, AffiliateIdentityDrawer */
 /* Análise de afiliados — quem sobe, quem cai e por quê.
    Ranking por métrica (receita/vendas/AOV/reembolso/Net após CPA), janelas
    de 3/7/15/30/60 dias (cada uma vs a anterior), identidade unificada entre
@@ -292,7 +292,7 @@ function AffiliateAnalysisPage({ filters, user }) {
                 <label title="Hoje ainda está em andamento — comparar com dias cheios vicia os Δ" style={{ display: 'flex', gap: 6, alignItems: 'center', fontSize: 11, color: 'var(--fg4)', cursor: 'pointer' }}>
                   <input type="checkbox" checked={today} onChange={(e) => setToday(e.target.checked)}/> incluir hoje (parcial)
                 </label>
-                <input style={AA_INPUT} placeholder="buscar nome, ID, e-mail…" value={query} onChange={(e) => setQuery(e.target.value)} style={{ width: 190, fontSize: 12 }}/>
+                <input style={{ ...AA_INPUT, width: 190 }} placeholder="buscar nome, ID, e-mail…" value={query} onChange={(e) => setQuery(e.target.value)}/>
                 <button className="btn btn-ghost" onClick={exportCsv} title="Exportar CSV"><Icon name="download" size={13}/></button>
                 <button className="btn btn-ghost" onClick={() => setTick((t) => t + 1)} title="Recarregar"><Icon name="refresh" size={13}/></button>
               </div>
@@ -371,7 +371,7 @@ function AffiliateAnalysisPage({ filters, user }) {
         <AaExplainDrawer entityKey={openKey} win={win} filters={filters} internal={internal} today={today} isAdmin={isAdmin} onClose={() => setOpenKey(null)} onChanged={() => setTick((t) => t + 1)}/>
       )}
       {identityOpen && (
-        <AaIdentityDrawer onClose={() => setIdentityOpen(false)} onChanged={() => setTick((t) => t + 1)}/>
+        <AffiliateIdentityDrawer onClose={() => setIdentityOpen(false)} onChanged={() => setTick((t) => t + 1)}/>
       )}
     </div>
   );
@@ -396,7 +396,6 @@ function AaExplainDrawer({ entityKey, win, filters, internal, today, isAdmin, on
   const [state, setState] = useStateAA({ status: 'loading', data: null, error: null });
   const [tick, setTick] = useStateAA(0);
   const [editing, setEditing] = useStateAA(false);
-  const [form, setForm] = useStateAA({ displayName: '', email: '', phone: '', notes: '' });
   const [busy, setBusy] = useStateAA(false);
   const [msg, setMsg] = useStateAA(null);
 
@@ -408,7 +407,6 @@ function AaExplainDrawer({ entityKey, win, filters, internal, today, isAdmin, on
         if (cancelled) return;
         if (data?.error) { setState({ status: 'error', data: null, error: 'não encontrado' }); return; }
         setState({ status: 'ready', data, error: null });
-        setForm({ displayName: data.entity.name || '', email: data.entity.contact?.email || '', phone: data.entity.contact?.phone || '', notes: data.entity.notes || '' });
       })
       .catch((err) => { if (!cancelled) setState({ status: 'error', data: null, error: err.message }); });
     return () => { cancelled = true; };
@@ -421,12 +419,15 @@ function AaExplainDrawer({ entityKey, win, filters, internal, today, isAdmin, on
     catch (err) { setMsg({ ok: false, text: err.message }); }
     finally { setBusy(false); }
   };
-  const saveContact = () => act(async () => {
+  const saveContactWith = (form) => act(async () => {
     if (d.entity.partnerId) {
       await window.NSApi.adminAffiliateIdentity('update', { partnerId: d.entity.partnerId, displayName: form.displayName, email: form.email || null, phone: form.phone || null, notes: form.notes || null });
     } else {
       // Conta solta: cria um parceiro só com ela pra guardar o contato.
-      await window.NSApi.adminAffiliateIdentity('link', { affiliateIds: [d.entity.accounts[0].id], partnerId: null, displayName: form.displayName, email: form.email || null, phone: form.phone || null });
+      // Só manda o que veio preenchido (vazio não apaga nada).
+      const body = { affiliateIds: [d.entity.accounts[0].id] };
+      for (const k of ['displayName', 'email', 'phone', 'notes']) if ((form[k] || '').trim()) body[k] = form[k].trim();
+      await window.NSApi.adminAffiliateIdentity('link', body);
     }
     setEditing(false);
   }, '✓ contato salvo');
@@ -461,19 +462,13 @@ function AaExplainDrawer({ entityKey, win, filters, internal, today, isAdmin, on
           {msg && <div style={{ fontSize: 12, color: msg.ok ? 'var(--success)' : 'var(--danger)', marginBottom: 8 }}>{msg.text}</div>}
 
           {isAdmin && d && editing && (
-            <div className="panel" style={{ marginBottom: 12 }}>
-              <div className="panel-eyebrow">CONTATO DO PARCEIRO (opcional)</div>
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 8, marginTop: 8 }}>
-                <input style={AA_INPUT} placeholder="Nome" value={form.displayName} onChange={(e) => setForm({ ...form, displayName: e.target.value })}/>
-                <input style={AA_INPUT} placeholder="E-mail principal" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })}/>
-                <input style={AA_INPUT} placeholder="Telefone" value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })}/>
-                <input style={AA_INPUT} placeholder="Notas" value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })}/>
-              </div>
-              <div style={{ display: 'flex', gap: 6, marginTop: 8 }}>
-                <button className="btn" disabled={busy} onClick={saveContact}>Salvar</button>
-                <button className="btn btn-ghost" onClick={() => setEditing(false)}>Cancelar</button>
-              </div>
-            </div>
+            <AaContactForm
+              title="CONTATO DO PARCEIRO (opcional)"
+              initial={{ displayName: d.entity.name || '', email: d.entity.contact?.email || '', phone: d.entity.contact?.phone || '', notes: d.entity.notes || '' }}
+              busy={busy}
+              onCancel={() => setEditing(false)}
+              onSave={saveContactWith}
+            />
           )}
 
           {d && (
@@ -618,191 +613,6 @@ function AaExplainDrawer({ entityKey, win, filters, internal, today, isAdmin, on
                   </div>
                 </div>
               </div>
-            </>
-          )}
-        </div>
-      </div>
-    </>
-  );
-}
-
-// ── Drawer de identidades (admin) ───────────────────────────────────────
-
-function AaIdentityDrawer({ onClose, onChanged }) {
-  const [state, setState] = useStateAA({ status: 'loading', data: null, error: null });
-  const [tick, setTick] = useStateAA(0);
-  const [busy, setBusy] = useStateAA(false);
-  const [msg, setMsg] = useStateAA(null);
-  const [tab, setTab] = useStateAA('sugestoes');
-  const [pick, setPick] = useStateAA([]);      // contas selecionadas pro vínculo manual
-  const [q, setQ] = useStateAA('');
-  const [editPartner, setEditPartner] = useStateAA(null);
-
-  useEffectAA(() => {
-    let cancelled = false;
-    setState((s) => ({ ...s, status: 'loading' }));
-    window.NSApi.adminListAffiliateIdentity()
-      .then((data) => { if (!cancelled) setState({ status: 'ready', data, error: null }); })
-      .catch((err) => { if (!cancelled) setState({ status: 'error', data: null, error: err.message }); });
-    return () => { cancelled = true; };
-  }, [tick]);
-
-  const d = state.data;
-  const act = async (fn, okMsg) => {
-    setBusy(true); setMsg(null);
-    try { const r = await fn(); setMsg({ ok: true, text: typeof okMsg === 'function' ? okMsg(r) : okMsg }); setTick((t) => t + 1); onChanged?.(); }
-    catch (err) { setMsg({ ok: false, text: err.message }); }
-    finally { setBusy(false); }
-  };
-  const accountLabel = (a) => `${AA_PLAT[a.platformSlug] || a.platformSlug} · ${a.nickname || a.externalId}${a.nickname && a.nickname !== a.externalId ? ` (${a.externalId})` : ''}`;
-  const allAccounts = useMemoAA(() => {
-    if (!d) return [];
-    const linked = d.partners.flatMap((p) => p.accounts.map((a) => ({ ...a, partnerName: p.displayName })));
-    return [...d.unlinked, ...linked];
-  }, [d]);
-  const searchHits = useMemoAA(() => {
-    const s = q.trim().toLowerCase();
-    if (!s) return [];
-    return allAccounts.filter((a) => (a.nickname || '').toLowerCase().includes(s) || a.externalId.toLowerCase().includes(s) || (a.email || '').toLowerCase().includes(s)).slice(0, 12);
-  }, [q, allAccounts]);
-
-  return (
-    <>
-      <div className="drawer-backdrop" onClick={onClose}/>
-      <div className="drawer" style={{ width: 820, maxWidth: '100vw' }}>
-        <div className="drawer-head">
-          <div>
-            <div className="eyebrow" style={{ fontSize: 10 }}>IDENTIDADES · UNIFICAÇÃO ENTRE PLATAFORMAS</div>
-            <h3 style={{ margin: '4px 0 0' }}>Contas → parceiros</h3>
-            {d && <div style={{ fontSize: 11, color: 'var(--fg4)', marginTop: 4 }}>{d.stats.partners} parceiros · {d.stats.linkedAccounts} contas vinculadas · {d.stats.unlinkedAccounts} soltas · {d.stats.withEmail} com e-mail · {d.stats.internal} internos</div>}
-          </div>
-          <div style={{ display: 'flex', gap: 6 }}>
-            <button className="btn btn-ghost" disabled={busy} title="Importa affiliate_email das ordens JVZoo e vincula contas com o mesmo e-mail" onClick={() => act(() => window.NSApi.adminAffiliateIdentity('backfill', {}), (r) => `✓ ${r.updated} e-mails importados · ${r.linked} contas vinculadas · ${r.partnersCreated} parceiros novos`)}>
-              <Icon name="refresh" size={12}/> Importar e-mails + auto-vincular
-            </button>
-            <button className="btn btn-ghost" onClick={onClose}><Icon name="x" size={14}/></button>
-          </div>
-        </div>
-        <div className="drawer-body">
-          {msg && <div style={{ fontSize: 12, color: msg.ok ? 'var(--success)' : 'var(--danger)', marginBottom: 8 }}>{msg.text}</div>}
-          {state.status === 'loading' && !d && <SkelDrawerLoading/>}
-          {state.status === 'error' && <div style={{ color: 'var(--danger)', fontSize: 12 }}>Erro: {state.error}</div>}
-          {d && (
-            <>
-              <div className="seg" style={{ marginBottom: 12 }}>
-                {[['sugestoes', `Sugestões (${d.suggestions.length})`], ['manual', 'Vincular manualmente'], ['parceiros', `Parceiros (${d.partners.length})`]].map(([k, l]) => (
-                  <button key={k} className={tab === k ? 'is-active' : ''} onClick={() => setTab(k)}>{l}</button>
-                ))}
-              </div>
-
-              {tab === 'sugestoes' && (
-                <div className="panel" style={{ padding: 0 }}>
-                  <div className="panel-head" style={{ padding: '12px 16px 6px' }}>
-                    <div className="panel-title"><span className="panel-eyebrow">PARES PROVÁVEIS</span><span className="panel-sub">alta = mesmo e-mail · média = mesmo nome em plataformas diferentes · baixa = sobrenome/token em comum — confira antes de unificar</span></div>
-                  </div>
-                  {d.suggestions.length === 0 && <div style={{ padding: 16 }}><AaEmpty>Nenhuma sugestão pendente. Use "Vincular manualmente" pra casos que a heurística não pega.</AaEmpty></div>}
-                  {d.suggestions.length > 0 && (
-                    <div className="tbl-wrap" style={{ maxHeight: 520 }}>
-                      <table className="tbl">
-                        <thead><tr><th>Conta A</th><th>Conta B</th><th>Motivo</th><th>Conf.</th><th></th></tr></thead>
-                        <tbody>
-                          {d.suggestions.map((s, i) => (
-                            <tr key={i}>
-                              <td style={{ fontSize: 12 }}>{accountLabel(s.a)}{s.a.partnerId && <span style={{ fontSize: 9, color: 'var(--accent)', marginLeft: 4 }}>já em parceiro</span>}</td>
-                              <td style={{ fontSize: 12 }}>{accountLabel(s.b)}{s.b.partnerId && <span style={{ fontSize: 9, color: 'var(--accent)', marginLeft: 4 }}>já em parceiro</span>}</td>
-                              <td style={{ fontSize: 11, color: 'var(--fg4)' }}>{s.evidence}</td>
-                              <td><span className={`badge ${s.confidence === 'alta' ? 'ok' : s.confidence === 'media' ? 'warn' : 'neutral'}`}>{s.confidence}</span></td>
-                              <td><button className="btn" disabled={busy} onClick={() => act(() => window.NSApi.adminAffiliateIdentity('link', { affiliateIds: [s.a.id, s.b.id] }), '✓ contas unificadas')}>Unificar</button></td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
-                  )}
-                </div>
-              )}
-
-              {tab === 'manual' && (
-                <div className="panel">
-                  <div className="panel-eyebrow">VÍNCULO MANUAL</div>
-                  <div style={{ fontSize: 12, color: 'var(--fg4)', margin: '4px 0 10px' }}>Busque e selecione 2+ contas (de qualquer plataforma) que são a mesma pessoa. Se alguma já estiver num parceiro, as outras entram nele.</div>
-                  <input style={AA_INPUT} placeholder="buscar por nome, ID ou e-mail…" value={q} onChange={(e) => setQ(e.target.value)} style={{ width: '100%', marginBottom: 8 }}/>
-                  {searchHits.length > 0 && (
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: 4, marginBottom: 10 }}>
-                      {searchHits.map((a) => (
-                        <button key={a.id} className="btn btn-ghost" style={{ justifyContent: 'flex-start', fontSize: 12 }} onClick={() => setPick((p) => p.some((x) => x.id === a.id) ? p : [...p, a])}>
-                          + {accountLabel(a)}{a.partnerName ? <span style={{ color: 'var(--accent)', marginLeft: 6, fontSize: 10 }}>({a.partnerName})</span> : null}{a.internal ? <span style={{ color: 'var(--fg5)', marginLeft: 6, fontSize: 10 }}>interno</span> : null}
-                        </button>
-                      ))}
-                    </div>
-                  )}
-                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 10 }}>
-                    {pick.map((a) => (
-                      <span key={a.id} className="badge neutral" style={{ display: 'inline-flex', gap: 6, alignItems: 'center' }}>
-                        {accountLabel(a)} <button className="btn btn-ghost" style={{ padding: '0 4px' }} onClick={() => setPick((p) => p.filter((x) => x.id !== a.id))}>×</button>
-                      </span>
-                    ))}
-                    {pick.length === 0 && <span style={{ fontSize: 11, color: 'var(--fg5)' }}>nenhuma conta selecionada</span>}
-                  </div>
-                  <button className="btn" disabled={busy || pick.length < 2} onClick={() => act(async () => { await window.NSApi.adminAffiliateIdentity('link', { affiliateIds: pick.map((a) => a.id) }); setPick([]); setQ(''); }, '✓ contas unificadas')}>
-                    Vincular {pick.length >= 2 ? `${pick.length} contas` : ''}
-                  </button>
-                </div>
-              )}
-
-              {tab === 'parceiros' && (
-                <div className="panel" style={{ padding: 0 }}>
-                  <div className="panel-head" style={{ padding: '12px 16px 6px' }}>
-                    <div className="panel-title"><span className="panel-eyebrow">PARCEIROS</span><span className="panel-sub">nome, contato e contas de cada um · clique no lápis pra editar</span></div>
-                  </div>
-                  {d.partners.length === 0 && <div style={{ padding: 16 }}><AaEmpty>Nenhum parceiro ainda. Unifique contas nas sugestões ou manualmente.</AaEmpty></div>}
-                  <div className="tbl-wrap" style={{ maxHeight: 520 }}>
-                    <table className="tbl">
-                      <thead><tr><th>Parceiro</th><th>Contato</th><th>Contas</th><th></th></tr></thead>
-                      <tbody>
-                        {d.partners.map((p) => (
-                          <tr key={p.id}>
-                            <td style={{ fontWeight: 600 }}>
-                              {editPartner?.id === p.id
-                                ? <input style={AA_INPUT} value={editPartner.displayName} onChange={(e) => setEditPartner({ ...editPartner, displayName: e.target.value })}/>
-                                : p.displayName}
-                            </td>
-                            <td style={{ fontSize: 11, fontFamily: 'var(--f-mono)', color: 'var(--fg3)' }}>
-                              {editPartner?.id === p.id ? (
-                                <div style={{ display: 'grid', gap: 4 }}>
-                                  <input style={AA_INPUT} placeholder="e-mail" value={editPartner.email} onChange={(e) => setEditPartner({ ...editPartner, email: e.target.value })}/>
-                                  <input style={AA_INPUT} placeholder="telefone" value={editPartner.phone} onChange={(e) => setEditPartner({ ...editPartner, phone: e.target.value })}/>
-                                  <input style={AA_INPUT} placeholder="notas" value={editPartner.notes} onChange={(e) => setEditPartner({ ...editPartner, notes: e.target.value })}/>
-                                </div>
-                              ) : (
-                                <>{p.email || <span style={{ color: 'var(--fg5)' }}>sem e-mail</span>}{p.phone ? ` · ${p.phone}` : ''}{p.notes ? <div style={{ color: 'var(--fg5)' }}>{p.notes}</div> : null}</>
-                              )}
-                            </td>
-                            <td style={{ fontSize: 11 }}>
-                              {p.accounts.map((a) => (
-                                <div key={a.id} style={{ display: 'flex', gap: 6, alignItems: 'center', whiteSpace: 'nowrap' }}>
-                                  <AaPlat slug={a.platformSlug}/> {a.nickname || a.externalId}
-                                  <button className="btn btn-ghost" style={{ padding: '0 4px' }} title="Desvincular" disabled={busy} onClick={() => act(() => window.NSApi.adminAffiliateIdentity('unlink', { affiliateId: a.id }), '✓ desvinculada')}>×</button>
-                                </div>
-                              ))}
-                            </td>
-                            <td style={{ whiteSpace: 'nowrap' }}>
-                              {editPartner?.id === p.id ? (
-                                <>
-                                  <button className="btn" disabled={busy} onClick={() => act(async () => { await window.NSApi.adminAffiliateIdentity('update', { partnerId: p.id, displayName: editPartner.displayName, email: editPartner.email || null, phone: editPartner.phone || null, notes: editPartner.notes || null }); setEditPartner(null); }, '✓ salvo')}>Salvar</button>
-                                  <button className="btn btn-ghost" onClick={() => setEditPartner(null)}>Cancelar</button>
-                                </>
-                              ) : (
-                                <button className="btn btn-ghost" onClick={() => setEditPartner({ id: p.id, displayName: p.displayName, email: p.email || '', phone: p.phone || '', notes: p.notes || '' })}><Icon name="edit" size={12}/></button>
-                              )}
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                </div>
-              )}
             </>
           )}
         </div>

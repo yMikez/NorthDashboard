@@ -151,7 +151,7 @@ async function fetchRefundCohorts(filters, horizon) {
   return fetchJSON('/api/metrics/refund-cohorts', params);
 }
 
-async function fetchAffiliates(filters) {
+async function fetchAffiliates(filters, { unify = false } = {}) {
   const params = {
     start_date: toISODate(filters.dateRange.start),
     end_date: toISODate(filters.dateRange.end),
@@ -160,6 +160,8 @@ async function fetchAffiliates(filters) {
     products: setToCSV(filters.funnels),
     families: setToCSV(filters.families),
     stages: setToCSV(filters.stages),
+    // unify=1: contas do mesmo parceiro viram uma linha (com `accounts`).
+    unify: unify ? '1' : null,
   };
   return fetchJSON('/api/metrics/affiliates', params);
 }

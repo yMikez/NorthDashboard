@@ -58,6 +58,7 @@ describe('mergeMetrics — parceiro = contas somadas', () => {
     expect(m.cpaPerFe).toBe(250);
     expect(m.netAfterCpaTotal).toBe(300);
     expect(m.netAfterCpa).toBe(30);
+    expect(m.netAov - m.cpaPerFe).toBe(m.netAfterCpa); // mesma base
   });
 
   it('soma totais, pondera CPA/NET por FEs e re-deriva taxas', () => {

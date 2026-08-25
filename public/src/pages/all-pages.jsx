@@ -482,7 +482,8 @@ function AffiliateRefundModal({ aff, onCancel, onSaved }) {
   );
 }
 
-function LeaderboardPage({ filters, onOpenAffiliate }) {
+function LeaderboardPage({ filters, onOpenAffiliate, user }) {
+  const isAdmin = user?.role === 'ADMIN';
   const [sortBy, setSortBy] = useState('revenue');
   const [minOrders, setMinOrders] = useState(1);
   const [query, setQuery] = useState('');
@@ -490,11 +491,17 @@ function LeaderboardPage({ filters, onOpenAffiliate }) {
   // Modal de override do refund&cb% por afiliado (substitui o prompt nativo).
   const [refundModal, setRefundModal] = useState(null);
   const [refreshTick, setRefreshTick] = useState(0);
+  // Contas do mesmo parceiro (Identidades) viram uma linha só.
+  const [unify, setUnify] = useState(true);
+  // Guarda só a CHAVE; a linha é re-derivada da lista a cada refetch (trocar
+  // filtro ou salvar contato com o drawer aberto não deixa dado velho).
+  const [partnerKey, setPartnerKey] = useState(null);
+  const [identityOpen, setIdentityOpen] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
     setLbState((s) => ({ ...s, status: 'loading' }));
-    window.NSApi.fetchAffiliates(filters)
+    window.NSApi.fetchAffiliates(filters, { unify })
       .then((data) => { if (!cancelled) setLbState({ status: 'ready', data, error: null }); })
       .catch((err) => {
         if (cancelled) return;
@@ -502,13 +509,15 @@ function LeaderboardPage({ filters, onOpenAffiliate }) {
         setLbState({ status: 'error', data: null, error: err.message });
       });
     return () => { cancelled = true; };
-  }, [refreshTick, filters.dateRange.start.getTime(), filters.dateRange.end.getTime(),
+  }, [refreshTick, unify, filters.dateRange.start.getTime(), filters.dateRange.end.getTime(),
       Array.from(filters.platforms).join(','), Array.from(filters.countries).join(','),
       Array.from(filters.funnels).join(','),
       Array.from(filters.families).join(',')]);
 
   const cur = filters.currency || 'USD';
   const all = state.data?.affiliates || [];
+  const partnerRow = partnerKey ? (all.find((r) => r.key === partnerKey) || null) : null;
+  const setPartnerRow = (r) => setPartnerKey(r ? r.key : null);
   const summary = state.data?.summary || { activeNow: 0, activePrev: 0, concentration: 0, newAff: 0, churnedAff: 0 };
 
   // AOV padrão (fórmula do usuário): RECEITA da linha ÷ FEs APROVADAS —
@@ -534,7 +543,9 @@ function LeaderboardPage({ filters, onOpenAffiliate }) {
   // o pior resultado possível.
   const q = query.trim().toLowerCase();
   const rows = all.filter((a) => (q
-    ? ((a.nickname || '').toLowerCase().includes(q) || a.externalId.toLowerCase().includes(q))
+    ? ((a.nickname || '').toLowerCase().includes(q) || a.externalId.toLowerCase().includes(q)
+       || (a.accounts || []).some((c) => (c.nickname || '').toLowerCase().includes(q) || c.externalId.toLowerCase().includes(q))
+       || (a.contact?.email || '').toLowerCase().includes(q))
     : a.realOrders >= minOrders
   )).sort((a, b) => {
     switch (sortBy) {
@@ -570,13 +581,21 @@ function LeaderboardPage({ filters, onOpenAffiliate }) {
                 title="Limpar busca" onClick={() => setQuery('')}>×</button>
             )}
           </div>
+          <label title="Contas da mesma pessoa em plataformas diferentes viram uma linha só (configure em Identidades)" style={{ display: 'flex', gap: 6, alignItems: 'center', fontSize: 11, color: 'var(--fg4)', cursor: 'pointer', whiteSpace: 'nowrap' }}>
+            <input type="checkbox" checked={unify} onChange={(e) => setUnify(e.target.checked)}/> contas unificadas
+          </label>
+          {isAdmin && (
+            <button className="btn btn-ghost" title="Unificar contas, contatos e internos" onClick={() => setIdentityOpen(true)}>
+              <Icon name="link" size={12}/> Identidades
+            </button>
+          )}
           <button className="btn btn-ghost" onClick={() => downloadCsv(
             `ranking-afiliados_${isoDateOnly(filters.dateRange.start)}_${isoDateOnly(filters.dateRange.end)}.csv`,
             ['#', 'Afiliado', 'Afiliado ID', 'Plataforma', 'Pedidos aprovados', 'Receita USD', 'FEs aprovadas',
              'AOV global USD', 'Aprovação %', 'Refund&CB modelo %', 'CPA pago USD', 'Custos op %',
              'NET AOV USD', 'CPA por venda USD', 'Net after CPA USD', 'Status CPA'],
             rows.map((r, i) => [
-              i + 1, r.nickname || r.externalId, r.externalId, r.platformSlug, r.orders, r.revenue, r.feApprovedCount,
+              i + 1, r.nickname || r.externalId, r.accounts && r.accounts.length > 1 ? r.accounts.map((c) => c.externalId).join(' | ') : r.externalId, (r.platforms || [r.platformSlug]).join('+'), r.orders, r.revenue, r.feApprovedCount,
               aovOf(r), r.approvalRate * 100, r.refundCbPctUsed, r.cpa, r.opexPctUsed,
               r.netAovUsd, r.cpaPerFe, r.netAfterCpaUsd, r.cpaStatus,
             ]),
@@ -585,6 +604,14 @@ function LeaderboardPage({ filters, onOpenAffiliate }) {
       </div>
 
       <ProfitConfigPanel/>
+
+      {partnerRow && (
+        <AffiliatePartnerDrawer row={partnerRow} filters={filters} isAdmin={isAdmin}
+          onClose={() => setPartnerRow(null)}
+          onOpenAccount={(acc) => { setPartnerRow(null); onOpenAffiliate({ externalId: acc.externalId, platformSlug: acc.platformSlug }); }}
+          onChanged={() => setRefreshTick((n) => n + 1)}/>
+      )}
+      {identityOpen && <AffiliateIdentityDrawer onClose={() => setIdentityOpen(false)} onChanged={() => setRefreshTick((n) => n + 1)}/>}
 
       {refundModal && (
         <AffiliateRefundModal
@@ -700,18 +727,20 @@ function LeaderboardPage({ filters, onOpenAffiliate }) {
                 const { cls: platClass, short: platShort } = platBadge(r.platformSlug);
                 const displayName = r.nickname || r.externalId;
                 return (
-                  <tr key={`${r.platformSlug}:${r.externalId}`} onClick={() => onOpenAffiliate(r.externalId)}>
+                  <tr key={r.key || `${r.platformSlug}:${r.externalId}`} onClick={() => (r.accounts && r.accounts.length > 1 ? setPartnerRow(r) : onOpenAffiliate({ externalId: r.externalId, platformSlug: r.platformSlug }))}>
                     <td className="rank">{String(i+1).padStart(2, '0')}</td>
                     <td>
                       <span className="cell-aff">
                         <span className="av" style={{ background: avatarColor(r.externalId) }}>{initials(displayName)}</span>
                         <span className="meta">
-                          <span className="nm">{displayName}</span>
-                          <span className="id">{r.externalId}</span>
+                          <span className="nm">{displayName}{r.accounts && r.accounts.length > 1 && <span title="contas unificadas" style={{ marginLeft: 5, color: 'var(--accent)', verticalAlign: -1 }}><Icon name="link" size={10}/></span>}</span>
+                          <span className="id">{r.accounts && r.accounts.length > 1 ? `${r.accounts.length} contas · ${r.accounts.map((c) => c.externalId).join(' · ')}` : r.externalId}{isAdmin && r.contact?.email ? ` · ${r.contact.email}` : ''}</span>
                         </span>
                       </span>
                     </td>
-                    <td><span className={`plat ${platClass}`}>{platShort}</span></td>
+                    <td style={{ whiteSpace: 'nowrap' }}>
+                      {(r.accounts && r.accounts.length > 1 ? r.accounts : [r]).map((c) => { const pb = platBadge(c.platformSlug); return <span key={`${c.platformSlug}:${c.externalId}`} className={`plat ${pb.cls}`} style={{ marginRight: 3 }} title={c.nickname || c.externalId}>{pb.short}</span>; })}
+                    </td>
                     <td className="num cell-mono">{fmtInt(r.orders)}</td>
                     <td className="num cell-mono" style={{ color: 'var(--fg1)' }}>{fmtCurrency(r.revenue, cur, 0)}</td>
                     <td className="num cell-mono" style={{ color: 'var(--money)' }}>
@@ -729,7 +758,7 @@ function LeaderboardPage({ filters, onOpenAffiliate }) {
                       </div>
                     </td>
                     <td className="num cell-mono"
-                      title={`Taxa do MODELO CPA usada no NET AOV: ${r.refundCbPctUsed}% (${r.refundCbPctOverride != null ? 'override deste afiliado' : 'default da plataforma'}).\nObservada no período: ${(r.refundRate * 100).toFixed(1)}% = ${fmtInt(r.refunds)} estornos ÷ ${fmtInt(r.realOrders)} pedidos reais.${r.realOrders !== r.allOrders ? `\n(${fmtInt(r.allOrders - r.realOrders)} linhas de estorno da Digistore fora do denominador.)` : ''}\nCoorte por data da VENDA: período recente ainda vai receber reembolsos.`}>
+                      title={`Taxa do MODELO CPA usada no NET AOV: ${r.refundCbPctUsed}% (${r.accounts && r.accounts.length > 1 ? 'média ponderada das contas — override é por conta' : r.refundCbPctOverride != null ? 'override deste afiliado' : 'default da plataforma'}).\nObservada no período: ${(r.refundRate * 100).toFixed(1)}% = ${fmtInt(r.refunds)} estornos ÷ ${fmtInt(r.realOrders)} pedidos reais.${r.realOrders !== r.allOrders ? `\n(${fmtInt(r.allOrders - r.realOrders)} linhas de estorno da Digistore fora do denominador.)` : ''}\nCoorte por data da VENDA: período recente ainda vai receber reembolsos.`}>
                       {r.refundCbPctUsed}%
                       {r.refundCbPctOverride != null && <span style={{ fontSize: 8, color: 'var(--glow-cyan)', marginLeft: 3 }}>ovr</span>}
                       <span className={rfClass} style={{ fontSize: 9, marginLeft: 5, opacity: 0.75 }}>obs {(r.refundRate * 100).toFixed(1)}%</span>
@@ -745,11 +774,11 @@ function LeaderboardPage({ filters, onOpenAffiliate }) {
                     <td>
                       <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
                         <CpaStatusChip status={r.cpaStatus}/>
-                        <button
+                        {!(r.accounts && r.accounts.length > 1) && (<button
                           className="btn btn-ghost" style={{ padding: '1px 6px', fontSize: 9 }}
                           title={`Refund&CB usado: ${r.refundCbPctUsed}% ${r.refundCbPctOverride != null ? '(override deste afiliado)' : '(default da plataforma)'} — clique pra editar só deste afiliado`}
                           onClick={(e) => { e.stopPropagation(); setRefundModal(r); }}
-                        >%</button>
+                        >%</button>)}
                       </span>
                     </td>
                   </tr>
@@ -765,12 +794,16 @@ function LeaderboardPage({ filters, onOpenAffiliate }) {
 
 // ---------- AFFILIATE DRAWER (drill-down) ----------
 function AffiliateDrawer({ affiliateId, filters, onClose }) {
+  // Aceita string (externalId) ou { externalId, platformSlug } — o hint de
+  // plataforma evita ambiguidade quando o mesmo ID existe em mais de uma.
+  const affKey = typeof affiliateId === 'string' ? affiliateId : ((affiliateId && affiliateId.externalId) || '');
+  const platformHint = affiliateId && typeof affiliateId === 'object' ? affiliateId.platformSlug : undefined;
   const [state, setDState] = useState({ status: 'loading', data: null, error: null });
 
   useEffect(() => {
     let cancelled = false;
     setDState((s) => ({ ...s, status: 'loading' }));
-    window.NSApi.fetchAffiliateDetail(affiliateId, filters)
+    window.NSApi.fetchAffiliateDetail(affKey, filters, platformHint)
       .then((data) => { if (!cancelled) setDState({ status: 'ready', data, error: null }); })
       .catch((err) => {
         if (cancelled) return;
@@ -778,7 +811,7 @@ function AffiliateDrawer({ affiliateId, filters, onClose }) {
         setDState({ status: 'error', data: null, error: err.message || String(err) });
       });
     return () => { cancelled = true; };
-  }, [affiliateId, filters.dateRange.start.getTime(), filters.dateRange.end.getTime(),
+  }, [affKey, platformHint, filters.dateRange.start.getTime(), filters.dateRange.end.getTime(),
       Array.from(filters.platforms).join(','), Array.from(filters.countries).join(','),
       Array.from(filters.funnels).join(','),
       Array.from(filters.families).join(',')]);
@@ -794,9 +827,9 @@ function AffiliateDrawer({ affiliateId, filters, onClose }) {
         <div className="drawer">
           <div className="drawer-head">
             <div className="drawer-aff">
-              <div className="av-lg" style={{ background: avatarColor(affiliateId) }}>{initials(affiliateId)}</div>
+              <div className="av-lg" style={{ background: avatarColor(affKey) }}>{initials(affKey)}</div>
               <div>
-                <h3>{affiliateId}</h3>
+                <h3>{affKey}</h3>
                 <div className="sub">
                   {state.status === 'loading' ? 'Carregando dados do afiliado…' : `Erro: ${state.error}`}
                 </div>

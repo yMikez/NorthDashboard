@@ -186,6 +186,11 @@ export function mergeMetrics(parts: WindowMetrics[], thresholds: ProfitThreshold
   const nAfterTotal = withCpa.length ? round2(withCpa.reduce((n, m) => n + (m.netAfterCpaTotal ?? 0), 0)) : null;
   const nAfter = nAfterTotal != null && feWithCpa > 0 ? round2(nAfterTotal / feWithCpa) : null;
   const wavg = (f: (m: WindowMetrics) => number) => (fe > 0 ? round2(parts.reduce((n, m) => n + f(m) * m.feApproved, 0) / fe) : 0);
+  // NET AOV na MESMA base do CPA (contas com CPA, quando há): assim
+  // NET AOV − CPA/venda = Net após CPA também no parceiro.
+  const cpaBase = feWithCpa > 0 ? withCpa : parts;
+  const cpaBaseFe = feWithCpa > 0 ? feWithCpa : fe;
+  const wavgCpaBase = (f: (m: WindowMetrics) => number) => (cpaBaseFe > 0 ? round2(cpaBase.reduce((n, m) => n + f(m) * m.feApproved, 0) / cpaBaseFe) : 0);
   return {
     sales: sum((m) => m.sales),
     feApproved: fe,
@@ -202,8 +207,8 @@ export function mergeMetrics(parts: WindowMetrics[], thresholds: ProfitThreshold
     refunds: sum((m) => m.refunds),
     chargebacks: sum((m) => m.chargebacks),
     cpaPaid: round2(sum((m) => m.cpaPaid)),
-    cpaPerFe: feWithCpa > 0 ? round2(withCpa.reduce((n, m) => n + m.cpaPerFe * m.feApproved, 0) / feWithCpa) : 0,
-    netAov: wavg((m) => m.netAov),
+    cpaPerFe: feWithCpa > 0 ? wavgCpaBase((m) => m.cpaPerFe) : 0,
+    netAov: wavgCpaBase((m) => m.netAov),
     netAfterCpa: nAfter,
     netAfterCpaTotal: nAfterTotal,
     cpaStatus: nAfter != null ? cpaStatus(nAfter, thresholds) : null,
