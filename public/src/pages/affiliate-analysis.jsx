@@ -245,40 +245,14 @@ function AffiliateAnalysisPage({ filters, user }) {
             <div className="seg">
               {[2, 3, 4, 6, 8].map((k) => <button key={k} className={count === k ? 'is-active' : ''} onClick={() => setCount(k)}>{k}</button>)}
             </div>
-            <span style={{ fontSize: 11, color: 'var(--fg5)' }}>= {count} × {win} dias, a última terminando {effectiveAnchor || anchor || (today ? 'hoje' : 'ontem')}{mode === 'ranking' ? ' · tops por janela abaixo do ranking' : ''}</span>
+            <span style={{ fontSize: 11, color: 'var(--fg5)' }}>= {count} × {win} dias, a última terminando {effectiveAnchor || anchor || (today ? 'hoje' : 'ontem')}</span>
           </>
         )}
       </div>
 
-      {mode !== 'ranking' && (
-        <>
-          {seqState.status === 'error' && <div className="panel" style={{ color: 'var(--danger)', fontSize: 12 }}>Erro ao carregar: {seqState.error}</div>}
-          {!seq && seqState.status === 'loading' && <><SkelMiniKpis n={4}/><SkelTablePanel rows={8} cols={10} title="Janelas"/></>}
-          {seq && (
-            <div style={{ opacity: seqState.status === 'loading' ? 0.45 : 1, transition: 'opacity .2s' }}>
-              {mode === 'janelas' && <AaSequenceView key={`${seq.count}:${seq.window}:${seq.anchor}`} seq={seq} onOpen={openEntity}/>}
-              {mode === 'evolucao' && <AaEvolutionView seq={seq} onOpen={openEntity}/>}
-              {mode === 'saude' && <AaHealthView seq={seq} onOpen={openEntity}/>}
-            </div>
-          )}
-        </>
-      )}
-
-      {mode === 'ranking' && state.status === 'error' && (
-        <div className="panel" style={{ color: 'var(--danger)', fontSize: 12 }}>Erro ao carregar: {state.error}</div>
-      )}
-
-      {mode === 'ranking' && loading && !data && (
-        <>
-          <SkelMiniKpis n={6}/>
-          <SkelChartPanel height={260} title="Comparativo"/>
-          <SkelTablePanel rows={10} cols={12} title="Ranking"/>
-        </>
-      )}
-
-      {mode === 'ranking' && data && (
+      {/* KPIs + comparativo por janela: fixos em TODOS os modos (o modo só troca o que vem abaixo) */}
+      {data && (
         <div style={{ opacity: loading ? 0.45 : 1, transition: 'opacity .2s' }}>
-          {/* KPIs da janela */}
           {win0 && (
             <div className="grid-2" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: 10, marginBottom: 14 }}>
               <AaKpi label={`Receita · ${win}d`} value={fmtCurrency(win0.cur.revenue, 'USD', 0)} money delta={win0.prev.revenue ? (win0.cur.revenue - win0.prev.revenue) / win0.prev.revenue : null} sub={`antes ${fmtCurrency(win0.prev.revenue, 'USD', 0)}`}/>
@@ -332,6 +306,37 @@ function AffiliateAnalysisPage({ filters, user }) {
             </div>
           </div>
 
+        </div>
+      )}
+
+      {mode !== 'ranking' && (
+        <>
+          {seqState.status === 'error' && <div className="panel" style={{ color: 'var(--danger)', fontSize: 12 }}>Erro ao carregar: {seqState.error}</div>}
+          {!seq && seqState.status === 'loading' && <><SkelMiniKpis n={4}/><SkelTablePanel rows={8} cols={10} title="Janelas"/></>}
+          {seq && (
+            <div style={{ opacity: seqState.status === 'loading' ? 0.45 : 1, transition: 'opacity .2s' }}>
+              {mode === 'janelas' && <AaSequenceView key={`${seq.count}:${seq.window}:${seq.anchor}`} seq={seq} onOpen={openEntity}/>}
+              {mode === 'evolucao' && <AaEvolutionView seq={seq} onOpen={openEntity}/>}
+              {mode === 'saude' && <AaHealthView seq={seq} onOpen={openEntity}/>}
+            </div>
+          )}
+        </>
+      )}
+
+      {mode === 'ranking' && state.status === 'error' && (
+        <div className="panel" style={{ color: 'var(--danger)', fontSize: 12 }}>Erro ao carregar: {state.error}</div>
+      )}
+
+      {loading && !data && (
+        <>
+          <SkelMiniKpis n={6}/>
+          <SkelChartPanel height={260} title="Comparativo"/>
+          <SkelTablePanel rows={10} cols={12} title="Ranking"/>
+        </>
+      )}
+
+      {mode === 'ranking' && data && (
+        <div style={{ opacity: loading ? 0.45 : 1, transition: 'opacity .2s' }}>
           {/* Gráficos */}
           <div className="grid-2" style={{ marginBottom: 14 }}>
             <div className="panel">
