@@ -1,95 +1,215 @@
-// Reconciliação de sessão JVZoo.
+// Reconciliação de sessão JVZoo — a regra DEFINITIVA do papel (FE/UPSELL/
+// DOWNSELL + etapa) de cada pedido, sempre automática, nesta ordem:
 //
-// O webhook não diz o papel do pedido (prekey é sempre auto-referente,
-// validado 2026-08-03), então quem decide é, nesta ordem:
+//   1. MARCADOR NO NOME (classifyProduct.roleMarked): "/ FE", "/ OTO1",
+//      "/ DS 1-A", "(Upgrade)", "(Last Chance)", "UP01", "Down 02"... É o
+//      que a JVZoo manda no product_name — convenção real do IPN validada
+//      2026-08-26 no export: "<Produto> N Bottles / FE|OTO1..3|DS1..3[ - A]".
+//   2. MEMÓRIA DO CATÁLOGO: Product.productType só é gravado quando o nome
+//      veio marcado; se depois o vendor tirar o marcador ("HoneyPril 12
+//      Bottles"), o SKU continua com o papel que já provou ter.
+//   3. POSIÇÃO NA SESSÃO (e-mail + dia Eastern): a compra mais antiga é a
+//      FE; as demais são backend na ordem em que aconteceram (2ª = etapa 2…).
+//      Upsell × downsell sem marcador: MENOS potes que o pedido anterior da
+//      MESMA família = DOWNSELL; senão UPSELL.
+//   4. MEIA-NOITE EASTERN: sessão sem FE marcada cujo cliente fechou uma FE
+//      na sessão do dia anterior até 6h antes → funde com ela (o upsell
+//      que passou de 00:00 ET deixa de ser "sessão órfã").
 //
-//   1. O NOME do produto, quando o classificador reconhece o SKU. Os nomes
-//      da JVZoo anotam o papel: "(Upgrade)" → UPSELL, "(Last Chance)" →
-//      DOWNSELL, sem marcador → FRONTEND. Vale pra 24 dos 28 SKUs.
-//   2. A POSIÇÃO dentro da sessão, só pros SKUs que o classificador não sabe
-//      ler: a compra mais antiga é FRONTEND, as demais UPSELL.
+// planJvzooRoles() é pura (testada); reconcileJvzooSession() carrega,
+// funde e grava. Idempotente e à prova de IPN fora de ordem: roda depois de
+// TODO upsert (ingest, import CSV, backfill) — FE atrasada rebaixa o upsell,
+// RFND/CGBK que reprocessam o pedido não derrubam o papel.
 //
-// Até 2026-08-12 só existia a regra 2, e ela é cega pra DOWNSELL — daí 0
-// downsells em 3.156 pedidos, com ~60 "(Last Chance)" contados como upsell.
-// Pior: quando a sessão RACHAVA (ver jvzooSessionAnchor), o upsell virava a
-// "compra mais antiga" da própria sessão e saía FRONTEND — ~55 casos.
-// Com o nome mandando, um upsell órfão continua UPSELL mesmo sozinho.
-//
-// Esta função ainda é necessária depois do upsertOrder porque:
-//   - amarra parentExternalId de todos os membros na FE da sessão;
-//   - preenche funnelStep pelos SKUs que o classificador não tipa;
-//   - conserta o clobber do update (RFND/CGBK reprocessam o pedido).
-//
-// Idempotente e à prova de IPN fora de ordem. Sessões que não começam com
-// "jvz:" (rebill ancorado em si, pedidos sem email/data) não têm o que
-// reconciliar — single-member por definição.
+// Histórico: até 2026-08-12 só existia a posição (cega pra DOWNSELL); até
+// 2026-08-26 o nome mandava mesmo SEM marcador (default FRONTEND) — 171+
+// pedidos "/ OTO1" e todo SKU sem marcador entravam como FE.
 
 import type { ProductType } from '@prisma/client';
 import { db } from '../db';
 import { classifyProduct } from './productClassification';
+import { rebalanceSessionFulfillment } from './sessionFulfillment';
+
+export interface JvzooSessionRow {
+  id: string;
+  externalId: string;
+  orderedAt: Date;
+  /** Papel explícito no nome (roleMarked) — null quando o nome não anota. */
+  marked: { type: ProductType; step: number | null } | null;
+  /** Product.productType — memória do catálogo (FRONTEND = sem opinião). */
+  memoryType: ProductType | null;
+  family: string | null;
+  bottles: number | null;
+  current: { productType: ProductType; funnelStep: number | null; parentExternalId: string | null };
+}
+
+export interface JvzooRolePlan {
+  id: string;
+  productType: ProductType;
+  funnelStep: number;
+  parentExternalId: string;
+}
+
+const isBackendType = (t: ProductType | null | undefined): boolean =>
+  t === 'UPSELL' || t === 'DOWNSELL';
+
+/** Papel/etapa/parent de cada pedido da sessão (pura). */
+export function planJvzooRoles(rows: JvzooSessionRow[]): JvzooRolePlan[] {
+  if (rows.length === 0) return [];
+  const sorted = [...rows].sort(
+    (a, b) => a.orderedAt.getTime() - b.orderedAt.getTime() || a.id.localeCompare(b.id),
+  );
+  const knownBackend = (r: JvzooSessionRow): boolean =>
+    r.marked ? isBackendType(r.marked.type) : isBackendType(r.memoryType);
+
+  // Âncora (FE da sessão): a primeira que o NOME diz ser FE; senão a mais
+  // antiga que não seja backend conhecido; senão a mais antiga (sessão só
+  // de backend — vira âncora sem virar FRONTEND).
+  const fe =
+    sorted.find((r) => r.marked?.type === 'FRONTEND')
+    ?? sorted.find((r) => !knownBackend(r))
+    ?? sorted[0];
+
+  const plans: JvzooRolePlan[] = [];
+  let position = 1; // 1 = FE; cada pedido não-âncora avança
+  let prev: JvzooSessionRow | null = null;
+  for (const r of sorted) {
+    let type: ProductType;
+    let step: number;
+    if (r.id === fe.id) {
+      // Âncora: FRONTEND, salvo quando o nome diz explicitamente outra coisa
+      // (sessão órfã de um "/ OTO1" — continua upsell, só ancora o grupo).
+      type = r.marked && r.marked.type !== 'FRONTEND' ? r.marked.type : 'FRONTEND';
+      step = r.marked?.step ?? 1;
+    } else {
+      position++;
+      if (r.marked) {
+        type = r.marked.type;
+        step = r.marked.step ?? position;
+      } else if (isBackendType(r.memoryType)) {
+        type = r.memoryType as ProductType;
+        step = position;
+      } else {
+        const fewer =
+          prev !== null
+          && r.bottles != null && prev.bottles != null
+          && r.family != null && r.family === prev.family
+          && r.bottles < prev.bottles;
+        type = fewer ? 'DOWNSELL' : 'UPSELL';
+        step = position;
+      }
+    }
+    plans.push({ id: r.id, productType: type, funnelStep: step, parentExternalId: fe.externalId });
+    prev = r;
+  }
+  return plans;
+}
+
+const SESSION_RE = /^jvz:(.+):(\d{4}-\d{2}-\d{2})$/;
+const DAY_MS = 86_400_000;
+const MERGE_WINDOW_MS = 6 * 3_600_000;
+
+function shiftDay(day: string, delta: number): string {
+  const [y, m, d] = day.split('-').map((x) => parseInt(x, 10));
+  return new Date(Date.UTC(y, m - 1, d) + delta * DAY_MS).toISOString().slice(0, 10);
+}
+
+/** `current` é a sessão do DIA ANTERIOR do mesmo cliente que `anchor`? (resultado de uma fusão de meia-noite) */
+export function isPrevDaySession(anchor: string, current: string | null): boolean {
+  if (!current) return false;
+  const a = SESSION_RE.exec(anchor);
+  const c = SESSION_RE.exec(current);
+  if (!a || !c) return false;
+  return a[1] === c[1] && shiftDay(a[2], -1) === c[2];
+}
+
+async function loadRows(platformId: string, funnelSessionId: string): Promise<JvzooSessionRow[]> {
+  const rows = await db.order.findMany({
+    where: { platformId, funnelSessionId },
+    select: {
+      id: true, externalId: true, orderedAt: true, productType: true, funnelStep: true, parentExternalId: true,
+      product: { select: { externalId: true, name: true, productType: true, family: true, bottles: true } },
+    },
+  });
+  return rows.map((r) => {
+    const c = classifyProduct(r.product.externalId, r.product.name, 'jvzoo');
+    return {
+      id: r.id,
+      externalId: r.externalId,
+      orderedAt: r.orderedAt,
+      marked: c.roleMarked ? { type: c.type, step: c.funnelStep } : null,
+      memoryType: r.product.productType,
+      family: c.family ?? r.product.family,
+      bottles: c.bottles ?? r.product.bottles,
+      current: { productType: r.productType, funnelStep: r.funnelStep, parentExternalId: r.parentExternalId },
+    };
+  });
+}
+
+/**
+ * Meia-noite Eastern: se esta sessão não tem FE marcada e o mesmo cliente
+ * fechou uma FE na sessão do dia anterior até 6h antes do 1º pedido daqui,
+ * move todos os pedidos pra lá. Devolve a sessão de destino (ou null).
+ */
+async function mergeIntoPreviousDay(platformId: string, sessionId: string, rows: JvzooSessionRow[]): Promise<string | null> {
+  const m = SESSION_RE.exec(sessionId);
+  if (!m || rows.length === 0) return null;
+  if (rows.some((r) => r.marked?.type === 'FRONTEND')) return null;
+  const prevId = `jvz:${m[1]}:${shiftDay(m[2], -1)}`;
+  const first = rows.reduce((a, b) => (b.orderedAt < a.orderedAt ? b : a));
+  const prevFe = await db.order.findFirst({
+    where: {
+      platformId,
+      funnelSessionId: prevId,
+      productType: 'FRONTEND',
+      orderedAt: { gte: new Date(first.orderedAt.getTime() - MERGE_WINDOW_MS), lte: first.orderedAt },
+    },
+    select: { id: true },
+  });
+  if (!prevFe) return null;
+  await db.order.updateMany({ where: { platformId, funnelSessionId: sessionId }, data: { funnelSessionId: prevId } });
+  return prevId;
+}
 
 export async function reconcileJvzooSession(funnelSessionId: string | null): Promise<number> {
   if (!funnelSessionId || !funnelSessionId.startsWith('jvz:')) return 0;
 
-  const platform = await db.platform.findUnique({
-    where: { slug: 'jvzoo' },
-    select: { id: true },
-  });
+  const platform = await db.platform.findUnique({ where: { slug: 'jvzoo' }, select: { id: true } });
   if (!platform) return 0;
 
-  const rows = await db.order.findMany({
-    where: { platformId: platform.id, funnelSessionId },
-    orderBy: [{ orderedAt: 'asc' }, { id: 'asc' }],
-    select: {
-      id: true,
-      externalId: true,
-      productType: true,
-      funnelStep: true,
-      parentExternalId: true,
-      product: { select: { externalId: true, name: true } },
-    },
-  });
+  let sessionId = funnelSessionId;
+  let rows = await loadRows(platform.id, sessionId);
   if (rows.length === 0) return 0;
 
-  // Papel/etapa pelo nome. family === null = classificador sem opinião
-  // confiável (SKU fora de qualquer padrão) → cai na posição.
-  const typed = rows.map((r) => {
-    const c = classifyProduct(r.product.externalId, r.product.name, 'jvzoo');
-    return {
-      row: r,
-      role: c.family ? c.type : null,
-      step: c.family ? c.funnelStep : null,
-    };
-  });
+  const merged = await mergeIntoPreviousDay(platform.id, sessionId, rows);
+  if (merged) {
+    sessionId = merged;
+    rows = await loadRows(platform.id, sessionId);
+  }
 
-  // FE da sessão = a primeira (mais antiga) que o NOME diz ser frontend.
-  // Sessão só de backend (a FE caiu fora da janela, ou nunca chegou): a mais
-  // antiga vira a âncora, sem virar FRONTEND por isso.
-  const fe = typed.find((t) => t.role === 'FRONTEND') ?? typed[0];
-
+  const plans = planJvzooRoles(rows);
+  const byId = new Map(rows.map((r) => [r.id, r]));
   let updated = 0;
-  for (let i = 0; i < typed.length; i++) {
-    const t = typed[i];
-    const isAnchor = t.row.id === fe.row.id;
-    const wantType: ProductType = t.role ?? (isAnchor ? 'FRONTEND' : 'UPSELL');
-    // Etapa: a do nome quando existe; senão a posição (FE=1, 2ª compra=2…).
-    const wantStep = t.step ?? (isAnchor ? 1 : i + 1);
-
+  for (const p of plans) {
+    const r = byId.get(p.id)!;
     if (
-      t.row.productType !== wantType
-      || t.row.parentExternalId !== fe.row.externalId
-      || t.row.funnelStep !== wantStep
+      r.current.productType !== p.productType
+      || r.current.parentExternalId !== p.parentExternalId
+      || r.current.funnelStep !== p.funnelStep
     ) {
       await db.order.update({
-        where: { id: t.row.id },
-        data: {
-          productType: wantType,
-          parentExternalId: fe.row.externalId,
-          funnelStep: wantStep,
-        },
+        where: { id: p.id },
+        data: { productType: p.productType, parentExternalId: p.parentExternalId, funnelStep: p.funnelStep },
       });
       updated++;
     }
+  }
+
+  if (merged) {
+    // Pacote = sessão: a antiga esvaziou, a nova ganhou pedidos.
+    await rebalanceSessionFulfillment(platform.id, funnelSessionId, 'session');
+    await rebalanceSessionFulfillment(platform.id, merged, 'session');
+    updated++;
   }
   return updated;
 }

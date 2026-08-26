@@ -83,7 +83,7 @@ const pct1 = (f: number) => (Math.abs(f) * 100).toFixed(1).replace('.', ',') + '
 const signed = (f: number) => (f >= 0 ? '+' : '−') + pct1(f);
 const pp = (f: number) => (f >= 0 ? '+' : '−') + (Math.abs(f) * 100).toFixed(1).replace('.', ',') + ' pp';
 
-export const EMPTY_SUMMARY: FunnelSummary = { feGroups: 0, totalGroups: 0, totalRevenue: 0, aov: 0, aovFEOnly: 0, aovWithUpsell: 0, revenueLiftFromUpsells: 0 };
+export const EMPTY_SUMMARY: FunnelSummary = { feGroups: 0, totalGroups: 0, totalRevenue: 0, aov: 0, aovFEOnly: 0, aovWithUpsell: 0, revenueLiftFromUpsells: 0, revenueFeSessions: 0 };
 
 function isBackend(stage: FunnelStage): boolean {
   return !/^(fe|frontend|front)$/i.test(stage.id) && !/^front/i.test(stage.label);

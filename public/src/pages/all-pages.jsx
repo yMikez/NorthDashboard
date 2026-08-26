@@ -79,7 +79,7 @@ function FunnelPage({ filters }) {
   const byFamily = state.data?.byFamily || [];
   const emptySummary = {
     feGroups: 0, totalGroups: 0, totalRevenue: 0,
-    aov: 0, aovFEOnly: 0, aovWithUpsell: 0, revenueLiftFromUpsells: 0,
+    aov: 0, aovFEOnly: 0, aovWithUpsell: 0, revenueLiftFromUpsells: 0, revenueFeSessions: 0,
   };
   const view = selected === 'all'
     ? { stages: state.data?.stages || [], summary: state.data?.summary || emptySummary, name: null }
@@ -168,11 +168,16 @@ function FunnelPage({ filters }) {
           <div className="l">Total revenue</div>
           <div className="v">{fmtCurrency(summary.totalRevenue, cur, 0)}</div>
           <div className="s">FE + bumps + upsells + downsells</div>
+          {summary.revenueFeSessions != null && summary.totalGroups > summary.feGroups && (
+            <div className="s" style={{ color: 'var(--warning)' }} title="Backend cujo FE ficou fora do período filtrado (ex.: FE ontem, upsell hoje). Entra na receita, não no AOV.">
+              inclui {fmtCurrency(summary.totalRevenue - summary.revenueFeSessions, cur, 0)} de {fmtInt(summary.totalGroups - summary.feGroups)} sessões sem FE no período
+            </div>
+          )}
         </div>
         <div className="mini-kpi">
           <div className="l">AOV (full funnel)</div>
           <div className="v">{fmtCurrency(summary.aov, cur, 0)}</div>
-          <div className="s">receita total / FE orders</div>
+          <div className="s">receita das sessões com FE ÷ FE orders{summary.revenueFeSessions != null && summary.feGroups > 0 ? ` (${fmtCurrency(summary.revenueFeSessions, cur, 0)} ÷ ${fmtInt(summary.feGroups)})` : ''}</div>
         </div>
         <div className="mini-kpi">
           <div className="l">Lift de upsells</div>

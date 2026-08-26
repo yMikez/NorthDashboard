@@ -90,6 +90,8 @@ export interface FunnelSummary {
   aovFEOnly: number;
   aovWithUpsell: number;
   revenueLiftFromUpsells: number;
+  /** Receita só das sessões COM FE no período — numerador do AOV. totalRevenue − isto = receita de sessões órfãs (backend cujo FE ficou fora do filtro). */
+  revenueFeSessions: number;
 }
 
 export interface FunnelResponse {
@@ -1557,6 +1559,7 @@ export function aggregateGroups(
       aovFEOnly: round2(aovFEOnly),
       aovWithUpsell: round2(aovWithUpsell),
       revenueLiftFromUpsells: round4(revenueLiftFromUpsells),
+      revenueFeSessions: round2(feGroupsRevenue),
     },
   };
 }

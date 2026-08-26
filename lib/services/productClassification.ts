@@ -16,6 +16,14 @@ export interface ProductClassification {
   family: string | null;
   type: ProductType;
   funnelStep: number | null;
+  // true quando o PAPEL (type/funnelStep) veio de um marcador EXPLÍCITO —
+  // código no SKU (CB), código no nome (D24) ou marcador no nome
+  // ("(Upgrade)", "UP01", "/ OTO1", "/ DS 1-A", "/ FE", "Last Chance",
+  // "FREE"). false = o papel é só o default do parser ("sem marcador →
+  // FRONTEND" no BuyGoods-style, "sem padrão → UPSELL" no fallback). Na
+  // JVZoo, false significa: NÃO confie no type — o papel sai da sessão
+  // (lib/services/jvzooSessions.ts). Cartpanda é sempre false (connector).
+  roleMarked: boolean;
   variant: string | null;
   bottles: number | null;
   // Bonus bottles in combo SKUs (RC "6 + 2 Bottles" → bonusBottles=2,
@@ -104,8 +112,11 @@ const COMBO_ABBREV_RE =
 // items = tudo antes do marcador entre parênteses; cada item = "N Nome".
 // Requer 2+ itens (o split valida) — nome comum "2 Bottles..." não chega
 // aqui porque o caminho BuyGoods casa antes.
+// `rest` aceita "(Upgrade)" E o esquema real do IPN JVZoo: "- [NeuroMind] / OTO3",
+// "/ DS3" (2026-08-26 — antes só "(", e o bundle triplo caía no fallback
+// sem família = COGS $0).
 const COMBO_COUNT_FIRST_RE =
-  /^(?<items>\d+\s+[A-Za-z][A-Za-z ]*?(?:\s*\+\s*\d+\s+[A-Za-z][A-Za-z ]*?)+)\s*(?<rest>\(.*)?$/;
+  /^(?<items>\d+\s+[A-Za-z][A-Za-z ]*?(?:\s*\+\s*\d+\s+[A-Za-z][A-Za-z ]*?)+)\s*(?<rest>[(\-\/].*)?$/;
 
 const FAMILY_NORMALIZATIONS: Array<[RegExp, string]> = [
   [/^glycopulse$/i, 'GlycoPulse'],
@@ -230,8 +241,31 @@ function classifyType(typeCode: string): { type: ProductType; step: number } {
 // as variações de grafia: Upgrade/Upsell/UP × Downsell/Down Sell/Down/DS/
 // Last Chance. \b nos dois lados evita falso positivo em palavra que
 // contém "up"/"ds" ("syrup", "hands"...).
-const UP_N_RE = /\b(?:upgrade|upsell|up)\s*0*(\d+)\b/;
+// "OTO N" (one-time offer) é como a JVZoo escreve o upsell no nome REAL do
+// IPN desde 2026-08 ("NeuroPulse pro 12 Bottles / OTO1", "Neuro Mind Pro 6
+// Bottles / OTO1 - A"). Não estava aqui → 171+ pedidos de OTO1 gravados
+// como FRONTEND (auditoria 2026-08-26).
+const UP_N_RE = /\b(?:upgrade|upsell|oto|up)\s*0*(\d+)\b/;
 const DW_N_RE = /\b(?:down\s*sell|last\s*chance|down|ds)\s*0*(\d+)\b/;
+// FE explícito no nome: "NeuroPulse pro 6 Bottles / FE", "... / FE (AFF)".
+const FE_MARK_RE = /\bfe\b/;
+// Qualquer marcador de papel que o parser sabe ler (sem número também:
+// "(Upgrade)", "(Last Chance)", "(Downsell)", FREE, FE).
+const ROLE_MARK_RE = /\b(?:upgrade|upsell|oto|up)\s*0*\d+\b|\b(?:down\s*sell|last\s*chance|down|ds)\s*0*\d+\b|last\s*chance|down\s*sell|upgrade|\bfe\b|\bfree\b/i;
+
+/**
+ * O papel deste SKU está ANOTADO em algum lugar (SKU CB, código D24 ou
+ * marcador no nome)? Cartpanda: nunca (o papel é do connector). Quando
+ * false, o `type` do classificador é só o default do parser.
+ */
+export function hasRoleMarker(sku: string, name?: string | null, platform?: string | null): boolean {
+  if (platform === 'cartpanda') return false;
+  if (CB_SKU_RE.test(sku.trim())) return true;
+  const n = (name ?? '').trim();
+  if (!n) return false;
+  if (D24_NAME_RE.test(n)) return true;
+  return ROLE_MARK_RE.test(n);
+}
 
 function buyGoodsType(
   family: string,
@@ -245,6 +279,9 @@ function buyGoodsType(
   if (upN) return classifyType(`UP${parseInt(upN[1], 10)}`);
   const dwN = r.match(DW_N_RE);
   if (dwN) return classifyType(`DW${parseInt(dwN[1], 10)}`);
+  // "/ FE" explícito (JVZoo) — antes de "upgrade"/"last chance" por ser o
+  // marcador mais específico; nunca coexiste com os outros.
+  if (FE_MARK_RE.test(r)) return classifyType('FE');
   // Formato antigo sem N → ancorado na família. "Downsell" NU entra aqui
   // junto com "Last Chance": antes a palavra sozinha não estava em lugar
   // nenhum e caía no FE — 135 pedidos BuyGoods gravados como FRONTEND
@@ -280,7 +317,9 @@ function buyGoodsType(
 // → "Giant Power"); sem pipe, remove "N Bottles" + o sufixo "- FE" (ex
 // "Horse Peak Gelatin - FE 6 Bottles" → "Horse Peak Gelatin"). Assim o FE
 // ("... - FE") e os upsells ("..." puro) caem na MESMA família.
-function classifyCartpanda(sku: string, name?: string | null): ProductClassification {
+type BaseClassification = Omit<ProductClassification, 'roleMarked'>;
+
+function classifyCartpanda(sku: string, name?: string | null): BaseClassification {
   const raw = (name || sku || '').trim();
 
   let fam = raw;
@@ -335,6 +374,15 @@ export function classifyProduct(
   name?: string | null,
   platform?: string | null,
 ): ProductClassification {
+  const base = classifyProductBase(sku, name, platform);
+  return { ...base, roleMarked: hasRoleMarker(sku, name, platform) };
+}
+
+function classifyProductBase(
+  sku: string,
+  name?: string | null,
+  platform?: string | null,
+): BaseClassification {
   // Cartpanda tem caminho próprio: família do nome, papel do connector.
   if (platform === 'cartpanda') {
     return classifyCartpanda(sku, name);
@@ -487,6 +535,10 @@ export function classifyProduct(
     if (dwN) {
       const t = classifyType(`DW${parseInt(dwN[1], 10)}`);
       return { family: null, type: t.type, funnelStep: t.step, variant: null, bottles: null, bonusBottles: null };
+    }
+    // "/ FE" explícito num nome fora de padrão → porta de entrada mesmo assim.
+    if (FE_MARK_RE.test(raw)) {
+      return { family: null, type: 'FRONTEND', funnelStep: 1, variant: null, bottles: null, bonusBottles: null };
     }
     if (/last\s*chance|down\s*sell/.test(raw)) {
       return { family: null, type: 'DOWNSELL', funnelStep: null, variant: null, bottles: null, bonusBottles: null };

@@ -72,6 +72,7 @@ describe('classifyProduct (ClickBank SKU patterns)', () => {
       variant: null,
       bottles: 6,
       bonusBottles: null,
+      roleMarked: true,
     });
   });
 
@@ -157,6 +158,7 @@ describe('classifyProduct (DigiStore name patterns)', () => {
       variant: null,
       bottles: 6,
       bonusBottles: null,
+      roleMarked: true,
     });
   });
 
@@ -745,6 +747,80 @@ describe('normalizeFamily — duplicatas por capitalização', () => {
 
   it('unifica Blessed Kit', () => {
     expect(classifyProduct('x', 'Blessed kit 5 Bottles (Upgrade)', 'jvzoo').family).toBe('Blessed Kit');
+  });
+});
+
+// Convenção REAL do product_name do IPN JVZoo (export de 2026-08-25 + dump):
+//   "<Produto> N Bottles / FE" · "/ OTO1 - A" · "/ OTO2" · "/ DS 1-A" · "/ DS2"
+//   "Digest Flow 6 Bottles - NeuroMind / OTO2"  (funil de origem no nome)
+//   "1 Flex Guard + 1 Night Calm + 1 Honey Flush - [NeuroMind] / OTO3"
+// e produtos antigos ainda com "(Upgrade)" / "(Last Chance)".
+describe('classifyProduct — JVZoo "/ FE", "/ OTO N", "/ DS N" + roleMarked (2026-08-26)', () => {
+  it('"/ OTO1" → UPSELL etapa 2; "- A"/"- B" são variantes do mesmo slot', () => {
+    expect(classifyProduct('447927', 'Neuro Mind Pro 6 Bottles / OTO1 - A', 'jvzoo'))
+      .toMatchObject({ type: 'UPSELL', funnelStep: 2, family: 'NeuroMindPro', bottles: 6, roleMarked: true });
+    expect(classifyProduct('447925', 'Neuro Mind Pro 12 Bottles / OTO1 - B', 'jvzoo'))
+      .toMatchObject({ type: 'UPSELL', funnelStep: 2, bottles: 12 });
+    expect(classifyProduct('448301', 'NeuroPulse pro 12 Bottles / OTO1', 'jvzoo'))
+      .toMatchObject({ type: 'UPSELL', funnelStep: 2, roleMarked: true });
+  });
+
+  it('funil de origem no nome ("- NeuroMind / OTO2") não vira família', () => {
+    expect(classifyProduct('444183', 'Digest Flow 6 Bottles - NeuroMind / OTO2', 'jvzoo'))
+      .toMatchObject({ type: 'UPSELL', funnelStep: 3, family: 'DigestFlow', bottles: 6 });
+    expect(classifyProduct('x', 'NightCalm 6 Bottles -HoneyPril- OTO2', 'jvzoo'))
+      .toMatchObject({ type: 'UPSELL', funnelStep: 3, family: 'NightCalm' });
+  });
+
+  it('"/ DS2", "/ DS 1-A" → DOWNSELL nas etapas 3 e 2', () => {
+    expect(classifyProduct('444189', 'Digest Flow 3 Bottles - NeuroMind / DS2', 'jvzoo'))
+      .toMatchObject({ type: 'DOWNSELL', funnelStep: 3, family: 'DigestFlow' });
+    expect(classifyProduct('444187', 'Neuro Mind Pro 3 Bottles / DS 1-A', 'jvzoo'))
+      .toMatchObject({ type: 'DOWNSELL', funnelStep: 2, bottles: 3 });
+    expect(classifyProduct('448305', 'NeuroPulse pro 3 Bottles / DS1', 'jvzoo'))
+      .toMatchObject({ type: 'DOWNSELL', funnelStep: 2 });
+  });
+
+  it('"/ FE" e "/ FE (AFF)" → FRONTEND marcado', () => {
+    expect(classifyProduct('448297', 'NeuroPulse pro 6 Bottles / FE', 'jvzoo'))
+      .toMatchObject({ type: 'FRONTEND', funnelStep: 1, roleMarked: true });
+    expect(classifyProduct('x', 'Neuro Mind Pro 6 Bottles / FE (AFF)', 'jvzoo'))
+      .toMatchObject({ type: 'FRONTEND', roleMarked: true, family: 'NeuroMindPro' });
+    expect(classifyProduct('449431', 'HoneyPril 6 Bottles - FE', 'jvzoo'))
+      .toMatchObject({ type: 'FRONTEND', roleMarked: true });
+  });
+
+  it('sem marcador nenhum: type é só o default (FRONTEND) e roleMarked=false — JVZoo decide pela sessão', () => {
+    expect(classifyProduct('449437', 'HoneyPril 12 Bottles', 'jvzoo'))
+      .toMatchObject({ type: 'FRONTEND', roleMarked: false, family: 'HoneyPril', bottles: 12 });
+    expect(classifyProduct('444173', 'Neuro Mind Pro 6 Bottles', 'jvzoo').roleMarked).toBe(false);
+  });
+
+  it('bundle triplo no esquema novo ("- [NeuroMind] / OTO3", "/ DS3") mantém família e potes', () => {
+    expect(classifyProduct('444185', '1 Flex Guard + 1 Night Calm + 1 Honey Flush - [NeuroMind] / OTO3', 'jvzoo'))
+      .toMatchObject({ type: 'UPSELL', funnelStep: 4, bottles: 3, roleMarked: true });
+    expect(classifyProduct('444191', '1 Flex Guard + 1 Night Calm + 1 Honey Flush / DS3', 'jvzoo'))
+      .toMatchObject({ type: 'DOWNSELL', funnelStep: 4, bottles: 3 });
+  });
+
+  it('combo abreviado com funil de origem: "NightCalm 3B + FlexGuard 3B - Thermoburn/ OTO3"', () => {
+    expect(classifyProduct('445591', 'NightCalm 3B + FlexGuard 3B - Thermoburn/ OTO3', 'jvzoo'))
+      .toMatchObject({ type: 'UPSELL', funnelStep: 4, family: 'NightCalm + FlexGuard' });
+  });
+
+  it('nome fora de qualquer padrão mas com marcador → papel do marcador, família null', () => {
+    expect(classifyProduct('x', '5 Bottles Bundle - Glyco Eden / OTO3', 'jvzoo'))
+      .toMatchObject({ type: 'UPSELL', funnelStep: 4, family: null, roleMarked: true });
+    expect(classifyProduct('x', 'Special Offer Immune Guard + Flex Guard 6B - OTO3', 'jvzoo'))
+      .toMatchObject({ type: 'UPSELL', funnelStep: 4, roleMarked: true });
+  });
+
+  it('roleMarked nas outras plataformas: SKU CB e código D24 são explícitos; BuyGoods sem marcador não', () => {
+    expect(classifyProduct('NeuroMindPro-6-FE', null, 'clickbank').roleMarked).toBe(true);
+    expect(classifyProduct('687054', 'UP2 - Glyco Pulse 3 Bottles', 'digistore24').roleMarked).toBe(true);
+    expect(classifyProduct('x', 'Luminacept 3 Bottles (Downsell)', 'buygoods').roleMarked).toBe(true);
+    expect(classifyProduct('x', 'Luminacept 3 Bottles', 'buygoods').roleMarked).toBe(false);
+    expect(classifyProduct('x', 'Qualquer coisa', 'cartpanda').roleMarked).toBe(false);
   });
 });
 

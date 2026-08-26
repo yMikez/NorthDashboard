@@ -71,10 +71,15 @@ export async function upsertOrder(normalized: NormalizedOrder): Promise<UpsertOr
   // (up_sell_id / prekey), não do classificador de nome — o nome não anota o
   // papel nessas plataformas e o classificador leria todo upsell como FE.
   // Demais plataformas: o classificador é autoritativo quando reconhece a família.
+  // JVZoo sem marcador no nome ("HoneyPril 12 Bottles"): o parser devolve
+  // FRONTEND por default, mas isso NÃO é informação — o papel sai da sessão
+  // (reconcileJvzooSession) e da memória do catálogo (Product.productType
+  // gravado quando o nome VEIO marcado). Aqui nunca gravamos esse default.
+  const jvzooUnmarked = normalized.platformSlug === 'jvzoo' && !classified.roleMarked;
   const catalogType: ProductType =
     CONNECTOR_ROLE_PLATFORMS.has(normalized.platformSlug)
       ? (normalized.productType as ProductType)
-      : classified.family !== null
+      : classified.family !== null && !jvzooUnmarked
         ? classified.type
         : (normalized.productType as ProductType);
 
@@ -131,7 +136,7 @@ export async function upsertOrder(normalized: NormalizedOrder): Promise<UpsertOr
       // Only override productType when the classifier had a confident match;
       // otherwise leave whatever was there (avoids regressing rows for SKUs
       // whose pattern we don't know yet).
-      productType: classified.family !== null ? catalogType : undefined,
+      productType: classified.family !== null && !jvzooUnmarked ? catalogType : undefined,
       family: classified.family ?? undefined,
       variant: classified.variant ?? undefined,
       bottles: classified.bottles ?? undefined,
@@ -139,7 +144,7 @@ export async function upsertOrder(normalized: NormalizedOrder): Promise<UpsertOr
     },
     // fulfillmentSupplier (override por SKU) — preservado entre ingests.
     // Não mexemos aqui, só leitura pra alimentar o calcCogs abaixo.
-    select: { id: true, fulfillmentSupplier: true },
+    select: { id: true, fulfillmentSupplier: true, productType: true },
   });
 
   // Snapshot COGS at ingest. Reads cached cost tables; refreshing the cache
@@ -231,7 +236,7 @@ export async function upsertOrder(normalized: NormalizedOrder): Promise<UpsertOr
   // Aqui o role/step vem do connector (up_sell_id / prekey) — nunca do nome.
   const trustParserRole = CONNECTOR_ROLE_PLATFORMS.has(normalized.platformSlug);
   const finalFunnelStep =
-    !trustParserRole && classified.family != null && classified.funnelStep != null
+    !trustParserRole && !jvzooUnmarked && classified.family != null && classified.funnelStep != null
       ? classified.funnelStep
       : normalized.funnelStep;
 
@@ -247,10 +252,16 @@ export async function upsertOrder(normalized: NormalizedOrder): Promise<UpsertOr
   // então — não sabia emitir DOWNSELL. Quando o classificador não reconhece
   // o SKU (family null), o papel continua vindo da sessão (jvzooSessions).
   const CLASSIFIER_ROLE_PLATFORMS = new Set(['buygoods', 'digistore24', 'jvzoo']);
+  // JVZoo sem marcador: memória do catálogo (o SKU já chegou marcado como
+  // UPSELL/DOWNSELL antes → continua) e, sem memória, o que o connector
+  // trouxe (FRONTEND inicial ou o papel já gravado em RFND/CGBK) — a
+  // reconciliação da sessão decide em seguida pela posição.
   const orderType: ProductType =
-    CLASSIFIER_ROLE_PLATFORMS.has(normalized.platformSlug) && classified.family !== null
+    CLASSIFIER_ROLE_PLATFORMS.has(normalized.platformSlug) && classified.family !== null && !jvzooUnmarked
       ? catalogType
-      : (normalized.productType as ProductType);
+      : jvzooUnmarked && product.productType !== 'FRONTEND'
+        ? product.productType
+        : (normalized.productType as ProductType);
 
   const orderData = {
     platformId: platform.id,

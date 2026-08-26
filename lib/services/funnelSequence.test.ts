@@ -11,7 +11,7 @@ const scope = (fe: number, up1Take: number, up2Take: number, feTicket = 100, up1
       { id: 'UP1', label: 'UP1', volume: up1, revenue: up1Rev, takeRate: fe ? up1 / fe : 0 },
       { id: 'UP2', label: 'UP2', volume: up2, revenue: up2Rev, takeRate: fe ? up2 / fe : 0 },
     ],
-    summary: { feGroups: fe, totalGroups: fe, totalRevenue: total, aov: fe ? total / fe : 0, aovFEOnly: feTicket, aovWithUpsell: fe ? total / fe : 0, revenueLiftFromUpsells: fe ? total / feRev - 1 : 0 },
+    summary: { feGroups: fe, totalGroups: fe, totalRevenue: total, aov: fe ? total / fe : 0, aovFEOnly: feTicket, aovWithUpsell: fe ? total / fe : 0, revenueLiftFromUpsells: fe ? total / feRev - 1 : 0, revenueFeSessions: total },
   };
 };
 

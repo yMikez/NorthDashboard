@@ -20,7 +20,7 @@ import { db } from '@/lib/db';
 import { checkIngestSecret } from '@/lib/ingest/auth';
 import { jvzooSessionAnchor } from '@/lib/connectors/jvzoo/ingest';
 import type { JvzooPayload } from '@/lib/connectors/jvzoo/types';
-import { reconcileJvzooSession } from '@/lib/services/jvzooSessions';
+import { reconcileJvzooSession, isPrevDaySession } from '@/lib/services/jvzooSessions';
 import { rebalanceSessionFulfillment } from '@/lib/services/sessionFulfillment';
 import { clearResponseCache } from '@/lib/cache/responseCache';
 import { logger } from '@/lib/logger';
@@ -74,6 +74,12 @@ export async function POST(req: Request) {
     if (REBILL_EVENTS.has(o.eventType ?? '')) continue; // rebill ancora em si
     const anchor = anchorByTx.get(o.externalId);
     if (!anchor) continue; // sem log de SALE (não deveria acontecer) — não mexe
+    // Sessão fundida na meia-noite (dia anterior do mesmo cliente) é
+    // resultado da reconciliação — não desfaz.
+    if (isPrevDaySession(anchor, o.funnelSessionId)) {
+      touchedSessions.add(o.funnelSessionId as string);
+      continue;
+    }
     if (anchor !== o.funnelSessionId) {
       sessionChanged++;
       if (!dryRun) {

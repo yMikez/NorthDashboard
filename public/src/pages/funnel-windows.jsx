@@ -82,7 +82,7 @@ function FunnelWindowsView({ filters, family }) {
   const seq = state.data;
   const scopeKey = family && family !== 'all' ? family : 'all';
   const scope = seq ? (seq.scopes[scopeKey] || seq.scopes.all) : null;
-  const scopeOf = (w) => (scopeKey === 'all' ? w.all : (w.byFamily[scopeKey] || { stages: [], summary: { feGroups: 0, totalGroups: 0, totalRevenue: 0, aov: 0, aovFEOnly: 0, aovWithUpsell: 0, revenueLiftFromUpsells: 0 } }));
+  const scopeOf = (w) => (scopeKey === 'all' ? w.all : (w.byFamily[scopeKey] || { stages: [], summary: { feGroups: 0, totalGroups: 0, totalRevenue: 0, aov: 0, aovFEOnly: 0, aovWithUpsell: 0, revenueLiftFromUpsells: 0, revenueFeSessions: 0 } }));
   const backend = (stages) => stages.filter((s) => !/^(fe|frontend|front)$/i.test(s.id) && !/^front/i.test(s.label));
   const toneColor = { pos: 'var(--success)', neg: 'var(--danger)', neutral: 'var(--fg4)' };
   const sectionTitle = (x) => <div className="eyebrow" style={{ fontSize: 10, margin: '16px 0 8px', color: 'var(--accent)' }}>{x}</div>;

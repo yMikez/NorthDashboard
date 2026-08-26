@@ -69,8 +69,12 @@ export async function classifyExistingProducts(): Promise<BackfillStats> {
     // upgrade) seria reescrito pra FRONTEND e o funil quebraria.
     // (JVZoo saiu deste grupo em 2026-08-12: lá o nome anota o papel.)
     const isCartpanda = CONNECTOR_ROLE_PLATFORMS.has(p.platform?.slug ?? '');
+    // JVZoo SEM marcador no nome: o type do classificador é só o default
+    // (FRONTEND) — não é opinião. Família/potes sim; papel fica com a
+    // sessão (backfill-jvzoo-sessions) e a memória do catálogo.
+    const roleUnknown = isCartpanda || (p.platform?.slug === 'jvzoo' && !c.roleMarked);
 
-    const productTypeChanged = !isCartpanda && p.productType !== c.type;
+    const productTypeChanged = !roleUnknown && p.productType !== c.type;
     await db.product.update({
       where: { id: p.id },
       data: {
@@ -80,13 +84,13 @@ export async function classifyExistingProducts(): Promise<BackfillStats> {
         // bonusBottles também — combos BuyGoods/RC ("3 + 3 Bottles")
         // precisam disso pro total de potes (COGS+frete) no backfill.
         bonusBottles: c.bonusBottles,
-        ...(isCartpanda ? {} : { productType: c.type }),
+        ...(roleUnknown ? {} : { productType: c.type }),
       },
     });
     stats.classified++;
     if (productTypeChanged) stats.productTypeFixed++;
 
-    if (isCartpanda) continue;
+    if (roleUnknown) continue;
 
     // Catálogo é autoritativo pro Order.productType de TODA order desse
     // produto (qualquer direção, não só FE→outro). Sem isso, um "Last
