@@ -1,4 +1,4 @@
-/* global React, Icon, fmtCurrency, fmtInt, fmtPct, SkelMiniKpis, SkelTablePanel, FunnelChart */
+/* global React, Icon, fmtCurrency, fmtInt, fmtPct, SkelMiniKpis, SkelTablePanel */
 /* Funil por JANELAS (Janela 1..K de N dias até uma data): cards por janela,
    comparativo entre janelas com a leitura da causa (volume de FEs × AOV de
    sessão + estágio que mais mexeu) e tabela etapa × janela.
@@ -17,6 +17,43 @@ function FwDelta({ value, kind = 'rel' }) {
   const text = kind === 'pp' ? fwPp(value).slice(1) : kind === 'money' ? fmtCurrency(Math.abs(value), 'USD', 0) : (Math.abs(value) * 100).toFixed(1).replace('.', ',') + '%';
   const flat = Math.abs(value) < (kind === 'pp' ? 0.0005 : kind === 'money' ? 0.5 : 0.002);
   return <span className="mono" style={{ color: flat ? 'var(--fg4)' : up ? 'var(--success)' : 'var(--danger)', whiteSpace: 'nowrap' }}>{flat ? '■' : up ? '▲' : '▼'} {text}</span>;
+}
+
+/* Funil compacto pra painéis estreitos (o .funnel-row da aba tem colunas fixas
+   de 220px e vira caixinha com texto quebrado quando cabe 3 janelas na tela).
+   Barra proporcional ao topo (FE), da esquerda pra direita; volume + receita à direita. */
+function FwFunnel({ stages, currency }) {
+  if (!stages || !stages.length) return <div style={{ padding: 16, textAlign: 'center', color: 'var(--fg4)', fontSize: 12 }}>Sem vendas na janela</div>;
+  const top = stages[0].volume || 0;
+  return (
+    <div style={{ display: 'grid', gap: 6 }}>
+      {stages.map((st, i) => {
+        const share = top > 0 ? st.volume / top : 0;
+        const w = i === 0 ? 100 : Math.max(1.5, share * 100);
+        const isDown = /down/i.test(st.id) || /down/i.test(st.label);
+        const fill = i === 0 ? 'var(--accent)' : isDown ? 'color-mix(in oklab, var(--warning) 70%, var(--bg))' : 'color-mix(in oklab, var(--accent) 60%, var(--bg))';
+        const inside = w >= 22;
+        return (
+          <div key={st.id || i} style={{ display: 'grid', gridTemplateColumns: '92px 1fr 118px', gap: 10, alignItems: 'center' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: 'var(--fg1)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+              <span style={{ fontFamily: 'var(--f-mono)', fontSize: 9, color: 'var(--fg5)' }}>{String(i + 1).padStart(2, '0')}</span>
+              <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>{st.label}</span>
+            </div>
+            <div style={{ position: 'relative', height: 22, borderRadius: 4, background: 'color-mix(in oklab, var(--fg4) 10%, transparent)', overflow: 'hidden' }}>
+              <div style={{ position: 'absolute', inset: '0 auto 0 0', width: `${w}%`, background: fill, borderRadius: 4, transition: 'width 300ms var(--ease-smooth)' }}/>
+              <span className="mono" style={{ position: 'absolute', top: 0, bottom: 0, display: 'flex', alignItems: 'center', fontSize: 10, letterSpacing: '0.04em', whiteSpace: 'nowrap', left: inside ? 8 : `calc(${w}% + 8px)`, color: inside ? (i === 0 ? 'var(--bg)' : 'var(--fg1)') : 'var(--fg3)' }}>
+                {i === 0 ? '100%' : fmtPct(share, 1) + ' do FE'}
+              </span>
+            </div>
+            <div style={{ textAlign: 'right', lineHeight: 1.15 }}>
+              <div style={{ fontFamily: 'var(--f-display)', fontSize: 14, fontWeight: 600, color: 'var(--fg1)' }}>{fmtInt(st.volume)}</div>
+              <div className="mono" style={{ fontSize: 10, color: st.revenue > 0 ? 'var(--money)' : 'var(--fg5)' }}>{fmtCurrency(st.revenue || 0, currency, 0)}</div>
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
 }
 
 function FunnelWindowsView({ filters, family }) {
@@ -115,7 +152,7 @@ function FunnelWindowsView({ filters, family }) {
           </div>
 
           {sectionTitle('FUNIL EM BARRAS · UMA JANELA AO LADO DA OUTRA')}
-          <div style={{ display: 'grid', gridTemplateColumns: `repeat(auto-fit, minmax(${seq.windows.length > 3 ? 300 : 360}px, 1fr))`, gap: 12 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: `repeat(auto-fit, minmax(${seq.windows.length > 3 ? 330 : 380}px, 1fr))`, gap: 12 }}>
             {seq.windows.map((w) => {
               const sc = scopeOf(w);
               return (
@@ -130,7 +167,7 @@ function FunnelWindowsView({ filters, family }) {
                       <div style={{ fontSize: 10, color: 'var(--fg5)' }}>{fmtInt(sc.summary.feGroups)} FEs · AOV {fmtCurrency(sc.summary.aov, cur, 0)}</div>
                     </div>
                   </div>
-                  <FunnelChart stages={sc.stages.map((st) => ({ label: st.label, volume: st.volume, revenue: st.revenue }))} currency={cur}/>
+                  <FwFunnel stages={sc.stages} currency={cur}/>
                 </div>
               );
             })}
