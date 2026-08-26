@@ -390,6 +390,9 @@ export interface ToolInput {
   window?: number;
   view?: string;
   include_internal?: boolean;
+  anchor?: string;
+  include_today?: boolean;
+  count?: number;
   key?: string;
 }
 
