@@ -136,6 +136,42 @@ function FunnelWindowsView({ filters, family }) {
             })}
           </div>
 
+          {scope.transitions.length > 0 && (
+            <>
+              {sectionTitle('COMPARATIVO JANELA A JANELA — DE ONDE VEIO A VARIAÇÃO')}
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: 12 }}>
+                {scope.transitions.map((t) => {
+                  const Row = ({ l, v, color }) => <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, fontSize: 12, padding: '4px 0', borderBottom: '1px solid var(--border-soft)' }}><span style={{ color: 'var(--fg4)' }}>{l}</span><b className="mono" style={{ color }}>{v}</b></div>;
+                  return (
+                    <div key={t.to} className="panel">
+                      <h5 style={{ margin: '0 0 8px', fontSize: 13, color: 'var(--accent)' }}>Janela {t.from + 1} → {t.to + 1}</h5>
+                      <Row l="Receita" v={<>{fmtCurrency(t.prevRevenue, cur, 0)} → {fmtCurrency(t.revenue, cur, 0)} <FwDelta value={t.revenuePct}/></>}/>
+                      <Row l="FEs (volume)" v={<>{fmtInt(t.prevFeGroups)} → {fmtInt(t.feGroups)} <FwDelta value={t.fePct}/></>}/>
+                      <Row l="AOV de sessão" v={<>{fmtCurrency(t.prevAov, cur, 0)} → {fmtCurrency(t.aov, cur, 0)} <FwDelta value={t.aovPct}/></>}/>
+                      <Row l="Efeito do volume" v={<FwDelta value={t.volumeEffect} kind="money"/>}/>
+                      <Row l="Efeito do AOV" v={<FwDelta value={t.aovEffect} kind="money"/>}/>
+                      <Row l="Lift de upsells" v={<>{(t.prevLift * 100).toFixed(0)}% → {(t.lift * 100).toFixed(0)}% <FwDelta value={t.lift - t.prevLift} kind="pp"/></>}/>
+                      {t.stages.length > 0 && (
+                        <div style={{ marginTop: 8 }}>
+                          <div style={{ fontSize: 10, color: 'var(--fg5)', letterSpacing: '0.06em', textTransform: 'uppercase', marginBottom: 4 }}>Take rate por estágio</div>
+                          {t.stages.map((s) => (
+                            <div key={s.id} style={{ display: 'grid', gridTemplateColumns: '60px 1fr auto auto', gap: 8, fontSize: 12, padding: '2px 0', color: t.topStage && t.topStage.id === s.id ? 'var(--fg1)' : 'var(--fg3)', fontWeight: t.topStage && t.topStage.id === s.id ? 700 : 400 }}>
+                              <span>{s.label}</span>
+                              <span className="mono">{fmtPct(s.prevTakeRate, 1)} → {fmtPct(s.takeRate, 1)}</span>
+                              <FwDelta value={s.takePp} kind="pp"/>
+                              <FwDelta value={s.takeEffectUsd} kind="money"/>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                      <div style={{ fontSize: 12, color: 'var(--fg3)', lineHeight: 1.55, marginTop: 8 }}>{t.note}</div>
+                    </div>
+                  );
+                })}
+              </div>
+            </>
+          )}
+
           {sectionTitle('TAKE RATE POR ETAPA · JANELA A JANELA')}
           <div className="panel">
             <div style={{ fontSize: 11, color: 'var(--fg4)', marginBottom: 10 }}>Uma barra por janela em cada etapa (J1 = mais antiga, última em destaque). Comprimento = take rate relativa às FEs da própria janela.</div>
@@ -172,42 +208,6 @@ function FunnelWindowsView({ filters, family }) {
               ));
             })()}
           </div>
-
-          {scope.transitions.length > 0 && (
-            <>
-              {sectionTitle('COMPARATIVO ENTRE JANELAS — DE ONDE VEIO A VARIAÇÃO')}
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: 12 }}>
-                {scope.transitions.map((t) => {
-                  const Row = ({ l, v, color }) => <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, fontSize: 12, padding: '4px 0', borderBottom: '1px solid var(--border-soft)' }}><span style={{ color: 'var(--fg4)' }}>{l}</span><b className="mono" style={{ color }}>{v}</b></div>;
-                  return (
-                    <div key={t.to} className="panel">
-                      <h5 style={{ margin: '0 0 8px', fontSize: 13, color: 'var(--accent)' }}>Janela {t.from + 1} → {t.to + 1}</h5>
-                      <Row l="Receita" v={<>{fmtCurrency(t.prevRevenue, cur, 0)} → {fmtCurrency(t.revenue, cur, 0)} <FwDelta value={t.revenuePct}/></>}/>
-                      <Row l="FEs (volume)" v={<>{fmtInt(t.prevFeGroups)} → {fmtInt(t.feGroups)} <FwDelta value={t.fePct}/></>}/>
-                      <Row l="AOV de sessão" v={<>{fmtCurrency(t.prevAov, cur, 0)} → {fmtCurrency(t.aov, cur, 0)} <FwDelta value={t.aovPct}/></>}/>
-                      <Row l="Efeito do volume" v={<FwDelta value={t.volumeEffect} kind="money"/>}/>
-                      <Row l="Efeito do AOV" v={<FwDelta value={t.aovEffect} kind="money"/>}/>
-                      <Row l="Lift de upsells" v={<>{(t.prevLift * 100).toFixed(0)}% → {(t.lift * 100).toFixed(0)}% <FwDelta value={t.lift - t.prevLift} kind="pp"/></>}/>
-                      {t.stages.length > 0 && (
-                        <div style={{ marginTop: 8 }}>
-                          <div style={{ fontSize: 10, color: 'var(--fg5)', letterSpacing: '0.06em', textTransform: 'uppercase', marginBottom: 4 }}>Take rate por estágio</div>
-                          {t.stages.map((s) => (
-                            <div key={s.id} style={{ display: 'grid', gridTemplateColumns: '60px 1fr auto auto', gap: 8, fontSize: 12, padding: '2px 0', color: t.topStage && t.topStage.id === s.id ? 'var(--fg1)' : 'var(--fg3)', fontWeight: t.topStage && t.topStage.id === s.id ? 700 : 400 }}>
-                              <span>{s.label}</span>
-                              <span className="mono">{fmtPct(s.prevTakeRate, 1)} → {fmtPct(s.takeRate, 1)}</span>
-                              <FwDelta value={s.takePp} kind="pp"/>
-                              <FwDelta value={s.takeEffectUsd} kind="money"/>
-                            </div>
-                          ))}
-                        </div>
-                      )}
-                      <div style={{ fontSize: 12, color: 'var(--fg3)', lineHeight: 1.55, marginTop: 8 }}>{t.note}</div>
-                    </div>
-                  );
-                })}
-              </div>
-            </>
-          )}
 
           {sectionTitle('ETAPA × JANELA')}
           <div className="panel" style={{ padding: 0 }}>
