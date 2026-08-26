@@ -21,7 +21,7 @@ const YMD = /^\d{4}-\d{2}-\d{2}$/;
 // Dia de calendário real (2026-02-30 não passa) e ano plausível — o input
 // type=date do Chrome emite anos parciais (0002, 0020, 0202) enquanto o
 // usuário digita; sem o piso cada tecla virava uma query de 700 dias.
-function validAnchor(raw: string): string | undefined {
+export function validAnchor(raw: string): string | undefined {
   if (!YMD.test(raw)) return undefined;
   const t = Date.parse(raw + 'T00:00:00Z');
   if (Number.isNaN(t) || new Date(t).toISOString().slice(0, 10) !== raw) return undefined;

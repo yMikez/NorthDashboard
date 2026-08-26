@@ -39,7 +39,9 @@ import { getFulfillment } from './fulfillment';
 import { getHealth } from './health';
 import { getProfitSplit } from './profitSplit';
 import { getFamilies } from './families';
-import { getAffiliateAnalysis, getAffiliateExplain } from './affiliateAnalysis';
+import { getAffiliateAnalysis, getAffiliateExplain, getAffiliateSequence } from './affiliateAnalysis';
+import { getFunnelSequence } from './funnelSequence';
+import { validAnchor } from '../shared/affiliateAnalysisParams';
 import { isValidWindow } from './affiliateAnalysisCore';
 import { stagesParam } from '../shared/queryParams';
 import { db } from '../db';
@@ -78,6 +80,20 @@ const SCOPE_PROPS: Record<string, JsonSchema> = {
   },
 };
 
+/** window/anchor/include_today das tools de janela → opções dos serviços (ou erro pro modelo). */
+function windowArgs(input: ToolInput): { window: number; anchor?: string; includeToday: boolean } | { error: string; message: string } {
+  const win = input.window == null ? 7 : Number(input.window);
+  if (!isValidWindow(win)) return { error: 'invalid_input', message: 'window deve ser um inteiro de 1 a 90' };
+  const anchorRaw = typeof input.anchor === 'string' ? input.anchor.trim() : '';
+  const anchor = anchorRaw ? validAnchor(anchorRaw) : undefined;
+  if (anchorRaw && !anchor) return { error: 'invalid_input', message: 'anchor deve ser uma data real YYYY-MM-DD (ano >= 2024), não futura' };
+  return { window: win, anchor, includeToday: input.include_today === true };
+}
+function countArg(input: ToolInput): number {
+  const n = Number(input.count);
+  return Number.isFinite(n) ? Math.min(Math.max(Math.trunc(n), 2), 8) : 3;
+}
+
 function tool(name: string, description: string, props: Record<string, JsonSchema> = {}, required: string[] = []): Anthropic.Tool {
   return {
     name,
@@ -87,6 +103,12 @@ function tool(name: string, description: string, props: Record<string, JsonSchem
 }
 
 const ORDER_STATUSES = ['APPROVED', 'REFUNDED', 'CHARGEBACK', 'PENDING', 'CANCELED'] as const;
+
+const WINDOW_PROPS: Record<string, JsonSchema> = {
+  window: { type: 'integer', description: 'Tamanho da janela em dias, 1 a 90 (presets 3/7/15/30/60; default 7)' },
+  anchor: { type: 'string', description: 'Janela personalizada: último dia da janela mais recente, YYYY-MM-DD (BRT). Default = ontem (último dia completo). Serve pra "olhar como estava até o dia X".' },
+  include_today: { type: 'boolean', description: 'Sem anchor: fecha a janela em HOJE (dia parcial) em vez de ontem. Default false.' },
+};
 
 export const TOOLS: Anthropic.Tool[] = [
   tool(
@@ -118,9 +140,9 @@ export const TOOLS: Anthropic.Tool[] = [
   ),
   tool(
     'get_affiliate_analysis',
-    'Análise de afiliados por JANELAS FIXAS (3, 7, 15, 30 ou 60 dias, fechando ontem), cada uma comparada com a janela anterior de mesmo tamanho: ranking com receita, vendas, AOV, aprovação, reembolso, CPA, Net após CPA, tendência (novo/breakout/crescimento/estável/volátil/queda/queda forte/churn) e o principal motivo da variação (topDriver). view=partner soma as contas da mesma pessoa em plataformas diferentes (identidade unificada); view=platform mostra cada conta. Retorna também `windows` (totais das 5 janelas) e cada linha traz `key` (use em get_affiliate_explain). As janelas fecham ONTEM (último dia completo, BRT). Mesmos números da aba Análise de afiliados. Não recebe datas — use `window`.',
+    'Análise de afiliados por JANELAS FIXAS (3, 7, 15, 30 ou 60 dias, fechando ontem), cada uma comparada com a janela anterior de mesmo tamanho: ranking com receita, vendas, AOV, aprovação, reembolso, CPA, Net após CPA, tendência (novo/breakout/crescimento/estável/volátil/queda/queda forte/churn) e o principal motivo da variação (topDriver). view=partner soma as contas da mesma pessoa em plataformas diferentes (identidade unificada); view=platform mostra cada conta. Retorna também `windows` (totais das 5 janelas) e cada linha traz `key` (use em get_affiliate_explain). As janelas fecham ONTEM (último dia completo, BRT) — ou no `anchor` (janela personalizada até um dia). Mesmos números da aba Análise de afiliados (modo Ranking). Não recebe datas de início/fim — use `window` (+ `anchor`). Pra VÁRIAS janelas em sequência (Janela 1..K, evolução, quem está parando, saúde), use get_affiliate_sequence.',
     {
-      window: { type: 'integer', description: 'Tamanho da janela em dias, 1 a 90 (presets 3/7/15/30/60; default 7)' },
+      ...WINDOW_PROPS,
       view: { type: 'string', enum: ['partner', 'platform'], description: 'partner = contas unificadas (default); platform = por conta' },
       include_internal: { type: 'boolean', description: 'Incluir pseudo-afiliados internos (tracking de produto). Default false.' },
       platforms: SCOPE_PROPS.platforms, families: SCOPE_PROPS.families,
@@ -131,16 +153,36 @@ export const TOOLS: Anthropic.Tool[] = [
     'POR QUÊ um afiliado/parceiro subiu ou caiu: drivers ordenados por impacto (volume de fronts × AOV — decomposição exata da Δreceita —, ticket do front, take rate de upsell, dias com venda, aprovação, reembolso, CPA renegociado, mix de família), janelas 3/7/15/30/60, série diária atual × anterior, quebra por família e por conta. `key` vem de get_affiliate_analysis (partner:<id> ou aff:<id>).',
     {
       key: { type: 'string', description: 'Chave da entidade: partner:<id> ou aff:<id>' },
-      window: { type: 'integer', description: 'Tamanho da janela em dias, 1 a 90 (presets 3/7/15/30/60; default 7)' },
+      ...WINDOW_PROPS,
       include_internal: { type: 'boolean', description: 'Incluir contas internas do parceiro (default false, igual ao ranking)' },
       platforms: SCOPE_PROPS.platforms, families: SCOPE_PROPS.families,
     },
     ['key'],
   ),
   tool(
+    'get_affiliate_sequence',
+    'Análise de afiliados em SEQUÊNCIA de janelas: K janelas consecutivas de N dias (Janela 1 = mais antiga … Janela K = mais recente, terminando ontem ou no `anchor`). Igual aos modos Janelas / Evolução / Saúde da aba Análise de afiliados. Retorna: `windows` (totais, ativos, concentração top10, ranking completo de cada janela), `transitions` (Janela i → i+1: Δ receita/vendas/AOV com a CAUSA — retidos vs saldo novos−churn, quem mais subiu/caiu), `evolution` (trajetória de cada afiliado nas K janelas com tag novo/breakout/crescimento/estável/volátil/queda/queda forte/churn/intermitente e comentário), `reactivation` (quem parou há 1 janela = mornos), `slowing` (quem está parando de rodar: sumiu na última janela ou caiu ≥ 50% do pico e segue caindo) e `health` (notas de saúde da base + risco de concentração). Use pra "como foram as últimas 3 semanas?", "quem está parando de rodar?", "evolução de X janela a janela", "saúde da base de afiliados".',
+    {
+      ...WINDOW_PROPS,
+      count: { type: 'integer', description: 'Quantas janelas em sequência, 2 a 8 (default 3)' },
+      view: { type: 'string', enum: ['partner', 'platform'], description: 'partner = contas unificadas (default); platform = por conta' },
+      include_internal: { type: 'boolean', description: 'Incluir pseudo-afiliados internos. Default false.' },
+      platforms: SCOPE_PROPS.platforms, families: SCOPE_PROPS.families,
+    },
+  ),
+  tool(
     'get_funnel',
     'Funil de conversão por família: etapas (FE → Bump → UP1 → UP2 → UP3 → DW1 → DW2 → DW3) com take rate e receita. Inclui cross-sell por família (cross-sells contam no funil da família do FE). Mesmos números da aba Funil.',
     { ...DATE_PROPS, platforms: SCOPE_PROPS.platforms, countries: SCOPE_PROPS.countries, families: SCOPE_PROPS.families, products: SCOPE_PROPS.products },
+  ),
+  tool(
+    'get_funnel_sequence',
+    'Funil por JANELAS em sequência (modo "Janelas & comparativo" da aba Funil): K janelas consecutivas de N dias terminando ontem ou no `anchor`, e pra cada uma o funil completo (etapas com volume, take rate sobre o FE e receita) + resumo (FEs, receita, AOV de sessão, lift de upsells). `scopes.all` = tudo; `scopes.<família>` = funil isolado da família. Cada escopo traz `notes` (leitura de cada janela) e `transitions` (Janela i → i+1: Δ receita decomposta em EFEITO DO VOLUME de FEs × EFEITO DO AOV de sessão, take rate por estágio com Δ em pp e efeito em $ a ticket constante, `topStage` = estágio que mais mexeu, e `note` com a explicação). Mesmos números do get_funnel, janela a janela. Use pra "o funil piorou nas últimas semanas?", "qual upsell caiu?", "foi volume ou conversão?".',
+    {
+      ...WINDOW_PROPS,
+      count: { type: 'integer', description: 'Quantas janelas em sequência, 2 a 8 (default 3)' },
+      platforms: SCOPE_PROPS.platforms, countries: SCOPE_PROPS.countries, families: SCOPE_PROPS.families, products: SCOPE_PROPS.products,
+    },
   ),
   tool(
     'get_products',
@@ -613,10 +655,10 @@ const HANDLERS: Record<string, Handler> = {
     return detail ?? { error: 'affiliate_not_found', message: `Afiliado "${id}" não encontrado no período. Tente get_affiliates com search.` };
   },
   async get_affiliate_analysis(input) {
-    const win = Number(input.window) || 7;
-    if (!isValidWindow(win)) return { error: 'invalid_input', message: 'window deve ser um inteiro de 1 a 90' };
+    const w = windowArgs(input);
+    if ('error' in w) return w;
     const data = await getAffiliateAnalysis({
-      window: win, view: input.view === 'platform' ? 'platform' : 'partner',
+      ...w, view: input.view === 'platform' ? 'platform' : 'partner',
       includeInternal: input.include_internal === true,
       platformSlugs: strList(input.platforms), families: strList(input.families),
       includeContact: false,
@@ -628,16 +670,34 @@ const HANDLERS: Record<string, Handler> = {
   async get_affiliate_explain(input) {
     const key = typeof input.key === 'string' ? input.key.trim() : '';
     if (!/^(partner|aff):[A-Za-z0-9_-]+$/.test(key)) return { error: 'invalid_input', message: 'key deve ser partner:<id> ou aff:<id> (veja get_affiliate_analysis)' };
-    const win = Number(input.window) || 7;
-    if (!isValidWindow(win)) return { error: 'invalid_input', message: 'window deve ser um inteiro de 1 a 90' };
+    const w = windowArgs(input);
+    if ('error' in w) return w;
     const r = await getAffiliateExplain(key, {
-      window: win, view: 'partner', includeInternal: input.include_internal === true,
+      ...w, view: 'partner', includeInternal: input.include_internal === true,
       platformSlugs: strList(input.platforms), families: strList(input.families), includeContact: false,
     });
     return r ?? { error: 'not_found', message: `entidade ${key} não encontrada` };
   },
+  async get_affiliate_sequence(input) {
+    const w = windowArgs(input);
+    if ('error' in w) return w;
+    return getAffiliateSequence({
+      ...w, count: countArg(input), view: input.view === 'platform' ? 'platform' : 'partner',
+      includeInternal: input.include_internal === true,
+      platformSlugs: strList(input.platforms), families: strList(input.families), includeContact: false,
+    });
+  },
   async get_funnel(input, ctx) {
     return getFunnel(parseFilters(input, ctx));
+  },
+  async get_funnel_sequence(input) {
+    const w = windowArgs(input);
+    if ('error' in w) return w;
+    return getFunnelSequence({
+      ...w, count: countArg(input),
+      platformSlugs: strList(input.platforms), countries: strList(input.countries),
+      productFamilies: strList(input.families), productExternalIds: strList(input.products),
+    });
   },
   async get_products(input, ctx) {
     const data = await getProducts(parseFilters(input, ctx));
