@@ -1,4 +1,4 @@
-/* global React, Icon, fmtCurrency, fmtInt, fmtPct, CpaStatusChip, SkelTablePanel, SkelMiniKpis, AaPlat, AaEmpty */
+/* global React, Icon, fmtCurrency, fmtInt, fmtPct, CpaStatusChip, SkelTablePanel, SkelMiniKpis, AaPlat, AaEmpty, downloadCsv */
 /* Análise de afiliados — visões em SEQUÊNCIA de janelas (Janela 1..K):
      AaSequenceView   tabela por janela (como as "Semanas" do relatório)
      AaEvolutionView  Evolução · Comentários (tag, barras, ranks, título + texto)
@@ -230,6 +230,16 @@ function AaSlowingPanel({ seq, onOpen, cur = 'USD' }) {
   const labels = seq.windows.map((w) => `J${w.index + 1}`);
   const nParou = (seq.slowing || []).filter((r) => r.state === 'parou').length;
   const nCaindo = (seq.slowing || []).filter((r) => r.state === 'caindo').length;
+  const exportCsv = () => {
+    const wLabel = (i) => { const w = seq.windows[i]; return w ? `J${i + 1} (${w.start} a ${w.end})` : `J${i + 1}`; };
+    const headers = ['Afiliado', 'Tipo', 'Plataformas', 'Estado', 'Última venda', 'Pico $', 'Janela do pico', 'Última janela $', 'Última janela vendas', 'vs pico %',
+      ...seq.windows.map((_, i) => `Receita ${wLabel(i)}`)];
+    const body = list.map((r) => [r.name, r.kind === 'partner' ? 'parceiro' : 'conta', r.platforms.join('+'),
+      r.state, `J${r.lastActiveIndex + 1}`, Math.round(r.peakRevenue), `J${r.peakIndex + 1}`,
+      Math.round(r.lastRevenue), r.lastSales, Math.round(Math.abs(r.dropPct) * 100),
+      ...r.revenue.map((v) => (v == null ? '' : Math.round(v)))]);
+    downloadCsv(`parando-de-rodar-${show}-${seq.window}d-${seq.anchor}.csv`, headers, body);
+  };
   return (
     <div className="panel" style={{ marginBottom: 14, padding: 0, border: '1px solid color-mix(in oklab, var(--danger) 30%, var(--border))' }}>
       <div className="panel-head" style={{ padding: '12px 16px 6px', flexWrap: 'wrap', gap: 8 }}>
@@ -242,6 +252,9 @@ function AaSlowingPanel({ seq, onOpen, cur = 'USD' }) {
             <button key={k} className={show === k ? 'is-active' : ''} onClick={() => setShow(k)}>{l}</button>
           ))}
         </div>
+        <button className="btn btn-ghost" style={{ fontSize: 11, whiteSpace: 'nowrap' }} onClick={exportCsv} disabled={list.length === 0} title="Baixa a lista do filtro ativo em CSV (abre no Excel/Sheets)">
+          <Icon name="download" size={12}/> Exportar CSV
+        </button>
       </div>
       {list.length === 0 && <div style={{ padding: 16 }}><AaEmpty>Ninguém parando de rodar nas janelas escolhidas — base saudável.</AaEmpty></div>}
       {list.length > 0 && (
