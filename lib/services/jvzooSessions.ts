@@ -27,15 +27,17 @@
 
 import type { ProductType } from '@prisma/client';
 import { db } from '../db';
-import { classifyProduct } from './productClassification';
+import { classifyProduct, hasNumberedRoleMarker } from './productClassification';
 import { rebalanceSessionFulfillment } from './sessionFulfillment';
 
 export interface JvzooSessionRow {
   id: string;
   externalId: string;
   orderedAt: Date;
-  /** Papel explícito no nome (roleMarked) — null quando o nome não anota. */
-  marked: { type: ProductType; step: number | null } | null;
+  /** Papel explícito no nome (roleMarked) — null quando o nome não anota.
+   *  `numbered`: o marcador traz o slot ("OTO2"); sem número ("(Upgrade)")
+   *  o step do classificador é só âncora de família — a posição decide. */
+  marked: { type: ProductType; step: number | null; numbered: boolean } | null;
   /** Product.productType — memória do catálogo (FRONTEND = sem opinião). */
   memoryType: ProductType | null;
   family: string | null;
@@ -85,7 +87,13 @@ export function planJvzooRoles(rows: JvzooSessionRow[]): JvzooRolePlan[] {
       position++;
       if (r.marked) {
         type = r.marked.type;
-        step = r.marked.step ?? position;
+        // Slot explícito ("OTO2") manda; "(Upgrade)" sem número fica com o
+        // MAIOR entre a âncora de família e a posição real — cobre tanto o
+        // 3º pedido genérico (posição 3 > âncora 2) quanto o DigestFlow
+        // comprado em 2º pulando o OTO1 (âncora 3 > posição 2).
+        step = r.marked.numbered
+          ? (r.marked.step ?? position)
+          : Math.max(r.marked.step ?? 2, position);
       } else if (isBackendType(r.memoryType)) {
         type = r.memoryType as ProductType;
         step = position;
@@ -137,7 +145,7 @@ async function loadRows(platformId: string, funnelSessionId: string): Promise<Jv
       id: r.id,
       externalId: r.externalId,
       orderedAt: r.orderedAt,
-      marked: c.roleMarked ? { type: c.type, step: c.funnelStep } : null,
+      marked: c.roleMarked ? { type: c.type, step: c.funnelStep, numbered: hasNumberedRoleMarker(r.product.name) } : null,
       memoryType: r.product.productType,
       family: c.family ?? r.product.family,
       bottles: c.bottles ?? r.product.bottles,

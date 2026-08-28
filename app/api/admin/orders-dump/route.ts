@@ -37,7 +37,7 @@ export async function GET(req: Request) {
     orderBy: { orderedAt: 'asc' },
     take: 50_000,
     select: {
-      externalId: true, parentExternalId: true, funnelSessionId: true, status: true, productType: true,
+      externalId: true, parentExternalId: true, funnelSessionId: true, status: true, productType: true, funnelStep: true,
       grossAmountUsd: true, netAmountUsd: true, cpaPaidUsd: true, orderedAt: true, refundedAt: true, chargebackAt: true,
       country: true,
       product: { select: { externalId: true, name: true, family: true } },
@@ -49,7 +49,7 @@ export async function GET(req: Request) {
     platform, start, end, count: rows.length, truncated: rows.length >= 50_000,
     orders: rows.map((o) => ({
       externalId: o.externalId, parentExternalId: o.parentExternalId, sessionId: o.funnelSessionId,
-      status: o.status, productType: o.productType,
+      status: o.status, productType: o.productType, funnelStep: o.funnelStep,
       gross: Number(o.grossAmountUsd), net: Number(o.netAmountUsd), cpa: Number(o.cpaPaidUsd),
       orderedAt: o.orderedAt.toISOString(), refundedAt: o.refundedAt?.toISOString() ?? null, chargebackAt: o.chargebackAt?.toISOString() ?? null,
       country: o.country,

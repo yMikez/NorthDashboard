@@ -18,9 +18,9 @@ const byId = (plans: ReturnType<typeof planJvzooRoles>) => Object.fromEntries(pl
 describe('planJvzooRoles — papel pela sessão', () => {
   it('nome marcado manda: FE + OTO1 + DS2; parent = FE', () => {
     const p = byId(planJvzooRoles([
-      row({ id: 'a', marked: { type: 'FRONTEND', step: 1 } }),
-      row({ id: 'b', orderedAt: at(1), marked: { type: 'UPSELL', step: 2 }, bottles: 12 }),
-      row({ id: 'c', orderedAt: at(3), marked: { type: 'DOWNSELL', step: 3 }, family: 'DigestFlow', bottles: 3 }),
+      row({ id: 'a', marked: { type: 'FRONTEND', step: 1, numbered: false } }),
+      row({ id: 'b', orderedAt: at(1), marked: { type: 'UPSELL', step: 2, numbered: true }, bottles: 12 }),
+      row({ id: 'c', orderedAt: at(3), marked: { type: 'DOWNSELL', step: 3, numbered: true }, family: 'DigestFlow', bottles: 3 }),
     ]));
     expect(p.a).toMatchObject({ productType: 'FRONTEND', funnelStep: 1, parentExternalId: 'TXa' });
     expect(p.b).toMatchObject({ productType: 'UPSELL', funnelStep: 2, parentExternalId: 'TXa' });
@@ -57,15 +57,15 @@ describe('planJvzooRoles — papel pela sessão', () => {
 
   it('sessão só de backend (órfã): âncora continua com o papel do nome, não vira FE', () => {
     const p = byId(planJvzooRoles([
-      row({ id: 'oto', marked: { type: 'UPSELL', step: 2 }, bottles: 12 }),
+      row({ id: 'oto', marked: { type: 'UPSELL', step: 2, numbered: true }, bottles: 12 }),
     ]));
     expect(p.oto).toMatchObject({ productType: 'UPSELL', funnelStep: 2, parentExternalId: 'TXoto' });
   });
 
   it('FE marcada que chegou depois no relógio de parede ainda ancora (fora de ordem)', () => {
     const p = byId(planJvzooRoles([
-      row({ id: 'up', orderedAt: at(0), marked: { type: 'UPSELL', step: 2 } }),
-      row({ id: 'fe', orderedAt: at(1), marked: { type: 'FRONTEND', step: 1 } }),
+      row({ id: 'up', orderedAt: at(0), marked: { type: 'UPSELL', step: 2, numbered: true } }),
+      row({ id: 'fe', orderedAt: at(1), marked: { type: 'FRONTEND', step: 1, numbered: false } }),
     ]));
     expect(p.fe.productType).toBe('FRONTEND');
     expect(p.up.parentExternalId).toBe('TXfe');
@@ -75,6 +75,34 @@ describe('planJvzooRoles — papel pela sessão', () => {
     const p = byId(planJvzooRoles([row({ id: 'b' }), row({ id: 'a' })]));
     expect(p.a.productType).toBe('FRONTEND');
     expect(p.b).toMatchObject({ productType: 'UPSELL', funnelStep: 2 });
+  });
+});
+
+describe('planJvzooRoles — marcador sem número usa a posição', () => {
+  it('"(Upgrade)" genérico comprado em 3º vira etapa 3 (caso GlycoPulse no funil NeuroPulse)', () => {
+    const p = byId(planJvzooRoles([
+      row({ id: 'fe', marked: { type: 'FRONTEND', step: 1, numbered: false }, family: 'NeuroPulsePro' }),
+      row({ id: 'oto1', orderedAt: at(1), marked: { type: 'UPSELL', step: 2, numbered: false }, family: 'NeuroPulsePro', bottles: 12 }),
+      row({ id: 'gp', orderedAt: at(2), marked: { type: 'UPSELL', step: 2, numbered: false }, family: 'GlycoPulse', bottles: 6 }),
+    ]));
+    expect(p.oto1).toMatchObject({ productType: 'UPSELL', funnelStep: 2 });
+    expect(p.gp).toMatchObject({ productType: 'UPSELL', funnelStep: 3 });
+  });
+
+  it('âncora de família maior que a posição vence (DigestFlow "(Upgrade)" comprado em 2º = OTO2)', () => {
+    const p = byId(planJvzooRoles([
+      row({ id: 'fe', marked: { type: 'FRONTEND', step: 1, numbered: false } }),
+      row({ id: 'df', orderedAt: at(1), marked: { type: 'UPSELL', step: 3, numbered: false }, family: 'DigestFlow' }),
+    ]));
+    expect(p.df).toMatchObject({ productType: 'UPSELL', funnelStep: 3 });
+  });
+
+  it('slot numerado ("OTO2") ignora a posição', () => {
+    const p = byId(planJvzooRoles([
+      row({ id: 'fe', marked: { type: 'FRONTEND', step: 1, numbered: false } }),
+      row({ id: 'x', orderedAt: at(1), marked: { type: 'UPSELL', step: 3, numbered: true }, family: 'GlycoPulse' }),
+    ]));
+    expect(p.x).toMatchObject({ funnelStep: 3 });
   });
 });
 

@@ -254,6 +254,19 @@ const FE_MARK_RE = /\bfe\b/;
 const ROLE_MARK_RE = /\b(?:upgrade|upsell|oto|up)\s*0*\d+\b|\b(?:down\s*sell|last\s*chance|down|ds)\s*0*\d+\b|last\s*chance|down\s*sell|upgrade|\bfe\b|\bfree\b/i;
 
 /**
+ * O marcador de papel no NOME traz o NÚMERO do slot ("OTO2", "UP01",
+ * "DS 1-A")? "(Upgrade)"/"(Last Chance)" sem número dão o TIPO mas não o
+ * slot — o classificador chuta por âncora de família (default UP1/DW1), e
+ * na JVZoo o slot verdadeiro deve vir da POSIÇÃO na sessão (ex.: "Glyco
+ * Pulse 6 Bottles (Upgrade)" comprado em 3º é o OTO2, não UP1 —
+ * auditoria 2026-08-26, vendas de UP2 somando na barra do UP1).
+ */
+export function hasNumberedRoleMarker(name?: string | null): boolean {
+  const n = (name ?? '').toLowerCase();
+  return UP_N_RE.test(n) || DW_N_RE.test(n);
+}
+
+/**
  * O papel deste SKU está ANOTADO em algum lugar (SKU CB, código D24 ou
  * marcador no nome)? Cartpanda: nunca (o papel é do connector). Quando
  * false, o `type` do classificador é só o default do parser.

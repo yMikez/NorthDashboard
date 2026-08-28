@@ -12,7 +12,7 @@
 
 import type { ProductType } from '@prisma/client';
 import { db } from '../db';
-import { classifyProduct, CONNECTOR_ROLE_PLATFORMS } from './productClassification';
+import { classifyProduct, CONNECTOR_ROLE_PLATFORMS, hasNumberedRoleMarker } from './productClassification';
 
 export interface BackfillStats {
   scanned: number;
@@ -98,7 +98,11 @@ export async function classifyExistingProducts(): Promise<BackfillStats> {
     // funil mostrava Downsell=0. Idempotente (filtro `not` abaixo).
     productsToFixOrders.push({ id: p.id, toType: c.type });
 
-    if (c.funnelStep != null) {
+    // JVZoo com marcador SEM número ("(Upgrade)"): o step do classificador é
+    // âncora de família, não o slot real — quem decide é a posição na sessão
+    // (reconcileJvzooSession). Forçar aqui desfazia o step da posição.
+    const stepUnreliable = p.platform?.slug === 'jvzoo' && !hasNumberedRoleMarker(p.name);
+    if (c.funnelStep != null && !stepUnreliable) {
       productsToFixFunnelStep.push({ id: p.id, funnelStep: c.funnelStep });
     }
   }
