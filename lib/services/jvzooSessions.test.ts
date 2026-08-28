@@ -106,6 +106,18 @@ describe('planJvzooRoles — marcador sem número usa a posição', () => {
   });
 });
 
+describe('planJvzooRoles — empate de horário (import) desempata por funil', () => {
+  it('mesma hora: pack maior da família do FE vem antes do cross-family, qualquer que seja o id', () => {
+    const p = byId(planJvzooRoles([
+      row({ id: 'z-fe', marked: { type: 'FRONTEND', step: 1, numbered: false }, family: 'NeuroPulsePro' }),
+      row({ id: 'a-gp', marked: { type: 'UPSELL', step: 2, numbered: false }, family: 'GlycoPulse', bottles: 6 }),
+      row({ id: 'm-np', marked: { type: 'UPSELL', step: 2, numbered: false }, family: 'NeuroPulsePro', bottles: 12 }),
+    ]));
+    expect(p['m-np']).toMatchObject({ productType: 'UPSELL', funnelStep: 2 });
+    expect(p['a-gp']).toMatchObject({ productType: 'UPSELL', funnelStep: 3 });
+  });
+});
+
 describe('isPrevDaySession', () => {
   it('mesmo cliente, dia anterior', () => {
     expect(isPrevDaySession('jvz:a@b.com:2026-08-26', 'jvz:a@b.com:2026-08-25')).toBe(true);

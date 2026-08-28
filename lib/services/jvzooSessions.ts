@@ -72,10 +72,25 @@ export function planJvzooRoles(rows: JvzooSessionRow[]): JvzooRolePlan[] {
     ?? sorted.find((r) => !knownBackend(r))
     ?? sorted[0];
 
+  // Ordem do funil pra atribuir POSIÇÃO. Timestamps reais (IPN) decidem
+  // sozinhos; empate de horário (import de CSV carimba a sessão inteira com
+  // a mesma hora) desempata por critério de funil: mesma família do FE
+  // antes de cross-family (OTO1 é o pack maior da própria família; cross
+  // vem depois), depois a âncora de slot do classificador, depois o id.
+  const feFamily = fe.family;
+  const sameFam = (r: JvzooSessionRow) => (r.family != null && r.family === feFamily ? 0 : 1);
+  const walk = [fe, ...sorted.filter((r) => r.id !== fe.id).sort(
+    (a, b) =>
+      a.orderedAt.getTime() - b.orderedAt.getTime()
+      || sameFam(a) - sameFam(b)
+      || (a.marked?.step ?? 9) - (b.marked?.step ?? 9)
+      || a.id.localeCompare(b.id),
+  )];
+
   const plans: JvzooRolePlan[] = [];
   let position = 1; // 1 = FE; cada pedido não-âncora avança
   let prev: JvzooSessionRow | null = null;
-  for (const r of sorted) {
+  for (const r of walk) {
     let type: ProductType;
     let step: number;
     if (r.id === fe.id) {
