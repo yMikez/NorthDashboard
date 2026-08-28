@@ -398,6 +398,16 @@ function AaHealthView({ seq, onOpen, cur = 'USD' }) {
   const warm = seq.reactivation.filter((r) => r.windowsAgo === 1);
   const cold = seq.reactivation.filter((r) => r.windowsAgo > 1);
   const sectionTitle = (t) => <div className="eyebrow" style={{ fontSize: 10, margin: '18px 0 8px', color: 'var(--accent)' }}>{t}</div>;
+  const exportReactivation = () => {
+    const wLabel = (i) => { const w = seq.windows[i]; return w ? `J${i + 1} (${w.start} a ${w.end})` : `J${i + 1}`; };
+    const headers = ['Afiliado', 'Plataformas', 'Temperatura', 'Parou há (janelas)', 'Última venda', 'Pico pedidos', 'Pico receita $',
+      ...seq.windows.map((_, i) => `Receita ${wLabel(i)}`)];
+    const body = [...warm, ...cold].map((r) => [r.name, r.platforms.join('+'),
+      r.windowsAgo === 1 ? 'morno' : 'frio', r.windowsAgo, `J${r.lastActiveIndex + 1}`,
+      r.peakSales, Math.round(r.peakRevenue),
+      ...r.revenue.map((v) => (v == null ? '' : Math.round(v)))]);
+    downloadCsv(`reativar-${seq.window}d-${seq.anchor}.csv`, headers, body);
+  };
   return (
     <>
       {sectionTitle(`LINHA DO TEMPO — COMO CADA JANELA SE COMPORTOU (${seq.window} DIAS CADA)`)}
@@ -410,7 +420,12 @@ function AaHealthView({ seq, onOpen, cur = 'USD' }) {
         <b style={{ color: 'var(--danger)' }}>Risco estrutural de concentração:</b> {seq.health.risk.replace(/^Risco estrutural de concentração:\s*/, '')}
       </div>
 
-      {sectionTitle('QUEM VALE A PENA REATIVAR')}
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, flexWrap: 'wrap' }}>
+        {sectionTitle('QUEM VALE A PENA REATIVAR')}
+        <button className="btn btn-ghost" style={{ fontSize: 11, whiteSpace: 'nowrap' }} onClick={exportReactivation} disabled={seq.reactivation.length === 0} title="Baixa a lista (mornos + frios) em CSV — abre no Excel/Sheets">
+          <Icon name="download" size={12}/> Exportar CSV
+        </button>
+      </div>
       <div style={{ fontSize: 12, color: 'var(--fg4)', marginBottom: 8 }}>
         Afiliados que venderam em alguma janela e sumiram na última. <span style={{ color: 'var(--warning)' }}>● Mornos</span> pararam na última transição — contato rápido tem mais chance; <span style={{ color: 'var(--fg5)' }}>● frios</span> pararam há mais tempo. Ordenados pelo pico de receita.
       </div>
