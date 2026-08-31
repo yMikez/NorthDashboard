@@ -95,9 +95,15 @@ export async function POST(req: Request) {
     const famMatch = c.family != null && p.family != null && sameFamilyKey(c.family, p.family);
     const cartpanda = slug === 'cartpanda';
     const jvzooUnnumbered = slug === 'jvzoo' && !hasNumberedRoleMarker(p.name);
+    // Papel "reproduzido": marcador explícito bate, OU (fora da JVZoo) o
+    // default sem marcador bate — no BuyGoods "sem marcador = FE" É a
+    // convenção; na JVZoo sem marcador o papel vem da sessão, então nome
+    // não-marcado NÃO autoriza travar (ex.: "HoneyPril 12 Bottles" é OTO).
     const roleMatch = cartpanda
       ? true // papel do connector; o que está no Product foi o connector que pôs
-      : c.roleMarked && c.type === p.productType;
+      : c.roleMarked
+        ? c.type === p.productType
+        : slug !== 'jvzoo' && c.type === p.productType;
     if (famMatch && (roleMatch || (slug === 'jvzoo' && !c.roleMarked && p.productType !== 'FRONTEND'))) {
       verified.push({ externalId: p.externalId, name: p.name, by: 'backfill' });
       if (!dryRun) {
