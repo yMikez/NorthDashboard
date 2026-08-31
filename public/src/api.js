@@ -365,6 +365,38 @@ async function fetchFulfillmentOverview(filters) {
  * resolvido (override → família default → fallback). Token bearer.
  * Opcional: { platform, family, search } pra filtrar.
  */
+// Catálogo de SKUs (fila de confirmação do catálogo VERIFICADO).
+async function adminListCatalog(token, opts = {}) {
+  const qs = new URLSearchParams();
+  if (opts.platform) qs.set('platform', opts.platform);
+  if (opts.verified != null) qs.set('verified', String(opts.verified));
+  if (opts.onlyIssues) qs.set('onlyIssues', '1');
+  if (opts.search) qs.set('search', opts.search);
+  const res = await fetch(`/api/admin/catalog${qs.toString() ? `?${qs}` : ''}`, {
+    headers: { Authorization: `Bearer ${token}`, Accept: 'application/json' },
+  });
+  if (!res.ok) throw new Error(`${res.status} ${await res.text().catch(() => '')}`);
+  return res.json();
+}
+async function adminPatchCatalog(token, updates) {
+  const res = await fetch('/api/admin/catalog', {
+    method: 'PATCH',
+    headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ updates }),
+  });
+  if (!res.ok) throw new Error(`${res.status} ${await res.text().catch(() => '')}`);
+  return res.json();
+}
+async function adminVerifyCatalog(token, dryRun) {
+  const res = await fetch('/api/admin/verify-catalog', {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ dryRun: dryRun !== false }),
+  });
+  if (!res.ok) throw new Error(`${res.status} ${await res.text().catch(() => '')}`);
+  return res.json();
+}
+
 async function adminListProductSuppliers(token, opts = {}) {
   const qs = new URLSearchParams();
   if (opts.platform) qs.set('platform', opts.platform);
@@ -899,6 +931,9 @@ window.NSApi = _wrapMutations({
   fetchFulfillmentOverview,
   adminListProductSuppliers,
   adminUpdateProductSuppliers,
+  adminListCatalog,
+  adminPatchCatalog,
+  adminVerifyCatalog,
   adminSaveCosts,
   adminBackfillCogs,
   adminBackfillStatus,

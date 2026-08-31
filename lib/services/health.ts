@@ -31,6 +31,9 @@ export interface HealthResponse {
     totalProducts: number;
     productsWithFamily: number;
     productsWithoutFamily: number;
+    unverifiedProducts: number;
+    pendingOrders: number;
+    pendingGrossUsd: number;
     unknownSKUs: Array<{ platform: string; externalId: string; name: string }>;
   };
   metricsView: {
@@ -111,7 +114,7 @@ export async function getHealth(): Promise<HealthResponse> {
   const refundBaseline = total30 ? get(counts30d, 'REFUNDED') / total30 : 0;
 
   // --- Catalog: classification coverage ---
-  const [totalProducts, withFamily, unknownList] = await Promise.all([
+  const [totalProducts, withFamily, unknownList, unverifiedCount, pendingAgg] = await Promise.all([
     db.product.count(),
     db.product.count({ where: { family: { not: null } } }),
     db.product.findMany({
@@ -122,6 +125,12 @@ export async function getHealth(): Promise<HealthResponse> {
         platform: { select: { slug: true } },
       },
       take: 25,
+    }),
+    db.product.count({ where: { verified: false } }),
+    db.order.aggregate({
+      where: { classificationPending: true },
+      _count: { _all: true },
+      _sum: { grossAmountUsd: true },
     }),
   ]);
 
@@ -142,6 +151,11 @@ export async function getHealth(): Promise<HealthResponse> {
       totalProducts,
       productsWithFamily: withFamily,
       productsWithoutFamily: totalProducts - withFamily,
+      // Catálogo VERIFICADO (2026-08-31): SKUs aguardando confirmação na
+      // fila (/costs) e pedidos com custo pendente (COGS NULL).
+      unverifiedProducts: unverifiedCount,
+      pendingOrders: pendingAgg._count._all,
+      pendingGrossUsd: Number(pendingAgg._sum.grossAmountUsd ?? 0),
       unknownSKUs: unknownList.map((p) => ({
         platform: p.platform.slug,
         externalId: p.externalId,

@@ -4683,6 +4683,13 @@ function HealthPage() {
                 ({((d.catalog.productsWithFamily / Math.max(1, d.catalog.totalProducts)) * 100).toFixed(0)}%)
               </span>
             </div>
+            {d.catalog.unverifiedProducts != null && (d.catalog.unverifiedProducts > 0 || d.catalog.pendingOrders > 0) && (
+              <div style={{ fontSize: 12, color: d.catalog.pendingOrders > 0 ? 'var(--warning)' : 'var(--fg4)' }}>
+                {d.catalog.unverifiedProducts} SKU(s) aguardando confirmação no catálogo
+                {d.catalog.pendingOrders > 0 && <> · {d.catalog.pendingOrders} pedido(s) com custo pendente ({fmtCurrency(d.catalog.pendingGrossUsd || 0, 'USD', 0)})</>}
+                {' '}— resolver na aba Custos
+              </div>
+            )}
             {d.catalog.productsWithoutFamily > 0 ? (
               <>
                 <div style={{ fontFamily: 'var(--f-mono)', fontSize: 10, color: 'var(--warning)', letterSpacing: '0.1em' }}>
@@ -5972,6 +5979,8 @@ function CostsPage({ filters }) {
       )}
 
       {/* Recompute */}
+      {token && <CatalogQueuePanel token={token}/>}
+
       <div className="panel" style={{ marginTop: 14 }}>
         <div className="panel-head">
           <div className="panel-title">
@@ -6003,6 +6012,225 @@ function CostsPage({ filters }) {
         </div>
       )}
       </>)}
+    </div>
+  );
+}
+
+// ------------------------------------------------------------------
+// Catálogo de SKUs — fila de confirmação do catálogo VERIFICADO.
+// A identidade (família/papel/etapa/potes) de um SKU verificado é imune a
+// rename de vendor; SKU novo roda pela sugestão e espera 1 clique aqui.
+// ------------------------------------------------------------------
+const CAT_TYPES = [['FRONTEND', 'FE'], ['UPSELL', 'Upsell'], ['DOWNSELL', 'Downsell'], ['SMS_RECOVERY', 'Recovery'], ['BUMP', 'Bump']];
+const CAT_INPUT = { background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: 6, padding: '4px 7px', color: 'var(--fg1)', fontFamily: 'var(--f-body)', fontSize: 12 };
+
+function CatalogQueuePanel({ token }) {
+  const [list, setList] = useState({ status: 'loading', summary: null, products: [], error: null });
+  const [onlyIssues, setOnlyIssues] = useState(true);
+  const [search, setSearch] = useState('');
+  const [drafts, setDrafts] = useState({});
+  const [busy, setBusy] = useState(null); // mensagem de operação em curso/resultado
+  const [migration, setMigration] = useState(null); // resultado do verify-catalog
+
+  async function load() {
+    setList((s) => ({ ...s, status: 'loading' }));
+    try {
+      const res = await window.NSApi.adminListCatalog(token, { onlyIssues, search: search || undefined });
+      setList({ status: 'ready', summary: res.summary, products: res.products || [], error: null });
+    } catch (err) {
+      setList({ status: 'error', summary: null, products: [], error: err.message });
+    }
+  }
+  useEffect(() => { load(); }, [token, onlyIssues]);
+
+  const draftOf = (p) => drafts[p.productId] || {};
+  const effField = (p, key, sugKey) => {
+    const d = draftOf(p);
+    if (key in d) return d[key];
+    if (p[key] != null) return p[key];
+    return p.suggestion ? p.suggestion[sugKey ?? key] : null;
+  };
+  const setDraft = (p, key, value) => setDrafts((d) => ({ ...d, [p.productId]: { ...(d[p.productId] || {}), [key]: value } }));
+
+  async function patch(updates, note) {
+    setBusy(note || 'Salvando…');
+    try {
+      const res = await window.NSApi.adminPatchCatalog(token, updates);
+      setBusy(`${res.updated} SKU(s) atualizados${res.aliases ? ` · ${res.aliases} alias aprendido(s)` : ''}. Rode "Reclassificar + recalcular" abaixo pra propagar pro histórico.`);
+      setDrafts({});
+      load();
+    } catch (err) {
+      setBusy(`Erro: ${err.message}`);
+    }
+  }
+
+  function confirmRow(p) {
+    const family = effField(p, 'family', 'family');
+    const upd = {
+      productId: p.productId,
+      family: family || null,
+      productType: effField(p, 'productType', 'type'),
+      funnelStep: effField(p, 'funnelStep', 'funnelStep'),
+      bottles: effField(p, 'bottles', 'bottles'),
+      bonusBottles: effField(p, 'bonusBottles', 'bonusBottles'),
+      ...(p.comboComponents == null && p.suggestion?.comboComponents ? { comboComponents: p.suggestion.comboComponents } : {}),
+      verified: true,
+      // Ensina o alias quando o parser NÃO tinha resolvido a família — a
+      // correção vale pra qualquer SKU futuro com esse nome dentro.
+      ...(family && !p.suggestion?.family ? { alias: { from: p.name } } : {}),
+    };
+    patch([upd], `Confirmando ${p.externalId}…`);
+  }
+
+  function confirmAllHigh() {
+    const cands = list.products.filter((p) => !p.verified && p.suggestion?.confidence === 'high' && !p.flags.conflict && p.suggestion.family);
+    if (cands.length === 0) { setBusy('Nenhum SKU com sugestão de alta confiança pendente.'); return; }
+    patch(cands.map((p) => ({
+      productId: p.productId,
+      family: p.family || p.suggestion.family,
+      productType: p.suggestion.roleMarked ? p.suggestion.type : p.productType,
+      funnelStep: p.suggestion.funnelStep,
+      bottles: p.bottles ?? p.suggestion.bottles,
+      bonusBottles: p.bonusBottles ?? p.suggestion.bonusBottles,
+      ...(p.comboComponents == null && p.suggestion.comboComponents ? { comboComponents: p.suggestion.comboComponents } : {}),
+      verified: true,
+    })), `Confirmando ${cands.length} SKU(s) de alta confiança…`);
+  }
+
+  async function runMigration(apply) {
+    setBusy(apply ? 'Aplicando verify-catalog…' : 'Rodando dry-run…');
+    try {
+      const res = await window.NSApi.adminVerifyCatalog(token, !apply);
+      setMigration(res);
+      setBusy(`${res.dryRun ? 'DRY-RUN' : 'APLICADO'}: ${res.verified} verificados · ${res.fixedPhantom.length} famílias corrigidas · ${res.queue.length} na fila`);
+      if (apply) load();
+    } catch (err) {
+      setBusy(`Erro: ${err.message}`);
+    }
+  }
+
+  const sm = list.summary;
+  return (
+    <div className="panel" style={{ marginTop: 14 }}>
+      <div className="panel-head" style={{ flexWrap: 'wrap', gap: 8 }}>
+        <div className="panel-title">
+          <span className="panel-eyebrow">CATÁLOGO DE SKUs — FILA DE CONFIRMAÇÃO</span>
+          <div className="panel-sub">
+            SKU <b>verificado</b> fica imune a renomeação do vendor (a identidade ancora no ID).
+            SKU novo roda pela sugestão do nome e espera 1 clique aqui. Corrigiu a família de um
+            nome irreconhecível? O sistema aprende (alias) e nunca mais pergunta.
+          </div>
+        </div>
+        <div className="page-head-actions" style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+          {sm && (
+            <span style={{ fontFamily: 'var(--f-mono)', fontSize: 11, color: sm.unverified > 0 ? 'var(--warning)' : 'var(--success)' }}>
+              {sm.unverified} aguardando · {sm.attention} em atenção{sm.pendingOrders > 0 ? ` · ${fmtCurrency(sm.pendingGross, 'USD', 0)} pendente (${sm.pendingOrders} pedidos)` : ''}
+            </span>
+          )}
+          <button className="btn btn-ghost" style={{ fontSize: 11 }} onClick={confirmAllHigh}>Confirmar alta confiança</button>
+          <button className="btn btn-ghost" style={{ fontSize: 11 }} onClick={() => runMigration(false)} title="Simula: trava o acervo que o classificador reproduz e lista o que sobra">Migração (dry-run)</button>
+          {migration && migration.dryRun && (
+            <button className="btn" style={{ fontSize: 11 }} onClick={() => runMigration(true)}>Aplicar migração</button>
+          )}
+        </div>
+      </div>
+
+      <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap', margin: '4px 0 10px' }}>
+        <label style={{ display: 'flex', gap: 6, alignItems: 'center', fontSize: 12, color: 'var(--fg4)', cursor: 'pointer' }}>
+          <input type="checkbox" checked={onlyIssues} onChange={(e) => setOnlyIssues(e.target.checked)}/> só pendências
+        </label>
+        <input placeholder="buscar nome/ID/família" value={search} style={{ ...CAT_INPUT, width: 220 }}
+          onChange={(e) => setSearch(e.target.value)}
+          onKeyDown={(e) => { if (e.key === 'Enter') load(); }}/>
+        <button className="btn btn-ghost" style={{ fontSize: 11 }} onClick={load}>Buscar</button>
+        {busy && <span style={{ fontSize: 11, color: 'var(--accent)' }}>{busy}</span>}
+      </div>
+
+      {migration && migration.fixedPhantom.length > 0 && (
+        <div style={{ fontSize: 11, color: 'var(--fg4)', marginBottom: 8, maxHeight: 120, overflowY: 'auto' }}>
+          <b style={{ color: 'var(--warning)' }}>{migration.dryRun ? 'Corrigiria' : 'Corrigidas'} famílias fantasma:</b>
+          {migration.fixedPhantom.map((f, i) => (
+            <div key={i} className="mono" style={{ fontSize: 10 }}>{f.externalId}: "{f.from}" → "{f.to}"</div>
+          ))}
+        </div>
+      )}
+
+      {list.status === 'error' && <div style={{ color: 'var(--danger)', fontSize: 12 }}>Erro: {list.error}</div>}
+      {list.status === 'ready' && list.products.length === 0 && (
+        <div style={{ fontSize: 12, color: 'var(--success)', padding: '8px 0' }}>✓ Nenhuma pendência no catálogo.</div>
+      )}
+      {list.products.length > 0 && (
+        <div className="tbl-wrap" style={{ maxHeight: 480 }}>
+          <table className="tbl">
+            <thead><tr><th>SKU</th><th>Família</th><th>Papel</th><th>Etapa</th><th className="num">Potes</th><th className="num">Bônus</th><th></th></tr></thead>
+            <tbody>
+              {list.products.map((p) => {
+                const sug = p.suggestion || {};
+                return (
+                  <tr key={p.productId}>
+                    <td style={{ maxWidth: 340 }}>
+                      <div style={{ fontWeight: 600, fontSize: 12, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={p.name}>{p.name}</div>
+                      <div className="mono" style={{ fontSize: 10, color: 'var(--fg5)', display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                        <span>{p.platformSlug} · {p.externalId} · {fmtInt(p.orderCount)} pedidos</span>
+                        {p.verified
+                          ? <span style={{ color: 'var(--success)' }}>✓ verificado ({p.verifiedBy})</span>
+                          : <span style={{ color: 'var(--warning)' }}>● aguardando</span>}
+                        {p.flags.drift && <span style={{ color: 'var(--warning)' }}>renomeado: era "{p.nameAtVerification}"</span>}
+                        {p.flags.conflict && <span style={{ color: 'var(--danger)' }}>nome sugere "{sug.family}"</span>}
+                        {p.pendingOrders > 0 && <span style={{ color: 'var(--danger)' }}>{p.pendingOrders} pedidos sem custo ({fmtCurrency(p.pendingGross, 'USD', 0)})</span>}
+                        {p.flags.noCost && !p.flags.noFamily && <span style={{ color: 'var(--warning)' }}>família sem custo cadastrado</span>}
+                      </div>
+                    </td>
+                    <td>
+                      <input value={effField(p, 'family', 'family') ?? ''} placeholder={sug.family || '—'} disabled={p.verified}
+                        style={{ ...CAT_INPUT, width: 150, opacity: p.verified ? 0.6 : 1 }}
+                        onChange={(e) => setDraft(p, 'family', e.target.value || null)}/>
+                    </td>
+                    <td>
+                      <select value={effField(p, 'productType', 'type') ?? 'FRONTEND'} disabled={p.verified}
+                        style={{ ...CAT_INPUT, opacity: p.verified ? 0.6 : 1 }}
+                        onChange={(e) => setDraft(p, 'productType', e.target.value)}>
+                        {CAT_TYPES.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+                      </select>
+                    </td>
+                    <td>
+                      <select value={String(effField(p, 'funnelStep', 'funnelStep') ?? '')} disabled={p.verified}
+                        style={{ ...CAT_INPUT, opacity: p.verified ? 0.6 : 1 }}
+                        onChange={(e) => setDraft(p, 'funnelStep', e.target.value === '' ? null : parseInt(e.target.value, 10))}>
+                        <option value="">—</option>
+                        <option value="1">1 (FE)</option>
+                        <option value="2">2 (UP1/DW1)</option>
+                        <option value="3">3 (UP2/DW2)</option>
+                        <option value="4">4 (UP3/DW3)</option>
+                      </select>
+                    </td>
+                    <td className="num">
+                      <input type="number" min="0" value={effField(p, 'bottles', 'bottles') ?? ''} disabled={p.verified}
+                        style={{ ...CAT_INPUT, width: 58, opacity: p.verified ? 0.6 : 1 }}
+                        onChange={(e) => setDraft(p, 'bottles', e.target.value === '' ? null : parseInt(e.target.value, 10))}/>
+                    </td>
+                    <td className="num">
+                      <input type="number" min="0" value={effField(p, 'bonusBottles', 'bonusBottles') ?? ''} disabled={p.verified}
+                        style={{ ...CAT_INPUT, width: 58, opacity: p.verified ? 0.6 : 1 }}
+                        onChange={(e) => setDraft(p, 'bonusBottles', e.target.value === '' ? null : parseInt(e.target.value, 10))}/>
+                    </td>
+                    <td style={{ whiteSpace: 'nowrap' }}>
+                      {!p.verified && <button className="btn" style={{ fontSize: 11 }} onClick={() => confirmRow(p)}>Confirmar</button>}
+                      {p.verified && p.flags.drift && (
+                        <button className="btn btn-ghost" style={{ fontSize: 11 }} title="O nome novo é só rename — mantém a classificação e limpa o aviso"
+                          onClick={() => patch([{ productId: p.productId, acceptRename: true }], 'Aceitando rename…')}>Aceitar rename</button>
+                      )}
+                      {p.verified && (
+                        <button className="btn btn-ghost" style={{ fontSize: 11, marginLeft: 4 }} onClick={() => patch([{ productId: p.productId, verified: false }], 'Reabrindo…')}>Reabrir</button>
+                      )}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
     </div>
   );
 }
