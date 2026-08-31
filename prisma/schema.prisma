@@ -87,6 +87,24 @@ model Product {
   // família. Valores: 'redrock' | 'shipoffers'.
   fulfillmentSupplier String?
 
+  // ------------------------------------------------------------------
+  // Catálogo VERIFICADO (2026-08-31) — a identidade do SKU mora AQUI.
+  // verified=true: NENHUM ingest/backfill/rename sobrescreve família/
+  // papel/etapa/potes deste produto; só a UI de catálogo (/costs) mexe.
+  // verifiedBy: 'auto-sku' (SKU estruturado CB), 'backfill' (verify-catalog
+  // reproduziu a classificação), ou o e-mail do admin que confirmou.
+  // nameAtVerification: snapshot do nome no momento do lock — name atual
+  // diferente = rename do vendor (badge de drift na fila; nunca reescreve).
+  // funnelStep: etapa canônica do SKU (1..4); null = sessão/connector decide.
+  // comboComponents: [{family, bottles}] na ordem do nome — COGS soma por
+  // componente (combos sem custo por permutação).
+  verified            Boolean   @default(false)
+  verifiedAt          DateTime?
+  verifiedBy          String?
+  nameAtVerification  String?
+  funnelStep          Int?
+  comboComponents     Json?
+
   platform Platform  @relation(fields: [platformId], references: [id])
   parent   Product?  @relation("FunnelTree", fields: [parentProductId], references: [id])
   children Product[] @relation("FunnelTree")
@@ -326,6 +344,12 @@ model Order {
   // they actually had. Computed via lib/services/cogs.ts.
   cogsUsd        Decimal? @db.Decimal(10, 2)
   fulfillmentUsd Decimal? @db.Decimal(10, 2)
+  // COGS/família irresolvíveis no ingest (família fora do dicionário, potes
+  // desconhecidos, custo não cadastrado): cogs/frete ficam NULL (nunca $0
+  // falso) e esta flag marca o pedido pra re-processo pelo backfill-cogs
+  // depois que o humano confirmar o SKU na fila do catálogo.
+  classificationPending Boolean @default(false)
+
   // Potes desta order (bottles + bonusBottles do Product NO MOMENTO do
   // ingest). Snapshot de propósito: reclassificar o produto depois não
   // reescreve o histórico de volume enviado. Base do "quanto está sendo
@@ -1071,3 +1095,15 @@ model IntegrationSetting {
   value     String
   updatedAt DateTime @updatedAt
 }
+
+// Aprendizado do catálogo: cada correção humana de família vira um alias
+// (chave normalizada [a-z0-9] → família canônica). O classificador/ingest
+// consulta via lib/services/familyDictionary.ts — "NerveBOX"/"Nerve Box"
+// nunca mais viram duas famílias.
+model FamilyAlias {
+  alias     String   @id
+  family    String
+  createdBy String?
+  createdAt DateTime @default(now())
+}
+

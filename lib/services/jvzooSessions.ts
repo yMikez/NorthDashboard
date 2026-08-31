@@ -163,20 +163,36 @@ async function loadRows(platformId: string, funnelSessionId: string): Promise<Jv
     where: { platformId, funnelSessionId },
     select: {
       id: true, externalId: true, orderedAt: true, productType: true, funnelStep: true, parentExternalId: true,
-      product: { select: { externalId: true, name: true, productType: true, family: true, bottles: true } },
+      product: {
+        select: {
+          externalId: true, name: true, productType: true, family: true,
+          bottles: true, verified: true, funnelStep: true,
+        },
+      },
     },
   });
   return rows.map((r) => {
     const c = classifyProduct(r.product.externalId, r.product.name, 'jvzoo');
+    const nameNumbered = c.roleMarked && hasNumberedRoleMarker(r.product.name);
+    // Precedência do papel: marcador NUMERADO no nome > catálogo VERIFICADO
+    // (etapa gravada conta como slot explícito) > marcador sem número >
+    // memória/posição (planJvzooRoles).
+    const marked = nameNumbered
+      ? { type: c.type, step: c.funnelStep, numbered: true }
+      : r.product.verified
+        ? { type: r.product.productType, step: r.product.funnelStep, numbered: r.product.funnelStep != null }
+        : c.roleMarked
+          ? { type: c.type, step: c.funnelStep, numbered: false }
+          : null;
     return {
       id: r.id,
       externalId: r.externalId,
       productId: r.product.externalId,
       orderedAt: r.orderedAt,
-      marked: c.roleMarked ? { type: c.type, step: c.funnelStep, numbered: hasNumberedRoleMarker(r.product.name) } : null,
+      marked,
       memoryType: r.product.productType,
-      family: c.family ?? r.product.family,
-      bottles: c.bottles ?? r.product.bottles,
+      family: (r.product.verified ? r.product.family : c.family) ?? r.product.family,
+      bottles: (r.product.verified ? r.product.bottles : c.bottles) ?? r.product.bottles,
       current: { productType: r.productType, funnelStep: r.funnelStep, parentExternalId: r.parentExternalId },
     };
   });

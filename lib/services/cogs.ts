@@ -88,7 +88,14 @@ export interface CogsResult {
   fulfillmentUsd: number;
   totalBottles: number;
   supplier: string; // fornecedor resolvido (transparência / debug)
+  // false = custo IRRESOLVÍVEL (família fora do catálogo de custos, potes
+  // desconhecidos, componente de combo sem custo). O caller grava NULL no
+  // pedido + classificationPending=true — nunca $0 falso nem média
+  // silenciosa (decisão 2026-08-31; a média inflava lucro sem aviso).
+  resolved: boolean;
 }
+
+export interface ComboComponentInput { family: string; bottles: number }
 
 /**
  * Resolve a tarifa de frete pro fornecedor + família + total de potes.
@@ -138,28 +145,53 @@ export async function calcCogs(
   bottles: number | null,
   bonusBottles: number | null,
   productSupplierOverride?: string | null,
+  comboComponents?: ComboComponentInput[] | null,
 ): Promise<CogsResult> {
+  const c = await getCache();
+
+  // Combo multi-família: COGS = Σ custo unitário do componente × potes do
+  // componente (sem cadastrar custo por permutação); frete pelo TOTAL de
+  // potes, com a tarifa da 1ª família componente cadastrada ('_default'
+  // como fallback). Qualquer componente sem custo → irresolvível.
+  if (comboComponents && comboComponents.length >= 2) {
+    const totalBottles = comboComponents.reduce((s2, x) => s2 + x.bottles, 0);
+    const supplier = productSupplierOverride
+      ?? comboComponents.map((x) => c.byFamily.get(x.family)?.supplier).find((x) => x != null)
+      ?? DEFAULT_SUPPLIER;
+    let sum = 0;
+    for (const comp of comboComponents) {
+      const unit = c.byFamily.get(comp.family)?.unitCostUsd;
+      if (unit == null) {
+        return { cogsUsd: 0, fulfillmentUsd: 0, totalBottles, supplier, resolved: false };
+      }
+      sum += unit * comp.bottles;
+    }
+    const rateFamily = comboComponents.find((x) => c.byFamily.has(x.family))?.family ?? (family ?? '_default');
+    const fulfillmentUsd = round2(lookupFulfillment(c.rates, supplier, rateFamily, totalBottles));
+    return { cogsUsd: round2(sum), fulfillmentUsd, totalBottles, supplier, resolved: true };
+  }
+
   const totalBottles = (bottles ?? 0) + (bonusBottles ?? 0);
   if (!family || totalBottles <= 0) {
-    return { cogsUsd: 0, fulfillmentUsd: 0, totalBottles, supplier: DEFAULT_SUPPLIER };
+    return { cogsUsd: 0, fulfillmentUsd: 0, totalBottles, supplier: DEFAULT_SUPPLIER, resolved: false };
   }
-  const c = await getCache();
   const fc = c.byFamily.get(family);
-  // Custo unitário: cadastrado, ou média (fallback p/ família nova).
-  const unitCost = fc?.unitCostUsd ?? c.averageUnitCost;
+  // Custo unitário: SÓ o cadastrado. (A média entre famílias saiu em
+  // 2026-08-31 — família sem custo agora é explicitamente irresolvível.)
+  const unitCost = fc?.unitCostUsd;
   // Supplier: override por SKU vence default da família. Sem override e sem
-  // família cadastrada cai pro DEFAULT_SUPPLIER ('shipoffers').
+  // família cadastrada cai pro DEFAULT_SUPPLIER.
   const supplier = productSupplierOverride
     ?? fc?.supplier
     ?? DEFAULT_SUPPLIER;
   if (unitCost == null) {
-    return { cogsUsd: 0, fulfillmentUsd: 0, totalBottles, supplier };
+    return { cogsUsd: 0, fulfillmentUsd: 0, totalBottles, supplier, resolved: false };
   }
   const cogsUsd = round2(totalBottles * unitCost);
   const fulfillmentUsd = round2(
     lookupFulfillment(c.rates, supplier, family, totalBottles),
   );
-  return { cogsUsd, fulfillmentUsd, totalBottles, supplier };
+  return { cogsUsd, fulfillmentUsd, totalBottles, supplier, resolved: true };
 }
 
 function round2(n: number): number {

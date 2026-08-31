@@ -12,7 +12,10 @@
 
 import type { ProductType } from '@prisma/client';
 import { db } from '../db';
-import { classifyProduct, CONNECTOR_ROLE_PLATFORMS, hasNumberedRoleMarker } from './productClassification';
+import {
+  classifyProduct, CONNECTOR_ROLE_PLATFORMS, hasNumberedRoleMarker, sameFamilyKey,
+} from './productClassification';
+import { resolveFamilyDynamic } from './familyDictionary';
 
 export interface BackfillStats {
   scanned: number;
@@ -31,6 +34,8 @@ export async function classifyExistingProducts(): Promise<BackfillStats> {
       name: true,
       productType: true,
       family: true,
+      verified: true,
+      funnelStep: true,
       platform: { select: { slug: true } },
     },
   });
@@ -56,10 +61,35 @@ export async function classifyExistingProducts(): Promise<BackfillStats> {
   const productsToFixFunnelStep: Array<{ id: string; funnelStep: number }> = [];
 
   for (const p of products) {
-    const c = classifyProduct(p.externalId, p.name, p.platform?.slug);
+    const isCartpandaV = CONNECTOR_ROLE_PLATFORMS.has(p.platform?.slug ?? '');
+    // Catálogo VERIFICADO: o Product é intocável — só PROPAGA o que está
+    // gravado pras Orders (papel/etapa). JVZoo com funnelStep null deixa a
+    // etapa com a sessão; Cartpanda nunca propaga (connector).
+    if (p.verified) {
+      stats.classified++;
+      if (isCartpandaV) continue;
+      productsToFixOrders.push({ id: p.id, toType: p.productType });
+      if (p.funnelStep != null) {
+        productsToFixFunnelStep.push({ id: p.id, funnelStep: p.funnelStep });
+      }
+      continue;
+    }
+
+    let c = classifyProduct(p.externalId, p.name, p.platform?.slug);
+    if (!c.family) {
+      // Família fora das canônicas estáticas → tenta o dicionário dinâmico
+      // (alias/custo/verificadas) antes de desistir.
+      const dyn = await resolveFamilyDynamic(p.name);
+      if (dyn.family) c = { ...c, family: dyn.family, variant: c.variant ?? dyn.variant };
+    }
     if (!c.family) {
       // Classifier has no confident opinion — leave the row alone.
       if (!p.family) stats.unrecognized.push(p.externalId);
+      continue;
+    }
+    // Anti-fantasma: família já gravada DIFERENTE (além de grafia) nunca é
+    // trocada por backfill — o conflito fica visível na fila do catálogo.
+    if (p.family != null && !sameFamilyKey(p.family, c.family)) {
       continue;
     }
     // Cartpanda: o PAPEL (productType/funnelStep) é do connector (up_sell_id),
@@ -68,7 +98,7 @@ export async function classifyExistingProducts(): Promise<BackfillStats> {
     // Order.productType/funnelStep — senão upsell (que o nome não anota como
     // upgrade) seria reescrito pra FRONTEND e o funil quebraria.
     // (JVZoo saiu deste grupo em 2026-08-12: lá o nome anota o papel.)
-    const isCartpanda = CONNECTOR_ROLE_PLATFORMS.has(p.platform?.slug ?? '');
+    const isCartpanda = isCartpandaV;
     // JVZoo SEM marcador no nome: o type do classificador é só o default
     // (FRONTEND) — não é opinião. Família/potes sim; papel fica com a
     // sessão (backfill-jvzoo-sessions) e a memória do catálogo.
@@ -78,13 +108,17 @@ export async function classifyExistingProducts(): Promise<BackfillStats> {
     await db.product.update({
       where: { id: p.id },
       data: {
-        family: c.family,
+        // Mantém a grafia já gravada quando equivalente (sameFamilyKey acima).
+        family: p.family ?? c.family,
         variant: c.variant,
         bottles: c.bottles,
         // bonusBottles também — combos BuyGoods/RC ("3 + 3 Bottles")
         // precisam disso pro total de potes (COGS+frete) no backfill.
         bonusBottles: c.bonusBottles,
-        ...(roleUnknown ? {} : { productType: c.type }),
+        ...(c.comboComponents && c.comboComponents.length >= 2
+          ? { comboComponents: c.comboComponents as unknown as object }
+          : {}),
+        ...(roleUnknown ? {} : { productType: c.type, funnelStep: c.funnelStep }),
       },
     });
     stats.classified++;
