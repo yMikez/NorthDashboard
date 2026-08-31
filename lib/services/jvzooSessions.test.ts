@@ -5,6 +5,7 @@ const t0 = new Date('2026-08-25T14:00:00Z');
 const at = (min: number) => new Date(t0.getTime() + min * 60_000);
 const row = (over: Partial<JvzooSessionRow> & { id: string }): JvzooSessionRow => ({
   externalId: 'TX' + over.id,
+  productId: 'P' + over.id,
   orderedAt: at(0),
   marked: null,
   memoryType: 'FRONTEND',
@@ -103,6 +104,34 @@ describe('planJvzooRoles — marcador sem número usa a posição', () => {
       row({ id: 'x', orderedAt: at(1), marked: { type: 'UPSELL', step: 3, numbered: true }, family: 'GlycoPulse' }),
     ]));
     expect(p.x).toMatchObject({ funnelStep: 3 });
+  });
+});
+
+describe('planJvzooRoles — slots 1..3 sempre', () => {
+  it('recompra da MESMA oferta reusa a etapa (não vira Upsell 4)', () => {
+    const p = byId(planJvzooRoles([
+      row({ id: 'fe', marked: { type: 'FRONTEND', step: 1, numbered: false } }),
+      row({ id: 'a', orderedAt: at(1), productId: 'NM12', marked: { type: 'UPSELL', step: 2, numbered: false }, bottles: 12 }),
+      row({ id: 'b', orderedAt: at(2), productId: 'NM12', marked: { type: 'UPSELL', step: 2, numbered: false }, bottles: 12 }),
+      row({ id: 'c', orderedAt: at(3), productId: 'DF6', marked: { type: 'UPSELL', step: 2, numbered: false }, family: 'DigestFlow' }),
+    ]));
+    expect(p.a.funnelStep).toBe(2);
+    expect(p.b.funnelStep).toBe(2); // repetida
+    expect(p.c.funnelStep).toBe(3); // próxima oferta REAL continua do slot certo
+  });
+
+  it('posição nunca passa do slot 3 (step 4), mesmo com 5+ ofertas distintas', () => {
+    const p = byId(planJvzooRoles([
+      row({ id: 'fe', marked: { type: 'FRONTEND', step: 1, numbered: false } }),
+      row({ id: 'u1', orderedAt: at(1), productId: 'o1' }),
+      row({ id: 'u2', orderedAt: at(2), productId: 'o2', family: 'DigestFlow' }),
+      row({ id: 'u3', orderedAt: at(3), productId: 'o3', family: 'NightCalm' }),
+      row({ id: 'u4', orderedAt: at(4), productId: 'o4', family: 'FlexGuard' }),
+      row({ id: 'u5', orderedAt: at(5), productId: 'o5', family: 'Cognizil' }),
+    ]));
+    expect(p.u3.funnelStep).toBe(4);
+    expect(p.u4.funnelStep).toBe(4);
+    expect(p.u5.funnelStep).toBe(4);
   });
 });
 

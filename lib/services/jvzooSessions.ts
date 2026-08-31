@@ -33,6 +33,8 @@ import { rebalanceSessionFulfillment } from './sessionFulfillment';
 export interface JvzooSessionRow {
   id: string;
   externalId: string;
+  /** Product.externalId — identifica a OFERTA (recompra da mesma oferta reusa a etapa). */
+  productId: string;
   orderedAt: Date;
   /** Papel explícito no nome (roleMarked) — null quando o nome não anota.
    *  `numbered`: o marcador traz o slot ("OTO2"); sem número ("(Upgrade)")
@@ -88,7 +90,13 @@ export function planJvzooRoles(rows: JvzooSessionRow[]): JvzooRolePlan[] {
   )];
 
   const plans: JvzooRolePlan[] = [];
-  let position = 1; // 1 = FE; cada pedido não-âncora avança
+  // O funil tem SEMPRE 3 slots de upsell e 3 de downsell (Up01..03 /
+  // Down01..03). Posição passa disso quando o cliente compra 4+ ofertas ou
+  // repete a mesma — teto no step 4 (slot 3), e oferta repetida (mesmo
+  // productId) reusa a etapa da primeira compra em vez de abrir slot novo.
+  const MAX_STEP = 4;
+  const offerStep = new Map<string, number>();
+  let position = 1; // 1 = FE; cada OFERTA nova não-âncora avança
   let prev: JvzooSessionRow | null = null;
   for (const r of walk) {
     let type: ProductType;
@@ -100,6 +108,8 @@ export function planJvzooRoles(rows: JvzooSessionRow[]): JvzooRolePlan[] {
       step = r.marked?.step ?? 1;
     } else {
       position++;
+      const repeatStep = offerStep.get(r.productId);
+      if (repeatStep != null) position--; // recompra não abre slot novo
       if (r.marked) {
         type = r.marked.type;
         // Slot explícito ("OTO2") manda; "(Upgrade)" sem número fica com o
@@ -108,10 +118,10 @@ export function planJvzooRoles(rows: JvzooSessionRow[]): JvzooRolePlan[] {
         // comprado em 2º pulando o OTO1 (âncora 3 > posição 2).
         step = r.marked.numbered
           ? (r.marked.step ?? position)
-          : Math.max(r.marked.step ?? 2, position);
+          : repeatStep ?? Math.max(r.marked.step ?? 2, position);
       } else if (isBackendType(r.memoryType)) {
         type = r.memoryType as ProductType;
-        step = position;
+        step = repeatStep ?? position;
       } else {
         const fewer =
           prev !== null
@@ -119,8 +129,10 @@ export function planJvzooRoles(rows: JvzooSessionRow[]): JvzooRolePlan[] {
           && r.family != null && r.family === prev.family
           && r.bottles < prev.bottles;
         type = fewer ? 'DOWNSELL' : 'UPSELL';
-        step = position;
+        step = repeatStep ?? position;
       }
+      step = Math.min(step, MAX_STEP);
+      offerStep.set(r.productId, step);
     }
     plans.push({ id: r.id, productType: type, funnelStep: step, parentExternalId: fe.externalId });
     prev = r;
@@ -159,6 +171,7 @@ async function loadRows(platformId: string, funnelSessionId: string): Promise<Jv
     return {
       id: r.id,
       externalId: r.externalId,
+      productId: r.product.externalId,
       orderedAt: r.orderedAt,
       marked: c.roleMarked ? { type: c.type, step: c.funnelStep, numbered: hasNumberedRoleMarker(r.product.name) } : null,
       memoryType: r.product.productType,

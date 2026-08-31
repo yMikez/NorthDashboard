@@ -1316,10 +1316,13 @@ export async function getFunnel(
     } else if (t === 'UPSELL') {
       // step missing or 0 (legacy data) falls back to step=2 (UP1) so the
       // order still appears somewhere in the funnel rather than being lost.
-      const s = step >= 2 ? step : 2;
+      // Teto no step 4 (slot 3): o funil SEMPRE mostra Upsell 1·2·3 e
+      // Downsell 1·2·3 — compra repetida/posição >3 (sessão JVZoo com 5+
+      // itens) dobra no slot 3 em vez de inventar "Upsell 4/5".
+      const s = Math.min(step >= 2 ? step : 2, 4);
       g.upsellsByStep.set(s, (g.upsellsByStep.get(s) ?? 0) + gross);
     } else if (t === 'DOWNSELL') {
-      const s = step >= 2 ? step : 2;
+      const s = Math.min(step >= 2 ? step : 2, 4);
       g.downsellsByStep.set(s, (g.downsellsByStep.get(s) ?? 0) + gross);
     }
   }
