@@ -8,6 +8,7 @@ import {
 } from './productClassification';
 import { resolveFamilyDynamic } from './familyDictionary';
 import { effectiveInternal } from './affiliateIdentityCore';
+import { looksLikeProductTracking } from './digistoreAffiliates';
 import { calcCogs, type ComboComponentInput } from './cogs';
 import { rebalanceSessionFulfillment } from './sessionFulfillment';
 import { scheduleDailyMetricsRefresh } from './dailyMetrics';
@@ -383,11 +384,13 @@ export async function upsertOrder(normalized: NormalizedOrder): Promise<UpsertOr
     && normalized.parentExternalId
     && normalized.parentExternalId !== normalized.externalId
   ) {
-    const incomingPseudo = affiliateId == null || effectiveInternal({
-      externalId: normalized.affiliateExternalId ?? '',
-      nickname: normalized.affiliateNickname ?? null,
-      isInternal: null,
-    });
+    const incomingPseudo = affiliateId == null
+      || effectiveInternal({
+        externalId: normalized.affiliateExternalId ?? '',
+        nickname: normalized.affiliateNickname ?? null,
+        isInternal: null,
+      })
+      || looksLikeProductTracking(normalized.affiliateNickname || normalized.affiliateExternalId || '');
     if (incomingPseudo) {
       const fe = await db.order.findFirst({
         where: {

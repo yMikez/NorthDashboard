@@ -16,6 +16,32 @@
 
 import { db } from '../db';
 import { effectiveInternal } from './affiliateIdentityCore';
+import { normalizeKey, scanFamilies } from './productClassification';
+import { getDynamicFamilyEntries } from './familyDictionary';
+
+/**
+ * O texto é um TRACKING de produto ("blessedkit3", "gelazen6",
+ * "flexguard3nightcalm1neuropulsepro1-bundle")? Regra: cita família(s) do
+ * dicionário e o que sobra é só dígitos/"bundle". A heurística genérica
+ * (isInternalGuess) só conhece as famílias antigas — esta usa o dicionário
+ * inteiro (estáticas + custo + aliases + verificadas).
+ */
+export function looksLikeProductTracking(
+  text: string,
+  extraEntries?: Array<{ key: string; family: string }>,
+): boolean {
+  const fams = scanFamilies(text, extraEntries);
+  if (fams.length === 0) return false;
+  let rest = normalizeKey(text);
+  for (const f of fams) {
+    const k = normalizeKey(f);
+    while (rest.includes(k)) rest = rest.replace(k, '');
+  }
+  // aliases podem ter chave diferente da canônica — remove sobras não
+  // numéricas conhecidas ("bundle") e aceita só dígitos no resto.
+  rest = rest.replace(/bundle/g, '');
+  return /^\d*$/.test(rest);
+}
 
 export interface DigistoreAffiliateStats {
   scanned: number;       // backends D24 com parent
@@ -42,9 +68,12 @@ export async function reattributeDigistoreBackendAffiliates(dryRun = false): Pro
   });
   stats.scanned = backs.length;
 
+  const dynEntries = await getDynamicFamilyEntries().catch(() => []);
+  const pseudo = (a: { externalId: string; nickname: string | null; isInternal: boolean | null }) =>
+    effectiveInternal(a) || looksLikeProductTracking(a.nickname || a.externalId, dynEntries);
   const candidates = backs.filter(
     (b) => b.parentExternalId !== b.externalId
-      && (b.affiliateId == null || (b.affiliate != null && effectiveInternal(b.affiliate))),
+      && (b.affiliateId == null || (b.affiliate != null && pseudo(b.affiliate))),
   );
   stats.candidates = candidates.length;
   if (candidates.length === 0) return stats;
