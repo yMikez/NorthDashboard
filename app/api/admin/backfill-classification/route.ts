@@ -7,6 +7,7 @@
 
 import { NextResponse } from 'next/server';
 import { classifyExistingProducts } from '@/lib/services/classifyExistingProducts';
+import { reattributeDigistoreBackendAffiliates } from '@/lib/services/digistoreAffiliates';
 import { refreshDailyMetricsNow } from '@/lib/services/dailyMetrics';
 import { checkIngestSecret } from '@/lib/ingest/auth';
 import { logger } from '@/lib/logger';
@@ -23,11 +24,13 @@ export async function POST(req: Request) {
 
   try {
     const stats = await classifyExistingProducts();
+    // Upsell D24 com afiliado-pseudo (tracking do produto) → afiliado da FE.
+    const digistoreAffiliates = await reattributeDigistoreBackendAffiliates();
     // Backfill mutated Product.family / Order.productType, which feeds the
     // MV — invalidate immediately so the next dashboard request sees fresh
     // numbers instead of waiting for the in-process staleness window.
     await refreshDailyMetricsNow();
-    return NextResponse.json(stats);
+    return NextResponse.json({ ...stats, digistoreAffiliates });
   } catch (err) {
     logger.error({ err }, 'admin/backfill-classification failed');
     return NextResponse.json(

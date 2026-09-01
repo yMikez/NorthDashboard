@@ -7,6 +7,7 @@ import {
   isStructuredSku, sameFamilyKey, type ComboComponent,
 } from './productClassification';
 import { resolveFamilyDynamic } from './familyDictionary';
+import { effectiveInternal } from './affiliateIdentityCore';
 import { calcCogs, type ComboComponentInput } from './cogs';
 import { rebalanceSessionFulfillment } from './sessionFulfillment';
 import { scheduleDailyMetricsRefresh } from './dailyMetrics';
@@ -368,6 +369,42 @@ export async function upsertOrder(normalized: NormalizedOrder): Promise<UpsertOr
   } else {
     orderType = normalized.productType as ProductType;
     orderStep = normalized.funnelStep ?? null;
+  }
+
+  // Digistore manda o campo de afiliado do UPSELL/DOWNSELL com o TRACKING
+  // do próprio produto ("neuromindpro12") em vez do afiliado real — a
+  // receita do upsell sumia do afiliado (pseudo é filtrado como interno) e
+  // o AOV dele desabava. Backend com afiliado nulo/pseudo herda o afiliado
+  // da FE da sessão; afiliado REAL divergente nunca é sobrescrito.
+  // (Histórico: lib/services/digistoreAffiliates.ts via backfill.)
+  if (
+    normalized.platformSlug === 'digistore24'
+    && (orderType === 'UPSELL' || orderType === 'DOWNSELL')
+    && normalized.parentExternalId
+    && normalized.parentExternalId !== normalized.externalId
+  ) {
+    const incomingPseudo = affiliateId == null || effectiveInternal({
+      externalId: normalized.affiliateExternalId ?? '',
+      nickname: normalized.affiliateNickname ?? null,
+      isInternal: null,
+    });
+    if (incomingPseudo) {
+      const fe = await db.order.findFirst({
+        where: {
+          platformId: platform.id,
+          productType: 'FRONTEND',
+          affiliateId: { not: null },
+          OR: [
+            { externalId: normalized.parentExternalId },
+            { parentExternalId: normalized.parentExternalId },
+          ],
+        },
+        select: { affiliateId: true },
+      });
+      if (fe?.affiliateId && fe.affiliateId !== affiliateId) {
+        affiliateId = fe.affiliateId;
+      }
+    }
   }
 
   const orderData = {

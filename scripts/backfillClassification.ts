@@ -6,11 +6,14 @@
 
 import { db } from '../lib/db';
 import { classifyExistingProducts } from '../lib/services/classifyExistingProducts';
+import { reattributeDigistoreBackendAffiliates } from '../lib/services/digistoreAffiliates';
 
 async function main() {
   console.log('[backfill] starting product classification backfill');
   const stats = await classifyExistingProducts();
   console.log('[backfill] done:', JSON.stringify(stats));
+  const aff = await reattributeDigistoreBackendAffiliates();
+  console.log('[backfill] digistore backend affiliates:', JSON.stringify(aff));
   if (stats.unrecognized.length > 0) {
     console.warn(`[backfill] ${stats.unrecognized.length} products did not match any known SKU pattern:`);
     for (const sku of stats.unrecognized.slice(0, 20)) {
