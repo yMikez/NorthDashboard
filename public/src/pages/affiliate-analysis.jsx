@@ -1,4 +1,4 @@
-/* global React, Icon, NSTimeSeries, NSBarRank, Sparkline, CpaStatusChip, fmtCurrency, fmtInt, fmtPct, SkelMiniKpis, SkelChartPanel, SkelTablePanel, SkelDrawerLoading, downloadCsv, AaContactForm, AffiliateIdentityDrawer, AaSequenceView, AaEvolutionView, AaHealthView, AaTopsByWindow, AiOriginChip */
+/* global React, Icon, NSTimeSeries, NSBarRank, Sparkline, CpaStatusChip, fmtCurrency, fmtInt, fmtPct, SkelMiniKpis, SkelChartPanel, SkelTablePanel, SkelDrawerLoading, downloadCsv, AaContactForm, AffiliateIdentityDrawer, AaSequenceView, AaEvolutionView, AaHealthView, AaTopsByWindow, AaNewAffiliatesPanel, AiOriginChip */
 /* Análise de afiliados — quem sobe, quem cai e por quê.
    Ranking por métrica (receita/vendas/AOV/reembolso/Net após CPA), janelas
    de 3/7/15/30/60 dias (cada uma vs a anterior), identidade unificada entre
@@ -467,6 +467,7 @@ function AffiliateAnalysisPage({ filters, user }) {
           </div>
 
           {/* Tops por janela (sequência J1..JK) logo abaixo do ranking */}
+          {seq && <AaNewAffiliatesPanel seq={seq} onOpen={openEntity}/>}
           {seq && <AaTopsByWindow seq={seq} onOpen={openEntity}/>}
         </div>
       )}

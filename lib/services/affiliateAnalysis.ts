@@ -670,6 +670,17 @@ export interface SlowingEntry {
   revenue: Array<number | null>;
 }
 
+export interface NewAffiliateEntry {
+  key: string;               // partner:<id> | aff:<id> — abre o "por quê"
+  name: string;
+  kind: 'partner' | 'affiliate';
+  platforms: string[];
+  firstSaleAt: string;       // ISO da 1ª venda FE aprovada (EVER)
+  firstSaleDay: string;      // YYYY-MM-DD (BRT)
+  sales: number;             // FEs aprovadas nos 7 dias
+  revenue: number;           // gross aprovado (com backend) nos 7 dias
+}
+
 export interface AffiliateSequenceResponse {
   asOf: string;
   window: WindowDays;
@@ -683,7 +694,128 @@ export interface AffiliateSequenceResponse {
   reactivation: Array<ReactivationEntry & { platforms: string[] }>;
   /** Quem está parando de rodar: sumiu na última janela ou caiu ≥ 50% vs o pico e segue caindo. */
   slowing: SlowingEntry[];
+  /** Quadro de NOVOS: 1ª venda de todos os tempos caiu nos últimos 7 dias (até a âncora). */
+  newAffiliates: NewAffiliateEntry[];
+  newRange: { start: string; end: string; days: number };
   health: { notes: HealthNote[]; risk: string };
+}
+
+// Novos afiliados: contas cuja PRIMEIRA venda FE aprovada (histórico
+// inteiro, não só a cobertura das janelas) caiu nos últimos 7 dias até a
+// âncora. Em view=partner, o parceiro só é novo se a 1ª venda do PARCEIRO
+// (todas as contas) caiu na janela — conta nova de parceiro veterano não
+// entra (isso é migração de conta, e a Evolução já dá a pista).
+const NEW_AFF_DAYS = 7;
+
+async function loadNewAffiliates(
+  opts: SequenceOptions,
+  lastDayStart: Date,
+): Promise<{ rows: NewAffiliateEntry[]; range: { start: string; end: string; days: number } }> {
+  const end = new Date(lastDayStart.getTime() + DAY_MS);
+  const start = new Date(lastDayStart.getTime() - (NEW_AFF_DAYS - 1) * DAY_MS);
+  const range = { start: brtDateStr(start), end: brtDateStr(lastDayStart), days: NEW_AFF_DAYS };
+
+  const platCond = opts.platformSlugs?.length
+    ? Prisma.sql`AND pl."slug" IN (${Prisma.join(opts.platformSlugs)})`
+    : Prisma.empty;
+  const firsts = await db.$queryRaw<Array<{
+    id: string; externalId: string; nickname: string | null; partnerId: string | null;
+    isInternal: boolean | null; platform: string; first_sale: Date;
+  }>>(Prisma.sql`
+    SELECT a."id", a."externalId", a."nickname", a."partnerId", a."isInternal",
+           pl."slug" AS platform, MIN(o."orderedAt") AS first_sale
+    FROM "Order" o
+    JOIN "Affiliate" a ON a."id" = o."affiliateId"
+    JOIN "Platform" pl ON pl."id" = a."platformId"
+    WHERE o."status" = 'APPROVED' AND o."productType" = 'FRONTEND' ${platCond}
+    GROUP BY a."id", a."externalId", a."nickname", a."partnerId", a."isInternal", pl."slug"
+    HAVING MIN(o."orderedAt") >= ${start} AND MIN(o."orderedAt") < ${end}
+  `);
+  const fresh = firsts.filter((a) => opts.includeInternal || !effectiveInternal(a));
+  if (fresh.length === 0) return { rows: [], range };
+
+  // 1ª venda do PARCEIRO inteiro (pra barrar conta nova de veterano).
+  const pids = Array.from(new Set(fresh.map((f) => f.partnerId).filter((x): x is string => x != null)));
+  const partnerFirst = new Map<string, Date>();
+  const partnerName = new Map<string, string>();
+  if (pids.length > 0) {
+    const [pf, pn] = await Promise.all([
+      db.$queryRaw<Array<{ pid: string; first_sale: Date }>>(Prisma.sql`
+        SELECT a."partnerId" AS pid, MIN(o."orderedAt") AS first_sale
+        FROM "Order" o JOIN "Affiliate" a ON a."id" = o."affiliateId"
+        WHERE o."status" = 'APPROVED' AND o."productType" = 'FRONTEND'
+          AND a."partnerId" IN (${Prisma.join(pids)})
+        GROUP BY a."partnerId"
+      `),
+      db.affiliatePartner.findMany({ where: { id: { in: pids } }, select: { id: true, displayName: true } }),
+    ]);
+    for (const r of pf) partnerFirst.set(r.pid, r.first_sale);
+    for (const p of pn) partnerName.set(p.id, p.displayName);
+  }
+
+  const ids = fresh.map((f) => f.id);
+  const stats = new Map<string, { fe: number; revenue: number }>();
+  const st = await db.$queryRaw<Array<{ id: string; fe: bigint; revenue: number }>>(Prisma.sql`
+    SELECT o."affiliateId" AS id,
+           COUNT(*) FILTER (WHERE o."productType" = 'FRONTEND')::bigint AS fe,
+           COALESCE(SUM(o."grossAmountUsd"), 0)::float AS revenue
+    FROM "Order" o
+    WHERE o."status" = 'APPROVED' AND o."affiliateId" IN (${Prisma.join(ids)})
+      AND o."orderedAt" >= ${start} AND o."orderedAt" < ${end}
+    GROUP BY o."affiliateId"
+  `);
+  for (const r of st) stats.set(r.id, { fe: Number(r.fe), revenue: r.revenue });
+
+  const rows: NewAffiliateEntry[] = [];
+  if (opts.view === 'partner') {
+    const grouped = new Map<string, typeof fresh>();
+    for (const f of fresh) {
+      if (f.partnerId != null) {
+        const pFirst = partnerFirst.get(f.partnerId);
+        if (pFirst && pFirst < start) continue; // veterano abrindo conta nova
+        const list = grouped.get(f.partnerId) ?? [];
+        list.push(f);
+        grouped.set(f.partnerId, list);
+      } else {
+        const s = stats.get(f.id) ?? { fe: 0, revenue: 0 };
+        rows.push({
+          key: `aff:${f.id}`, name: f.nickname?.trim() || f.externalId, kind: 'affiliate',
+          platforms: [f.platform], firstSaleAt: f.first_sale.toISOString(),
+          firstSaleDay: brtDateStr(f.first_sale), sales: s.fe, revenue: round2(s.revenue),
+        });
+      }
+    }
+    for (const [pid, list] of grouped) {
+      const first = list.reduce((a, b) => (b.first_sale < a.first_sale ? b : a));
+      const agg = list.reduce(
+        (acc, f) => {
+          const s = stats.get(f.id) ?? { fe: 0, revenue: 0 };
+          return { fe: acc.fe + s.fe, revenue: acc.revenue + s.revenue };
+        },
+        { fe: 0, revenue: 0 },
+      );
+      rows.push({
+        key: `partner:${pid}`,
+        name: partnerName.get(pid) ?? list[0].nickname ?? pid,
+        kind: 'partner',
+        platforms: Array.from(new Set(list.map((f) => f.platform))),
+        firstSaleAt: first.first_sale.toISOString(),
+        firstSaleDay: brtDateStr(first.first_sale),
+        sales: agg.fe, revenue: round2(agg.revenue),
+      });
+    }
+  } else {
+    for (const f of fresh) {
+      const s = stats.get(f.id) ?? { fe: 0, revenue: 0 };
+      rows.push({
+        key: `aff:${f.id}`, name: f.nickname?.trim() || f.externalId, kind: 'affiliate',
+        platforms: [f.platform], firstSaleAt: f.first_sale.toISOString(),
+        firstSaleDay: brtDateStr(f.first_sale), sales: s.fe, revenue: round2(s.revenue),
+      });
+    }
+  }
+  rows.sort((a, b) => b.revenue - a.revenue || b.sales - a.sales);
+  return { rows, range };
 }
 
 export async function getAffiliateSequence(opts: SequenceOptions): Promise<AffiliateSequenceResponse> {
@@ -812,6 +944,8 @@ export async function getAffiliateSequence(opts: SequenceOptions): Promise<Affil
       return lb - la;
     });
 
+  const newAff = await loadNewAffiliates(opts, raw.lastDayStart);
+
   const totals: WindowTotals[] = windows.map((w) => ({
     revenue: w.totals.revenue, sales: w.totals.sales, active: w.active, concentrationTop10: w.concentrationTop10,
     topShare2: w.topShare2, topNames: w.rows.slice(0, 2).map((x) => x.name),
@@ -849,6 +983,7 @@ export async function getAffiliateSequence(opts: SequenceOptions): Promise<Affil
     asOf: (opts.now ?? new Date()).toISOString(),
     window: opts.window, count, anchor: brtDateStr(raw.lastDayStart), view: opts.view, includeInternal: opts.includeInternal,
     windows, transitions, evolution, reactivation, slowing: slowing.slice(0, 80),
+    newAffiliates: newAff.rows.slice(0, 100), newRange: newAff.range,
     health: { notes, risk: riskText(totals, transitions) },
   };
 }

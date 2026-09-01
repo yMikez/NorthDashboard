@@ -224,6 +224,71 @@ function AaTopsByWindow({ seq, onOpen, cur = 'USD', top = 10 }) {
 }
 
 // ── Quem está parando de rodar (Evolução) ───────────────────────────────
+// Quadro de NOVOS afiliados: 1ª venda de todos os tempos nos últimos 7 dias
+// (até a âncora). Clique abre o "por quê"; export CSV.
+function AaNewAffiliatesPanel({ seq, onOpen, cur = 'USD' }) {
+  if (!seq.newAffiliates) return null; // resposta antiga em cache
+  const list = seq.newAffiliates;
+  const d = (s) => s.slice(8, 10) + '/' + s.slice(5, 7);
+  const daysAgo = (day) => {
+    const ms = Date.parse(seq.anchor + 'T00:00:00Z') - Date.parse(day + 'T00:00:00Z');
+    return Math.round(ms / 86400000);
+  };
+  const agoLabel = (day) => {
+    const n = daysAgo(day);
+    return n <= 0 ? 'no dia da âncora' : n === 1 ? 'há 1 dia' : `há ${n} dias`;
+  };
+  const exportCsv = () => {
+    const headers = ['Afiliado', 'Tipo', 'Plataformas', '1ª venda', 'Vendas 7d', 'Receita 7d $'];
+    const body = list.map((r) => [r.name, r.kind === 'partner' ? 'parceiro' : 'conta', r.platforms.join('+'), r.firstSaleDay, r.sales, Math.round(r.revenue)]);
+    downloadCsv(`novos-afiliados-${seq.newRange.start}-a-${seq.newRange.end}.csv`, headers, body);
+  };
+  return (
+    <div className="panel" style={{ marginBottom: 14, padding: 0, border: '1px solid color-mix(in oklab, var(--success) 30%, var(--border))' }}>
+      <div className="panel-head" style={{ padding: '12px 16px 6px', flexWrap: 'wrap', gap: 8 }}>
+        <div className="panel-title">
+          <span className="panel-eyebrow" style={{ color: 'var(--success)' }}>★ NOVOS AFILIADOS — 1ª VENDA NOS ÚLTIMOS {seq.newRange.days} DIAS</span>
+          <span className="panel-sub">
+            primeira venda FE aprovada de TODOS os tempos entre {d(seq.newRange.start)} e {d(seq.newRange.end)} ·
+            conta nova de parceiro já ativo não entra · clique pra ver o detalhe
+          </span>
+        </div>
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+          <span className="mono" style={{ fontSize: 11, color: list.length ? 'var(--success)' : 'var(--fg5)' }}>{list.length} novo(s)</span>
+          <button className="btn btn-ghost" style={{ fontSize: 11, whiteSpace: 'nowrap' }} onClick={exportCsv} disabled={list.length === 0}>
+            <Icon name="download" size={12}/> Exportar CSV
+          </button>
+        </div>
+      </div>
+      {list.length === 0 && <div style={{ padding: 16 }}><AaEmpty>Nenhum afiliado fez a primeira venda no período.</AaEmpty></div>}
+      {list.length > 0 && (
+        <div className="tbl-wrap" style={{ maxHeight: 360 }}>
+          <table className="tbl">
+            <thead><tr><th>Afiliado</th><th>Plat.</th><th>1ª venda</th><th className="num">Vendas (7d)</th><th className="num">Receita (7d)</th></tr></thead>
+            <tbody>
+              {list.map((r) => (
+                <tr key={r.key} onClick={() => onOpen?.(r.key)} style={{ cursor: 'pointer' }}>
+                  <td style={{ fontWeight: 600 }}>
+                    {r.kind === 'partner' && <span style={{ color: 'var(--accent)', marginRight: 4 }}><Icon name="link" size={10}/></span>}
+                    {r.name}
+                    {daysAgo(r.firstSaleDay) <= 1 && (
+                      <span style={{ fontFamily: 'var(--f-mono)', fontSize: 9, fontWeight: 700, marginLeft: 6, padding: '1px 6px', borderRadius: 'var(--r-full)', color: 'var(--success)', background: 'color-mix(in oklab, var(--success) 14%, transparent)' }}>NOVO</span>
+                    )}
+                  </td>
+                  <td style={{ whiteSpace: 'nowrap' }}>{r.platforms.map((p) => <span key={p} style={{ marginRight: 3 }}><AaPlat slug={p}/></span>)}</td>
+                  <td className="cell-mono" style={{ whiteSpace: 'nowrap' }}>{d(r.firstSaleDay)} <span style={{ color: 'var(--fg5)', fontSize: 10 }}>{agoLabel(r.firstSaleDay)}</span></td>
+                  <td className="num cell-mono">{fmtInt(r.sales)}</td>
+                  <td className="num cell-mono" style={{ fontWeight: 700, color: 'var(--money)' }}>{fmtCurrency(r.revenue, cur, 0)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function AaSlowingPanel({ seq, onOpen, cur = 'USD' }) {
   const [show, setShow] = useStateAS('all'); // all | parou | caindo
   const list = (seq.slowing || []).filter((r) => show === 'all' || r.state === show);
@@ -300,6 +365,7 @@ function AaEvolutionView({ seq, onOpen, cur = 'USD' }) {
       <div style={{ fontSize: 12, color: 'var(--fg4)', lineHeight: 1.6, padding: '12px 14px', border: '1px solid var(--border-soft)', borderRadius: 12, marginBottom: 12 }}>
         Todo afiliado que esteve no <b>Top 10</b> em pelo menos uma das {seq.windows.length} janelas está listado abaixo, ordenado por relevância. As barras mostram a receita em {labels.join(' / ')} (barra vazia = não vendeu naquela janela). Os comentários são gerados pelas regras da própria análise — números, ranks, aprovação e Net após CPA.
       </div>
+      <AaNewAffiliatesPanel seq={seq} onOpen={onOpen} cur={cur}/>
       <AaSlowingPanel seq={seq} onOpen={onOpen} cur={cur}/>
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 14 }}>
         <button className={`btn btn-ghost ${filter === 'all' ? 'is-active' : ''}`} style={{ fontSize: 11 }} onClick={() => setFilter('all')}>Todos · {seq.evolution.length}</button>
@@ -459,4 +525,4 @@ function AaHealthView({ seq, onOpen, cur = 'USD' }) {
   );
 }
 
-Object.assign(window, { AaSequenceView, AaEvolutionView, AaHealthView, AaBars, AaTopsByWindow, AaSlowingPanel });
+Object.assign(window, { AaSequenceView, AaEvolutionView, AaHealthView, AaBars, AaTopsByWindow, AaSlowingPanel, AaNewAffiliatesPanel });
