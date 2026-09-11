@@ -75,6 +75,10 @@ export async function POST(req: Request) {
         amountUsd: sale.amountUsd,
         fulfillmentStatus: sale.fulfillmentStatus,
         purchasedAt: sale.purchasedAt,
+        productName: sale.productName,
+        productSku: sale.productSku,
+        family: sale.family,
+        bottles: sale.bottles,
         raw: data as unknown as object,
       },
       update: {
@@ -86,6 +90,12 @@ export async function POST(req: Request) {
         amountUsd: sale.amountUsd,
         fulfillmentStatus: sale.fulfillmentStatus,
         purchasedAt: sale.purchasedAt,
+        // Produto só sobrescreve com valor (reenvio antigo sem Product não
+        // apaga o que um payload novo já preencheu).
+        productName: sale.productName ?? undefined,
+        productSku: sale.productSku ?? undefined,
+        family: sale.family ?? undefined,
+        bottles: sale.bottles ?? undefined,
         raw: data as unknown as object,
       },
     });

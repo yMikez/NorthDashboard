@@ -14,6 +14,7 @@
 // BuyGoods (ver lib/connectors/buygoods/ingest.ts, Gotcha 2). Valor em USD.
 
 import { wallClockToUtc } from '../../shared/datetime';
+import { extractBottles, refineFamilyText } from '../../services/productClassification';
 
 export interface TaukSaleInput {
   externalKey: string;
@@ -25,6 +26,14 @@ export interface TaukSaleInput {
   amountUsd: number;
   fulfillmentStatus: string | null;
   purchasedAt: Date;
+  // Campo "Product" (novo no feed, observado 2026-09-11):
+  //   "2734 Horse Peak Gelatin Phone (Future No"
+  // → productSku = prefixo numérico ("2734"), productName = resto limpo
+  // (parêntese truncado removido), family pelo dicionário canônico.
+  productName: string | null;
+  productSku: string | null;
+  family: string | null;
+  bottles: number | null;
 }
 
 // Normaliza chave: minúsculo, só alfanumérico ("Fulfillment Status" →
@@ -41,6 +50,7 @@ const FIELD_ALIASES: Record<string, string[]> = {
   phone: ['phone', 'phonenumber', 'telephone'],
   address: ['address', 'address1', 'street'],
   amount: ['purchaseamount', 'amount', 'total', 'purchasetotal', 'price'],
+  product: ['product', 'productname', 'item', 'offer'],
   status: ['fulfillmentstatus', 'status', 'orderstatus'],
   date: ['purchasedate', 'date', 'purchasedatetime', 'orderdate'],
 };
@@ -77,6 +87,26 @@ export function parseTaukPayload(raw: Record<string, unknown>): TaukSaleInput {
   // chaves distintas (data tem precisão de segundo).
   const externalKey = `${(email ?? 'sem-email').toLowerCase()}|${dateRaw ?? 'sem-data'}`;
 
+  // Produto: "2734 Horse Peak Gelatin Phone (Future No" — SKU numérico na
+  // frente, e a Tauk trunca a string no meio de um parêntese (sobra um "("
+  // aberto). Família resolvida SÓ contra o dicionário canônico (nunca cunha
+  // família nova a partir do texto do call center).
+  let productName: string | null = null;
+  let productSku: string | null = null;
+  let family: string | null = null;
+  let bottles: number | null = null;
+  const productRaw = pick('product');
+  if (productRaw) {
+    const m = productRaw.match(/^(\d{2,8})\s+(.*)$/);
+    productSku = m ? m[1] : null;
+    let name = (m ? m[2] : productRaw).trim();
+    // parêntese aberto sem fechar = truncamento do feed → descarta a cauda
+    name = name.replace(/\s*\([^)]*$/, '').replace(/\s{2,}/g, ' ').trim();
+    productName = name || productRaw.trim();
+    family = refineFamilyText(productName).family;
+    bottles = extractBottles(productName).bottles;
+  }
+
   return {
     externalKey,
     email,
@@ -87,5 +117,9 @@ export function parseTaukPayload(raw: Record<string, unknown>): TaukSaleInput {
     amountUsd: Number.isFinite(amountUsd) ? Math.round(amountUsd * 100) / 100 : 0,
     fulfillmentStatus: pick('status'),
     purchasedAt,
+    productName,
+    productSku,
+    family,
+    bottles,
   };
 }

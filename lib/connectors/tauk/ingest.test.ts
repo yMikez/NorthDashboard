@@ -66,3 +66,35 @@ describe('parseTaukPayload', () => {
     expect(r.purchasedAt.toISOString()).toBe('2026-01-15T13:00:00.000Z');
   });
 });
+
+describe('parseTaukPayload — campo Product (payload real 2026-09-11)', () => {
+  it('separa SKU numérico, limpa parêntese truncado, resolve família pelo dicionário', () => {
+    const sale = parseTaukPayload({
+      phone: '7608847590',
+      email: 'wcschaul@gmail.com',
+      lname: 'Schaul',
+      address: '26170 Sultanas Rd',
+      'purchase amount': '167.90',
+      fname: 'William C',
+      Product: '2734 Horse Peak Gelatin Phone (Future No',
+      'Purchase Date': '2026-09-10 16:05:50',
+    });
+    expect(sale.amountUsd).toBe(167.9);
+    expect(sale.productSku).toBe('2734');
+    expect(sale.productName).toBe('Horse Peak Gelatin Phone');
+    expect(sale.family).toBe('Horse Peak Gelatin');
+    expect(sale.externalKey).toBe('wcschaul@gmail.com|2026-09-10 16:05:50');
+    expect(sale.fulfillmentStatus).toBeNull(); // payload novo não manda status
+  });
+
+  it('sem Product continua como antes (campos null)', () => {
+    const sale = parseTaukPayload({
+      email: 'a@b.com',
+      'Purchase Date': '2026-09-10 10:00:00',
+      'purchase amount': '99.00',
+    });
+    expect(sale.productName).toBeNull();
+    expect(sale.family).toBeNull();
+  });
+});
+
