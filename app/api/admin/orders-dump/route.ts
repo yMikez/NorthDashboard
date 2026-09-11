@@ -38,6 +38,7 @@ export async function GET(req: Request) {
     take: 50_000,
     select: {
       externalId: true, parentExternalId: true, funnelSessionId: true, status: true, productType: true, funnelStep: true,
+      trafficSource: true, trackingId: true, clickId: true, campaignKey: true,
       grossAmountUsd: true, netAmountUsd: true, cpaPaidUsd: true, orderedAt: true, refundedAt: true, chargebackAt: true,
       country: true,
       product: { select: { externalId: true, name: true, family: true } },
@@ -50,6 +51,7 @@ export async function GET(req: Request) {
     orders: rows.map((o) => ({
       externalId: o.externalId, parentExternalId: o.parentExternalId, sessionId: o.funnelSessionId,
       status: o.status, productType: o.productType, funnelStep: o.funnelStep,
+      trafficSource: o.trafficSource, trackingId: o.trackingId, clickId: o.clickId, campaignKey: o.campaignKey,
       gross: Number(o.grossAmountUsd), net: Number(o.netAmountUsd), cpa: Number(o.cpaPaidUsd),
       orderedAt: o.orderedAt.toISOString(), refundedAt: o.refundedAt?.toISOString() ?? null, chargebackAt: o.chargebackAt?.toISOString() ?? null,
       country: o.country,
