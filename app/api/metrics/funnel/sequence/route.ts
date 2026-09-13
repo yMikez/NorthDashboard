@@ -6,7 +6,7 @@
 import { NextResponse } from 'next/server';
 import { requireTab } from '@/lib/auth/guard';
 import { respondCached } from '@/lib/shared/metricsResponse';
-import { csvParam } from '@/lib/shared/queryParams';
+import { affiliateIdsParam, csvParam } from '@/lib/shared/queryParams';
 import { parseAnalysisParams } from '@/lib/shared/affiliateAnalysisParams';
 import { getFunnelSequence } from '@/lib/services/funnelSequence';
 
@@ -26,6 +26,7 @@ export async function GET(req: Request) {
       platformSlugs: p.platformSlugs, productFamilies: p.families,
       countries: csvParam(searchParams.get('countries')),
       productExternalIds: csvParam(searchParams.get('products')),
+      mappedAffiliateIds: affiliateIdsParam(searchParams.get('affiliate_id')),
     }),
   );
 }

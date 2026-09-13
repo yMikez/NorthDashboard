@@ -3,7 +3,7 @@ import { getAffiliateDetail } from '@/lib/services/metrics';
 import { requireAnyTab } from '@/lib/auth/guard';
 import { getCachedResponse, setCachedResponse } from '@/lib/cache/responseCache';
 import { logger } from '@/lib/logger';
-import { csvParam, stagesParam } from '@/lib/shared/queryParams';
+import { affiliateIdsParam, csvParam, stagesParam } from '@/lib/shared/queryParams';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -38,6 +38,7 @@ export async function GET(
   const countries = csvParam(searchParams.get('countries'));
   const productExternalIds = csvParam(searchParams.get('products'));
   const productFamilies = csvParam(searchParams.get('families'));
+  const mappedAffiliateIds = affiliateIdsParam(searchParams.get('affiliate_id'));
   const productTypes = stagesParam(searchParams.get('stages'));
   const platformHint = searchParams.get('platform') ?? undefined;
 
@@ -51,7 +52,7 @@ export async function GET(
     const t0 = Date.now();
     const data = await getAffiliateDetail(
       decodeURIComponent(externalId),
-      { startDate, endDate, platformSlugs, countries, productExternalIds, productFamilies, productTypes },
+      { startDate, endDate, platformSlugs, countries, productExternalIds, productFamilies, productTypes, mappedAffiliateIds },
       platformHint,
     );
     if (!data) {

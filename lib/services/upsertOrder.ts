@@ -13,6 +13,7 @@ import { calcCogs, type ComboComponentInput } from './cogs';
 import { rebalanceSessionFulfillment } from './sessionFulfillment';
 import { scheduleDailyMetricsRefresh } from './dailyMetrics';
 import { autoLinkAffiliateByEmail } from './affiliateIdentity';
+import { resolveForIngest } from './affiliateMapping';
 import { logger } from '../logger';
 
 export interface UpsertOrderResult {
@@ -265,6 +266,11 @@ export async function upsertOrder(normalized: NormalizedOrder): Promise<UpsertOr
   const cogs = await calcCogs(eff.family, eff.bottles, eff.bonus, product.fulfillmentSupplier, eff.combo);
 
   let affiliateId: string | null = null;
+  // affiliate_id do NorthScale Afiliados (contrato integration-dashboard.md):
+  // resolvido por (plataforma, identificador do payload) contra o espelho
+  // do mapeamento. Não mapeado → fila unmapped_affiliate_events; nunca
+  // falha o IPN.
+  let mappedAffiliateId: string | null = null;
   if (normalized.affiliateExternalId) {
     const affiliate = await db.affiliate.upsert({
       where: {
@@ -286,9 +292,14 @@ export async function upsertOrder(normalized: NormalizedOrder): Promise<UpsertOr
         email: normalized.affiliateEmail ?? undefined,
         lastOrderAt: normalized.orderedAt,
       },
-      select: { id: true, partnerId: true },
+      select: { id: true, partnerId: true, mappedAffiliateId: true, isInternal: true },
     });
     affiliateId = affiliate.id;
+    mappedAffiliateId = await resolveForIngest(
+      normalized.platformSlug,
+      { externalId: normalized.affiliateExternalId, nickname: normalized.affiliateNickname },
+      { accountId: affiliate.id, orderExternalId: normalized.externalId, at: normalized.orderedAt, currentMapped: affiliate.mappedAffiliateId, isInternal: affiliate.isInternal },
+    );
     // Conta nova com e-mail conhecido → tenta vincular a um parceiro já
     // existente com o mesmo e-mail (outra plataforma). Nunca falha o IPN.
     if (normalized.affiliateEmail && !affiliate.partnerId) {
@@ -402,10 +413,12 @@ export async function upsertOrder(normalized: NormalizedOrder): Promise<UpsertOr
             { parentExternalId: normalized.parentExternalId },
           ],
         },
-        select: { affiliateId: true },
+        select: { affiliateId: true, affiliate: { select: { mappedAffiliateId: true } } },
       });
       if (fe?.affiliateId && fe.affiliateId !== affiliateId) {
         affiliateId = fe.affiliateId;
+        // O affiliate_id externo acompanha o afiliado herdado da FE.
+        mappedAffiliateId = fe.affiliate?.mappedAffiliateId ?? null;
       }
     }
   }
@@ -418,6 +431,7 @@ export async function upsertOrder(normalized: NormalizedOrder): Promise<UpsertOr
     vendorAccount: normalized.vendorAccount,
     productId: product.id,
     affiliateId,
+    mappedAffiliateId,
     customerId,
 
     productType: orderType,
@@ -479,7 +493,7 @@ export async function upsertOrder(normalized: NormalizedOrder): Promise<UpsertOr
       id: true, orderedAt: true, approvedAt: true,
       productId: true, productType: true, funnelStep: true,
       cogsUsd: true, fulfillmentUsd: true, bottlesShipped: true,
-      classificationPending: true, funnelSessionId: true,
+      classificationPending: true, funnelSessionId: true, mappedAffiliateId: true,
     },
   });
 
@@ -509,8 +523,10 @@ export async function upsertOrder(normalized: NormalizedOrder): Promise<UpsertOr
         bottlesShipped: existing.bottlesShipped,
         classificationPending: existing.classificationPending,
         funnelSessionId: existing.funnelSessionId,
+        // Estorno sem afiliado no payload não apaga a atribuição da venda.
+        mappedAffiliateId: orderData.mappedAffiliateId ?? existing.mappedAffiliateId,
       }
-      : orderData;
+      : { ...orderData, mappedAffiliateId: orderData.mappedAffiliateId ?? existing.mappedAffiliateId };
     await db.order.update({ where: { id: existing.id }, data: updateData });
     result = {
       created: false,

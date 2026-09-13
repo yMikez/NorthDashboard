@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import { getOrders } from '@/lib/services/metrics';
 import { requireTab } from '@/lib/auth/guard';
 import { logger } from '@/lib/logger';
-import { csvParam, stagesParam } from '@/lib/shared/queryParams';
+import { affiliateIdsParam, csvParam, stagesParam } from '@/lib/shared/queryParams';
 import { respondCached } from '@/lib/shared/metricsResponse';
 
 export const runtime = 'nodejs';
@@ -31,6 +31,7 @@ export async function GET(req: Request) {
   const countries = csvParam(searchParams.get('countries'));
   const productExternalIds = csvParam(searchParams.get('products'));
   const productFamilies = csvParam(searchParams.get('families'));
+  const mappedAffiliateIds = affiliateIdsParam(searchParams.get('affiliate_id'));
   const productTypes = stagesParam(searchParams.get('stages'));
   const status = searchParams.get('status') ?? undefined;
   const productType = searchParams.get('product_type') ?? undefined;
@@ -41,7 +42,7 @@ export async function GET(req: Request) {
   try {
     return await respondCached('orders', searchParams, () =>
       getOrders(
-        { startDate, endDate, platformSlugs, countries, productExternalIds, productFamilies, productTypes },
+        { startDate, endDate, platformSlugs, countries, productExternalIds, productFamilies, productTypes, mappedAffiliateIds },
         { status, productType, search, limit, offset },
       ),
     );

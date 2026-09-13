@@ -3,6 +3,7 @@ import { getFunnel } from '@/lib/services/metrics';
 import { requireTab } from '@/lib/auth/guard';
 import { logger } from '@/lib/logger';
 import { respondCached } from '@/lib/shared/metricsResponse';
+import { affiliateIdsParam } from '@/lib/shared/queryParams';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -30,10 +31,11 @@ export async function GET(req: Request) {
   const countries = csvParam(searchParams.get('countries'));
   const productExternalIds = csvParam(searchParams.get('products'));
   const productFamilies = csvParam(searchParams.get('families'));
+  const mappedAffiliateIds = affiliateIdsParam(searchParams.get('affiliate_id'));
 
   try {
     return await respondCached('funnel', searchParams, () =>
-      getFunnel({ startDate, endDate, platformSlugs, countries, productExternalIds, productFamilies }),
+      getFunnel({ startDate, endDate, platformSlugs, countries, productExternalIds, productFamilies, mappedAffiliateIds }),
     );
   } catch (err) {
     logger.error({ err }, 'metrics/funnel failed');

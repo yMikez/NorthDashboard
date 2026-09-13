@@ -142,6 +142,9 @@ function App({ user }) {
     // backend como query param `stages` (CSV) que mapeia pra
     // Order.productType (FRONTEND/UPSELL/DOWNSELL/SMS_RECOVERY).
     stages: decodeSet(params.get('st')),
+    // Afiliado do sistema NorthScale Afiliados (affiliate_id) — query
+    // param `affiliate_id` nos endpoints que aceitam (Order.mappedAffiliateId).
+    affiliates: decodeSet(params.get('aff')),
     // Retained for backward-compat with pages still reading filters.trafficSources / filters.currency.
     // Both removed from FilterBar UI + URL persistence in Fase 2A cleanup.
     trafficSources: new Set(),
@@ -172,6 +175,7 @@ function App({ user }) {
         families: Array.from(filters.families || []),
         stages: Array.from(filters.stages || []),
         countries: Array.from(filters.countries || []),
+        affiliates: Array.from(filters.affiliates || []),
       };
     } catch (e) { /* nunca quebra o render por causa do chat */ }
   }, [filters, hashState.route]);
@@ -191,6 +195,7 @@ function App({ user }) {
     if (filters.families.size) p.set('fam', encodeSet(filters.families));
     if (filters.countries.size) p.set('co', encodeSet(filters.countries));
     if (filters.stages?.size) p.set('st', encodeSet(filters.stages));
+    if (filters.affiliates?.size) p.set('aff', encodeSet(filters.affiliates));
     const qs = p.toString();
     const desiredUrl = '/' + hashState.route + (qs ? '?' + qs : '');
     const currentUrl = location.pathname + location.search;

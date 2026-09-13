@@ -174,6 +174,57 @@ Campo `signatureOk`:
 - `false` — assinatura inválida (payload rejeitado)
 - `null` — assinatura ausente (Digistore sem passphrase configurada; ClickBank não usa aqui)
 
+## Integração NorthScale Afiliados (sistema de afiliados)
+
+Contrato completo em [`integration-dashboard.md`](integration-dashboard.md). O sistema de
+afiliados (`https://api.thenorthscales.com`) é a **fonte de verdade da identidade** do
+afiliado (`affiliate_id` + IDs em cada plataforma); o dashboard espelha o mapeamento e
+resolve o `affiliate_id` de cada venda de BuyGoods, Digistore24 e JVZoo.
+
+| Sentido | Endpoint | Auth |
+| --- | --- | --- |
+| Eles → nós | `POST /api/integrations/affiliates/webhook` (evento `affiliate.updated`) | `X-Api-Key` = `DASHBOARD_API_KEY` |
+| Eles → nós | `GET /api/integrations/affiliates/metrics?period=7d\|30d\|mtd\|custom&from=&to=` | `X-Api-Key` = `DASHBOARD_API_KEY` |
+| Nós → eles | `GET {AFFILIATES_API_URL}/api/integrations/affiliates/mapping` (reconciliação diária + carga inicial) | enviamos `X-Api-Key` = `INTEGRATION_API_KEY` |
+
+Configuração: env vars `DASHBOARD_API_KEY`, `INTEGRATION_API_KEY`, `AFFILIATES_API_URL`
+(ver `.env.example`) **ou** pelo painel (Plataformas → *Sistema de afiliados* → Chaves),
+que grava em `IntegrationSetting`; a env var tem precedência. Sem chave de entrada, os
+dois endpoints respondem 503 (como o contrato prevê).
+
+Como funciona:
+
+- `affiliate_mappings` / `affiliate_mapping_state`: espelho do mapping (UNIQUE em
+  `platform + external_id`, normalizado `trim + lower`). Webhook e mapping aplicam o
+  **estado completo** do afiliado; evento com `occurred_at` menor que o gravado é
+  ignorado com 2xx (idempotência por `occurred_at`).
+- Ingest (`upsertOrder`): resolve por plataforma — BuyGoods `aff_id` → `aff_name`;
+  Digistore24 `affiliate_name` (Digistore ID) → `affiliate_id`; JVZoo `affiliate_id` →
+  `affiliate_name` — e grava `Order.mappedAffiliateId` (+ cache em
+  `Affiliate.mappedAffiliateId`). Sem mapeamento → `unmapped_affiliate_events`
+  (contador, primeiro/último visto, último pedido). Quando o mapeamento chega, as
+  contas afetadas são reprocessadas automaticamente.
+- Reconciliação: scheduler in-process (45 s após o boot; depois a cada
+  `AFFILIATES_SYNC_INTERVAL_MIN`, padrão diário). Manual:
+  `POST /api/admin/affiliate-mapping {"action":"sync","full":true}` e
+  `{"action":"backfill"}` (histórico), com sessão admin ou `Authorization: Bearer $INGEST_SECRET`.
+- Métricas pro ranking deles: faturado por data da venda, estornos (refund + chargeback)
+  por data do estorno, `net_sales = gross − refunds`, `orders_count` = pedidos reais
+  (linha sintética da Digistore fora), `refund_rate` em % 0–100. Cache de 5 min por
+  período; dia = `America/Sao_Paulo`.
+- UI: filtro global **Afiliado** (aplica em Visão geral, Funil, Afiliados, Produtos,
+  Transações, Plataformas), agrupamento **sistema** na aba Afiliados, coluna *Afiliado
+  (sistema)* em Transações, painel *Sistema de afiliados* em Plataformas (fila de não
+  mapeados, mapeados, ações).
+
+Teste rápido (curls da seção 6/7 do contrato):
+
+```bash
+curl -i -X POST "https://dash.thenorthscales.com/api/integrations/affiliates/webhook"   -H "Content-Type: application/json" -H "X-Api-Key: $DASHBOARD_API_KEY"   -H "X-Event-Id: teste1" -H "X-Event-Type: affiliate.updated" -H "X-Webhook-Attempt: 1"   -d '{"event":"affiliate.updated","affiliate_id":"cmfgq1x2a0000v8l4h3k9d2pw","name":"Maria Silva","status":"active","platforms":[{"platform":"jvzoo","external_id":"1234567"}],"occurred_at":"2026-09-12T13:37:00.123Z"}'
+
+curl -s "https://dash.thenorthscales.com/api/integrations/affiliates/metrics?period=7d" -H "X-Api-Key: $DASHBOARD_API_KEY"
+```
+
 ## Deploy (Fase de produção)
 
 Planejado: Docker + Traefik + Postgres + Redis na VPS Hostinger KVM 4 (São Paulo),

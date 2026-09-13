@@ -66,7 +66,7 @@ function FunnelPage({ filters }) {
   }, [filters.dateRange.start.getTime(), filters.dateRange.end.getTime(),
       Array.from(filters.platforms).join(','), Array.from(filters.countries).join(','),
       Array.from(filters.funnels).join(','),
-      Array.from(filters.families).join(',')]);
+      Array.from(filters.families).join(','), Array.from(filters.affiliates || []).join(',')]);
 
   // Reset selection if the chosen family no longer exists in the new dataset
   useEffect(() => {
@@ -512,8 +512,11 @@ function LeaderboardPage({ filters, onOpenAffiliate, user }) {
   // Modal de override do refund&cb% por afiliado (substitui o prompt nativo).
   const [refundModal, setRefundModal] = useState(null);
   const [refreshTick, setRefreshTick] = useState(0);
-  // Contas do mesmo parceiro (Identidades) viram uma linha só.
-  const [unify, setUnify] = useState(true);
+  // Agrupamento da lista: 'partner' = contas do mesmo parceiro (Identidades)
+  // viram uma linha; 'mapped' = pelo affiliate_id do NorthScale Afiliados
+  // (sistema de afiliados); 'none' = uma linha por conta/plataforma.
+  const [unify, setUnify] = useState('partner');
+  const [mappingOpen, setMappingOpen] = useState(false);
   // Guarda só a CHAVE; a linha é re-derivada da lista a cada refetch (trocar
   // filtro ou salvar contato com o drawer aberto não deixa dado velho).
   const [partnerKey, setPartnerKey] = useState(null);
@@ -533,7 +536,7 @@ function LeaderboardPage({ filters, onOpenAffiliate, user }) {
   }, [refreshTick, unify, filters.dateRange.start.getTime(), filters.dateRange.end.getTime(),
       Array.from(filters.platforms).join(','), Array.from(filters.countries).join(','),
       Array.from(filters.funnels).join(','),
-      Array.from(filters.families).join(',')]);
+      Array.from(filters.families).join(','), Array.from(filters.affiliates || []).join(',')]);
 
   const cur = filters.currency || 'USD';
   const all = state.data?.affiliates || [];
@@ -566,7 +569,8 @@ function LeaderboardPage({ filters, onOpenAffiliate, user }) {
   const rows = all.filter((a) => (q
     ? ((a.nickname || '').toLowerCase().includes(q) || a.externalId.toLowerCase().includes(q)
        || (a.accounts || []).some((c) => (c.nickname || '').toLowerCase().includes(q) || c.externalId.toLowerCase().includes(q))
-       || (a.contact?.email || '').toLowerCase().includes(q))
+       || (a.contact?.email || '').toLowerCase().includes(q)
+       || (a.mapped?.name || '').toLowerCase().includes(q))
     : a.realOrders >= minOrders
   )).sort((a, b) => {
     switch (sortBy) {
@@ -602,21 +606,26 @@ function LeaderboardPage({ filters, onOpenAffiliate, user }) {
                 title="Limpar busca" onClick={() => setQuery('')}>×</button>
             )}
           </div>
-          <label title="Contas da mesma pessoa em plataformas diferentes viram uma linha só (configure em Identidades)" style={{ display: 'flex', gap: 6, alignItems: 'center', fontSize: 11, color: 'var(--fg4)', cursor: 'pointer', whiteSpace: 'nowrap' }}>
-            <input type="checkbox" checked={unify} onChange={(e) => setUnify(e.target.checked)}/> contas unificadas
-          </label>
+          <div className="seg" title="Como agrupar: por conta/plataforma · por parceiro (Identidades) · pelo affiliate_id do sistema de afiliados (NorthScale Afiliados)">
+            <button className={unify === 'none' ? 'is-active' : ''} onClick={() => setUnify('none')}>por conta</button>
+            <button className={unify === 'partner' ? 'is-active' : ''} onClick={() => setUnify('partner')}>parceiros</button>
+            <button className={unify === 'mapped' ? 'is-active' : ''} onClick={() => setUnify('mapped')}>sistema</button>
+          </div>
           {isAdmin && (
             <button className="btn btn-ghost" title="Unificar contas, contatos e internos" onClick={() => setIdentityOpen(true)}>
               <Icon name="link" size={12}/> Identidades
             </button>
           )}
+          <button className="btn btn-ghost" title="Espelho do NorthScale Afiliados: quem está mapeado e a fila de IDs sem mapeamento" onClick={() => setMappingOpen(true)}>
+            <Icon name="plug" size={12}/> Mapeamento
+          </button>
           <button className="btn btn-ghost" onClick={() => downloadCsv(
             `ranking-afiliados_${isoDateOnly(filters.dateRange.start)}_${isoDateOnly(filters.dateRange.end)}.csv`,
-            ['#', 'Afiliado', 'Afiliado ID', 'Plataforma', 'Pedidos aprovados', 'Receita USD', 'FEs aprovadas',
+            ['#', 'Afiliado', 'Afiliado ID', 'Afiliado (sistema)', 'affiliate_id', 'Plataforma', 'Pedidos aprovados', 'Receita USD', 'FEs aprovadas',
              'AOV global USD', 'Aprovação %', 'Refund&CB modelo %', 'CPA pago USD', 'Custos op %',
              'NET AOV USD', 'CPA por venda USD', 'Net after CPA USD', 'Status CPA'],
             rows.map((r, i) => [
-              i + 1, r.nickname || r.externalId, r.accounts && r.accounts.length > 1 ? r.accounts.map((c) => c.externalId).join(' | ') : r.externalId, (r.platforms || [r.platformSlug]).join('+'), r.orders, r.revenue, r.feApprovedCount,
+              i + 1, r.nickname || r.externalId, r.accounts && r.accounts.length > 1 ? r.accounts.map((c) => c.externalId).join(' | ') : r.externalId, r.mapped ? r.mapped.name : '', r.mappedAffiliateId || '', (r.platforms || [r.platformSlug]).join('+'), r.orders, r.revenue, r.feApprovedCount,
               aovOf(r), r.approvalRate * 100, r.refundCbPctUsed, r.cpa, r.opexPctUsed,
               r.netAovUsd, r.cpaPerFe, r.netAfterCpaUsd, r.cpaStatus,
             ]),
@@ -627,12 +636,13 @@ function LeaderboardPage({ filters, onOpenAffiliate, user }) {
       <ProfitConfigPanel/>
 
       {partnerRow && (
-        <AffiliatePartnerDrawer row={partnerRow} filters={filters} isAdmin={isAdmin}
+        <AffiliatePartnerDrawer row={partnerRow} filters={filters} isAdmin={isAdmin && !String(partnerRow.key || '').startsWith('mapped:')}
           onClose={() => setPartnerRow(null)}
           onOpenAccount={(acc) => { setPartnerRow(null); onOpenAffiliate({ externalId: acc.externalId, platformSlug: acc.platformSlug }); }}
           onChanged={() => setRefreshTick((n) => n + 1)}/>
       )}
       {identityOpen && <AffiliateIdentityDrawer onClose={() => setIdentityOpen(false)} onChanged={() => setRefreshTick((n) => n + 1)}/>}
+      {mappingOpen && <AffiliateMappingDrawer isAdmin={user?.role === 'ADMIN'} onClose={() => setMappingOpen(false)} onChanged={() => setRefreshTick((n) => n + 1)}/>}
 
       {refundModal && (
         <AffiliateRefundModal
@@ -756,6 +766,7 @@ function LeaderboardPage({ filters, onOpenAffiliate, user }) {
                         <span className="meta">
                           <span className="nm">{displayName}{r.accounts && r.accounts.length > 1 && <span title="contas unificadas" style={{ marginLeft: 5, color: 'var(--accent)', verticalAlign: -1 }}><Icon name="link" size={10}/></span>}{r.origin && <span style={{ marginLeft: 6 }}><AiOriginChip origin={r.origin} size={9}/></span>}</span>
                           <span className="id">{r.accounts && r.accounts.length > 1 ? `${r.accounts.length} contas · ${r.accounts.map((c) => c.externalId).join(' · ')}` : r.externalId}{isAdmin && r.contact?.email ? ` · ${r.contact.email}` : ''}</span>
+                          <span style={{ marginTop: 2 }}><AmMappedChip mapped={r.mapped} platformSlug={r.platformSlug}/></span>
                         </span>
                       </span>
                     </td>
@@ -835,7 +846,7 @@ function AffiliateDrawer({ affiliateId, filters, onClose }) {
   }, [affKey, platformHint, filters.dateRange.start.getTime(), filters.dateRange.end.getTime(),
       Array.from(filters.platforms).join(','), Array.from(filters.countries).join(','),
       Array.from(filters.funnels).join(','),
-      Array.from(filters.families).join(',')]);
+      Array.from(filters.families).join(','), Array.from(filters.affiliates || []).join(',')]);
 
   const cur = filters.currency || 'USD';
   const data = state.data;
@@ -885,6 +896,7 @@ function AffiliateDrawer({ affiliateId, filters, onClose }) {
               <div className="sub">
                 <span className={`plat ${platClass}`} style={{ marginRight: 8 }}>{platShort}</span>
                 {aff.externalId} · entrou há {joinedDaysAgo}d
+                <span style={{ marginLeft: 8 }}><AmMappedChip mapped={aff.mapped} platformSlug={aff.platformSlug}/></span>
               </div>
             </div>
           </div>
@@ -1090,7 +1102,7 @@ function RefundCohortsPage({ filters }) {
   }, [horizon, filters.dateRange.start.getTime(), filters.dateRange.end.getTime(),
       Array.from(filters.platforms).join(','), Array.from(filters.countries).join(','),
       Array.from(filters.funnels).join(','), Array.from(filters.stages).join(','),
-      Array.from(filters.families).join(',')]);
+      Array.from(filters.families).join(','), Array.from(filters.affiliates || []).join(',')]);
 
   const cur = filters.currency || 'USD';
   const d = state.data;
@@ -1645,7 +1657,7 @@ function AllAffiliatesPage({ filters, onOpenAffiliate }) {
   }, [filters.dateRange.start.getTime(), filters.dateRange.end.getTime(),
       Array.from(filters.platforms).join(','), Array.from(filters.countries).join(','),
       Array.from(filters.funnels).join(','),
-      Array.from(filters.families).join(',')]);
+      Array.from(filters.families).join(','), Array.from(filters.affiliates || []).join(',')]);
 
   const cur = filters.currency || 'USD';
   const all = state.data?.affiliates || [];
@@ -2106,7 +2118,7 @@ function useFamilyData(filters) {
     return () => { cancelled = true; };
   }, [filters.dateRange.start.getTime(), filters.dateRange.end.getTime(),
       Array.from(filters.platforms).join(','), Array.from(filters.countries).join(','),
-      Array.from(filters.families).join(',')]);
+      Array.from(filters.families).join(','), Array.from(filters.affiliates || []).join(',')]);
   return state;
 }
 
@@ -2127,7 +2139,7 @@ function useProductsData(filters, enabled) {
   }, [enabled, filters.dateRange.start.getTime(), filters.dateRange.end.getTime(),
       Array.from(filters.platforms).join(','), Array.from(filters.countries).join(','),
       Array.from(filters.funnels).join(','),
-      Array.from(filters.families).join(',')]);
+      Array.from(filters.families).join(','), Array.from(filters.affiliates || []).join(',')]);
   return state;
 }
 
@@ -2767,7 +2779,7 @@ function _LegacyProductsPage({ filters }) {
   }, [filters.dateRange.start.getTime(), filters.dateRange.end.getTime(),
       Array.from(filters.platforms).join(','), Array.from(filters.countries).join(','),
       Array.from(filters.funnels).join(','),
-      Array.from(filters.families).join(',')]);
+      Array.from(filters.families).join(','), Array.from(filters.affiliates || []).join(',')]);
 
   const cur = filters.currency || 'USD';
   const byType = state.data?.byType || [];
@@ -3018,7 +3030,10 @@ function StagePill({ type }) {
 }
 
 function TransactionsPage({ filters }) {
-  const [query, setQuery] = useState('');
+  // `search` pode vir da URL (drill-down da fila de não mapeados).
+  const [query, setQuery] = useState(() => {
+    try { return new URLSearchParams(location.search).get('search') || ''; } catch (e) { return ''; }
+  });
   // Initial status filter pode vir da URL (drill-down dos KPIs em /overview).
   // Aceita os valores que a UI suporta; default é 'all'.
   const [statusFilter, setStatusFilter] = useState(() => {
@@ -3035,7 +3050,7 @@ function TransactionsPage({ filters }) {
       return s && ok.includes(s) ? s : 'all';
     } catch (e) { return 'all'; }
   });
-  const [debouncedQuery, setDebouncedQuery] = useState('');
+  const [debouncedQuery, setDebouncedQuery] = useState(query);
   const [state, setStateTx] = useState({ status: 'loading', data: null, error: null });
   const [drawer, setDrawer] = useState(null); // { externalId, platformSlug } | null
   const isMobile = useIsMobileAP();
@@ -3063,7 +3078,7 @@ function TransactionsPage({ filters }) {
   }, [filters.dateRange.start.getTime(), filters.dateRange.end.getTime(),
       Array.from(filters.platforms).join(','), Array.from(filters.countries).join(','),
       Array.from(filters.funnels).join(','),
-      Array.from(filters.families).join(','),
+      Array.from(filters.families).join(','), Array.from(filters.affiliates || []).join(','),
       statusFilter, typeFilter, debouncedQuery]);
 
   const cur = filters.currency || 'USD';
@@ -3154,7 +3169,7 @@ function TransactionsPage({ filters }) {
                   <span className={`st st-${statusLc}`}>{statusLc}</span>
                 </div>
                 <div className="l3">
-                  {fmtDateTime(o.eventAt || o.orderedAt)} · {o.affiliateNickname || o.affiliateExternalId || '—'} · {o.country || '—'} · {shortTxId(o.externalId)}
+                  {fmtDateTime(o.eventAt || o.orderedAt)} · {o.affiliateNickname || o.affiliateExternalId || '—'}{o.mappedAffiliateName ? ` (${o.mappedAffiliateName})` : ''} · {o.country || '—'} · {shortTxId(o.externalId)}
                 </div>
               </div>
             );
@@ -3168,6 +3183,7 @@ function TransactionsPage({ filters }) {
               <tr>
                 <th>Data/hora</th><th>Pedido</th><th>Plataforma</th>
                 <th>Produto</th><th>Afiliado</th>
+                <th title="Identidade no NorthScale Afiliados (affiliate_id resolvido pelo mapeamento)">Afiliado (sistema)</th>
                 <th>País</th><th>Pagamento</th>
                 <th className="num">Bruto</th><th className="num">Taxas</th>
                 <th className="num">Líquido</th>
@@ -3176,9 +3192,9 @@ function TransactionsPage({ filters }) {
               </tr>
             </thead>
             <tbody>
-              {state.status === 'loading' && <SkelTableRows rows={12} cols={12}/>}
+              {state.status === 'loading' && <SkelTableRows rows={12} cols={13}/>}
               {state.status === 'ready' && orders.length === 0 && (
-                <tr><td colSpan={12} style={{ textAlign: 'center', padding: 24, opacity: 0.6 }}>Nenhuma transação no período</td></tr>
+                <tr><td colSpan={13} style={{ textAlign: 'center', padding: 24, opacity: 0.6 }}>Nenhuma transação no período</td></tr>
               )}
               {orders.map((o) => {
                 const { cls: platClass, short: platShort } = platBadge(o.platformSlug);
@@ -3202,6 +3218,11 @@ function TransactionsPage({ filters }) {
                       </span>
                     </td>
                     <td className="cell-mono">{o.affiliateNickname || o.affiliateExternalId || '—'}</td>
+                    <td>
+                      {o.mappedAffiliateId
+                        ? <AmMappedChip mapped={{ id: o.mappedAffiliateId, name: o.mappedAffiliateName || o.mappedAffiliateId, status: o.mappedAffiliateStatus || 'active' }}/>
+                        : (o.affiliateExternalId ? <AmMappedChip mapped={null} platformSlug={o.platformSlug}/> : <span style={{ color: 'var(--fg5)' }}>—</span>)}
+                    </td>
                     <td className="cell-mono">{o.country || '—'}</td>
                     <td className="cell-mono">{o.paymentMethod || '—'}</td>
                     <td className="num cell-mono" style={{ color: o.grossAmountUsd < 0 ? 'var(--danger)' : 'var(--fg1)' }}>{fmtCurrency(o.grossAmountUsd, cur, 2)}</td>
@@ -3591,7 +3612,7 @@ function IntegrationsPage({ filters }) {
   }, [filters.dateRange.start.getTime(), filters.dateRange.end.getTime(),
       Array.from(filters.platforms).join(','), Array.from(filters.countries).join(','),
       Array.from(filters.funnels).join(','),
-      Array.from(filters.families).join(','),
+      Array.from(filters.families).join(','), Array.from(filters.affiliates || []).join(','),
       refreshKey]);
 
   const cur = filters.currency || 'USD';
@@ -3616,6 +3637,10 @@ function IntegrationsPage({ filters }) {
       {state.status === 'error' && (
         <div className="panel" style={{ color: 'var(--danger)' }}>Erro ao carregar: {state.error}</div>
       )}
+
+      {/* Espelho do NorthScale Afiliados (identidade dos afiliados): status
+          da integração, fila de não mapeados, ações de sync/backfill. */}
+      <AffiliateMappingPanel/>
 
       <div className="grid-3">
         {state.status === 'loading' && (
@@ -4799,7 +4824,7 @@ function CostsPage({ filters }) {
   }, [filters?.dateRange.start.getTime(), filters?.dateRange.end.getTime(),
       filters && Array.from(filters.platforms).join(','),
       filters && Array.from(filters.countries).join(','),
-      filters && Array.from(filters.families).join(',')]);
+      filters && Array.from(filters.families).join(','), Array.from(filters.affiliates || []).join(',')]);
 
   // Saúde do custo — só período (problemas de cadastro não são filtráveis).
   useEffect(() => {
@@ -4832,7 +4857,7 @@ function CostsPage({ filters }) {
   }, [filters?.dateRange.start.getTime(), filters?.dateRange.end.getTime(),
       filters && Array.from(filters.platforms).join(','),
       filters && Array.from(filters.countries).join(','),
-      filters && Array.from(filters.families).join(',')]);
+      filters && Array.from(filters.families).join(','), Array.from(filters.affiliates || []).join(',')]);
 
   // m = payload principal; fk = kpis. Deltas vs período anterior em %.
   const fm = fulf.m;

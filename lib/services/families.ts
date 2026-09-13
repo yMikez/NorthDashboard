@@ -84,6 +84,7 @@ export async function getFamilies(
   };
   if (filters.platformSlugs?.length) where.platform = { slug: { in: filters.platformSlugs } };
   if (filters.countries?.length) where.country = { in: filters.countries };
+  if (filters.mappedAffiliateIds?.length) where.mappedAffiliateId = { in: filters.mappedAffiliateIds };
   if (filters.productFamilies?.length) {
     where.product = {
       family: { in: filters.productFamilies },

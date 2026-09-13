@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import { getPlatforms } from '@/lib/services/metrics';
 import { requireTab } from '@/lib/auth/guard';
 import { logger } from '@/lib/logger';
-import { csvParam, stagesParam } from '@/lib/shared/queryParams';
+import { affiliateIdsParam, csvParam, stagesParam } from '@/lib/shared/queryParams';
 import { respondCached } from '@/lib/shared/metricsResponse';
 
 export const runtime = 'nodejs';
@@ -31,11 +31,12 @@ export async function GET(req: Request) {
   const countries = csvParam(searchParams.get('countries'));
   const productExternalIds = csvParam(searchParams.get('products'));
   const productFamilies = csvParam(searchParams.get('families'));
+  const mappedAffiliateIds = affiliateIdsParam(searchParams.get('affiliate_id'));
   const productTypes = stagesParam(searchParams.get('stages'));
 
   try {
     return await respondCached('platforms', searchParams, () =>
-      getPlatforms({ startDate, endDate, platformSlugs, countries, productExternalIds, productFamilies, productTypes }),
+      getPlatforms({ startDate, endDate, platformSlugs, countries, productExternalIds, productFamilies, productTypes, mappedAffiliateIds }),
     );
   } catch (err) {
     logger.error({ err }, 'metrics/platforms failed');

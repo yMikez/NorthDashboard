@@ -21,6 +21,21 @@ export function csvParam(raw: string | null): string[] | undefined {
 }
 
 /**
+ * `affiliate_id` (CSV) — affiliate_id do sistema NorthScale Afiliados
+ * (Order.mappedAffiliateId). Só ids "cuid-like"/seguros: letras, dígitos,
+ * `_` e `-` (o valor vai parametrizado no SQL de qualquer forma; a
+ * restrição só evita lixo no cache de resposta).
+ */
+export function affiliateIdsParam(raw: string | null): string[] | undefined {
+  if (!raw) return undefined;
+  const out = new Set<string>();
+  for (const s of raw.split(',').map((x) => x.trim()).filter(Boolean)) {
+    if (/^[A-Za-z0-9_-]{1,64}$/.test(s)) out.add(s);
+  }
+  return out.size ? Array.from(out) : undefined;
+}
+
+/**
  * Parse o `stages` query param em ProductType[]. Aceita tanto os enum
  * values (FRONTEND, UPSELL, ...) quanto os labels em PT-BR usados no UI
  * (front, upsell, downsell, recuperacao/recuperação). Case-insensitive.

@@ -1,6 +1,7 @@
 import { Prisma } from '@prisma/client';
 import type { ProductType } from '@prisma/client';
 import { db } from '../db';
+import { mappedIdentityMap } from './affiliateMapping';
 import {
   refreshDailyMetricsIfStale,
   queryDailyMetrics,
@@ -28,6 +29,11 @@ export interface MetricsFilters {
   // SMS_RECOVERY='Recuperação'. Vazio = todas as etapas (inclui BUMP).
   // Em getFunnel é IGNORADO (o funil É a quebra por etapa).
   productTypes?: ProductType[];
+  // Filtro "Afiliado (sistema)": affiliate_id do NorthScale Afiliados
+  // gravado em Order.mappedAffiliateId (ver lib/services/affiliateMapping).
+  // Aplicado como filtro de ORDEM em todos os relatórios; no overview força
+  // o caminho sem MV (a daily_metrics não tem essa dimensão).
+  mappedAffiliateIds?: string[];
 }
 
 export interface OverviewKPIs {
@@ -302,6 +308,8 @@ export interface AffiliateDetailResponse {
     externalId: string;
     nickname: string | null;
     platformSlug: string;
+    mappedAffiliateId: string | null;
+    mapped: { id: string; name: string; status: string } | null;
     firstSeenAt: string;
     lastOrderAt: string | null;
   };
@@ -374,6 +382,10 @@ export interface AffiliatesResponse {
     externalId: string;
     platformSlug: string;
     nickname: string | null;
+    // Identidade no sistema NorthScale Afiliados (espelho do mapping).
+    // null = conta não mapeada (aparece na fila de não mapeados).
+    mappedAffiliateId: string | null;
+    mapped: { id: string; name: string; status: string } | null;
     revenue: number;
     orders: number;
     allOrders: number;
@@ -441,6 +453,10 @@ export interface OrdersResponse {
     productType: string;
     affiliateExternalId: string | null;
     affiliateNickname: string | null;
+    // Identidade no sistema NorthScale Afiliados (Order.mappedAffiliateId).
+    mappedAffiliateId: string | null;
+    mappedAffiliateName: string | null;
+    mappedAffiliateStatus: string | null;
     country: string | null;
     paymentMethod: string | null;
     grossAmountUsd: number;
@@ -637,7 +653,7 @@ export async function getOverview(
   // SKU-level filtering isn't supported by the MV (keyed on family). Fall
   // back to the legacy path on those filter combinations — accuracy wins
   // over speed when the user explicitly picks SKUs.
-  if (filters.productExternalIds?.length) {
+  if (filters.productExternalIds?.length || filters.mappedAffiliateIds?.length) {
     return getOverviewLegacy(filters, compare);
   }
 
@@ -804,10 +820,16 @@ async function feSessionStats(filters: MetricsFilters): Promise<FeSessionStats> 
   if (filters.productFamilies?.length) {
     feConds.push(Prisma.sql`b."family" = ANY(${filters.productFamilies})`);
   }
+  // Afiliado (sistema) é dimensão de SESSÃO, como a família: a sessão cuja
+  // FE está mapeada pro afiliado entra INTEIRA (upsells juntos, mesmo que o
+  // mappedAffiliateId por pedido difira — BuyGoods emite aff_id por produto).
+  if (filters.mappedAffiliateIds?.length) {
+    feConds.push(Prisma.sql`b."mappedAffiliateId" = ANY(${filters.mappedAffiliateIds})`);
+  }
   const [row] = await db.$queryRaw<Array<{ sessions: bigint; revenue: Prisma.Decimal | null; net: Prisma.Decimal | null }>>(Prisma.sql`
     WITH base AS (
       SELECT o.id, o."productType", o."status", o."orderedAt",
-             o."grossAmountUsd", o."netAmountUsd",
+             o."grossAmountUsd", o."netAmountUsd", o."mappedAffiliateId",
              pr."family" AS family,
              ${SESSION_KEY_SQL} AS skey
       FROM "Order" o
@@ -848,6 +870,9 @@ async function orderGroupsCount(filters: MetricsFilters): Promise<number> {
   }
   if (filters.countries?.length) {
     conds.push(Prisma.sql`o."country" = ANY(${filters.countries})`);
+  }
+  if (filters.mappedAffiliateIds?.length) {
+    conds.push(Prisma.sql`o."mappedAffiliateId" = ANY(${filters.mappedAffiliateIds})`);
   }
   if (filters.productFamilies?.length) {
     conds.push(Prisma.sql`pr."family" = ANY(${filters.productFamilies})`);
@@ -981,6 +1006,9 @@ async function hourlyHeatmapQuery(
   if (filters.countries?.length) {
     conds.push(Prisma.sql`o."country" = ANY(${filters.countries})`);
   }
+  if (filters.mappedAffiliateIds?.length) {
+    conds.push(Prisma.sql`o."mappedAffiliateId" = ANY(${filters.mappedAffiliateIds})`);
+  }
   if (filters.productFamilies?.length) {
     conds.push(Prisma.sql`pr."family" = ANY(${filters.productFamilies})`);
   }
@@ -1034,6 +1062,9 @@ async function topAffiliatesQuery(
   }
   if (filters.countries?.length) {
     conds.push(Prisma.sql`o."country" = ANY(${filters.countries})`);
+  }
+  if (filters.mappedAffiliateIds?.length) {
+    conds.push(Prisma.sql`o."mappedAffiliateId" = ANY(${filters.mappedAffiliateIds})`);
   }
   if (filters.productFamilies?.length) {
     conds.push(Prisma.sql`pr."family" = ANY(${filters.productFamilies})`);
@@ -1127,14 +1158,26 @@ async function getOverviewLegacy(
   const prevEnd = new Date(filters.startDate.getTime() - 1);
   const prevStart = new Date(prevEnd.getTime() - span);
 
-  const [orders, hourlyHeatmap, prevOrders] = await Promise.all([
+  const prevFilters = { ...filters, startDate: prevStart, endDate: prevEnd };
+  // AOV/EPO/orderGroups vêm de feSessionStats (definição CANÔNICA — sessão
+  // por sessid2 na BuyGoods, só sessões com FE APPROVED); computeKPIs agrupa
+  // por parentExternalId, que na BuyGoods é por transação e inflaria o
+  // denominador. Sem isso, ligar um filtro que cai neste caminho mudaria a
+  // régua do AOV em relação ao caminho da MV.
+  const [orders, hourlyHeatmap, prevOrders, feSessions, prevSessions] = await Promise.all([
     fetchOrders(filters),
     hourlyHeatmapQuery(filters),
-    compare
-      ? fetchOrders({ ...filters, startDate: prevStart, endDate: prevEnd })
-      : Promise.resolve(null),
+    compare ? fetchOrders(prevFilters) : Promise.resolve(null),
+    feSessionStats(filters),
+    compare ? feSessionStats(prevFilters) : Promise.resolve(null),
   ]);
-  const kpis = computeKPIs(orders);
+  const withSessionAov = (k: OverviewKPIs, fe: FeSessionStats): OverviewKPIs => ({
+    ...k,
+    orderGroups: fe.sessions,
+    aov: round2(fe.sessions ? fe.revenue / fe.sessions : 0),
+    epo: round2(fe.sessions ? fe.net / fe.sessions : 0),
+  });
+  const kpis = withSessionAov(computeKPIs(orders), feSessions);
   const daily = computeDaily(orders, filters.startDate, filters.endDate);
   const byCountry = computeByCountry(orders);
   const byProductType = computeByProductType(orders);
@@ -1144,8 +1187,8 @@ async function getOverviewLegacy(
     range: { start: filters.startDate.toISOString(), end: filters.endDate.toISOString() },
     kpis, daily, byCountry, byProductType, topAffiliates, platformHealth, hourlyHeatmap,
   };
-  if (prevOrders) {
-    response.previous = computeKPIs(prevOrders);
+  if (prevOrders && prevSessions) {
+    response.previous = withSessionAov(computeKPIs(prevOrders), prevSessions);
   }
   return response;
 }
@@ -1163,13 +1206,16 @@ export async function getFunnel(
   if (filters.countries?.length) {
     where.country = { in: filters.countries };
   }
+  // mappedAffiliateIds NÃO entra no where: é dimensão de SESSÃO (a FE
+  // decide) — aplicado depois do Pass 1, como o filtro de família.
 
-  const orders = await db.order.findMany({
+  const fetched = await db.order.findMany({
     where,
     select: {
       externalId: true,
       parentExternalId: true,
       funnelSessionId: true,
+      mappedAffiliateId: true,
       grossAmountUsd: true,
       funnelStep: true,
       productType: true,
@@ -1182,7 +1228,7 @@ export async function getFunnel(
   // então a sessão real é o funnelSessionId (= sessid2). Demais plataformas
   // (incl. Cartpanda, cujo parentExternalId = order_id agrupa FE+upsells):
   // parentExternalId é o anchor da sessão (FE sem upsells = própria externalId).
-  const sessionKeyOf = (o: (typeof orders)[number]): string =>
+  const sessionKeyOf = (o: (typeof fetched)[number]): string =>
     o.platform.slug === 'buygoods'
       ? (o.funnelSessionId ?? o.parentExternalId ?? o.externalId)
       : (o.parentExternalId ?? o.externalId);
@@ -1205,6 +1251,8 @@ export async function getFunnel(
     feProductName: string | null;
     feProductFamily: string | null;
     fePlatformSlug: string | null;
+    // affiliate_id (NorthScale Afiliados) da FE — dimensão do filtro Afiliado.
+    feMapped: string | null;
   }
 
   const groups = new Map<string, Group>();
@@ -1223,7 +1271,7 @@ export async function getFunnel(
         upsellsByStep: new Map(),
         downsellsByStep: new Map(),
         feProductExternalId: null, feProductName: null, feProductFamily: null,
-        fePlatformSlug: slug,
+        fePlatformSlug: slug, feMapped: null,
       };
       groups.set(key, g);
     }
@@ -1231,7 +1279,7 @@ export async function getFunnel(
   }
 
   // Pass 1: FE orders only — establish each group's funnel identity.
-  for (const o of orders) {
+  for (const o of fetched) {
     if (o.productType !== 'FRONTEND') continue;
     const groupKey = `${o.platform.slug}:${sessionKeyOf(o)}`;
     const g = getOrInit(groupKey, o.platform.slug);
@@ -1242,7 +1290,21 @@ export async function getFunnel(
       g.feProductName = o.product.name;
       g.feProductFamily = o.product.family;
       g.fePlatformSlug = o.platform.slug;
+      g.feMapped = o.mappedAffiliateId;
     }
+  }
+
+  // Filtro "Afiliado (sistema)": fica a sessão cuja FE está mapeada pro
+  // afiliado — com os upsells dela, mesmo que o mappedAffiliateId por pedido
+  // difira (BuyGoods emite aff_id por produto). Sessões órfãs (sem FE no
+  // período) saem: sem FE não há como saber de quem são.
+  let orders = fetched;
+  if (filters.mappedAffiliateIds?.length) {
+    const allowed = new Set(filters.mappedAffiliateIds);
+    const keep = new Set<string>();
+    for (const [key, g] of groups) if (g.hasFE && g.feMapped && allowed.has(g.feMapped)) keep.add(key);
+    for (const key of Array.from(groups.keys())) if (!keep.has(key)) groups.delete(key);
+    orders = fetched.filter((o) => keep.has(`${o.platform.slug}:${sessionKeyOf(o)}`));
   }
 
   // Pass 1.5: orphan-FE recovery. If a group has no FE in this period (FE
@@ -1587,6 +1649,9 @@ export async function getProductsLegacy(
   if (filters.countries?.length) {
     where.country = { in: filters.countries };
   }
+  if (filters.mappedAffiliateIds?.length) {
+    where.mappedAffiliateId = { in: filters.mappedAffiliateIds };
+  }
   if (filters.productExternalIds?.length || filters.productFamilies?.length) {
     where.product = {
       ...(filters.productExternalIds?.length ? { externalId: { in: filters.productExternalIds } } : {}),
@@ -1888,6 +1953,9 @@ export async function getProductsSql(
   if (filters.countries?.length) {
     conds.push(Prisma.sql`o."country" = ANY(${filters.countries})`);
   }
+  if (filters.mappedAffiliateIds?.length) {
+    conds.push(Prisma.sql`o."mappedAffiliateId" = ANY(${filters.mappedAffiliateIds})`);
+  }
   if (filters.productExternalIds?.length) {
     conds.push(Prisma.sql`pr."externalId" = ANY(${filters.productExternalIds})`);
   }
@@ -2140,6 +2208,9 @@ export async function getPlatforms(
   if (filters.countries?.length) {
     where.country = { in: filters.countries };
   }
+  if (filters.mappedAffiliateIds?.length) {
+    where.mappedAffiliateId = { in: filters.mappedAffiliateIds };
+  }
   if (filters.productExternalIds?.length || filters.productFamilies?.length) {
     where.product = {
       ...(filters.productExternalIds?.length ? { externalId: { in: filters.productExternalIds } } : {}),
@@ -2368,6 +2439,9 @@ export async function getFulfillmentOverview(
   if (filters.countries?.length) {
     where.country = { in: filters.countries };
   }
+  if (filters.mappedAffiliateIds?.length) {
+    where.mappedAffiliateId = { in: filters.mappedAffiliateIds };
+  }
   if (filters.productExternalIds?.length || filters.productFamilies?.length) {
     where.product = {
       ...(filters.productExternalIds?.length ? { externalId: { in: filters.productExternalIds } } : {}),
@@ -2478,6 +2552,9 @@ export async function getCostsOverview(
   }
   if (filters.countries?.length) {
     where.country = { in: filters.countries };
+  }
+  if (filters.mappedAffiliateIds?.length) {
+    where.mappedAffiliateId = { in: filters.mappedAffiliateIds };
   }
   if (filters.productExternalIds?.length || filters.productFamilies?.length) {
     where.product = {
@@ -2845,6 +2922,7 @@ export async function getAffiliateDetail(
       firstSeenAt: true,
       lastOrderAt: true,
       refundCbPctOverride: true,
+      mappedAffiliateId: true,
       platform: { select: { slug: true } },
     },
   });
@@ -2866,6 +2944,9 @@ export async function getAffiliateDetail(
   }
   if (filters.countries?.length) {
     periodWhere.country = { in: filters.countries };
+  }
+  if (filters.mappedAffiliateIds?.length) {
+    periodWhere.mappedAffiliateId = { in: filters.mappedAffiliateIds };
   }
   if (filters.productExternalIds?.length || filters.productFamilies?.length) {
     periodWhere.product = {
@@ -3150,11 +3231,16 @@ export async function getAffiliateDetail(
     }
   }
 
+  const mappedDetail = aff.mappedAffiliateId ? await mappedIdentityMap([aff.mappedAffiliateId]) : null;
   return {
     affiliate: {
       externalId: aff.externalId,
       nickname: aff.nickname,
       platformSlug: aff.platform.slug,
+      mappedAffiliateId: aff.mappedAffiliateId ?? null,
+      mapped: aff.mappedAffiliateId && mappedDetail?.has(aff.mappedAffiliateId)
+        ? { id: aff.mappedAffiliateId, ...mappedDetail.get(aff.mappedAffiliateId)! }
+        : null,
       firstSeenAt: aff.firstSeenAt.toISOString(),
       lastOrderAt: aff.lastOrderAt?.toISOString() ?? null,
     },
@@ -3203,6 +3289,9 @@ export async function getAffiliatesLegacy(
   if (filters.countries?.length) {
     whereInCoverage.country = { in: filters.countries };
   }
+  if (filters.mappedAffiliateIds?.length) {
+    whereInCoverage.mappedAffiliateId = { in: filters.mappedAffiliateIds };
+  }
   if (filters.productExternalIds?.length || filters.productFamilies?.length) {
     whereInCoverage.product = {
       ...(filters.productExternalIds?.length ? { externalId: { in: filters.productExternalIds } } : {}),
@@ -3224,6 +3313,7 @@ export async function getAffiliatesLegacy(
   };
   if (filters.platformSlugs?.length) periodWhere.platform = { slug: { in: filters.platformSlugs } };
   if (filters.countries?.length) periodWhere.country = { in: filters.countries };
+  if (filters.mappedAffiliateIds?.length) periodWhere.mappedAffiliateId = { in: filters.mappedAffiliateIds };
 
   const [orders, periodOrders, ltvByAff, affiliatesAll] = await Promise.all([
     db.order.findMany({
@@ -3274,6 +3364,7 @@ export async function getAffiliatesLegacy(
         platform: { select: { slug: true } },
         id: true,
         refundCbPctOverride: true,
+        mappedAffiliateId: true,
       },
     }),
   ]);
@@ -3484,6 +3575,7 @@ export async function getAffiliatesLegacy(
   }
 
   const pm = await getProfitModelInputs();
+  const mappedById = await mappedIdentityMap();
 
   // "Ativo" = teve pedido REAL no período. Um afiliado cujo único registro do
   // período foi o estorno de uma venda antiga (linha extra da Digistore) não
@@ -3526,6 +3618,10 @@ export async function getAffiliatesLegacy(
       externalId: aff.externalId,
       platformSlug: aff.platform.slug,
       nickname: aff.nickname,
+      mappedAffiliateId: aff.mappedAffiliateId ?? null,
+      mapped: aff.mappedAffiliateId && mappedById.has(aff.mappedAffiliateId)
+        ? { id: aff.mappedAffiliateId, ...mappedById.get(aff.mappedAffiliateId)! }
+        : null,
       revenue: round2(a?.revenue ?? 0),
       orders,
       allOrders,
@@ -3662,6 +3758,9 @@ export async function getAffiliatesSql(
   if (filters.countries?.length) {
     directConds.push(Prisma.sql`o."country" = ANY(${filters.countries})`);
   }
+  if (filters.mappedAffiliateIds?.length) {
+    directConds.push(Prisma.sql`o."mappedAffiliateId" = ANY(${filters.mappedAffiliateIds})`);
+  }
   if (filters.productExternalIds?.length) {
     directConds.push(Prisma.sql`pr."externalId" = ANY(${filters.productExternalIds})`);
   }
@@ -3688,6 +3787,12 @@ export async function getAffiliatesSql(
     sessConds.push(Prisma.sql`o."country" = ANY(${filters.countries})`);
   }
   const sessWhere = Prisma.join(sessConds, ' AND ');
+  // Afiliado (sistema) na atribuição por sessão = condição da FE (a sessão
+  // inteira vai junto), nunca da base — senão upsell cujo aff_id por
+  // produto não está mapeado sumiria da sessão.
+  const feMappedCond = filters.mappedAffiliateIds?.length
+    ? Prisma.sql`AND "mappedAffiliateId" = ANY(${filters.mappedAffiliateIds})`
+    : Prisma.empty;
 
   const [aggRows, sparkRows, countryRows, cpaLatestRows, attRows, ltvByAff, affiliatesAll] =
     await Promise.all([
@@ -3781,7 +3886,7 @@ export async function getAffiliatesSql(
         fulfillment: Prisma.Decimal;
       }>>(Prisma.sql`
         WITH base AS (
-          SELECT o.id, o."affiliateId", o."productType", o."status", o."orderedAt",
+          SELECT o.id, o."affiliateId", o."mappedAffiliateId", o."productType", o."status", o."orderedAt",
                  o."grossAmountUsd", o."netAmountUsd", o."cpaPaidUsd", o."cogsUsd", o."fulfillmentUsd",
                  ${NOT_SYNTHETIC_ROW} AS is_real,
                  ${SESSION_KEY_SQL} AS skey
@@ -3792,7 +3897,7 @@ export async function getAffiliatesSql(
         fe AS (
           SELECT DISTINCT ON (skey) skey, "affiliateId"
           FROM base
-          WHERE "productType" = 'FRONTEND' AND "affiliateId" IS NOT NULL
+          WHERE "productType" = 'FRONTEND' AND "affiliateId" IS NOT NULL ${feMappedCond}
           ORDER BY skey, "orderedAt" ASC, id ASC
         )
         SELECT
@@ -3824,6 +3929,7 @@ export async function getAffiliatesSql(
           platform: { select: { slug: true } },
           id: true,
           refundCbPctOverride: true,
+          mappedAffiliateId: true,
         },
       }),
     ]);
@@ -3885,6 +3991,7 @@ export async function getAffiliatesSql(
     }
   }
   const pm = await getProfitModelInputs();
+  const mappedById = await mappedIdentityMap();
 
   revenues.sort((a, b) => b - a);
   const top5Revenue = revenues.slice(0, 5).reduce((s, v) => s + v, 0);
@@ -3927,6 +4034,10 @@ export async function getAffiliatesSql(
       externalId: aff.externalId,
       platformSlug: aff.platform.slug,
       nickname: aff.nickname,
+      mappedAffiliateId: aff.mappedAffiliateId ?? null,
+      mapped: aff.mappedAffiliateId && mappedById.has(aff.mappedAffiliateId)
+        ? { id: aff.mappedAffiliateId, ...mappedById.get(aff.mappedAffiliateId)! }
+        : null,
       revenue: round2(a ? toNumber(a.revenue) : 0),
       orders,
       allOrders,
@@ -4184,6 +4295,9 @@ export async function getOrders(
   if (filters.countries?.length) {
     where.country = { in: filters.countries };
   }
+  if (filters.mappedAffiliateIds?.length) {
+    where.mappedAffiliateId = { in: filters.mappedAffiliateIds };
+  }
   if (filters.productExternalIds?.length || filters.productFamilies?.length) {
     where.product = {
       ...(filters.productExternalIds?.length ? { externalId: { in: filters.productExternalIds } } : {}),
@@ -4290,6 +4404,9 @@ export async function getOrders(
   statusCounts.refunded = refundedInWindow;
   statusCounts.chargeback = chargebackInWindow;
 
+  const mappedIds = [...new Set(rows.map((o) => o.mappedAffiliateId).filter((x): x is string => !!x))];
+  const mappedById = mappedIds.length ? await mappedIdentityMap(mappedIds) : new Map<string, { name: string; status: string }>();
+
   return {
     orders: rows.map((o) => ({
       externalId: o.externalId,
@@ -4300,6 +4417,9 @@ export async function getOrders(
       productType: o.productType,
       affiliateExternalId: o.affiliate?.externalId ?? null,
       affiliateNickname: o.affiliate?.nickname ?? null,
+      mappedAffiliateId: o.mappedAffiliateId ?? null,
+      mappedAffiliateName: o.mappedAffiliateId ? (mappedById.get(o.mappedAffiliateId)?.name ?? null) : null,
+      mappedAffiliateStatus: o.mappedAffiliateId ? (mappedById.get(o.mappedAffiliateId)?.status ?? null) : null,
       country: o.country,
       paymentMethod: o.paymentMethod,
       grossAmountUsd: toNumber(o.grossAmountUsd),
@@ -4332,6 +4452,9 @@ async function fetchOrders(filters: MetricsFilters): Promise<OrderWithJoins[]> {
   }
   if (filters.countries?.length) {
     where.country = { in: filters.countries };
+  }
+  if (filters.mappedAffiliateIds?.length) {
+    where.mappedAffiliateId = { in: filters.mappedAffiliateIds };
   }
   if (filters.productExternalIds?.length || filters.productFamilies?.length) {
     where.product = {

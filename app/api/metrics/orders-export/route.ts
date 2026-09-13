@@ -11,7 +11,7 @@ import { NextResponse } from 'next/server';
 import { getOrders } from '@/lib/services/metrics';
 import { requireTab } from '@/lib/auth/guard';
 import { logger } from '@/lib/logger';
-import { csvParam, stagesParam } from '@/lib/shared/queryParams';
+import { affiliateIdsParam, csvParam, stagesParam } from '@/lib/shared/queryParams';
 import { buildCsv } from '@/lib/shared/csv';
 
 export const runtime = 'nodejs';
@@ -51,6 +51,7 @@ export async function GET(req: Request) {
     productExternalIds: csvParam(searchParams.get('products')),
     productFamilies: csvParam(searchParams.get('families')),
     productTypes: stagesParam(searchParams.get('stages')),
+    mappedAffiliateIds: affiliateIdsParam(searchParams.get('affiliate_id')),
   };
   const options = {
     status: searchParams.get('status') ?? undefined,

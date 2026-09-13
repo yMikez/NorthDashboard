@@ -173,16 +173,20 @@ export interface ProfitSplitFilters {
   platformSlugs?: string[];
   productFamilies?: string[];
   countries?: string[];
+  // Afiliado do sistema NorthScale Afiliados (Order.mappedAffiliateId).
+  // É filtro de ORDEM: com ele ativo, call center some (não atribuível).
+  mappedAffiliateIds?: string[];
 }
 
 export async function getProfitSplit(filters: ProfitSplitFilters): Promise<ProfitSplitResponse> {
-  const { startDate, endDate, platformSlugs, productFamilies, countries } = filters;
+  const { startDate, endDate, platformSlugs, productFamilies, countries, mappedAffiliateIds } = filters;
   const range = { gte: startDate, lte: endDate };
 
   const orderScope = {
     ...(platformSlugs?.length ? { platform: { slug: { in: platformSlugs } } } : {}),
     ...(productFamilies?.length ? { product: { family: { in: productFamilies } } } : {}),
     ...(countries?.length ? { country: { in: countries } } : {}),
+    ...(mappedAffiliateIds?.length ? { mappedAffiliateId: { in: mappedAffiliateIds } } : {}),
   };
   const hasOrderScope = Object.keys(orderScope).length > 0;
 

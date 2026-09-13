@@ -27,6 +27,7 @@ const options = {
     'public/src/pages/custos.jsx',
     'public/src/pages/all-pages.jsx',
     'public/src/pages/affiliate-identity.jsx',
+    'public/src/pages/affiliate-mapping.jsx',
     'public/src/pages/affiliate-sequence.jsx',
     'public/src/pages/affiliate-analysis.jsx',
     'public/src/pages/funnel-windows.jsx',
@@ -106,6 +107,7 @@ function checkGlobals() {
     'public/src/app.jsx', 'public/src/shell.jsx', 'public/src/pages/all-pages.jsx',
     'public/src/pages/overview.jsx', 'public/src/pages/custos.jsx',
     'public/src/pages/affiliate-analysis.jsx', 'public/src/pages/affiliate-identity.jsx', 'public/src/pages/affiliate-sequence.jsx',
+    'public/src/pages/affiliate-mapping.jsx',
     'public/src/pages/funnel-windows.jsx',
   ]) {
     for (const m of read(f).matchAll(/NSApi\.(\w+)/g)) {

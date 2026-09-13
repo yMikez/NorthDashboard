@@ -141,6 +141,12 @@ model Affiliate {
   // "neuromindpro12", ID "0") — sai do ranking. NULL = decide a heurística
   // (isInternalGuess); true/false = decisão manual do admin.
   isInternal  Boolean?
+  // affiliate_id do sistema NorthScale Afiliados (fonte de verdade da
+  // identidade — ver lib/services/affiliateMapping.ts). Cache por CONTA da
+  // resolução (platform + external_id/nickname → affiliate_id); a mesma
+  // resolução é gravada por pedido em Order.mappedAffiliateId. NULL = conta
+  // ainda não mapeada (aparece na fila unmapped_affiliate_events).
+  mappedAffiliateId String?
 
   platform    Platform            @relation(fields: [platformId], references: [id])
   orders      Order[]
@@ -157,6 +163,7 @@ model Affiliate {
   @@index([lastOrderAt])
   @@index([partnerId])
   @@index([email])
+  @@index([mappedAffiliateId])
 }
 
 // Pessoa/empresa por trás de uma ou mais contas de afiliado (uma por
@@ -285,6 +292,11 @@ model Order {
   productId             String
   affiliateId           String?
   customerId            String?
+  // affiliate_id do sistema NorthScale Afiliados resolvido no ingest via
+  // affiliate_mappings (platform + identificador do payload). É a chave
+  // que o GET /api/integrations/affiliates/metrics devolve e a dimensão do
+  // filtro "Afiliado (sistema)" nos relatórios. NULL = não mapeado.
+  mappedAffiliateId     String?
 
   currencyOriginal String
   grossAmountOrig  Decimal  @db.Decimal(12, 2)
@@ -390,6 +402,8 @@ model Order {
   @@index([funnelSessionId])
   @@index([parentExternalId])
   @@index([vendorAccount, orderedAt])
+  // Métricas por afiliado do sistema de afiliados + filtro nos relatórios.
+  @@index([mappedAffiliateId, orderedAt])
 }
 
 model FxRate {
@@ -1105,5 +1119,78 @@ model FamilyAlias {
   family    String
   createdBy String?
   createdAt DateTime @default(now())
+}
+
+// ============================================================
+// INTEGRAÇÃO NORTHSCALE AFILIADOS — espelho do mapeamento de identidade
+// (contrato: integration-dashboard.md). O sistema de afiliados é a FONTE
+// DE VERDADE de quem é cada afiliado e quais IDs ele tem em cada
+// plataforma; o dashboard só espelha (webhook affiliate.updated + pull do
+// mapping) e resolve o affiliate_id de cada venda por (platform,
+// external_id). Tabelas com nome snake_case por exigência do contrato.
+// ============================================================
+
+// Último estado aplicado por afiliado (nome/status/occurred_at). Existe
+// mesmo pra afiliado sem plataforma nenhuma (platforms: []). occurredAt é
+// a régua de idempotência: evento com occurred_at menor é ignorado.
+model AffiliateMappingState {
+  affiliateId String    @id @map("affiliate_id")
+  name        String
+  status      String    // 'active' | 'inactive'
+  occurredAt  DateTime  @map("occurred_at")
+  syncedAt    DateTime  @map("synced_at")
+  // Sumiu do mapping completo (sem evento de exclusão no contrato) —
+  // histórico de vendas fica; só deixa de aparecer como afiliado atual.
+  removedAt   DateTime? @map("removed_at")
+  createdAt   DateTime  @default(now()) @map("created_at")
+
+  mappings    AffiliateMapping[]
+
+  @@index([occurredAt])
+  @@map("affiliate_mapping_state")
+}
+
+// Uma linha por (platform, external_id) → affiliate_id. external_id já
+// normalizado (trim + minúsculas) como o contrato manda. name/status são
+// cópias denormalizadas do estado (facilitam listagem/joins).
+model AffiliateMapping {
+  id          String   @id @default(cuid())
+  affiliateId String   @map("affiliate_id")
+  name        String
+  status      String
+  platform    String   // 'buygoods' | 'digistore24' | 'jvzoo'
+  externalId  String   @map("external_id")
+  syncedAt    DateTime @map("synced_at")
+
+  state       AffiliateMappingState @relation(fields: [affiliateId], references: [affiliateId], onDelete: Cascade)
+
+  @@unique([platform, externalId])
+  @@index([affiliateId])
+  @@map("affiliate_mappings")
+}
+
+// Fila de identificadores que chegaram em webhook de venda e NÃO existem
+// no mapeamento. Uma linha por (platform, external_id), com contador e
+// primeiro/último visto; some sozinha quando o mapeamento chega
+// (reprocesso automático) ou quando o admin resolve.
+model UnmappedAffiliateEvent {
+  id                 String   @id @default(cuid())
+  platform           String
+  externalId         String   @map("external_id")
+  // Identificador alternativo do mesmo payload (ex.: aff_name da BuyGoods,
+  // affiliate_id numérico da Digistore) — ajuda o humano a achar a conta.
+  altExternalId      String?  @map("alt_external_id")
+  nickname           String?
+  // Affiliate.id da conta do dashboard (pra reprocessar os pedidos dela).
+  affiliateAccountId String?  @map("affiliate_account_id")
+  // externalId do último pedido que caiu aqui (event_id do contrato).
+  eventId            String?  @map("event_id")
+  firstSeen          DateTime @map("first_seen")
+  lastSeen           DateTime @map("last_seen")
+  count              Int      @default(1)
+
+  @@unique([platform, externalId])
+  @@index([lastSeen])
+  @@map("unmapped_affiliate_events")
 }
 

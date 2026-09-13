@@ -65,9 +65,12 @@ export function mergeAffiliateRows(accounts: AffiliateRow[], partnerName: string
   for (const a of accounts) (a.sparkline ?? []).forEach((v, i) => { sparkline[i] += v; });
   const firstSeen = accounts.map((a) => a.firstSeenAt).filter(Boolean).sort()[0] ?? primary.firstSeenAt;
   const lastOrder = accounts.map((a) => a.lastOrderAt).filter((x): x is string => !!x).sort().pop() ?? null;
+  const mappedAcc = accounts.find((a) => a.mappedAffiliateId) ?? null;
   return {
     ...primary,
     nickname: partnerName || primary.nickname,
+    mappedAffiliateId: mappedAcc?.mappedAffiliateId ?? null,
+    mapped: mappedAcc?.mapped ?? null,
     revenue: r2(revenue),
     orders,
     allOrders: sum(accounts, (a) => a.allOrders),
@@ -146,6 +149,43 @@ export function groupAffiliateRows(
   }
   out.sort((a, b) => b.revenue - a.revenue);
   return out;
+}
+
+/**
+ * Visão por AFILIADO DO SISTEMA (NorthScale Afiliados): agrupa as contas
+ * pelo affiliate_id resolvido no mapping — a mesma pessoa em BuyGoods,
+ * Digistore e JVZoo vira uma linha, com o nome/status vindos de lá.
+ * Contas não mapeadas ficam soltas (com `mapped: null`).
+ */
+export async function unifyAffiliatesByMapping(data: AffiliatesResponse, platformSlugs?: string[]): Promise<UnifiedAffiliatesResponse> {
+  const platformSet = platformSlugs?.length ? new Set(platformSlugs) : null;
+  const baseRows = platformSet ? data.affiliates.filter((r) => platformSet.has(r.platformSlug)) : data.affiliates;
+  const pm = await getProfitModelInputs();
+  const byKey = new Map<string, { id: string; name: string; status: string }>();
+  for (const r of baseRows) {
+    if (r.mappedAffiliateId) byKey.set(`${r.platformSlug}:${r.externalId}`, r.mapped ?? { id: r.mappedAffiliateId, name: r.nickname ?? r.mappedAffiliateId, status: 'unknown' });
+  }
+  const grouped = groupAffiliateRows(baseRows, (k) => {
+    const m = byKey.get(k);
+    return m ? { id: m.id, name: m.name, contact: null, origin: null } : null;
+  }, pm.thresholds);
+  // A chave de parceiro vira `mapped:<affiliate_id>` e a identidade do
+  // sistema é reafirmada na linha agrupada.
+  // partnerId fica NULL de propósito: o id aqui é o affiliate_id EXTERNO,
+  // não um AffiliatePartner — o drawer não pode oferecer edição de contato
+  // (Identidades) em cima dele.
+  const affiliates = grouped.map((r) => (r.partnerId
+    ? { ...r, key: `mapped:${r.partnerId}`, partnerId: null, mappedAffiliateId: r.partnerId, mapped: { id: r.partnerId, name: r.partnerName ?? r.partnerId, status: byKey.get(`${r.accounts[0].platformSlug}:${r.accounts[0].externalId}`)?.status ?? 'unknown' } }
+    : r));
+  const active = affiliates.filter((r) => r.realOrders > 0);
+  const totalRevenue = sum(active, (r) => r.revenue);
+  const top5 = [...active].sort((a, b) => b.revenue - a.revenue).slice(0, 5);
+  return {
+    ...data,
+    unified: true,
+    summary: { ...data.summary, concentration: totalRevenue > 0 ? r4(sum(top5, (r) => r.revenue) / totalRevenue) : 0 },
+    affiliates,
+  };
 }
 
 export async function unifyAffiliates(data: AffiliatesResponse, includeContact: boolean, platformSlugs?: string[]): Promise<UnifiedAffiliatesResponse> {

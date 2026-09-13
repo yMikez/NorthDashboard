@@ -34,6 +34,9 @@ export async function GET(req: Request) {
       [SETTING_KEYS.logicallApiKey]: Boolean(process.env.LOGICALL_API_KEY),
       [SETTING_KEYS.logicallCommissionPct]: Boolean(process.env.LOGICALL_COMMISSION_PCT),
       [SETTING_KEYS.taukCommissionPct]: Boolean(process.env.TAUK_COMMISSION_PCT),
+      [SETTING_KEYS.affiliatesApiUrl]: Boolean(process.env.AFFILIATES_API_URL),
+      [SETTING_KEYS.affiliatesIntegrationApiKey]: Boolean(process.env.INTEGRATION_API_KEY),
+      [SETTING_KEYS.affiliatesDashboardApiKey]: Boolean(process.env.DASHBOARD_API_KEY),
     },
   });
 }

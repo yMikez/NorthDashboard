@@ -33,6 +33,16 @@ export interface FilterOptionsResponse {
     label: string;
     orderCount: number;
   }>;
+  // Afiliados do sistema NorthScale Afiliados (espelho do mapping) — filtro
+  // "Afiliado" da barra global (Order.mappedAffiliateId). Só quem tem ao
+  // menos um pedido mapeado aparece; status/removed viram meta no chip.
+  affiliates: Array<{
+    id: string;        // affiliate_id externo
+    label: string;     // nome
+    status: string;    // active | inactive
+    removed: boolean;
+    orderCount: number;
+  }>;
 }
 
 export async function getFilterOptions(): Promise<FilterOptionsResponse> {
@@ -40,6 +50,29 @@ export async function getFilterOptions(): Promise<FilterOptionsResponse> {
     select: { slug: true, displayName: true, isActive: true },
     orderBy: { displayName: 'asc' },
   });
+
+  const [mappedCounts, mappedStates] = await Promise.all([
+    db.order.groupBy({
+      by: ['mappedAffiliateId'],
+      where: { mappedAffiliateId: { not: null } },
+      _count: { _all: true },
+    }),
+    db.affiliateMappingState.findMany({ select: { affiliateId: true, name: true, status: true, removedAt: true } }),
+  ]);
+  const stateById = new Map(mappedStates.map((s) => [s.affiliateId, s]));
+  const affiliates = mappedCounts
+    .filter((r): r is typeof r & { mappedAffiliateId: string } => !!r.mappedAffiliateId)
+    .map((r) => {
+      const st = stateById.get(r.mappedAffiliateId);
+      return {
+        id: r.mappedAffiliateId,
+        label: st?.name ?? r.mappedAffiliateId,
+        status: st?.status ?? 'unknown',
+        removed: st?.removedAt != null,
+        orderCount: r._count._all,
+      };
+    })
+    .sort((a, b) => b.orderCount - a.orderCount || a.label.localeCompare(b.label));
 
   // FE products that have at least one FRONTEND-typed order. We aggregate by
   // product to dedupe and rank by activity (most-sold first).
@@ -165,6 +198,7 @@ export async function getFilterOptions(): Promise<FilterOptionsResponse> {
     .sort((a, b) => b.orderCount - a.orderCount);
 
   return {
+    affiliates,
     families,
     platforms: platforms.map((p) => ({
       id: p.slug,

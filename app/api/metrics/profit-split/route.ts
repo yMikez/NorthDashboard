@@ -6,6 +6,7 @@ import { requireTab } from '@/lib/auth/guard';
 import { getProfitSplit } from '@/lib/services/profitSplit';
 import { logger } from '@/lib/logger';
 import { respondCached } from '@/lib/shared/metricsResponse';
+import { affiliateIdsParam } from '@/lib/shared/queryParams';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -35,10 +36,11 @@ export async function GET(req: Request) {
   const platformSlugs = csv('platforms');
   const productFamilies = csv('families');
   const countries = csv('countries');
+  const mappedAffiliateIds = affiliateIdsParam(searchParams.get('affiliate_id'));
 
   try {
     return await respondCached('profit-split', searchParams, () =>
-      getProfitSplit({ startDate, endDate, platformSlugs, productFamilies, countries }));
+      getProfitSplit({ startDate, endDate, platformSlugs, productFamilies, countries, mappedAffiliateIds }));
   } catch (err) {
     logger.error({ err }, 'metrics/profit-split failed');
     return NextResponse.json({ error: 'query failed' }, { status: 500 });

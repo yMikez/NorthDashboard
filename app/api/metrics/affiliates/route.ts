@@ -1,9 +1,9 @@
 import { NextResponse } from 'next/server';
 import { getAffiliates } from '@/lib/services/metrics';
-import { unifyAffiliates } from '@/lib/services/affiliatesUnified';
+import { unifyAffiliates, unifyAffiliatesByMapping } from '@/lib/services/affiliatesUnified';
 import { requireAnyTab } from '@/lib/auth/guard';
 import { logger } from '@/lib/logger';
-import { csvParam, stagesParam } from '@/lib/shared/queryParams';
+import { affiliateIdsParam, csvParam, stagesParam } from '@/lib/shared/queryParams';
 import { respondCached } from '@/lib/shared/metricsResponse';
 
 export const runtime = 'nodejs';
@@ -33,12 +33,17 @@ export async function GET(req: Request) {
   const countries = csvParam(searchParams.get('countries'));
   const productExternalIds = csvParam(searchParams.get('products'));
   const productFamilies = csvParam(searchParams.get('families'));
+  // Filtro "Afiliado (sistema)" — affiliate_id do NorthScale Afiliados.
+  const mappedAffiliateIds = affiliateIdsParam(searchParams.get('affiliate_id'));
   // Etapa é parseada mas NÃO aplicada aqui de propósito (a aba não filtra
   // por etapa — o chat e a Análise seguem a mesma convenção).
   stagesParam(searchParams.get('stages'));
   // unify=1: contas do mesmo AffiliatePartner viram uma linha só (com
   // `accounts` por plataforma). Contato só pra admin → chave de cache própria.
-  const unify = searchParams.get('unify') === '1';
+  const unifyRaw = searchParams.get('unify');
+  const unify = unifyRaw === '1';
+  // unify=mapped: agrupa pelo affiliate_id do sistema de afiliados.
+  const unifyMapped = unifyRaw === 'mapped';
   // Contato visível pra quem tem a aba (mesma regra de quem pode unificar).
   const includeContact = !!auth.user;
   const cacheParams = new URLSearchParams(searchParams);
@@ -53,7 +58,9 @@ export async function GET(req: Request) {
         countries,
         productExternalIds,
         productFamilies,
+        mappedAffiliateIds,
       });
+      if (unifyMapped) return unifyAffiliatesByMapping(data, platformSlugs);
       return unify ? unifyAffiliates(data, includeContact, platformSlugs) : data;
     });
   } catch (err) {

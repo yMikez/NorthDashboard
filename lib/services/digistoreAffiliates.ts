@@ -62,7 +62,7 @@ export async function reattributeDigistoreBackendAffiliates(dryRun = false): Pro
       parentExternalId: { not: null },
     },
     select: {
-      id: true, externalId: true, parentExternalId: true, affiliateId: true,
+      id: true, externalId: true, parentExternalId: true, affiliateId: true, mappedAffiliateId: true,
       affiliate: { select: { externalId: true, nickname: true, isInternal: true } },
     },
   });
@@ -88,15 +88,17 @@ export async function reattributeDigistoreBackendAffiliates(dryRun = false): Pro
     },
     select: {
       externalId: true, parentExternalId: true, affiliateId: true,
-      affiliate: { select: { externalId: true, nickname: true, isInternal: true } },
+      affiliate: { select: { externalId: true, nickname: true, isInternal: true, mappedAffiliateId: true } },
     },
   });
   // FE da sessão: indexa pelo próprio externalId E pelo parent (âncora).
-  const feBySession = new Map<string, { affiliateId: string; internal: boolean }>();
+  // Leva junto o affiliate_id do NorthScale Afiliados (cache da conta da
+  // FE) — o backend reatribuído herda os DOIS, como no forward-fix do ingest.
+  const feBySession = new Map<string, { affiliateId: string; internal: boolean; mappedAffiliateId: string | null }>();
   for (const f of fes) {
     const internal = f.affiliate != null && effectiveInternal(f.affiliate);
     for (const k of [f.externalId, f.parentExternalId]) {
-      if (k && !feBySession.has(k)) feBySession.set(k, { affiliateId: f.affiliateId as string, internal });
+      if (k && !feBySession.has(k)) feBySession.set(k, { affiliateId: f.affiliateId as string, internal, mappedAffiliateId: f.affiliate?.mappedAffiliateId ?? null });
     }
   }
 
@@ -107,7 +109,7 @@ export async function reattributeDigistoreBackendAffiliates(dryRun = false): Pro
     // FE também pseudo-interna E backend já tem afiliado: alinhar não muda
     // métrica (ambos filtrados) — ainda assim alinha pra sessão ficar coesa.
     if (!dryRun) {
-      await db.order.update({ where: { id: b.id }, data: { affiliateId: fe.affiliateId } });
+      await db.order.update({ where: { id: b.id }, data: { affiliateId: fe.affiliateId, mappedAffiliateId: fe.mappedAffiliateId } });
     }
     stats.reattributed++;
     touched.add(b.parentExternalId as string);

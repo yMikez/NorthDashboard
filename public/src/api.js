@@ -74,6 +74,7 @@ async function fetchOverview(filters) {
     products: setToCSV(filters.funnels),
     families: setToCSV(filters.families),
     stages: setToCSV(filters.stages),
+    affiliate_id: setToCSV(filters.affiliates),
     compare: filters.compare ? '1' : null,
   };
   return fetchJSON('/api/metrics/overview', params);
@@ -101,6 +102,7 @@ function ordersExportUrl(filters, options = {}) {
     products: setToCSV(filters.funnels),
     families: setToCSV(filters.families),
     stages: setToCSV(filters.stages),
+    affiliate_id: setToCSV(filters.affiliates),
     status: options.status && options.status !== 'all' ? options.status : null,
     product_type: options.productType && options.productType !== 'all' ? options.productType : null,
     search: options.search || null,
@@ -120,6 +122,7 @@ async function fetchOrders(filters, options = {}) {
     products: setToCSV(filters.funnels),
     families: setToCSV(filters.families),
     stages: setToCSV(filters.stages),
+    affiliate_id: setToCSV(filters.affiliates),
     status: options.status && options.status !== 'all' ? options.status : null,
     product_type: options.productType && options.productType !== 'all' ? options.productType : null,
     search: options.search || null,
@@ -146,6 +149,7 @@ async function fetchRefundCohorts(filters, horizon) {
     families: setToCSV(filters.families),
     products: setToCSV(filters.funnels),
     stages: setToCSV(filters.stages),
+    affiliate_id: setToCSV(filters.affiliates),
     horizon: String(horizon || 30),
   };
   return fetchJSON('/api/metrics/refund-cohorts', params);
@@ -160,8 +164,10 @@ async function fetchAffiliates(filters, { unify = false } = {}) {
     products: setToCSV(filters.funnels),
     families: setToCSV(filters.families),
     stages: setToCSV(filters.stages),
-    // unify=1: contas do mesmo parceiro viram uma linha (com `accounts`).
-    unify: unify ? '1' : null,
+    affiliate_id: setToCSV(filters.affiliates),
+    // unify=1: contas do mesmo parceiro (Identidades) viram uma linha;
+    // unify=mapped: agrupa pelo affiliate_id do NorthScale Afiliados.
+    unify: unify === 'mapped' ? 'mapped' : (unify === true || unify === 'partner' || unify === '1') ? '1' : null,
   };
   return fetchJSON('/api/metrics/affiliates', params);
 }
@@ -180,6 +186,7 @@ async function fetchPlatforms(filters) {
     products: setToCSV(filters.funnels),
     families: setToCSV(filters.families),
     stages: setToCSV(filters.stages),
+    affiliate_id: setToCSV(filters.affiliates),
   };
   return fetchJSON('/api/metrics/platforms', params);
 }
@@ -199,6 +206,7 @@ async function fetchProducts(filters) {
     products: setToCSV(filters.funnels),
     families: setToCSV(filters.families),
     stages: setToCSV(filters.stages),
+    affiliate_id: setToCSV(filters.affiliates),
   };
   return fetchJSON('/api/metrics/products', params);
 }
@@ -218,6 +226,7 @@ async function fetchAffiliateDetail(externalId, filters, platformHint) {
     products: setToCSV(filters.funnels),
     families: setToCSV(filters.families),
     stages: setToCSV(filters.stages),
+    affiliate_id: setToCSV(filters.affiliates),
     platform: platformHint || null,
   };
   return fetchJSON(`/api/metrics/affiliates/${encodeURIComponent(externalId)}`, params);
@@ -238,6 +247,7 @@ async function fetchFunnel(filters) {
     products: setToCSV(filters.funnels),
     families: setToCSV(filters.families),
     stages: setToCSV(filters.stages),
+    affiliate_id: setToCSV(filters.affiliates),
   };
   return fetchJSON('/api/metrics/funnel', params);
 }
@@ -262,6 +272,7 @@ async function fetchFamilies(filters) {
     countries: setToCSV(filters.countries),
     families: setToCSV(filters.families),
     stages: setToCSV(filters.stages),
+    affiliate_id: setToCSV(filters.affiliates),
   };
   return fetchJSON('/api/metrics/families', params);
 }
@@ -316,6 +327,7 @@ async function fetchCostsOverview(filters) {
     products: setToCSV(filters.funnels),
     families: setToCSV(filters.families),
     stages: setToCSV(filters.stages),
+    affiliate_id: setToCSV(filters.affiliates),
   };
   return fetchJSON('/api/metrics/costs-overview', params);
 }
@@ -356,6 +368,7 @@ async function fetchFulfillmentOverview(filters) {
     products: setToCSV(filters.funnels),
     families: setToCSV(filters.families),
     stages: setToCSV(filters.stages),
+    affiliate_id: setToCSV(filters.affiliates),
   };
   return fetchJSON('/api/metrics/fulfillment-overview', params);
 }
@@ -835,7 +848,21 @@ function fetchProfitSplit(filters) {
   if (filters.platforms?.size) qs.set('platforms', Array.from(filters.platforms).join(','));
   if (filters.families?.size) qs.set('families', Array.from(filters.families).join(','));
   if (filters.countries?.size) qs.set('countries', Array.from(filters.countries).join(','));
+  if (filters.affiliates?.size) qs.set('affiliate_id', Array.from(filters.affiliates).join(','));
   return coGet(`/api/metrics/profit-split?${qs}`);
+}
+// Integração NorthScale Afiliados — espelho do mapeamento de identidade.
+//   fetchAffiliateMapping()             status + fila de não mapeados + mapeados (quem tem a aba)
+//   adminAffiliateMapping(action, opts) 'sync' {full} | 'backfill' {dryRun} (admin/bearer)
+function fetchAffiliateMapping() { return coGet('/api/metrics/affiliate-mapping'); }
+async function adminAffiliateMapping(action, opts = {}) {
+  const res = await fetch('/api/admin/affiliate-mapping', {
+    method: 'POST', headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+    body: JSON.stringify({ action, ...opts }),
+  });
+  const body = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(body.message || body.error || `${res.status} affiliateMapping`);
+  return body;
 }
 // Override de refund&cb% por afiliado (null = herda da plataforma).
 function patchAffiliateRefundOverride(body) { return coSend('/api/admin/affiliates/refund-override', 'PATCH', body); }
@@ -914,6 +941,8 @@ window.NSApi = _wrapMutations({
   fetchFunnelSequence,
   adminListAffiliateIdentity,
   adminAffiliateIdentity,
+  fetchAffiliateMapping,
+  adminAffiliateMapping,
   fetchRefundCohorts,
   fetchPlatforms,
   adminPatchPlatformFees,

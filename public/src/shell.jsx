@@ -364,6 +364,10 @@ function MultiSelect({ label, options, selected, onChange, icon }) {
 // Routes that already render comparison data (deltas vs previous period).
 // Other routes hide the toggle since flipping it would have no visible effect.
 const ROUTES_WITH_COMPARE = new Set(['overview']);
+// Rotas cujos endpoints aplicam o filtro "Afiliado (sistema)" (affiliate_id
+// do NorthScale Afiliados). Fora delas o seletor some — o filtro fica na
+// URL mas não é enviado, então nada finge estar filtrado.
+const ROUTES_WITH_AFFILIATE = new Set(['overview', 'funnel', 'leaderboard', 'all-affiliates', 'transactions', 'products', 'platforms']);
 
 // ---------- Date range chip with custom-range popover ----------
 function DateRangeChip({ range, onChange }) {
@@ -602,6 +606,13 @@ function FilterBar({ filters, setFilters, options, route }) {
 
   const showCompare = ROUTES_WITH_COMPARE.has(route);
 
+  // Afiliados do sistema de afiliados (espelho do mapping) — só aparecem
+  // quando há mapeamento carregado e a rota aplica o filtro.
+  const affiliateOpts = (options?.affiliates || []).map((a) => ({
+    id: a.id, label: a.label, meta: a.removed ? 'removido' : a.status === 'active' ? 'ativo' : 'inativo',
+  }));
+  const showAffiliate = ROUTES_WITH_AFFILIATE.has(route) && (affiliateOpts.length > 0 || (filters.affiliates && filters.affiliates.size > 0));
+
   return (
     <div className="filters">
       <Icon name="filter" size={12} className="f-icon" />
@@ -637,6 +648,10 @@ function FilterBar({ filters, setFilters, options, route }) {
         onChange={(s) => setFilters(f => ({ ...f, stages: s }))}/>
       <MultiSelect label="País" icon="globe" options={countryOpts} selected={filters.countries}
         onChange={(s) => setFilters(f => ({ ...f, countries: s }))}/>
+      {showAffiliate && (
+        <MultiSelect label="Afiliado" icon="users" options={affiliateOpts} selected={filters.affiliates || new Set()}
+          onChange={(s) => setFilters(f => ({ ...f, affiliates: s }))}/>
+      )}
     </div>
   );
 }

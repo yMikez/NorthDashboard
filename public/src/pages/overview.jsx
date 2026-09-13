@@ -147,6 +147,7 @@ function ProfitSplitPanel({ filters, cur, onData }) {
     Array.from(filters.platforms || []).join(','),
     Array.from(filters.families || []).join(','),
     Array.from(filters.countries || []).join(','),
+    Array.from(filters.affiliates || []).join(','),
   ]);
   const d = ps.d;
   if (!d) return null;
@@ -226,7 +227,7 @@ function OverviewPage({ filters, setFilters }) {
     return () => { cancelled = true; };
   }, [filters.dateRange.start.getTime(), filters.dateRange.end.getTime(),
       encodeSet(filters.platforms), encodeSet(filters.countries),
-      encodeSet(filters.funnels), encodeSet(filters.families), filters.compare]);
+      encodeSet(filters.funnels), encodeSet(filters.families), encodeSet(filters.affiliates || new Set()), filters.compare]);
 
   const cur = filters.currency || 'USD';
 

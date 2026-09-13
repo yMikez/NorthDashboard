@@ -23,7 +23,22 @@ export const SETTING_KEYS = {
   logicallApiKey: 'logicall.apiKey',
   logicallCommissionPct: 'logicall.commissionPct',
   taukCommissionPct: 'tauk.commissionPct',
+  // Integração NorthScale Afiliados (integration-dashboard.md §2/§3):
+  //   apiUrl            base da API de afiliados (GET …/mapping)
+  //   integrationApiKey chave que o DASHBOARD ENVIA no X-Api-Key do mapping
+  //                     (= INTEGRATION_API_KEY do lado deles)
+  //   dashboardApiKey   chave que o dashboard ACEITA no webhook e no metrics
+  //                     (= DASHBOARD_API_KEY do lado deles)
+  affiliatesApiUrl: 'affiliates.apiUrl',
+  affiliatesIntegrationApiKey: 'affiliates.integrationApiKey',
+  affiliatesDashboardApiKey: 'affiliates.dashboardApiKey',
 } as const;
+
+// Chaves INTERNAS (não editáveis pela UI): marcador incremental do mapping.
+export const INTERNAL_SETTING_KEYS = {
+  affiliatesSyncSince: 'affiliates.sync.since',
+} as const;
+export type InternalSettingKey = (typeof INTERNAL_SETTING_KEYS)[keyof typeof INTERNAL_SETTING_KEYS];
 
 export type SettingKey = (typeof SETTING_KEYS)[keyof typeof SETTING_KEYS];
 const ALLOWED = new Set<string>(Object.values(SETTING_KEYS));
@@ -46,12 +61,12 @@ export function isAllowedSettingKey(key: string): key is SettingKey {
   return ALLOWED.has(key);
 }
 
-export async function getSetting(key: SettingKey): Promise<string | null> {
+export async function getSetting(key: SettingKey | InternalSettingKey): Promise<string | null> {
   const map = await load();
   return map.get(key) ?? null;
 }
 
-export async function setSetting(key: SettingKey, value: string): Promise<void> {
+export async function setSetting(key: SettingKey | InternalSettingKey, value: string): Promise<void> {
   await db.integrationSetting.upsert({
     where: { key },
     create: { key, value },
@@ -61,7 +76,7 @@ export async function setSetting(key: SettingKey, value: string): Promise<void> 
   clearResponseCache();
 }
 
-export async function deleteSetting(key: SettingKey): Promise<void> {
+export async function deleteSetting(key: SettingKey | InternalSettingKey): Promise<void> {
   await db.integrationSetting.deleteMany({ where: { key } });
   invalidateIntegrationSettings();
   clearResponseCache();
@@ -85,6 +100,32 @@ export async function listSettingsMasked(): Promise<
       updatedAt: r.updatedAt.toISOString(),
     };
   });
+}
+
+// ── NorthScale Afiliados ─────────────────────────────────────────────
+export const DEFAULT_AFFILIATES_API_URL = 'https://api.thenorthscales.com';
+
+/** Base da API de afiliados (sem barra final): env AFFILIATES_API_URL > banco > default. */
+export async function getAffiliatesApiUrl(): Promise<string> {
+  const env = process.env.AFFILIATES_API_URL?.trim();
+  const raw = env || (await getSetting(SETTING_KEYS.affiliatesApiUrl)) || DEFAULT_AFFILIATES_API_URL;
+  return raw.replace(/\/+$/, '');
+}
+
+/** Chave que ENVIAMOS no mapping (X-Api-Key): env INTEGRATION_API_KEY > banco > null. */
+export async function getAffiliatesOutboundKey(): Promise<string | null> {
+  const env = process.env.INTEGRATION_API_KEY?.trim();
+  if (env) return env;
+  const v = await getSetting(SETTING_KEYS.affiliatesIntegrationApiKey);
+  return v?.trim() || null;
+}
+
+/** Chave que ACEITAMOS no webhook/metrics: env DASHBOARD_API_KEY > banco > null (503). */
+export async function getAffiliatesInboundKey(): Promise<string | null> {
+  const env = process.env.DASHBOARD_API_KEY?.trim();
+  if (env) return env;
+  const v = await getSetting(SETTING_KEYS.affiliatesDashboardApiKey);
+  return v?.trim() || null;
 }
 
 /** Chave da API Logicall: env > banco > null (integração desligada). */
