@@ -851,6 +851,26 @@ function fetchProfitSplit(filters) {
   if (filters.affiliates?.size) qs.set('affiliate_id', Array.from(filters.affiliates).join(','));
   return coGet(`/api/metrics/profit-split?${qs}`);
 }
+// Lucro real (admin-only). GET carrega tudo; compute recalcula com os
+// parâmetros em edição (inputs em cache no servidor); params/scenarios
+// persistem. Sem cache client-side: cada chamada tem params diferentes.
+function fetchNetProfit(filters) {
+  const qs = new URLSearchParams({ start_date: toISODate(filters.dateRange.start), end_date: toISODate(filters.dateRange.end) });
+  return coGet(`/api/admin/net-profit?${qs}`);
+}
+function computeNetProfit(filters, params) {
+  return coSend('/api/admin/net-profit', 'POST', { start_date: toISODate(filters.dateRange.start), end_date: toISODate(filters.dateRange.end), params });
+}
+function adminSaveNetProfitParams(params) { return coSend('/api/admin/net-profit/params', 'PUT', { params }); }
+function adminListNetProfitScenarios() { return coGet('/api/admin/net-profit/scenarios'); }
+function adminSaveNetProfitScenario({ name, note, params, filters }) {
+  return coSend('/api/admin/net-profit/scenarios', 'POST', { name, note, params, start_date: toISODate(filters.dateRange.start), end_date: toISODate(filters.dateRange.end) });
+}
+async function adminDeleteNetProfitScenario(id) {
+  const res = await fetch(`/api/admin/net-profit/scenarios?id=${encodeURIComponent(id)}`, { method: 'DELETE', headers: { Accept: 'application/json' } });
+  if (!res.ok) { const e = await res.json().catch(() => ({})); throw new Error(e.error || `HTTP ${res.status}`); }
+  return res.json();
+}
 // Integração NorthScale Afiliados — espelho do mapeamento de identidade.
 //   fetchAffiliateMapping()             status + fila de não mapeados + mapeados (quem tem a aba)
 //   adminAffiliateMapping(action, opts) 'sync' {full} | 'backfill' {dryRun} (admin/bearer)
@@ -943,6 +963,12 @@ window.NSApi = _wrapMutations({
   adminAffiliateIdentity,
   fetchAffiliateMapping,
   adminAffiliateMapping,
+  fetchNetProfit,
+  computeNetProfit,
+  adminSaveNetProfitParams,
+  adminListNetProfitScenarios,
+  adminSaveNetProfitScenario,
+  adminDeleteNetProfitScenario,
   fetchRefundCohorts,
   fetchPlatforms,
   adminPatchPlatformFees,

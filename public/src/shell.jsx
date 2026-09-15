@@ -66,6 +66,7 @@ function Sidebar({ active, onNav, user, open, onClose }) {
     items: [
       { id: 'users', label: 'Usuários', icon: 'user-plus' },
       { id: 'copy-optimizer', label: 'Copy Optimizer', icon: 'sliders' },
+      { id: 'net-profit', label: 'Lucro real', icon: 'dollar' },
     ],
   };
   const groups = isAdmin

@@ -225,6 +225,28 @@ curl -i -X POST "https://dash.thenorthscales.com/api/integrations/affiliates/web
 curl -s "https://dash.thenorthscales.com/api/integrations/affiliates/metrics?period=7d" -H "X-Api-Key: $DASHBOARD_API_KEY"
 ```
 
+## Aba "Lucro real" (admin-only)
+
+`/net-profit` — lucro líquido da empresa por canal, cada linha de custo isolada:
+
+| Canal | Fórmula |
+| --- | --- |
+| Front-end / plataformas | Faturamento − CPA − Reembolso/CB − Taxa da plataforma − Custo de produto − Allowance |
+| Call centers (Tauk, Logicall) | Faturamento − Comissão − Reembolso/CB − Custo de produto |
+| Recuperação (Skill99 e-mail/SMS, SMS próprio) | Faturamento − Comissão − Custo de produto − Reembolso/CB |
+| SalesBound | Faturamento − Reembolso/CB − Comissão − Custo de produto |
+
+Total = Σ lucros; margem = lucro ÷ faturamento. KPIs (faturado, custos, lucro, margem), participação % de
+cada canal no faturamento e no lucro, e a mesma fórmula por afiliado (com % do faturamento total).
+
+Parâmetros (painel na aba, salvos em `NetProfitParams`; projeções salvas em `NetProfitScenario`):
+reembolso **observado** (valor já calculado no dashboard, por data do estorno) ou **% manual** por canal;
+custo de produto em % por canal/etapa (vazio = real observado dos snapshots COGS+frete); comissões
+(Tauk/Logicall/recuperação/SMS/SalesBound); override de taxa/allowance por plataforma; SalesBound manual
+(faturamento, vendas, estornos) enquanto o postback não traz eventos; toggle que subtrai a receita de
+recuperação/SMS do front-end (evita dupla contagem). Tudo recalcula ao digitar (`POST /api/admin/net-profit`
+com os inputs medidos em cache 60s). Núcleo puro e testado: `lib/services/netProfitCore.ts`.
+
 ## Postback SalesBound (cross-sell) — fase 1: captura
 
 URL entregue à SalesBound (GET com macros na querystring **ou** POST JSON/form — tudo é aceito):

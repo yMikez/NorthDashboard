@@ -20,6 +20,7 @@ const ROUTES = {
   'chat':           { title: 'Análise',    em: 'com IA',         crumbs: ['Admin', 'Chat'] },
   'users':          { title: 'Usuários',    em: 'do dashboard', crumbs: ['Admin', 'Usuários'] },
   'copy-optimizer': { title: 'Copy',         em: 'Optimizer',   crumbs: ['Admin', 'Copy Optimizer'] },
+  'net-profit':     { title: 'Lucro',        em: 'real',        crumbs: ['Admin', 'Lucro real'] },
 };
 
 // Path-based routing via History API. Pathname is the route name (e.g.
@@ -267,6 +268,7 @@ function App({ user }) {
           {/* 'chat' agora vive em /chat (Next.js native). Nav redireciona via window.location. */}
           {hashState.route === 'users'          && <UsersPage currentUser={user}/>}
           {hashState.route === 'copy-optimizer' && <CopyOptimizerPage/>}
+          {hashState.route === 'net-profit'     && <NetProfitPage filters={filters}/>}
         </div>
       </div>
 

@@ -1194,3 +1194,34 @@ model UnmappedAffiliateEvent {
   @@map("unmapped_affiliate_events")
 }
 
+// ============================================================
+// LUCRO REAL (aba admin-only) — parâmetros do cálculo e projeções salvas.
+// Fórmulas e inputs medidos vivem em lib/services/netProfitCore.ts /
+// netProfit.ts; aqui só persistimos o que o admin edita.
+// ============================================================
+
+// Parâmetros vigentes (singleton id='default'): JSON no formato
+// NetProfitParams (normalizado na leitura — nunca confiar no shape cru).
+model NetProfitParams {
+  id          String   @id @default("default")
+  params      Json
+  updatedAt   DateTime @updatedAt
+  updatedById String?
+}
+
+// Projeção salva: parâmetros + período + resumo do resultado no momento
+// (pra comparar versões sem recalcular com dados que mudaram).
+model NetProfitScenario {
+  id          String   @id @default(cuid())
+  name        String
+  note        String?
+  params      Json
+  periodStart DateTime
+  periodEnd   DateTime
+  summary     Json
+  createdAt   DateTime @default(now())
+  createdById String?
+
+  @@index([createdAt])
+}
+
