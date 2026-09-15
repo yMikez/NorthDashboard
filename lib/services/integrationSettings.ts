@@ -32,6 +32,8 @@ export const SETTING_KEYS = {
   affiliatesApiUrl: 'affiliates.apiUrl',
   affiliatesIntegrationApiKey: 'affiliates.integrationApiKey',
   affiliatesDashboardApiKey: 'affiliates.dashboardApiKey',
+  // SalesBound (cross-sell): token do postback GET|POST /api/ingest/salesbound?token=
+  salesboundPostbackToken: 'salesbound.postbackToken',
 } as const;
 
 // Chaves INTERNAS (não editáveis pela UI): marcador incremental do mapping.
@@ -125,6 +127,14 @@ export async function getAffiliatesInboundKey(): Promise<string | null> {
   const env = process.env.DASHBOARD_API_KEY?.trim();
   if (env) return env;
   const v = await getSetting(SETTING_KEYS.affiliatesDashboardApiKey);
+  return v?.trim() || null;
+}
+
+/** Token do postback da SalesBound: env SALESBOUND_POSTBACK_TOKEN > banco > null (503). */
+export async function getSalesboundPostbackToken(): Promise<string | null> {
+  const env = process.env.SALESBOUND_POSTBACK_TOKEN?.trim();
+  if (env) return env;
+  const v = await getSetting(SETTING_KEYS.salesboundPostbackToken);
   return v?.trim() || null;
 }
 

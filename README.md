@@ -225,6 +225,21 @@ curl -i -X POST "https://dash.thenorthscales.com/api/integrations/affiliates/web
 curl -s "https://dash.thenorthscales.com/api/integrations/affiliates/metrics?period=7d" -H "X-Api-Key: $DASHBOARD_API_KEY"
 ```
 
+## Postback SalesBound (cross-sell) — fase 1: captura
+
+URL entregue à SalesBound (GET com macros na querystring **ou** POST JSON/form — tudo é aceito):
+
+```
+https://dash.thenorthscales.com/api/ingest/salesbound?token=<SALESBOUND_POSTBACK_TOKEN>
+```
+
+Auth pelo `token` da querystring (tempo constante; env `SALESBOUND_POSTBACK_TOKEN` ou setting
+`salesbound.postbackToken`). Cada chamada vira um `IngestLog` (`platformSlug=salesbound`) com o
+payload inteiro (query + body + `_meta`); `eventType`/`externalId` são extraídos de chaves comuns
+(`event`/`type`/`status`, `order_id`/`transaction_id`/`id`). Resposta 200 sempre que gravou; 401 token
+errado; 503 sem token. Inspeção: `GET /api/admin/ingest-logs?platform=salesbound` (bearer). A
+modelagem (CallCenterSale `salesbound`, lucro BACK, aba) vem na fase 2 por replay desses logs.
+
 ## Deploy (Fase de produção)
 
 Planejado: Docker + Traefik + Postgres + Redis na VPS Hostinger KVM 4 (São Paulo),
