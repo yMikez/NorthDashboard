@@ -322,7 +322,9 @@ function NpLines({ gross, revenue, lines, profit, marginPct, cur, dense }) {
         <tr style={{ borderTop: '1px solid var(--border)' }}>
           <td style={{ fontWeight: 700 }}>= Lucro de contribuição</td>
           <td className="num cell-mono" style={{ fontWeight: 700, color: npTone(profit) }}>{npMoney(profit, cur)}</td>
-          <td className="num cell-mono" style={{ fontWeight: 600, color: npTone(profit) }} title="lucro ÷ receita econômica">{npPct(marginPct)}</td>
+          {share.length > 0
+            ? <td className="num cell-mono" style={{ fontWeight: 600, color: npTone(profit) }} title="lucro ÷ bruto do parceiro">{npPct(gross > 0 ? (profit / gross) * 100 : null)}</td>
+            : <td className="num cell-mono" style={{ fontWeight: 600, color: npTone(profit) }} title="lucro ÷ receita econômica">{npPct(marginPct)}</td>}
           <td/>
         </tr>
       </tbody>
@@ -754,7 +756,7 @@ function NpProducts({ rows, cur }) {
       <div className="panel-head" style={{ flexWrap: 'wrap' }}>
         <div className="panel-title">
           <span className="panel-eyebrow">MARGEM POR PRODUTO</span>
-          <div className="panel-sub">Vendas de front (plataformas) por família, com o fee e a reserva de cada plataforma. Recuperação e backend não são alocados por produto.</div>
+          <div className="panel-sub">Vendas de front (plataformas) por família, com o fee e a reserva de cada plataforma. O CPA fica no produto do front-end (upsell não paga CPA), então produto de upsell aparece com margem alta. Recuperação e backend não são alocados por produto.</div>
         </div>
         <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
           <div className="select-btn" style={{ padding: '0 10px', width: 'min(200px, 100%)' }}>
