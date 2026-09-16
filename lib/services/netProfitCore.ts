@@ -106,6 +106,10 @@ export interface NetProfitInputs {
 export interface NetProfitParams {
   refundMode: 'observed' | 'manual';
   refundPct: Record<ChannelKey, number | null>;          // % fixo (modo manual) por canal
+  // Custo de produto ÚNICO (decisão do usuário 2026-09-16: front, upsell,
+  // downsell e bump são "a etapa inicial, uma coisa só"). Vale pra todos os
+  // canais/etapas; os campos específicos abaixo só sobrescrevem se preenchidos.
+  productCostDefaultPct: number | null;
   productCostPct: {
     front: Record<FrontStage, number | null>;
     callcenter: number | null;
@@ -130,6 +134,7 @@ export function defaultParams(): NetProfitParams {
   return {
     refundMode: 'observed',
     refundPct: { front: null, callcenter: null, recovery: null, salesbound: null },
+    productCostDefaultPct: null,
     productCostPct: { front: { FRONTEND: null, UPSELL: null, DOWNSELL: null, BUMP: null, SMS_RECOVERY: null }, callcenter: null, recovery: null, salesbound: null },
     feePctOverride: {},
     allowancePctOverride: {},
@@ -175,6 +180,7 @@ export function normalizeParams(raw: unknown): NetProfitParams {
   return {
     refundMode: r.refundMode === 'manual' ? 'manual' : 'observed',
     refundPct: { front: pctOrNull(rp.front), callcenter: pctOrNull(rp.callcenter), recovery: pctOrNull(rp.recovery), salesbound: pctOrNull(rp.salesbound) },
+    productCostDefaultPct: pctOrNull(r.productCostDefaultPct),
     productCostPct: { front, callcenter: pctOrNull(pc.callcenter), recovery: pctOrNull(pc.recovery), salesbound: pctOrNull(pc.salesbound) },
     feePctOverride: overrides(r.feePctOverride),
     allowancePctOverride: overrides(r.allowancePctOverride),
@@ -319,8 +325,9 @@ export function computeNetProfit(inputs: NetProfitInputs, params: NetProfitParam
     return v;
   };
   // Custo de produto do front por etapa: parâmetro > observado > 0.
+  const dflt = params.productCostDefaultPct;
   const frontCostPct = (s: FrontStage): { pct: number; source: LineSource } => {
-    const p = params.productCostPct.front[s];
+    const p = params.productCostPct.front[s] ?? dflt;
     if (p != null) return { pct: p, source: 'manual' };
     const o = observed.front[s];
     return o != null ? { pct: o, source: 'observed' } : { pct: 0, source: 'none' };
@@ -371,8 +378,9 @@ export function computeNetProfit(inputs: NetProfitInputs, params: NetProfitParam
 
   // ── CALL CENTERS por parceiro ────────────────────────────────────────
   const ccBreakdown: Breakdown[] = [];
-  const ccCostPct = params.productCostPct.callcenter ?? observed.front.FRONTEND ?? 0;
-  const ccCostSource: LineSource = params.productCostPct.callcenter != null ? 'manual' : observed.front.FRONTEND != null ? 'observed' : 'none';
+  const ccManual = params.productCostPct.callcenter ?? dflt;
+  const ccCostPct = ccManual ?? observed.front.FRONTEND ?? 0;
+  const ccCostSource: LineSource = ccManual != null ? 'manual' : observed.front.FRONTEND != null ? 'observed' : 'none';
   for (const c of inputs.callcenters) {
     if (!c.configured && c.gross === 0) continue;
     const pct = params.commissionPct[c.provider] ?? c.commissionPct;
@@ -389,8 +397,9 @@ export function computeNetProfit(inputs: NetProfitInputs, params: NetProfitParam
 
   // ── RECUPERAÇÃO: parceiros (Skill99…) + SMS próprio ──────────────────
   const recBreakdown: Breakdown[] = [];
-  const recCostPct = params.productCostPct.recovery ?? observed.recovery ?? observed.front.FRONTEND ?? 0;
-  const recCostSource: LineSource = params.productCostPct.recovery != null ? 'manual' : observed.recovery != null ? 'observed' : observed.front.FRONTEND != null ? 'observed' : 'none';
+  const recManual = params.productCostPct.recovery ?? dflt;
+  const recCostPct = recManual ?? observed.recovery ?? observed.front.FRONTEND ?? 0;
+  const recCostSource: LineSource = recManual != null ? 'manual' : observed.recovery != null ? 'observed' : observed.front.FRONTEND != null ? 'observed' : 'none';
   for (const a of inputs.recoveryAffiliates) {
     if (a.gross <= 0 && a.orders === 0) continue;
     const commission = params.commissionPct.recoveryOverride != null ? a.gross * (params.commissionPct.recoveryOverride / 100) : a.commissionUsd;
@@ -405,11 +414,11 @@ export function computeNetProfit(inputs: NetProfitInputs, params: NetProfitParam
   if (inputs.sms.gross > 0 || inputs.sms.orders > 0) {
     const g = inputs.sms.gross;
     const smsPct = params.commissionPct.sms ?? 0;
-    const smsCostPct = params.productCostPct.recovery ?? observed.sms ?? observed.front.FRONTEND ?? 0;
+    const smsCostPct = recManual ?? observed.sms ?? observed.front.FRONTEND ?? 0;
     const refundUsd = manualRefund ? g * (refundPctFor('recovery') / 100) : inputs.sms.refundsObserved;
     const lines: Line[] = [
       line('commission', 'Comissão do parceiro', g * (smsPct / 100), g, smsPct > 0 ? 'manual' : 'default', `${smsPct}% (SMS próprio)`),
-      line('product', 'Custo de produto', g * (smsCostPct / 100), g, params.productCostPct.recovery != null ? 'manual' : 'observed', `${r2(smsCostPct)}%`),
+      line('product', 'Custo de produto', g * (smsCostPct / 100), g, recManual != null ? 'manual' : 'observed', `${r2(smsCostPct)}%`),
       line('refund', 'Reembolso + chargeback', refundUsd, g, manualRefund ? 'manual' : 'observed'),
     ];
     recBreakdown.push(finishBreakdown('sms', 'SMS próprio (Mautic/Twilio)', g, inputs.sms.orders, lines));
@@ -423,7 +432,7 @@ export function computeNetProfit(inputs: NetProfitInputs, params: NetProfitParam
   const sbSales = sbMeasured ? sbMeasured.sales : (params.salesbound.sales ?? 0);
   if (sbGross > 0) {
     const sbPct = params.commissionPct.salesbound;
-    const sbCost = params.productCostPct.salesbound;
+    const sbCost = params.productCostPct.salesbound ?? dflt;
     const refundUsd = manualRefund
       ? sbGross * (refundPctFor('salesbound') / 100)
       : sbMeasured ? sbMeasured.refunds : (params.salesbound.refundsUsd ?? 0);

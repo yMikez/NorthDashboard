@@ -303,27 +303,25 @@ export async function computeNeeds(inputs: NetProfitInputs, params: NetProfitPar
     if (params.commissionPct.salesbound == null) needs.push({ key: 'salesbound.commission', severity: 'required', title: 'SalesBound: comissão do parceiro', detail: 'Percentual que a SalesBound cobra sobre cada venda.', format: 'Parâmetros → Comissões → SalesBound: número em % (ex.: 25).' });
     if (params.productCostPct.salesbound == null) needs.push({ key: 'salesbound.cost', severity: 'required', title: 'SalesBound: custo de produto', detail: 'Sem SKU nos eventos ainda, o custo entra como % do faturamento.', format: 'Parâmetros → Custo de produto → SalesBound: % do faturamento (ex.: 12).' });
   }
-  // Custo de produto: onde não há % manual, usa o real observado — informe se quiser fixar.
+  // Custo de produto: um % único (front/upsell/downsell/bump/canais); sem
+  // ele, cada linha usa o real observado dos snapshots.
   const obs = result.observedProductCostPct;
-  for (const s of FRONT_STAGES) {
-    const gross = inputs.platforms.reduce((t, p) => t + p.byStage[s].gross, 0);
-    if (gross <= 0) continue;
-    if (params.productCostPct.front[s] == null) {
+  if (params.productCostDefaultPct == null) {
+    const missing = [
+      ...FRONT_STAGES.filter((s) => params.productCostPct.front[s] == null && inputs.platforms.some((p) => p.byStage[s].gross > 0)).map((s) => STAGE_LABELS[s]),
+      ...(inputs.callcenters.some((c) => c.gross > 0) && params.productCostPct.callcenter == null ? ['call centers'] : []),
+      ...((inputs.recoveryAffiliates.some((a) => a.gross > 0) || inputs.sms.gross > 0) && params.productCostPct.recovery == null ? ['recuperação'] : []),
+    ];
+    if (missing.length) {
       needs.push({
-        key: `cost.front.${s}`, severity: obs.front[s] == null ? 'required' : 'suggested',
-        title: `Custo de produto — ${STAGE_LABELS[s]}`,
-        detail: obs.front[s] == null
-          ? 'Não há COGS/frete nos pedidos desta etapa no período (catálogo sem custo?) — o cálculo está usando 0%.'
-          : `Usando o real observado dos snapshots do período: ${obs.front[s]}% do faturamento. Informe um % se o custo mudou.`,
-        format: `Parâmetros → Custo de produto → ${STAGE_LABELS[s]}: % do faturamento (ex.: ${obs.front[s] ?? 12}).`,
+        key: 'cost.default', severity: obs.front.FRONTEND == null ? 'required' : 'suggested',
+        title: 'Custo de produto (% único)',
+        detail: obs.front.FRONTEND == null
+          ? 'Não há COGS/frete nos pedidos do período — o cálculo está usando 0% em: ' + missing.join(', ') + '.'
+          : `Usando o real observado dos snapshots (front-end ${obs.front.FRONTEND}%${obs.front.UPSELL != null ? `, upsell ${obs.front.UPSELL}%` : ''}). Informe um % se o custo mudou.`,
+        format: 'Parâmetros → Custo de produto: % do faturamento (ex.: 12).',
       });
     }
-  }
-  if (inputs.callcenters.some((c) => c.gross > 0) && params.productCostPct.callcenter == null) {
-    needs.push({ key: 'cost.callcenter', severity: 'suggested', title: 'Custo de produto — call centers', detail: `Sem % próprio, usa o observado do front-end (${obs.front.FRONTEND ?? 0}%).`, format: 'Parâmetros → Custo de produto → Call centers: % (ex.: 12).' });
-  }
-  if ((inputs.recoveryAffiliates.some((a) => a.gross > 0) || inputs.sms.gross > 0) && params.productCostPct.recovery == null) {
-    needs.push({ key: 'cost.recovery', severity: 'suggested', title: 'Custo de produto — recuperação', detail: `Sem % próprio, usa o observado das vendas de recuperação (${obs.recovery ?? obs.front.FRONTEND ?? 0}%).`, format: 'Parâmetros → Custo de produto → Recuperação: % (ex.: 12).' });
   }
   // Comissões.
   const lc = inputs.callcenters.find((c) => c.provider === 'logicall');

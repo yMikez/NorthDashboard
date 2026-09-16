@@ -70,6 +70,24 @@ describe('computeNetProfit — FRONT: Faturamento − CPA − Reembolso/CB − T
   });
 });
 
+describe('custo de produto ÚNICO (productCostDefaultPct)', () => {
+  it('12% vale pra todas as etapas do front e pros outros canais; campo específico ainda sobrescreve', () => {
+    const p = defaultParams(); p.productCostDefaultPct = 12; p.salesbound = { grossUsd: 1000, sales: 5, refundsUsd: 0 }; p.commissionPct.salesbound = 65;
+    const inp = inputs({
+      platforms: [platform({ byStage: { ...emptyStages(), FRONTEND: st({ gross: 1000, orders: 1, cogs: 50, fulfillment: 0 }), UPSELL: st({ gross: 500, orders: 1, cogs: 200, fulfillment: 0 }) } })],
+      callcenters: [{ provider: 'tauk', label: 'Tauk', configured: true, gross: 2000, sales: 4, refundsObserved: 0, commissionPct: 30, commissionAssumed: false }],
+    });
+    const r = computeNetProfit(inp, p);
+    const prod = (k: string) => r.channels.find((c) => c.key === k)!.lines.find((l) => l.key === 'product')!;
+    expect(prod('front')).toMatchObject({ usd: 180, source: 'manual' });        // 12% de 1500 (não o observado 5%/40%)
+    expect(prod('callcenter')).toMatchObject({ usd: 240, source: 'manual' });
+    expect(prod('salesbound')).toMatchObject({ usd: 120, source: 'manual' });
+    p.productCostPct.callcenter = 20;
+    expect(computeNetProfit(inp, p).channels[1].lines.find((l) => l.key === 'product')!.usd).toBe(400);
+    expect(normalizeParams({ productCostDefaultPct: '12' }).productCostDefaultPct).toBe(12);
+  });
+});
+
 describe('dedupe da recuperação no front', () => {
   const inp = inputs({
     platforms: [platform({
