@@ -301,7 +301,7 @@ export async function computeNeeds(inputs: NetProfitInputs, params: NetProfitPar
       format: 'Painel de parâmetros → SalesBound: "Faturamento (USD)" no período selecionado, "Vendas" (nº) e "Estornos (USD)". Ex.: 12500.00 / 48 / 600.00.',
     });
     if (params.commissionPct.salesbound == null) needs.push({ key: 'salesbound.commission', severity: 'required', title: 'SalesBound: comissão do parceiro', detail: 'Percentual que a SalesBound cobra sobre cada venda.', format: 'Parâmetros → Comissões → SalesBound: número em % (ex.: 25).' });
-    if (params.productCostPct.salesbound == null) needs.push({ key: 'salesbound.cost', severity: 'required', title: 'SalesBound: custo de produto', detail: 'Sem SKU nos eventos ainda, o custo entra como % do faturamento.', format: 'Parâmetros → Custo de produto → SalesBound: % do faturamento (ex.: 12).' });
+    if (params.productCostPct.salesbound == null && params.productCostDefaultPct == null) needs.push({ key: 'salesbound.cost', severity: 'required', title: 'SalesBound: custo de produto', detail: 'Sem SKU nos eventos ainda, o custo entra como % do faturamento.', format: 'Parâmetros → Custo de produto → SalesBound: % do faturamento (ex.: 12).' });
   }
   // Custo de produto: um % único (front/upsell/downsell/bump/canais); sem
   // ele, cada linha usa o real observado dos snapshots.
