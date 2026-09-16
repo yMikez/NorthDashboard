@@ -54,23 +54,90 @@ function NpSourceChip({ source }) {
 // NÃO está focado — digitar "12." ou "0,5" não é mais engolido a cada
 // recálculo. Vazio = null (= usa o observado/cadastrado, mostrado no
 // placeholder). Enter/Tab/blur normaliza.
-function NpNum({ value, onChange, suffix = '%', placeholder = '', max, step = 'any', size = 'md' }) {
+function NpNum({ value, onChange, suffix = '%', placeholder = '', max, size = 'md', step = 1 }) {
   const [draft, setDraft] = useStateNP(value == null ? '' : String(value));
   const [focus, setFocus] = useStateNP(false);
-  useEffectNP(() => { if (!focus) setDraft(value == null ? '' : String(value)); }, [value, focus]);
-  const commit = (raw) => {
-    if (raw.trim() === '') { onChange(null); return; }
-    const n = Number(raw.replace(',', '.'));
-    if (Number.isFinite(n) && n >= 0 && (max == null || n <= max)) onChange(Math.round(n * 100) / 100);
+  const focusRef = useRefNP(false);
+  const timerRef = useRefNP(null);
+  const pendingRef = useRefNP(undefined);   // undefined = nada pendente
+  const onChangeRef = useRefNP(onChange);
+  onChangeRef.current = onChange;
+
+  // O valor de FORA só reescreve o campo quando ele NÃO está em edição: o
+  // recálculo dispara a cada tecla e, sem esta guarda, apagaria o que está
+  // sendo digitado ("12," vira "12" no meio da digitação).
+  useEffectNP(() => {
+    if (!focusRef.current) setDraft(value == null ? '' : String(value));
+  }, [value]);
+
+  // Se o campo sumir (fechar o drawer, trocar de aba) com algo pendente,
+  // não perde o que foi digitado.
+  useEffectNP(() => () => {
+    if (timerRef.current) clearTimeout(timerRef.current);
+    if (pendingRef.current !== undefined) onChangeRef.current(pendingRef.current.v);
+  }, []);
+
+  // '' → null (usa o observado/cadastrado) · inválido → undefined (ignora,
+  // o rascunho continua na tela até o blur).
+  const parse = (raw) => {
+    const t = String(raw).trim();
+    if (t === '') return null;
+    const n = Number(t.replace(',', '.'));
+    if (!Number.isFinite(n) || n < 0) return undefined;
+    const clamped = max != null ? Math.min(n, max) : n;
+    return Math.round(clamped * 100) / 100;
   };
+
+  // Propaga com atraso (o pai recalcula a cada mudança) e na hora no
+  // blur/Enter/setas.
+  const push = (raw, immediate) => {
+    const parsed = parse(raw);
+    if (parsed === undefined) return;
+    if (timerRef.current) clearTimeout(timerRef.current);
+    if (immediate) {
+      timerRef.current = null; pendingRef.current = undefined;
+      onChangeRef.current(parsed);
+      return;
+    }
+    pendingRef.current = { v: parsed };
+    timerRef.current = setTimeout(() => {
+      timerRef.current = null; pendingRef.current = undefined;
+      onChangeRef.current(parsed);
+    }, 350);
+  };
+
+  const bump = (dir, big) => {
+    const cur = parse(draft);
+    const base = cur == null || cur === undefined ? 0 : cur;
+    const delta = (big ? step * 10 : step) * dir;
+    const next = Math.max(0, max != null ? Math.min(max, base + delta) : base + delta);
+    const rounded = String(Math.round(next * 100) / 100);
+    setDraft(rounded);
+    push(rounded, true);
+  };
+
   const h = size === 'lg' ? 40 : 34;
   return (
-    <div className={`np-num${focus ? ' is-focus' : ''}`} style={{ display: 'inline-flex', alignItems: 'center', height: h, border: `1px solid ${focus ? 'var(--accent)' : 'var(--border)'}`, boxShadow: focus ? '0 0 0 2px color-mix(in oklab, var(--accent) 25%, transparent)' : 'none', borderRadius: 9, background: 'var(--bg)', padding: '0 10px', minWidth: size === 'lg' ? 150 : 120, transition: 'border-color 120ms, box-shadow 120ms' }}>
-      <input type="text" inputMode="decimal" value={draft} placeholder={placeholder}
-        onFocus={() => setFocus(true)}
-        onBlur={() => { setFocus(false); commit(draft); }}
-        onKeyDown={(e) => { if (e.key === 'Enter') { e.currentTarget.blur(); } }}
-        onChange={(e) => { const raw = e.target.value; setDraft(raw); if (raw === '' || /^\d*[.,]?\d*$/.test(raw)) commit(raw); }}
+    <div style={{ display: 'inline-flex', alignItems: 'center', height: h, border: `1px solid ${focus ? 'var(--accent)' : 'var(--border)'}`, boxShadow: focus ? '0 0 0 2px color-mix(in oklab, var(--accent) 22%, transparent)' : 'none', borderRadius: 9, background: 'var(--bg)', padding: '0 10px', minWidth: size === 'lg' ? 150 : 120, transition: 'border-color 120ms, box-shadow 120ms' }}>
+      <input
+        type="text" inputMode="decimal" autoComplete="off" spellCheck={false}
+        value={draft} placeholder={placeholder}
+        onFocus={(e) => { focusRef.current = true; setFocus(true); e.target.select(); }}
+        onBlur={() => { focusRef.current = false; setFocus(false); push(draft, true); }}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter') { e.preventDefault(); push(draft, true); e.currentTarget.blur(); return; }
+          if (e.key === 'Escape') { setDraft(value == null ? '' : String(value)); e.currentTarget.blur(); return; }
+          if (e.key === 'ArrowUp') { e.preventDefault(); bump(1, e.shiftKey); return; }
+          if (e.key === 'ArrowDown') { e.preventDefault(); bump(-1, e.shiftKey); }
+        }}
+        onChange={(e) => {
+          const raw = e.target.value;
+          // Aceita vazio, dígitos e UM separador decimal (vírgula ou ponto)
+          // — inclusive estados intermediários como "12," e "0.".
+          if (raw !== '' && !/^\d*[.,]?\d*$/.test(raw)) return;
+          setDraft(raw);
+          push(raw, false);
+        }}
         style={{ flex: 1, minWidth: 0, background: 'transparent', border: 0, outline: 'none', color: 'var(--fg1)', fontFamily: 'var(--f-mono)', fontSize: size === 'lg' ? 15 : 13, textAlign: 'right', padding: 0 }}/>
       {suffix && <span style={{ marginLeft: 6, fontSize: 11, color: 'var(--fg4)', fontFamily: 'var(--f-mono)', flex: 'none' }}>{suffix}</span>}
     </div>
@@ -85,6 +152,22 @@ function NpField({ label, hint, children, wide }) {
       {children}
       {hint && <span style={{ fontSize: 10.5, color: 'var(--fg5)', fontFamily: 'var(--f-mono)', lineHeight: 1.3 }}>{hint}</span>}
     </label>
+  );
+}
+
+// ATENÇÃO: componentes usados dentro de um render NUNCA podem ser
+// declarados dentro dele — a cada render vira um "tipo" novo, o React
+// desmonta/remonta a subárvore e os inputs perdem o foco a cada tecla
+// (mesmo tropeço do AiField em affiliate-identity.jsx).
+function NpSection({ title, hint, children }) {
+  return (
+    <section style={{ padding: '16px 0', borderBottom: '1px solid var(--border-soft)' }}>
+      <div style={{ marginBottom: 10 }}>
+        <div className="f-label">{title}</div>
+        {hint && <div style={{ fontSize: 11, color: 'var(--fg5)', marginTop: 2, lineHeight: 1.4 }}>{hint}</div>}
+      </div>
+      {children}
+    </section>
   );
 }
 
@@ -305,15 +388,6 @@ function NpParamsDrawer({ params, setParam, setParams, obs, platforms, dirty, bu
   const [perChannelCost, setPerChannelCost] = useStateNP(() => params.productCostPct.callcenter != null || params.productCostPct.recovery != null || params.productCostPct.salesbound != null);
   const [scnName, setScnName] = useStateNP('');
   const grid2 = { display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 12 };
-  const Section = ({ title, hint, children }) => (
-    <section style={{ padding: '16px 0', borderBottom: '1px solid var(--border-soft)' }}>
-      <div style={{ marginBottom: 10 }}>
-        <div className="f-label">{title}</div>
-        {hint && <div style={{ fontSize: 11, color: 'var(--fg5)', marginTop: 2, lineHeight: 1.4 }}>{hint}</div>}
-      </div>
-      {children}
-    </section>
-  );
   const refundAll = params.refundPct.front;
   const setRefundAll = (v) => setParams((p) => ({ ...p, refundPct: { front: v, callcenter: v, recovery: v, salesbound: v } }));
   const obsFe = obs?.front?.FRONTEND;
@@ -331,7 +405,7 @@ function NpParamsDrawer({ params, setParam, setParams, obs, platforms, dirty, bu
         </div>
 
         <div style={{ padding: '0 24px', overflowY: 'auto', flex: 1 }}>
-          <Section title="REEMBOLSO / CHARGEBACK" hint="Observado = valor real por data do estorno, já calculado no dashboard. % fixo = projeção.">
+          <NpSection title="REEMBOLSO / CHARGEBACK" hint="Observado = valor real por data do estorno, já calculado no dashboard. % fixo = projeção.">
             <div className="seg" style={{ marginBottom: 12 }}>
               <button className={params.refundMode === 'observed' ? 'is-active' : ''} onClick={() => setParam(['refundMode'], 'observed')}>observado</button>
               <button className={params.refundMode === 'manual' ? 'is-active' : ''} onClick={() => setParam(['refundMode'], 'manual')}>% fixo</button>
@@ -351,9 +425,9 @@ function NpParamsDrawer({ params, setParam, setParams, obs, platforms, dirty, bu
                 </div>
               )
             )}
-          </Section>
+          </NpSection>
 
-          <Section title="CUSTO DE PRODUTO" hint="% do faturamento, um valor só (front, upsell, downsell e bump são a mesma etapa).">
+          <NpSection title="CUSTO DE PRODUTO" hint="% do faturamento, um valor só (front, upsell, downsell e bump são a mesma etapa).">
             <div style={grid2}>
               <NpField label="% do faturamento" hint={obsFe != null ? `vazio = real observado (front ${npPct(obsFe)}${obs?.front?.UPSELL != null ? `, upsell ${npPct(obs.front.UPSELL)}` : ''})` : 'vazio = sem dado (0%)'}>
                 <NpNum value={params.productCostDefaultPct} onChange={(v) => setParam(['productCostDefaultPct'], v)} placeholder={obsFe != null ? String(obsFe) : 'ex.: 12'} max={100} size="lg"/>
@@ -367,26 +441,26 @@ function NpParamsDrawer({ params, setParam, setParams, obs, platforms, dirty, bu
                 </>
               )}
             </div>
-          </Section>
+          </NpSection>
 
-          <Section title="COMISSÕES" hint="Vazio = acordo cadastrado (aba Call Center / Recuperação).">
+          <NpSection title="COMISSÕES" hint="Vazio = acordo cadastrado (aba Call Center / Recuperação).">
             <div style={grid2}>
               <NpField label="Tauk"><NpNum value={params.commissionPct.tauk} onChange={(v) => setParam(['commissionPct', 'tauk'], v)} placeholder="cadastro" max={100}/></NpField>
               <NpField label="Logicall"><NpNum value={params.commissionPct.logicall} onChange={(v) => setParam(['commissionPct', 'logicall'], v)} placeholder="cadastro" max={100}/></NpField>
               <NpField label="Skill99 / recuperação" hint="sobrescreve a taxa de cada afiliado de recuperação"><NpNum value={params.commissionPct.recoveryOverride} onChange={(v) => setParam(['commissionPct', 'recoveryOverride'], v)} placeholder="por afiliado" max={100}/></NpField>
               <NpField label="SalesBound"><NpNum value={params.commissionPct.salesbound} onChange={(v) => setParam(['commissionPct', 'salesbound'], v)} placeholder="ex.: 65" max={100}/></NpField>
             </div>
-          </Section>
+          </NpSection>
 
-          <Section title="SALESBOUND · DADOS DO PERÍODO" hint="Informado manualmente enquanto o postback não traz eventos. Estornos vazio = usa o % de reembolso acima.">
+          <NpSection title="SALESBOUND · DADOS DO PERÍODO" hint="Informado manualmente enquanto o postback não traz eventos. Estornos vazio = usa o % de reembolso acima.">
             <div style={grid2}>
               <NpField label="Faturamento" wide><NpNum value={params.salesbound.grossUsd || null} onChange={(v) => setParam(['salesbound', 'grossUsd'], v ?? 0)} suffix="USD" placeholder="0" size="lg"/></NpField>
               <NpField label="Vendas"><NpNum value={params.salesbound.sales} onChange={(v) => setParam(['salesbound', 'sales'], v)} suffix="un." placeholder="0"/></NpField>
               <NpField label="Estornos"><NpNum value={params.salesbound.refundsUsd} onChange={(v) => setParam(['salesbound', 'refundsUsd'], v)} suffix="USD" placeholder="% acima"/></NpField>
             </div>
-          </Section>
+          </NpSection>
 
-          <Section title="TAXA DA PLATAFORMA E ALLOWANCE" hint="Vazio = cadastro da aba Plataformas. Override vale só nesta projeção.">
+          <NpSection title="TAXA DA PLATAFORMA E ALLOWANCE" hint="Vazio = cadastro da aba Plataformas. Override vale só nesta projeção.">
             <div style={{ display: 'grid', gap: 10 }}>
               {platforms.map((p) => (
                 <div key={p.slug} style={{ display: 'grid', gridTemplateColumns: '44px 1fr 1fr', gap: 10, alignItems: 'end' }}>
@@ -397,9 +471,9 @@ function NpParamsDrawer({ params, setParam, setParams, obs, platforms, dirty, bu
               ))}
               <NpSwitch on={params.includeAllowance} onChange={(v) => setParam(['includeAllowance'], v)} label="Descontar allowance do lucro do front" hint="reserva retida pela plataforma (rolling reserve)"/>
             </div>
-          </Section>
+          </NpSection>
 
-          <Section title="AVANÇADO">
+          <NpSection title="AVANÇADO">
             <button className="btn btn-ghost" style={{ fontSize: 11, marginBottom: advanced ? 12 : 0 }} onClick={() => setAdvanced((v) => !v)}>{advanced ? 'ocultar' : 'mostrar'} opções avançadas</button>
             {advanced && (
               <div style={{ display: 'grid', gap: 14 }}>
@@ -409,7 +483,7 @@ function NpParamsDrawer({ params, setParam, setParams, obs, platforms, dirty, bu
                 </div>
               </div>
             )}
-          </Section>
+          </NpSection>
         </div>
 
         <div style={{ padding: '12px 24px', borderTop: '1px solid var(--border)', background: 'var(--bg-elev)', display: 'grid', gap: 10 }}>
@@ -420,7 +494,9 @@ function NpParamsDrawer({ params, setParam, setParams, obs, platforms, dirty, bu
           </div>
           <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
             <input value={scnName} onChange={(e) => setScnName(e.target.value)} placeholder="nome da projeção (ex.: cenário CPA 20%)"
-              style={{ flex: 1, height: 34, padding: '0 10px', fontSize: 12, color: 'var(--fg1)', background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: 9, fontFamily: 'var(--f-body)' }}/>
+              autoComplete="off"
+              onKeyDown={(e) => { if (e.key === 'Enter' && scnName.trim()) { onSaveScenario(scnName.trim()); setScnName(''); } }}
+              style={{ flex: 1, height: 34, padding: '0 10px', fontSize: 12, color: 'var(--fg1)', background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: 9, fontFamily: 'var(--f-body)', outline: 'none' }}/>
             <button className="btn btn-ghost" disabled={busy || !scnName.trim()} onClick={() => { onSaveScenario(scnName.trim()); setScnName(''); }}>Salvar projeção</button>
           </div>
         </div>
@@ -506,13 +582,16 @@ function NpAffiliates({ rows, cur }) {
 }
 
 // ── Projeções ───────────────────────────────────────────────────────────
-function NpScenarios({ scenarios, current, cur, onApply, onDelete, busy }) {
-  const [compare, setCompare] = useStateNP(null);
-  const Delta = ({ v, money }) => (
+function NpDelta({ v, money, cur }) {
+  return (
     <span className="cell-mono" style={{ fontSize: 10, marginLeft: 6, color: v > 0 ? 'var(--success)' : v < 0 ? 'var(--danger)' : 'var(--fg5)' }}>
       {v > 0 ? '+' : ''}{money ? npMoney(v, cur) : `${v.toFixed(1)} pp`}
     </span>
   );
+}
+
+function NpScenarios({ scenarios, current, cur, onApply, onDelete, busy }) {
+  const [compare, setCompare] = useStateNP(null);
   return (
     <div className="panel" style={{ marginBottom: 14 }}>
       <div className="panel-head">
@@ -535,10 +614,10 @@ function NpScenarios({ scenarios, current, cur, onApply, onDelete, busy }) {
                   <td><div style={{ fontWeight: 600 }}>{s.name}</div>{s.note && <div style={{ fontSize: 10, color: 'var(--fg5)' }}>{s.note}</div>}</td>
                   <td className="cell-mono" style={{ fontSize: 11 }}>{s.periodStart.slice(0, 10)} → {s.periodEnd.slice(0, 10)}</td>
                   <td className="cell-mono" style={{ fontSize: 11 }}>{fmtDateTime(s.createdAt)}</td>
-                  <td className="num cell-mono">{npMoney(s.summary.revenue, cur)}{on && current && <Delta v={s.summary.revenue - current.revenue} money/>}</td>
-                  <td className="num cell-mono">{npMoney(s.summary.costs, cur)}{on && current && <Delta v={s.summary.costs - current.costs} money/>}</td>
-                  <td className="num cell-mono" style={{ color: 'var(--money)', fontWeight: 600 }}>{npMoney(s.summary.profit, cur)}{on && current && <Delta v={s.summary.profit - current.profit} money/>}</td>
-                  <td className="num cell-mono">{npPct(s.summary.marginPct)}{on && current && <Delta v={s.summary.marginPct - current.marginPct}/>}</td>
+                  <td className="num cell-mono">{npMoney(s.summary.revenue, cur)}{on && current && <NpDelta v={s.summary.revenue - current.revenue} money cur={cur}/>}</td>
+                  <td className="num cell-mono">{npMoney(s.summary.costs, cur)}{on && current && <NpDelta v={s.summary.costs - current.costs} money cur={cur}/>}</td>
+                  <td className="num cell-mono" style={{ color: 'var(--money)', fontWeight: 600 }}>{npMoney(s.summary.profit, cur)}{on && current && <NpDelta v={s.summary.profit - current.profit} money cur={cur}/>}</td>
+                  <td className="num cell-mono">{npPct(s.summary.marginPct)}{on && current && <NpDelta v={s.summary.marginPct - current.marginPct} cur={cur}/>}</td>
                   <td style={{ whiteSpace: 'nowrap' }}>
                     <button className="btn btn-ghost" style={{ fontSize: 10, padding: '2px 6px' }} onClick={() => setCompare(on ? null : s.id)}>{on ? 'ocultar Δ' : 'comparar'}</button>
                     <button className="btn btn-ghost" style={{ fontSize: 10, padding: '2px 6px' }} onClick={() => onApply(s.params)}>aplicar</button>
@@ -603,7 +682,7 @@ function NetProfitPage({ filters }) {
         .then((d) => { if (mySeq === seq.current) { setResult(d.result); setNeeds(d.needs || []); } })
         .catch((err) => setMsg({ ok: false, text: err.message }))
         .finally(() => { if (mySeq === seq.current) setComputing(false); });
-    }, 300);
+    }, 150);   // o campo já segura 350ms antes de propagar
     return () => { if (timer.current) clearTimeout(timer.current); };
   }, [params]);
 
