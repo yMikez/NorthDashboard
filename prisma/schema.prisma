@@ -1225,3 +1225,53 @@ model NetProfitScenario {
   @@index([createdAt])
 }
 
+
+// Histórico das premissas do Lucro real — cada "Salvar como padrão" grava o
+// snapshot e o diff (caminho → antes/depois). Regra do cálculo de margem:
+// taxa não muda sem registro de data (calculo_margem_northscale.md §10.5).
+model NetProfitParamsLog {
+  id          String   @id @default(cuid())
+  params      Json
+  changes     Json     // [{ path, from, to }] — vazio no snapshot inicial
+  createdAt   DateTime @default(now())
+  createdById String?
+
+  @@index([createdAt])
+}
+
+// SalesBound (cross-sell por telefone) — razão de transações do CRM deles
+// (CheckoutChamp, campanha "Salesbound - Phone Sales Team"). Alimentado pelo
+// export "Transaction Details" (CSV) via POST /api/admin/salesbound/import;
+// uma linha por transação: venda, reembolso, void e as recusas também
+// (result ≠ SUCCESS fica guardado, mas só SUCCESS entra em dinheiro).
+// Re-importar é idempotente (transactionId). Datas: wall clock America/
+// New_York assumido (agentes operam 8h–18h com pausa às 13h).
+model SalesboundTransaction {
+  id             String    @id @default(cuid())
+  transactionId  String    @unique
+  orderId        String
+  type           String    // SALE | REFUND | VOID | outro (maiúsculo, cru)
+  result         String    // SUCCESS | SOFT_DECLINE | HARD_DECLINE | …
+  amountUsd      Decimal   @db.Decimal(12, 2) // valor ABSOLUTO (reembolso vem negativo no CSV)
+  txnAt          DateTime
+  // Data da VENDA do pedido (= txnAt na própria venda). Void anula a venda
+  // no período dela; reembolso conta pela data do estorno (txnAt).
+  saleAt         DateTime?
+  chargedback    Boolean   @default(false)
+  agentName      String?
+  customerId     String?
+  email          String?
+  // De onde veio o cliente (custom3 do CRM: "JVZoo Order" → 'jvzoo').
+  sourcePlatform String?
+  merchant       String?
+  response       String?
+  items          Json      // [{ name, sku, qty, price, family, bottles }]
+  family         String?   // família do item de maior valor
+  bottles        Int?
+  importedAt     DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  @@index([txnAt])
+  @@index([saleAt])
+  @@index([orderId])
+}

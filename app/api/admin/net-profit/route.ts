@@ -1,6 +1,6 @@
 // Lucro real (admin-only).
 //   GET  /api/admin/net-profit?start_date&end_date
-//        → { period, params, paramsUpdatedAt, result, needs, scenarios }
+//        → { period, params, paramsUpdatedAt, history, result, needs, scenarios }
 //   POST /api/admin/net-profit  { start_date, end_date, params }
 //        → { result, needs }  (recálculo "em tempo real": inputs medidos
 //          ficam em cache 60s no servidor; só a fórmula roda de novo)
@@ -9,7 +9,7 @@
 import { NextResponse } from 'next/server';
 import { requireAdmin } from '@/lib/auth/guard';
 import { checkIngestSecret } from '@/lib/ingest/auth';
-import { evaluateNetProfit, getNetProfitParams, listNetProfitScenarios } from '@/lib/services/netProfit';
+import { evaluateNetProfit, getNetProfitParams, getNetProfitParamsHistory, listNetProfitScenarios } from '@/lib/services/netProfit';
 import { normalizeParams } from '@/lib/services/netProfitCore';
 import { logger } from '@/lib/logger';
 
@@ -40,12 +40,12 @@ export async function GET(req: Request) {
   if (period instanceof NextResponse) return period;
   const t0 = Date.now();
   try {
-    const [{ params, updatedAt }, scenarios] = await Promise.all([getNetProfitParams(), listNetProfitScenarios()]);
+    const [{ params, updatedAt }, scenarios, history] = await Promise.all([getNetProfitParams(), listNetProfitScenarios(), getNetProfitParamsHistory()]);
     const { result, needs } = await evaluateNetProfit(period.start, period.end, params);
     logger.info({ endpoint: 'admin/net-profit', ms: Date.now() - t0 }, 'metrics.timing');
     return NextResponse.json({
       period: { start: period.start.toISOString(), end: period.end.toISOString() },
-      params, paramsUpdatedAt: updatedAt, result, needs, scenarios,
+      params, paramsUpdatedAt: updatedAt, history, result, needs, scenarios,
     });
   } catch (err) {
     logger.error({ err }, 'admin/net-profit failed');

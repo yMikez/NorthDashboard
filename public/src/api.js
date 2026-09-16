@@ -861,7 +861,17 @@ function fetchNetProfit(filters) {
 function computeNetProfit(filters, params) {
   return coSend('/api/admin/net-profit', 'POST', { start_date: toISODate(filters.dateRange.start), end_date: toISODate(filters.dateRange.end), params });
 }
+function computeNetProfitDaily(filters, params) {
+  return coSend('/api/admin/net-profit/daily', 'POST', { start_date: toISODate(filters.dateRange.start), end_date: toISODate(filters.dateRange.end), params });
+}
 function adminSaveNetProfitParams(params) { return coSend('/api/admin/net-profit/params', 'PUT', { params }); }
+// SalesBound: import do export "Transaction Details" (CSV cru no corpo).
+async function adminImportSalesbound(csvText) {
+  const res = await fetch('/api/admin/salesbound/import', { method: 'POST', headers: { 'Content-Type': 'text/csv', Accept: 'application/json' }, body: csvText });
+  const body = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(body.error || `HTTP ${res.status}`);
+  return body;
+}
 function adminListNetProfitScenarios() { return coGet('/api/admin/net-profit/scenarios'); }
 function adminSaveNetProfitScenario({ name, note, params, filters }) {
   return coSend('/api/admin/net-profit/scenarios', 'POST', { name, note, params, start_date: toISODate(filters.dateRange.start), end_date: toISODate(filters.dateRange.end) });
@@ -965,6 +975,8 @@ window.NSApi = _wrapMutations({
   adminAffiliateMapping,
   fetchNetProfit,
   computeNetProfit,
+  computeNetProfitDaily,
+  adminImportSalesbound,
   adminSaveNetProfitParams,
   adminListNetProfitScenarios,
   adminSaveNetProfitScenario,

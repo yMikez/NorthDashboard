@@ -1,20 +1,31 @@
-// Lucro líquido REAL da empresa — núcleo PURO (sem DB). Aba admin-only
-// "Lucro real". Consolida as fontes de receita e aplica, por canal, as
-// fórmulas fechadas com o usuário (2026-09-15):
+// Lucro real — núcleo PURO (sem DB). Aba admin-only "Lucro real".
 //
-//   FRONT (plataformas)   Faturamento − CPA − Reembolso/CB − Taxa da plataforma
-//                         − Custo de produto − Allowance                = Lucro front
-//   CALL CENTERS          Faturamento − Comissão − Reembolso/CB − Custo de produto
-//   RECUPERAÇÃO (Skill99, e-mail/SMS)
-//                         Faturamento − Comissão − Custo de produto − Reembolso/CB
-//   SALESBOUND            Faturamento − Reembolso/CB − Comissão − Custo de produto
-//   TOTAL                 Σ lucros; margem = lucro ÷ faturamento
+// Desde 2026-09-16 segue o CÁLCULO DE MARGEM padronizado
+// (calculo_margem_northscale.md): MARGEM DE CONTRIBUIÇÃO da operação, sem
+// OPEX fixo, sempre com as mesmas taxas e a mesma lógica.
+//
+//   PLATAFORMAS (front + recuperação — vendas que passam pela plataforma)
+//     Gross − Afiliados (CPA / comissão de recuperação) − Reembolso − Fee
+//     − Reserva (allowance) − Produto + fulfillment        → custos variáveis
+//     Reembolso, fee, reserva e produto incidem sobre o GROSS (§10.1).
+//   BACKEND (call centers Tauk/Logicall + SalesBound)
+//     Entra só a PARCELA LÍQUIDA da NorthScale (§10.2):
+//       receita NS = (bruto − estornos informados pelo parceiro) × (100 − parcela do parceiro)%
+//     Sem custo de produto/reembolso projetado (só se o admin preencher o
+//     custo por canal). Estornos do parceiro: decisão 2026-09-16 — a SalesBound
+//     estorna ~27%; ignorar inflaria a receita (toggle backendNetOfRefunds).
+//   TOTAL
+//     receita econômica  = gross das plataformas + Σ receita NS do backend (§3)
+//     lucro contribuição = receita econômica − custos variáveis (§5)
+//     margem OFICIAL     = lucro ÷ receita econômica (§6); sobre o gross das
+//                          plataformas fica como leitura secundária
+//     lucro por FE       = lucro ÷ nº de FEs (§7); CPA médio = afiliados ÷ FEs
+//     buffer de risco    = % da receita econômica, linha SEPARADA (§9)
 //
 // Toda porcentagem aqui é PERCENTUAL 0–100 (como Platform.feeRatePct).
-// Parâmetros nulos caem no valor observado/configurado (ver `resolve*`), e a
-// linha diz de onde o número veio (`source`) pra auditoria. `inputs` vem
-// do banco (lib/services/netProfit.ts) e é reutilizado a cada recálculo —
-// mudar um parâmetro na UI é só rodar computeNetProfit de novo.
+// Parâmetros nulos caem no valor observado/configurado, e a linha diz de
+// onde o número veio (`source`). `inputs` vem do banco (netProfit.ts) e é
+// reutilizado a cada recálculo — mudar um parâmetro é só rodar de novo.
 
 export type FrontStage = 'FRONTEND' | 'UPSELL' | 'DOWNSELL' | 'BUMP' | 'SMS_RECOVERY';
 export const FRONT_STAGES: FrontStage[] = ['FRONTEND', 'UPSELL', 'DOWNSELL', 'BUMP', 'SMS_RECOVERY'];
@@ -26,6 +37,7 @@ export type ChannelKey = 'front' | 'callcenter' | 'recovery' | 'salesbound';
 export const CHANNEL_LABELS: Record<ChannelKey, string> = {
   front: 'Front-end / Plataformas', callcenter: 'Call centers', recovery: 'Recuperação (e-mail/SMS)', salesbound: 'SalesBound',
 };
+export const BACKEND_CHANNELS: ChannelKey[] = ['callcenter', 'salesbound'];
 
 export interface StageAgg { gross: number; cpa: number; orders: number; cogs: number; fulfillment: number }
 export const emptyStage = (): StageAgg => ({ gross: 0, cpa: 0, orders: 0, cogs: 0, fulfillment: 0 });
@@ -46,9 +58,9 @@ export interface PlatformFrontInput {
   // (afiliados de recuperação e SMS próprio) — por etapa do funil.
   byStage: Record<FrontStage, StageAgg>;
   // As mesmas vendas quando são de afiliado de recuperação / SMS próprio
-  // (entram no front só se dedupeRecovery = false).
-  recovery: StageAgg;
-  sms: StageAgg;
+  // (entram no front só se dedupeRecovery = false). `feOrders` = etapa FRONTEND.
+  recovery: StageAgg & { feOrders?: number };
+  sms: StageAgg & { feOrders?: number };
   // |$ devolvido| por data do ESTORNO (refundedAt/chargebackAt) no período.
   refundsObserved: { front: number; recovery: number; sms: number };
 }
@@ -60,6 +72,7 @@ export interface CallCenterProviderInput {
   gross: number;            // APPROVED amountUsd, purchasedAt no período
   sales: number;
   refundsObserved: number;  // estornos totais (refundedAt no período) + parciais
+  refundsReported: boolean; // o parceiro informa estorno? (Tauk não)
   commissionPct: number;    // % (do IntegrationSetting/env/default)
   commissionAssumed: boolean;
 }
@@ -71,6 +84,7 @@ export interface RecoveryAffiliateInput {
   platformSlug: string;
   gross: number;
   orders: number;
+  feOrders: number;
   cogs: number;
   fulfillment: number;
   commissionUsd: number;    // já resolvida pelos períodos de taxa (RecoveryRatePeriod)
@@ -88,16 +102,34 @@ export interface AffiliateInput {
   refundsObserved: number;
 }
 
+// Vendas de FRONT (mesmo escopo do canal) por família de produto × plataforma.
+export interface ProductInput {
+  family: string;           // '—' = sem família no catálogo
+  byPlatform: Array<{ slug: string; byStage: Record<FrontStage, StageAgg>; refundsObserved: number }>;
+}
+
+export interface SalesboundMeasuredInput {
+  gross: number;
+  sales: number;
+  refunds: number;
+  refundsCohort?: number;
+  voids?: number;
+  coverage?: { firstAt: string; lastAt: string; importedAt: string };
+}
+
 export interface NetProfitInputs {
   period: { start: string; end: string };
   platforms: PlatformFrontInput[];
   callcenters: CallCenterProviderInput[];
   recoveryAffiliates: RecoveryAffiliateInput[];
   // SMS próprio (Mautic/Twilio, trafficSource=smsbrdcst): custo do Twilio
-  // não passa pelo dash — comissão configurável (default 0).
-  sms: { gross: number; orders: number; cogs: number; fulfillment: number; refundsObserved: number };
+  // não passa pelo dash — comissão configurável (default 0). Fee/reserva
+  // saem de platforms[].sms (cada plataforma com a sua taxa).
+  sms: { gross: number; orders: number; feOrders?: number; cogs: number; fulfillment: number; refundsObserved: number };
   affiliates: AffiliateInput[];        // contas de FRONT (afiliados de recuperação ficam em recoveryAffiliates)
-  salesbound: { measured: { gross: number; sales: number; refunds: number } | null };
+  products?: ProductInput[];
+  // Razão importado do export do CRM da SalesBound; null = nunca importado.
+  salesbound: { measured: SalesboundMeasuredInput | null };
 }
 
 // ---------------------------------------------------------------------
@@ -105,10 +137,12 @@ export interface NetProfitInputs {
 // ---------------------------------------------------------------------
 export interface NetProfitParams {
   refundMode: 'observed' | 'manual';
-  refundPct: Record<ChannelKey, number | null>;          // % fixo (modo manual) por canal
-  // Custo de produto ÚNICO (decisão do usuário 2026-09-16: front, upsell,
-  // downsell e bump são "a etapa inicial, uma coisa só"). Vale pra todos os
-  // canais/etapas; os campos específicos abaixo só sobrescrevem se preenchidos.
+  // % projetado sobre o gross das PLATAFORMAS (§10.1). Recuperação vazio =
+  // mesmo % do front. Backend não recebe % projetado.
+  refundPct: { front: number | null; recovery: number | null };
+  // Custo de produto ÚNICO (front, upsell, downsell, bump e recuperação — "a
+  // etapa inicial, uma coisa só", decisão 2026-09-16). Campos por etapa/canal
+  // só sobrescrevem se preenchidos. Backend: só se preenchido por canal.
   productCostDefaultPct: number | null;
   productCostPct: {
     front: Record<FrontStage, number | null>;
@@ -119,6 +153,7 @@ export interface NetProfitParams {
   feePctOverride: Record<string, number | null>;         // por plataforma (slug)
   allowancePctOverride: Record<string, number | null>;
   includeAllowance: boolean;
+  // Parcela do PARCEIRO (%): a NorthScale fica com 100 − isso.
   commissionPct: {
     tauk: number | null;            // null = setting/env/default
     logicall: number | null;
@@ -126,14 +161,16 @@ export interface NetProfitParams {
     salesbound: number | null;
     recoveryOverride: number | null; // null = taxa de cada afiliado (RecoveryRatePeriod)
   };
-  salesbound: { grossUsd: number; sales: number | null; refundsUsd: number | null }; // manual enquanto não há dado
+  salesbound: { grossUsd: number; sales: number | null; refundsUsd: number | null }; // manual enquanto não há export importado
+  backendNetOfRefunds: boolean;     // parcela NS calculada sobre bruto − estornos do parceiro
+  riskBufferPct: number | null;     // % da receita econômica (§9); null/0 = desligado
   dedupeRecovery: boolean;          // subtrai recuperação/SMS do front (evita dupla contagem)
 }
 
 export function defaultParams(): NetProfitParams {
   return {
     refundMode: 'observed',
-    refundPct: { front: null, callcenter: null, recovery: null, salesbound: null },
+    refundPct: { front: null, recovery: null },
     productCostDefaultPct: null,
     productCostPct: { front: { FRONTEND: null, UPSELL: null, DOWNSELL: null, BUMP: null, SMS_RECOVERY: null }, callcenter: null, recovery: null, salesbound: null },
     feePctOverride: {},
@@ -141,6 +178,8 @@ export function defaultParams(): NetProfitParams {
     includeAllowance: true,
     commissionPct: { tauk: null, logicall: null, sms: 0, salesbound: null, recoveryOverride: null },
     salesbound: { grossUsd: 0, sales: null, refundsUsd: null },
+    backendNetOfRefunds: true,
+    riskBufferPct: null,
     dedupeRecovery: true,
   };
 }
@@ -179,7 +218,7 @@ export function normalizeParams(raw: unknown): NetProfitParams {
   for (const s of FRONT_STAGES) front[s] = pctOrNull(pcf[s]);
   return {
     refundMode: r.refundMode === 'manual' ? 'manual' : 'observed',
-    refundPct: { front: pctOrNull(rp.front), callcenter: pctOrNull(rp.callcenter), recovery: pctOrNull(rp.recovery), salesbound: pctOrNull(rp.salesbound) },
+    refundPct: { front: pctOrNull(rp.front), recovery: pctOrNull(rp.recovery) },
     productCostDefaultPct: pctOrNull(r.productCostDefaultPct),
     productCostPct: { front, callcenter: pctOrNull(pc.callcenter), recovery: pctOrNull(pc.recovery), salesbound: pctOrNull(pc.salesbound) },
     feePctOverride: overrides(r.feePctOverride),
@@ -190,6 +229,8 @@ export function normalizeParams(raw: unknown): NetProfitParams {
       sms: pctOrNull(cm.sms) ?? 0, salesbound: pctOrNull(cm.salesbound), recoveryOverride: pctOrNull(cm.recoveryOverride),
     },
     salesbound: { grossUsd: usdOrNull(sb.grossUsd) ?? 0, sales: usdOrNull(sb.sales), refundsUsd: usdOrNull(sb.refundsUsd) },
+    backendNetOfRefunds: r.backendNetOfRefunds !== false,
+    riskBufferPct: pctOrNull(r.riskBufferPct, 50),
     dedupeRecovery: r.dedupeRecovery !== false,
   };
 }
@@ -198,12 +239,17 @@ export function normalizeParams(raw: unknown): NetProfitParams {
 // RESULTADO
 // ---------------------------------------------------------------------
 export type LineSource = 'observed' | 'manual' | 'config' | 'default' | 'none';
+// cost  = custo variável da NorthScale (entra nos custos, §4)
+// share = não é receita da NorthScale (parcela do parceiro, estorno do
+//         parceiro) — sai do bruto ANTES da receita econômica (§10.2)
+export type LineKind = 'cost' | 'share';
 export interface Line {
   key: string;
   label: string;
   usd: number;                 // valor POSITIVO da dedução
-  pctOfGross: number | null;   // % do faturamento da linha-mãe
+  pctOfGross: number | null;   // % do bruto da linha-mãe
   source: LineSource;
+  kind: LineKind;
   note?: string;
 }
 export interface Breakdown {
@@ -212,19 +258,23 @@ export interface Breakdown {
   gross: number;
   orders: number;
   lines: Line[];
+  revenue: number;             // receita econômica (bruto − linhas share)
   profit: number;
-  marginPct: number;
+  marginPct: number;           // lucro ÷ receita econômica
 }
 export interface ChannelResult {
   key: ChannelKey;
   label: string;
-  gross: number;
+  type: 'platform' | 'backend';
+  gross: number;               // bruto
   orders: number;
-  costs: number;
+  fes: number;
+  revenue: number;             // receita econômica (plataforma: = bruto; backend: parcela NS)
+  costs: number;               // custos variáveis
   lines: Line[];               // somadas dos breakdowns, na ordem da fórmula
   profit: number;
-  marginPct: number;
-  shareOfRevenuePct: number;
+  marginPct: number;           // lucro ÷ receita econômica
+  shareOfRevenuePct: number;   // da receita econômica total
   shareOfProfitPct: number;
   breakdown: Breakdown[];
   available: boolean;          // false = sem dado nem parâmetro manual
@@ -238,6 +288,7 @@ export interface AffiliateResult {
   channel: 'front' | 'recovery';
   gross: number;
   orders: number;
+  fes: number;
   cpa: number;                 // front: CPA pago; recovery: comissão
   refund: number;
   fee: number;
@@ -245,23 +296,56 @@ export interface AffiliateResult {
   allowance: number;
   profit: number;
   marginPct: number;
-  shareOfRevenuePct: number;   // do faturamento TOTAL (todos os canais)
-  shareOfChannelPct: number;   // do faturamento do próprio canal
+  profitPerFe: number | null;
+  shareOfRevenuePct: number;   // da receita econômica TOTAL
+  shareOfChannelPct: number;   // do bruto do próprio canal
+}
+export interface ProductResult {
+  family: string;
+  gross: number;
+  orders: number;
+  fes: number;
+  cpa: number;
+  refund: number;
+  fee: number;
+  productCost: number;
+  allowance: number;
+  profit: number;
+  marginPct: number;
+  profitPerFe: number | null;
+  shareOfFrontPct: number;
+}
+export interface NetProfitKpis {
+  revenue: number;             // RECEITA ECONÔMICA (§3)
+  grossTotal: number;          // bruto de todos os canais (antes da parcela dos parceiros)
+  platformGross: number;       // gross das plataformas (front + recuperação) — "gross principal"
+  backendNet: number;          // Σ parcela NorthScale do backend
+  costs: number;               // custos variáveis (§4)
+  profit: number;              // lucro de contribuição (§5)
+  marginPct: number;           // OFICIAL: lucro ÷ receita econômica (§6)
+  marginOnGrossPct: number;    // lucro ÷ gross das plataformas (§6, leitura secundária)
+  fes: number;
+  profitPerFe: number | null;  // §7
+  affiliateCost: number;       // CPA + comissões de recuperação
+  cpaAvg: number | null;       // §2.1
+  buffer: { pct: number; usd: number; adjustedProfit: number; adjustedMarginPct: number } | null; // §9
 }
 export interface NetProfitResult {
-  kpis: { revenue: number; costs: number; profit: number; marginPct: number };
+  kpis: NetProfitKpis;
   channels: ChannelResult[];
   affiliates: AffiliateResult[];
+  products: ProductResult[];
   // % REAL observado de custo de produto (COGS + frete dos snapshots ÷
   // faturamento) — o que os parâmetros nulos usam e a sugestão da UI.
   observedProductCostPct: { front: Record<FrontStage, number | null>; recovery: number | null; sms: number | null };
+  salesbound: { mode: 'measured' | 'manual' | 'none'; coverage: SalesboundMeasuredInput['coverage'] | null; voids: number; refundsCohort: number | null };
   warnings: string[];
 }
 
 const r2 = (n: number) => Math.round(n * 100) / 100;
 const pctOf = (part: number, whole: number): number => (whole > 0 ? r2((part / whole) * 100) : 0);
-const line = (key: string, label: string, usd: number, gross: number, source: LineSource, note?: string): Line => ({
-  key, label, usd: r2(usd), pctOfGross: gross > 0 ? r2((usd / gross) * 100) : null, source, ...(note ? { note } : {}),
+const line = (key: string, label: string, usd: number, gross: number, source: LineSource, kind: LineKind, note?: string): Line => ({
+  key, label, usd: r2(usd), pctOfGross: gross > 0 ? r2((usd / gross) * 100) : null, source, kind, ...(note ? { note } : {}),
 });
 const sumStages = (s: Record<FrontStage, StageAgg>): StageAgg => FRONT_STAGES.reduce((a, k) => ({
   gross: a.gross + s[k].gross, cpa: a.cpa + s[k].cpa, orders: a.orders + s[k].orders, cogs: a.cogs + s[k].cogs, fulfillment: a.fulfillment + s[k].fulfillment,
@@ -284,32 +368,39 @@ function observedProductCost(inputs: NetProfitInputs): NetProfitResult['observed
 /** Deduções somadas por `key` (mesma ordem da primeira ocorrência). */
 function sumLines(groups: Line[][]): Line[] {
   const order: string[] = [];
-  const acc = new Map<string, { label: string; usd: number; sources: Set<LineSource>; notes: Set<string> }>();
+  const acc = new Map<string, { label: string; usd: number; kind: LineKind; sources: Set<LineSource>; notes: Set<string> }>();
   for (const lines of groups) for (const l of lines) {
     let a = acc.get(l.key);
-    if (!a) { a = { label: l.label, usd: 0, sources: new Set(), notes: new Set() }; acc.set(l.key, a); order.push(l.key); }
+    if (!a) { a = { label: l.label, usd: 0, kind: l.kind, sources: new Set(), notes: new Set() }; acc.set(l.key, a); order.push(l.key); }
     a.usd += l.usd; a.sources.add(l.source); if (l.note) a.notes.add(l.note);
   }
   return order.map((k) => {
     const a = acc.get(k)!;
     const source: LineSource = a.sources.size === 1 ? [...a.sources][0] : 'config';
-    return { key: k, label: a.label, usd: r2(a.usd), pctOfGross: null, source, ...(a.notes.size ? { note: [...a.notes].join(' · ') } : {}) };
+    return { key: k, label: a.label, usd: r2(a.usd), pctOfGross: null, source, kind: a.kind, ...(a.notes.size ? { note: [...a.notes].join(' · ') } : {}) };
   });
 }
 
+const sumKind = (lines: Line[], kind: LineKind) => lines.reduce((s, l) => s + (l.kind === kind ? l.usd : 0), 0);
+
 function finishBreakdown(key: string, label: string, gross: number, orders: number, lines: Line[]): Breakdown {
-  const costs = lines.reduce((s, l) => s + l.usd, 0);
-  const profit = r2(gross - costs);
-  return { key, label, gross: r2(gross), orders, lines, profit, marginPct: pctOf(profit, gross) };
+  const revenue = r2(gross - sumKind(lines, 'share'));
+  const profit = r2(revenue - sumKind(lines, 'cost'));
+  return { key, label, gross: r2(gross), orders, lines, revenue, profit, marginPct: pctOf(profit, revenue) };
 }
 
-function finishChannel(key: ChannelKey, breakdown: Breakdown[], available: boolean): Omit<ChannelResult, 'shareOfRevenuePct' | 'shareOfProfitPct'> {
+type PartialChannel = Omit<ChannelResult, 'shareOfRevenuePct' | 'shareOfProfitPct'>;
+function finishChannel(key: ChannelKey, breakdown: Breakdown[], available: boolean, fes: number): PartialChannel {
   const gross = r2(breakdown.reduce((s, b) => s + b.gross, 0));
   const orders = breakdown.reduce((s, b) => s + b.orders, 0);
   const lines = sumLines(breakdown.map((b) => b.lines)).map((l) => ({ ...l, pctOfGross: gross > 0 ? r2((l.usd / gross) * 100) : null }));
-  const costs = r2(lines.reduce((s, l) => s + l.usd, 0));
-  const profit = r2(gross - costs);
-  return { key, label: CHANNEL_LABELS[key], gross, orders, costs, lines, profit, marginPct: pctOf(profit, gross), breakdown, available };
+  const revenue = r2(gross - sumKind(lines, 'share'));
+  const costs = r2(sumKind(lines, 'cost'));
+  const profit = r2(revenue - costs);
+  return {
+    key, label: CHANNEL_LABELS[key], type: BACKEND_CHANNELS.includes(key) ? 'backend' : 'platform',
+    gross, orders, fes, revenue, costs, lines, profit, marginPct: pctOf(profit, revenue), breakdown, available,
+  };
 }
 
 // ---------------------------------------------------------------------
@@ -319,12 +410,27 @@ export function computeNetProfit(inputs: NetProfitInputs, params: NetProfitParam
   const warnings: string[] = [];
   const observed = observedProductCost(inputs);
   const manualRefund = params.refundMode === 'manual';
-  const refundPctFor = (ch: ChannelKey): number => {
-    const v = params.refundPct[ch];
-    if (v == null) { warnings.push(`Reembolso manual sem % definido para ${CHANNEL_LABELS[ch]} — usando 0%.`); return 0; }
+  const refundPctFront = (): number => {
+    const v = params.refundPct.front;
+    if (v == null) { warnings.push('Reembolso manual sem % definido para as plataformas — usando 0%.'); return 0; }
     return v;
   };
-  // Custo de produto do front por etapa: parâmetro > observado > 0.
+  const refundPctRecovery = (): number => params.refundPct.recovery ?? refundPctFront();
+  const platBySlug = new Map(inputs.platforms.map((p) => [p.slug, p]));
+  const feeFor = (slug: string): { pct: number | null; source: LineSource } => {
+    const o = params.feePctOverride[slug];
+    if (o != null) return { pct: o, source: 'manual' };
+    const c = platBySlug.get(slug)?.feePct ?? null;
+    return { pct: c, source: c == null ? 'none' : 'config' };
+  };
+  const allowanceFor = (slug: string): { pct: number | null; source: LineSource } => {
+    const o = params.allowancePctOverride[slug];
+    if (o != null) return { pct: o, source: 'manual' };
+    const c = platBySlug.get(slug)?.allowancePct ?? null;
+    return { pct: c, source: c == null ? 'none' : 'config' };
+  };
+
+  // Custo de produto das plataformas por etapa: parâmetro > % único > observado > 0.
   const dflt = params.productCostDefaultPct;
   const frontCostPct = (s: FrontStage): { pct: number; source: LineSource } => {
     const p = params.productCostPct.front[s] ?? dflt;
@@ -343,8 +449,24 @@ export function computeNetProfit(inputs: NetProfitInputs, params: NetProfitParam
   };
   const oneSource = (set: Set<LineSource>): LineSource => (set.size === 0 ? 'none' : set.size === 1 ? [...set][0] : 'config');
 
+  // Fatia de PLATAFORMA (mesma fórmula pra canal, afiliado e produto):
+  // Gross − CPA − Reembolso − Fee − Produto − Reserva.
+  const frontSlice = (slug: string, stages: Record<FrontStage, StageAgg>, refundsObserved: number) => {
+    const tot = sumStages(stages);
+    const fee = feeFor(slug);
+    const allow = allowanceFor(slug);
+    const refund = manualRefund ? tot.gross * (refundPctFront() / 100) : refundsObserved;
+    const cost = frontCostForStages(stages);
+    return {
+      tot, fee, allow, refund, cost,
+      feeUsd: fee.pct != null ? tot.gross * (fee.pct / 100) : 0,
+      allowanceUsd: params.includeAllowance && allow.pct != null ? tot.gross * (allow.pct / 100) : 0,
+    };
+  };
+
   // ── FRONT por plataforma ─────────────────────────────────────────────
   const frontBreakdown: Breakdown[] = [];
+  let frontFes = 0;
   for (const p of inputs.platforms) {
     // Sem dedupe, vendas de recuperação/SMS entram no front (dupla contagem
     // deliberada — o toggle existe pra quem quer ver o bruto "como a
@@ -354,151 +476,222 @@ export function computeNetProfit(inputs: NetProfitInputs, params: NetProfitParam
     if (!params.dedupeRecovery) {
       stages.FRONTEND = addStage(stages.FRONTEND, addStage(p.recovery, p.sms));
     }
-    const tot = sumStages(stages);
-    if (tot.gross <= 0 && tot.orders === 0) continue;
-    const feePct = params.feePctOverride[p.slug] ?? p.feePct;
-    const allowPct = params.allowancePctOverride[p.slug] ?? p.allowancePct;
-    const refundUsd = manualRefund
-      ? tot.gross * (refundPctFor('front') / 100)
-      : p.refundsObserved.front + (params.dedupeRecovery ? 0 : p.refundsObserved.recovery + p.refundsObserved.sms);
-    const cost = frontCostForStages(stages);
+    const refundsObs = p.refundsObserved.front + (params.dedupeRecovery ? 0 : p.refundsObserved.recovery + p.refundsObserved.sms);
+    const f = frontSlice(p.slug, stages, refundsObs);
+    if (f.tot.gross <= 0 && f.tot.orders === 0) continue;
+    frontFes += stages.FRONTEND.orders;
     const lines: Line[] = [
-      line('cpa', 'CPA pago aos afiliados', tot.cpa, tot.gross, 'observed'),
-      line('refund', 'Reembolso + chargeback', refundUsd, tot.gross, manualRefund ? 'manual' : 'observed', manualRefund ? undefined : 'por data do estorno'),
-      line('fee', 'Taxa da plataforma', feePct != null ? tot.gross * (feePct / 100) : 0, tot.gross, feePct == null ? 'none' : params.feePctOverride[p.slug] != null ? 'manual' : 'config', feePct == null ? 'taxa não cadastrada em Plataformas' : `${feePct}%`),
-      line('product', 'Custo de produto', cost.usd, tot.gross, oneSource(cost.sources)),
+      line('cpa', 'Afiliados (CPA pago)', f.tot.cpa, f.tot.gross, 'observed', 'cost'),
+      line('refund', 'Reembolso + chargeback', f.refund, f.tot.gross, manualRefund ? 'manual' : 'observed', 'cost', manualRefund ? 'projetado sobre o gross' : 'por data do estorno'),
+      line('fee', 'Fee da plataforma', f.feeUsd, f.tot.gross, f.fee.source, 'cost', f.fee.pct == null ? 'taxa não cadastrada em Plataformas' : `${f.fee.pct}%`),
+      line('product', 'Produto + fulfillment', f.cost.usd, f.tot.gross, oneSource(f.cost.sources), 'cost'),
     ];
     if (params.includeAllowance) {
-      lines.push(line('allowance', 'Allowance (reserva)', allowPct != null ? tot.gross * (allowPct / 100) : 0, tot.gross, allowPct == null ? 'none' : params.allowancePctOverride[p.slug] != null ? 'manual' : 'config', allowPct == null ? 'allowance não cadastrado' : `${allowPct}%`));
+      lines.push(line('allowance', 'Reserva (allowance)', f.allowanceUsd, f.tot.gross, f.allow.source, 'cost', f.allow.pct == null ? 'reserva não cadastrada' : `${f.allow.pct}%`));
     }
-    if (feePct == null) warnings.push(`${p.displayName}: taxa da plataforma não cadastrada (Plataformas → Editar).`);
-    frontBreakdown.push(finishBreakdown(p.slug, p.displayName, tot.gross, tot.orders, lines));
+    if (f.fee.pct == null) warnings.push(`${p.displayName}: taxa da plataforma não cadastrada (Plataformas → Editar).`);
+    frontBreakdown.push(finishBreakdown(p.slug, p.displayName, f.tot.gross, f.tot.orders, lines));
   }
-  const front = finishChannel('front', frontBreakdown, frontBreakdown.length > 0);
-
-  // ── CALL CENTERS por parceiro ────────────────────────────────────────
-  const ccBreakdown: Breakdown[] = [];
-  const ccManual = params.productCostPct.callcenter ?? dflt;
-  const ccCostPct = ccManual ?? observed.front.FRONTEND ?? 0;
-  const ccCostSource: LineSource = ccManual != null ? 'manual' : observed.front.FRONTEND != null ? 'observed' : 'none';
-  for (const c of inputs.callcenters) {
-    if (!c.configured && c.gross === 0) continue;
-    const pct = params.commissionPct[c.provider] ?? c.commissionPct;
-    const commissionSource: LineSource = params.commissionPct[c.provider] != null ? 'manual' : 'config';
-    const refundUsd = manualRefund ? c.gross * (refundPctFor('callcenter') / 100) : c.refundsObserved;
-    const lines: Line[] = [
-      line('commission', 'Comissão do parceiro', c.gross * (pct / 100), c.gross, commissionSource, `${pct}%${c.commissionAssumed && params.commissionPct[c.provider] == null ? ' (assumida)' : ''}`),
-      line('refund', 'Reembolso + chargeback', refundUsd, c.gross, manualRefund ? 'manual' : 'observed'),
-      line('product', 'Custo de produto', c.gross * (ccCostPct / 100), c.gross, ccCostSource, `${r2(ccCostPct)}%`),
-    ];
-    ccBreakdown.push(finishBreakdown(c.provider, c.label, c.gross, c.sales, lines));
-  }
-  const callcenter = finishChannel('callcenter', ccBreakdown, ccBreakdown.length > 0);
+  const front = finishChannel('front', frontBreakdown, frontBreakdown.length > 0, frontFes);
 
   // ── RECUPERAÇÃO: parceiros (Skill99…) + SMS próprio ──────────────────
+  // São vendas de plataforma: mesma fórmula do front, comissão no lugar do CPA.
   const recBreakdown: Breakdown[] = [];
   const recManual = params.productCostPct.recovery ?? dflt;
   const recCostPct = recManual ?? observed.recovery ?? observed.front.FRONTEND ?? 0;
-  const recCostSource: LineSource = recManual != null ? 'manual' : observed.recovery != null ? 'observed' : observed.front.FRONTEND != null ? 'observed' : 'none';
+  const recCostSource: LineSource = recManual != null ? 'manual' : observed.recovery != null || observed.front.FRONTEND != null ? 'observed' : 'none';
+  const recoveryCommission = (a: RecoveryAffiliateInput) => (params.commissionPct.recoveryOverride != null ? a.gross * (params.commissionPct.recoveryOverride / 100) : a.commissionUsd);
+  const recoverySlice = (slug: string, gross: number, refundsObserved: number) => {
+    const fee = feeFor(slug); const allow = allowanceFor(slug);
+    return {
+      fee, allow,
+      feeUsd: fee.pct != null ? gross * (fee.pct / 100) : 0,
+      allowanceUsd: params.includeAllowance && allow.pct != null ? gross * (allow.pct / 100) : 0,
+      refund: manualRefund ? gross * (refundPctRecovery() / 100) : refundsObserved,
+    };
+  };
+  let recFes = 0;
   for (const a of inputs.recoveryAffiliates) {
     if (a.gross <= 0 && a.orders === 0) continue;
-    const commission = params.commissionPct.recoveryOverride != null ? a.gross * (params.commissionPct.recoveryOverride / 100) : a.commissionUsd;
-    const refundUsd = manualRefund ? a.gross * (refundPctFor('recovery') / 100) : a.refundsObserved;
+    recFes += a.feOrders;
+    const s = recoverySlice(a.platformSlug, a.gross, a.refundsObserved);
     const lines: Line[] = [
-      line('commission', 'Comissão do parceiro', commission, a.gross, params.commissionPct.recoveryOverride != null ? 'manual' : 'config', params.commissionPct.recoveryOverride != null ? `${params.commissionPct.recoveryOverride}%` : `${r2(a.currentPct)}% vigente`),
-      line('product', 'Custo de produto', a.gross * (recCostPct / 100), a.gross, recCostSource, `${r2(recCostPct)}%`),
-      line('refund', 'Reembolso + chargeback', refundUsd, a.gross, manualRefund ? 'manual' : 'observed'),
+      line('commission', 'Afiliados (comissão de recuperação)', recoveryCommission(a), a.gross, params.commissionPct.recoveryOverride != null ? 'manual' : 'config', 'cost', params.commissionPct.recoveryOverride != null ? `${params.commissionPct.recoveryOverride}%` : `${r2(a.currentPct)}% vigente`),
+      line('refund', 'Reembolso + chargeback', s.refund, a.gross, manualRefund ? 'manual' : 'observed', 'cost'),
+      line('fee', 'Fee da plataforma', s.feeUsd, a.gross, s.fee.source, 'cost', s.fee.pct != null ? `${s.fee.pct}%` : undefined),
+      line('product', 'Produto + fulfillment', a.gross * (recCostPct / 100), a.gross, recCostSource, 'cost', `${r2(recCostPct)}%`),
     ];
+    if (params.includeAllowance) lines.push(line('allowance', 'Reserva (allowance)', s.allowanceUsd, a.gross, s.allow.source, 'cost', s.allow.pct != null ? `${s.allow.pct}%` : undefined));
     recBreakdown.push(finishBreakdown(`aff:${a.affiliateId}`, `${a.nickname || a.externalId} · ${a.platformSlug}`, a.gross, a.orders, lines));
   }
   if (inputs.sms.gross > 0 || inputs.sms.orders > 0) {
     const g = inputs.sms.gross;
     const smsPct = params.commissionPct.sms ?? 0;
     const smsCostPct = recManual ?? observed.sms ?? observed.front.FRONTEND ?? 0;
-    const refundUsd = manualRefund ? g * (refundPctFor('recovery') / 100) : inputs.sms.refundsObserved;
+    // fee/reserva por plataforma de origem das vendas SMS
+    let feeUsd = 0, allowanceUsd = 0;
+    for (const p of inputs.platforms) {
+      if (p.sms.gross <= 0) continue;
+      const s = recoverySlice(p.slug, p.sms.gross, 0);
+      feeUsd += s.feeUsd; allowanceUsd += s.allowanceUsd;
+    }
+    recFes += inputs.sms.feOrders ?? 0;
     const lines: Line[] = [
-      line('commission', 'Comissão do parceiro', g * (smsPct / 100), g, smsPct > 0 ? 'manual' : 'default', `${smsPct}% (SMS próprio)`),
-      line('product', 'Custo de produto', g * (smsCostPct / 100), g, recManual != null ? 'manual' : 'observed', `${r2(smsCostPct)}%`),
-      line('refund', 'Reembolso + chargeback', refundUsd, g, manualRefund ? 'manual' : 'observed'),
+      line('commission', 'Afiliados (comissão de recuperação)', g * (smsPct / 100), g, smsPct > 0 ? 'manual' : 'default', 'cost', `${smsPct}% (SMS próprio)`),
+      line('refund', 'Reembolso + chargeback', manualRefund ? g * (refundPctRecovery() / 100) : inputs.sms.refundsObserved, g, manualRefund ? 'manual' : 'observed', 'cost'),
+      line('fee', 'Fee da plataforma', feeUsd, g, 'config', 'cost'),
+      line('product', 'Produto + fulfillment', g * (smsCostPct / 100), g, recManual != null ? 'manual' : 'observed', 'cost', `${r2(smsCostPct)}%`),
     ];
+    if (params.includeAllowance) lines.push(line('allowance', 'Reserva (allowance)', allowanceUsd, g, 'config', 'cost'));
     recBreakdown.push(finishBreakdown('sms', 'SMS próprio (Mautic/Twilio)', g, inputs.sms.orders, lines));
   }
-  const recovery = finishChannel('recovery', recBreakdown, recBreakdown.length > 0);
+  const recovery = finishChannel('recovery', recBreakdown, recBreakdown.length > 0, recFes);
 
-  // ── SALESBOUND: medido (fase 2) ou manual ────────────────────────────
+  // ── BACKEND: parcela líquida da NorthScale ───────────────────────────
+  const backendLines = (gross: number, refunds: number, refundSource: LineSource, refundNote: string | undefined, partnerPct: number, partnerSource: LineSource, partnerNote: string, costPct: number | null): Line[] => {
+    const refundUsd = params.backendNetOfRefunds ? Math.min(refunds, gross) : 0;
+    const base = gross - refundUsd;
+    const lines: Line[] = [];
+    if (params.backendNetOfRefunds) lines.push(line('refund', 'Estornos informados pelo parceiro', refundUsd, gross, refundSource, 'share', refundNote));
+    lines.push(line('commission', 'Parcela do parceiro', base * (partnerPct / 100), gross, partnerSource, 'share', partnerNote));
+    if (costPct != null && costPct > 0) lines.push(line('product', 'Produto + fulfillment', base * (costPct / 100), gross, 'manual', 'cost', `${costPct}% (por canal)`));
+    return lines;
+  };
+
+  // Call centers
+  const ccBreakdown: Breakdown[] = [];
+  for (const c of inputs.callcenters) {
+    if (!c.configured && c.gross === 0) continue;
+    const pct = params.commissionPct[c.provider] ?? c.commissionPct;
+    const src: LineSource = params.commissionPct[c.provider] != null ? 'manual' : 'config';
+    const note = `${pct}%${c.commissionAssumed && params.commissionPct[c.provider] == null ? ' (assumida)' : ''} · NS fica com ${r2(100 - pct)}%`;
+    const lines = backendLines(c.gross, c.refundsObserved, c.refundsReported ? 'observed' : 'none', c.refundsReported ? undefined : 'parceiro não informa estorno', pct, src, note, params.productCostPct.callcenter);
+    ccBreakdown.push(finishBreakdown(c.provider, c.label, c.gross, c.sales, lines));
+  }
+  const callcenter = finishChannel('callcenter', ccBreakdown, ccBreakdown.length > 0, 0);
+
+  // SalesBound: razão importado (export do CRM) ou manual
   const sbBreakdown: Breakdown[] = [];
   const sbMeasured = inputs.salesbound.measured;
   const sbGross = sbMeasured ? sbMeasured.gross : params.salesbound.grossUsd;
   const sbSales = sbMeasured ? sbMeasured.sales : (params.salesbound.sales ?? 0);
-  if (sbGross > 0) {
+  if (sbGross > 0 || (sbMeasured && sbSales > 0)) {
     const sbPct = params.commissionPct.salesbound;
-    const sbCost = params.productCostPct.salesbound ?? dflt;
-    const refundUsd = manualRefund
-      ? sbGross * (refundPctFor('salesbound') / 100)
-      : sbMeasured ? sbMeasured.refunds : (params.salesbound.refundsUsd ?? 0);
-    const lines: Line[] = [
-      line('refund', 'Reembolso + chargeback', refundUsd, sbGross, manualRefund || !sbMeasured ? 'manual' : 'observed'),
-      line('commission', 'Comissão do parceiro', sbGross * ((sbPct ?? 0) / 100), sbGross, sbPct != null ? 'manual' : 'none', sbPct != null ? `${sbPct}%` : 'comissão não informada'),
-      line('product', 'Custo de produto', sbGross * ((sbCost ?? 0) / 100), sbGross, sbCost != null ? 'manual' : 'none', sbCost != null ? `${sbCost}%` : '% não informado'),
-    ];
-    if (sbPct == null) warnings.push('SalesBound: comissão % não informada — usando 0%.');
-    if (sbCost == null) warnings.push('SalesBound: custo de produto % não informado — usando 0%.');
-    sbBreakdown.push(finishBreakdown('salesbound', sbMeasured ? 'SalesBound (medido)' : 'SalesBound (manual)', sbGross, sbSales, lines));
+    const refunds = sbMeasured ? sbMeasured.refunds : (params.salesbound.refundsUsd ?? 0);
+    const note = sbPct != null ? `${sbPct}% · NS fica com ${r2(100 - sbPct)}%` : 'parcela não informada';
+    const lines = backendLines(sbGross, refunds, sbMeasured ? 'observed' : 'manual', sbMeasured ? 'export do CRM, por data do estorno' : undefined, sbPct ?? 0, sbPct != null ? 'manual' : 'none', note, params.productCostPct.salesbound);
+    if (sbPct == null) warnings.push('SalesBound: parcela do parceiro (%) não informada — usando 0%.');
+    sbBreakdown.push(finishBreakdown('salesbound', sbMeasured ? 'SalesBound (export do CRM)' : 'SalesBound (manual)', sbGross, sbSales, lines));
   }
-  const salesbound = finishChannel('salesbound', sbBreakdown, sbBreakdown.length > 0);
+  const salesbound = finishChannel('salesbound', sbBreakdown, sbBreakdown.length > 0, 0);
+  if (sbMeasured?.coverage && Date.parse(inputs.period.end) > Date.parse(sbMeasured.coverage.lastAt) + 36 * 3600_000 && Date.parse(inputs.period.start) <= Date.now()) {
+    warnings.push(`SalesBound: o export importado vai até ${sbMeasured.coverage.lastAt.slice(0, 10)} — dias depois disso estão sem venda SalesBound.`);
+  }
 
-  // ── Totais e participações ──────────────────────────────────────────
+  // ── Totais (§3–§9) ──────────────────────────────────────────────────
   const partial = [front, callcenter, recovery, salesbound];
-  const revenue = r2(partial.reduce((s, c) => s + c.gross, 0));
-  const profit = r2(partial.reduce((s, c) => s + c.profit, 0));
-  const costs = r2(revenue - profit);
+  const revenue = r2(partial.reduce((s, c) => s + c.revenue, 0));
+  const costs = r2(partial.reduce((s, c) => s + c.costs, 0));
+  const profit = r2(revenue - costs);
+  const platformGross = r2(front.gross + recovery.gross);
+  const backendNet = r2(callcenter.revenue + salesbound.revenue);
+  const fes = front.fes + recovery.fes;
+  const affiliateCost = r2([front, recovery].reduce((s, c) => s + c.lines.filter((l) => l.key === 'cpa' || l.key === 'commission').reduce((t, l) => t + l.usd, 0), 0));
+  const bufferPct = params.riskBufferPct ?? 0;
+  const bufferUsd = r2(revenue * (bufferPct / 100));
   const channels: ChannelResult[] = partial.map((c) => ({
     ...c,
-    shareOfRevenuePct: pctOf(c.gross, revenue),
+    shareOfRevenuePct: pctOf(c.revenue, revenue),
     shareOfProfitPct: profit !== 0 ? r2((c.profit / profit) * 100) : 0,
   }));
 
-  // ── Afiliados (mesma fórmula do canal, individual) ───────────────────
-  const platBySlug = new Map(inputs.platforms.map((p) => [p.slug, p]));
+  // ── Afiliados (mesma fórmula do canal, individual — §10.8) ───────────
   const affiliates: AffiliateResult[] = [];
   for (const a of inputs.affiliates) {
-    const tot = sumStages(a.byStage);
-    if (tot.gross <= 0 && tot.orders === 0) continue;
-    const p = platBySlug.get(a.platformSlug);
-    const feePct = params.feePctOverride[a.platformSlug] ?? p?.feePct ?? 0;
-    const allowPct = params.includeAllowance ? (params.allowancePctOverride[a.platformSlug] ?? p?.allowancePct ?? 0) : 0;
-    const refund = manualRefund ? tot.gross * ((params.refundPct.front ?? 0) / 100) : a.refundsObserved;
-    const fee = tot.gross * (feePct / 100);
-    const productCost = frontCostForStages(a.byStage).usd;
-    const allowance = tot.gross * (allowPct / 100);
-    const prof = r2(tot.gross - tot.cpa - refund - fee - productCost - allowance);
+    const f = frontSlice(a.platformSlug, a.byStage, a.refundsObserved);
+    if (f.tot.gross <= 0 && f.tot.orders === 0) continue;
+    const prof = r2(f.tot.gross - f.tot.cpa - f.refund - f.feeUsd - f.cost.usd - f.allowanceUsd);
+    const feCount = a.byStage.FRONTEND.orders;
     affiliates.push({
       affiliateId: a.affiliateId, externalId: a.externalId, nickname: a.nickname, platformSlug: a.platformSlug, mappedName: a.mappedName,
-      channel: 'front', gross: r2(tot.gross), orders: tot.orders, cpa: r2(tot.cpa), refund: r2(refund), fee: r2(fee),
-      productCost: r2(productCost), allowance: r2(allowance), profit: prof, marginPct: pctOf(prof, tot.gross),
-      shareOfRevenuePct: pctOf(tot.gross, revenue), shareOfChannelPct: pctOf(tot.gross, front.gross),
+      channel: 'front', gross: r2(f.tot.gross), orders: f.tot.orders, fes: feCount, cpa: r2(f.tot.cpa), refund: r2(f.refund), fee: r2(f.feeUsd),
+      productCost: r2(f.cost.usd), allowance: r2(f.allowanceUsd), profit: prof, marginPct: pctOf(prof, f.tot.gross),
+      profitPerFe: feCount > 0 ? r2(prof / feCount) : null,
+      shareOfRevenuePct: pctOf(f.tot.gross, revenue), shareOfChannelPct: pctOf(f.tot.gross, front.gross),
     });
   }
   for (const a of inputs.recoveryAffiliates) {
     if (a.gross <= 0 && a.orders === 0) continue;
-    const commission = params.commissionPct.recoveryOverride != null ? a.gross * (params.commissionPct.recoveryOverride / 100) : a.commissionUsd;
-    const refund = manualRefund ? a.gross * ((params.refundPct.recovery ?? 0) / 100) : a.refundsObserved;
+    const commission = recoveryCommission(a);
+    const s = recoverySlice(a.platformSlug, a.gross, a.refundsObserved);
     const productCost = a.gross * (recCostPct / 100);
-    const prof = r2(a.gross - commission - productCost - refund);
+    const prof = r2(a.gross - commission - s.refund - s.feeUsd - productCost - s.allowanceUsd);
     affiliates.push({
       affiliateId: a.affiliateId, externalId: a.externalId, nickname: a.nickname, platformSlug: a.platformSlug, mappedName: null,
-      channel: 'recovery', gross: r2(a.gross), orders: a.orders, cpa: r2(commission), refund: r2(refund), fee: 0,
-      productCost: r2(productCost), allowance: 0, profit: prof, marginPct: pctOf(prof, a.gross),
+      channel: 'recovery', gross: r2(a.gross), orders: a.orders, fes: a.feOrders, cpa: r2(commission), refund: r2(s.refund), fee: r2(s.feeUsd),
+      productCost: r2(productCost), allowance: r2(s.allowanceUsd), profit: prof, marginPct: pctOf(prof, a.gross),
+      profitPerFe: a.feOrders > 0 ? r2(prof / a.feOrders) : null,
       shareOfRevenuePct: pctOf(a.gross, revenue), shareOfChannelPct: pctOf(a.gross, recovery.gross),
     });
   }
   affiliates.sort((x, y) => y.gross - x.gross);
 
+  // ── Por produto (família) — vendas de front, mesma fórmula (§10.8) ───
+  const products: ProductResult[] = [];
+  for (const pr of inputs.products ?? []) {
+    const acc = { gross: 0, orders: 0, fes: 0, cpa: 0, refund: 0, fee: 0, productCost: 0, allowance: 0 };
+    for (const part of pr.byPlatform) {
+      const f = frontSlice(part.slug, part.byStage, part.refundsObserved);
+      acc.gross += f.tot.gross; acc.orders += f.tot.orders; acc.fes += part.byStage.FRONTEND.orders; acc.cpa += f.tot.cpa;
+      acc.refund += f.refund; acc.fee += f.feeUsd; acc.productCost += f.cost.usd; acc.allowance += f.allowanceUsd;
+    }
+    if (acc.gross <= 0 && acc.orders === 0) continue;
+    const prof = r2(acc.gross - acc.cpa - acc.refund - acc.fee - acc.productCost - acc.allowance);
+    products.push({
+      family: pr.family, gross: r2(acc.gross), orders: acc.orders, fes: acc.fes, cpa: r2(acc.cpa), refund: r2(acc.refund), fee: r2(acc.fee),
+      productCost: r2(acc.productCost), allowance: r2(acc.allowance), profit: prof, marginPct: pctOf(prof, acc.gross),
+      profitPerFe: acc.fes > 0 ? r2(prof / acc.fes) : null, shareOfFrontPct: pctOf(acc.gross, front.gross),
+    });
+  }
+  products.sort((x, y) => y.gross - x.gross);
+
   return {
-    kpis: { revenue, costs, profit, marginPct: pctOf(profit, revenue) },
+    kpis: {
+      revenue, grossTotal: r2(partial.reduce((s, c) => s + c.gross, 0)), platformGross, backendNet,
+      costs, profit, marginPct: pctOf(profit, revenue), marginOnGrossPct: pctOf(profit, platformGross),
+      fes, profitPerFe: fes > 0 ? r2(profit / fes) : null,
+      affiliateCost, cpaAvg: fes > 0 ? r2(affiliateCost / fes) : null,
+      buffer: bufferPct > 0 ? { pct: bufferPct, usd: bufferUsd, adjustedProfit: r2(profit - bufferUsd), adjustedMarginPct: pctOf(profit - bufferUsd, revenue) } : null,
+    },
     channels,
     affiliates,
+    products,
     observedProductCostPct: observed,
+    salesbound: {
+      mode: sbMeasured ? 'measured' : params.salesbound.grossUsd > 0 ? 'manual' : 'none',
+      coverage: sbMeasured?.coverage ?? null,
+      voids: r2(sbMeasured?.voids ?? 0),
+      refundsCohort: sbMeasured?.refundsCohort ?? null,
+    },
     warnings: [...new Set(warnings)],
   };
+}
+
+/** Caminhos folha → valor (pra diff do histórico de premissas). */
+export function flattenParams(p: NetProfitParams): Record<string, unknown> {
+  const out: Record<string, unknown> = {};
+  const walk = (v: unknown, path: string) => {
+    if (v && typeof v === 'object' && !Array.isArray(v)) {
+      for (const [k, x] of Object.entries(v as Record<string, unknown>)) walk(x, path ? `${path}.${k}` : k);
+    } else out[path] = v ?? null;
+  };
+  walk(p, '');
+  return out;
+}
+
+export function diffParams(before: NetProfitParams | null, after: NetProfitParams): Array<{ path: string; from: unknown; to: unknown }> {
+  const a = before ? flattenParams(before) : {};
+  const b = flattenParams(after);
+  const keys = [...new Set([...Object.keys(a), ...Object.keys(b)])].sort();
+  return keys.filter((k) => JSON.stringify(a[k] ?? null) !== JSON.stringify(b[k] ?? null)).map((k) => ({ path: k, from: a[k] ?? null, to: b[k] ?? null }));
 }

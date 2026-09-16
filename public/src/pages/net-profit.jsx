@@ -1,29 +1,30 @@
 /* global React, Icon, fmtCurrency, fmtInt, fmtDateTime, platBadge, SkelTableRows */
-/* Lucro real (admin-only) — redesign 2026-09-16.
-   Tela inicial = só o essencial: 4 KPIs, a barra de composição (pra onde
-   vai cada dólar) e 4 cards de canal compactos. Detalhe por demanda: clicar
-   num canal abre as linhas da fórmula e a desagregação; abas secundárias
-   (Afiliados, Projeções) ficam num seletor; parâmetros vivem num drawer
-   lateral com campos grandes (recalcula ao digitar, salva como padrão ou
-   como projeção). Pendências viram uma faixa discreta.
-   API: GET/POST /api/admin/net-profit, PUT …/params, GET/POST/DELETE …/scenarios */
+/* Lucro real (admin-only) — redesign 2026-09-16 + cálculo de margem
+   padronizado (calculo_margem_northscale.md, mesmo dia).
+   Tela inicial = MARGEM DE CONTRIBUIÇÃO: receita econômica (plataformas +
+   parcela NorthScale do backend), custos variáveis, lucro, margem oficial,
+   lucro por FE e buffer de risco separado. Detalhe por demanda: clicar num
+   canal abre as linhas da fórmula; seletor com Por dia / Por produto /
+   Afiliados / Projeções; parâmetros e histórico de premissas num drawer.
+   API: GET/POST /api/admin/net-profit, POST …/daily, PUT …/params,
+   GET/POST/DELETE …/scenarios, POST /api/admin/salesbound/import */
 
 const { useState: useStateNP, useEffect: useEffectNP, useRef: useRefNP, useMemo: useMemoNP } = React;
 
 const NP_CHANNEL_META = {
   front:      { short: 'Front-end',    icon: 'layers',   desc: 'Vendas nas plataformas (BuyGoods, Digistore24, JVZoo…)' },
-  callcenter: { short: 'Call centers', icon: 'target',   desc: 'Tauk e Logicall' },
-  recovery:   { short: 'Recuperação',  icon: 'refresh',  desc: 'Skill99 (e-mail/SMS) e SMS próprio' },
-  salesbound: { short: 'SalesBound',   icon: 'plug',     desc: 'Cross-sell (dado manual até o postback)' },
+  callcenter: { short: 'Call centers', icon: 'target',   desc: 'Tauk e Logicall — entra só a parcela da NorthScale' },
+  recovery:   { short: 'Recuperação',  icon: 'refresh',  desc: 'Skill99 (e-mail/SMS) e SMS próprio — vendas de plataforma' },
+  salesbound: { short: 'SalesBound',   icon: 'plug',     desc: 'Cross-sell por telefone — entra só a parcela da NorthScale' },
 };
-// Cores das deduções na barra de composição (semânticas, fora da paleta de tema).
+// Cores dos custos variáveis na barra de composição (semânticas, fora da paleta de tema).
 const NP_COST_COLORS = {
-  cpa:        { label: 'CPA',              color: 'var(--accent)' },
-  commission: { label: 'Comissões',        color: 'var(--accent2)' },
-  refund:     { label: 'Reembolso/CB',     color: 'var(--danger)' },
-  fee:        { label: 'Taxa plataforma',  color: 'var(--warning)' },
-  product:    { label: 'Custo de produto', color: 'var(--fg4)' },
-  allowance:  { label: 'Allowance',        color: 'var(--fg5)' },
+  cpa:        { label: 'Afiliados (CPA)',       color: 'var(--accent)' },
+  commission: { label: 'Comissão recuperação',  color: 'var(--accent2)' },
+  refund:     { label: 'Reembolso',             color: 'var(--danger)' },
+  fee:        { label: 'Fee plataforma',        color: 'var(--warning)' },
+  product:    { label: 'Produto + fulfillment', color: 'var(--fg4)' },
+  allowance:  { label: 'Reserva',               color: 'var(--fg5)' },
 };
 const NP_SOURCE = {
   observed: { label: 'observado', color: 'var(--success)', hint: 'Medido nos dados do período' },
@@ -32,6 +33,30 @@ const NP_SOURCE = {
   default:  { label: 'padrão',    color: 'var(--fg5)',     hint: 'Valor padrão do sistema' },
   none:     { label: 'faltando',  color: 'var(--warning)', hint: 'Sem dado nem parâmetro — está em 0' },
 };
+// Rótulos do histórico de premissas (caminho do parâmetro → texto).
+const NP_PARAM_LABELS = {
+  refundMode: 'Reembolso: modo', 'refundPct.front': 'Reembolso % (plataformas)', 'refundPct.recovery': 'Reembolso % (recuperação)',
+  productCostDefaultPct: 'Produto + fulfillment %', 'productCostPct.recovery': 'Produto % (recuperação)',
+  'productCostPct.callcenter': 'Produto % (call centers)', 'productCostPct.salesbound': 'Produto % (SalesBound)',
+  includeAllowance: 'Descontar reserva', 'commissionPct.tauk': 'Parcela Tauk %', 'commissionPct.logicall': 'Parcela Logicall %',
+  'commissionPct.salesbound': 'Parcela SalesBound %', 'commissionPct.recoveryOverride': 'Comissão recuperação %', 'commissionPct.sms': 'Comissão SMS próprio %',
+  'salesbound.grossUsd': 'SalesBound manual: faturamento', 'salesbound.sales': 'SalesBound manual: vendas', 'salesbound.refundsUsd': 'SalesBound manual: estornos',
+  backendNetOfRefunds: 'Backend líquido de estornos', riskBufferPct: 'Buffer de risco %', dedupeRecovery: 'Subtrair recuperação do front',
+};
+function npParamLabel(path) {
+  if (NP_PARAM_LABELS[path]) return NP_PARAM_LABELS[path];
+  let m;
+  if ((m = path.match(/^feePctOverride\.(.+)$/))) return `Fee % ${m[1]}`;
+  if ((m = path.match(/^allowancePctOverride\.(.+)$/))) return `Reserva % ${m[1]}`;
+  if ((m = path.match(/^productCostPct\.front\.(.+)$/))) return `Produto % (${m[1].toLowerCase()})`;
+  return path;
+}
+function npParamValue(v) {
+  if (v === null || v === undefined) return 'vazio';
+  if (v === true) return 'sim';
+  if (v === false) return 'não';
+  return String(v);
+}
 
 function npMoney(v, cur, digits = 0) { return fmtCurrency(v || 0, cur, digits); }
 function npPct(v, digits = 1) { return v == null ? '—' : `${Number(v).toFixed(digits)}%`; }
@@ -41,6 +66,7 @@ function npSet(obj, path, value) {
   out[path[0]] = npSet(obj?.[path[0]] ?? {}, path.slice(1), value);
   return out;
 }
+const npTone = (v) => (v >= 0 ? 'var(--money)' : 'var(--danger)');
 
 function NpSourceChip({ source }) {
   const s = NP_SOURCE[source] || NP_SOURCE.default;
@@ -196,20 +222,47 @@ function NpKpi({ label, value, sub, accent, money }) {
   );
 }
 
-// ── Barra de composição: pra onde vai cada dólar faturado ─────────────
+// ── Faixa de leituras por unidade + buffer de risco (§2.1, §7, §9) ──────
+function NpUnitStrip({ k, cur }) {
+  const item = (label, value, tone) => (
+    <span style={{ display: 'inline-flex', alignItems: 'baseline', gap: 6, whiteSpace: 'nowrap' }}>
+      <span style={{ fontSize: 11, color: 'var(--fg4)' }}>{label}</span>
+      <span className="cell-mono" style={{ fontSize: 13, fontWeight: 700, color: tone || 'var(--fg1)' }}>{value}</span>
+    </span>
+  );
+  return (
+    <div className="panel" style={{ marginBottom: 14, padding: '10px 18px', display: 'flex', flexWrap: 'wrap', gap: '8px 22px', alignItems: 'center' }}>
+      {item('Lucro por FE', k.profitPerFe == null ? '—' : npMoney(k.profitPerFe, cur, 2), k.profitPerFe == null ? undefined : npTone(k.profitPerFe))}
+      {item('FEs', fmtInt(k.fes))}
+      {item('CPA médio', k.cpaAvg == null ? '—' : npMoney(k.cpaAvg, cur, 2))}
+      {item('Backend líquido', npMoney(k.backendNet, cur), 'var(--money)')}
+      {k.buffer && (
+        <span style={{ display: 'inline-flex', alignItems: 'baseline', gap: 6, flexWrap: 'wrap', paddingLeft: 14, borderLeft: '1px solid var(--border-soft)' }}>
+          <span style={{ fontSize: 11, color: 'var(--fg4)' }}>Buffer de risco {npPct(k.buffer.pct)}</span>
+          <span className="cell-mono" style={{ fontSize: 13, color: 'var(--danger)' }}>−{npMoney(k.buffer.usd, cur)}</span>
+          <span style={{ fontSize: 11, color: 'var(--fg4)' }}>→ lucro ajustado</span>
+          <span className="cell-mono" style={{ fontSize: 13, fontWeight: 700, color: npTone(k.buffer.adjustedProfit) }}>{npMoney(k.buffer.adjustedProfit, cur)}</span>
+          <span className="cell-mono" style={{ fontSize: 11, color: 'var(--fg4)' }}>margem ajustada {npPct(k.buffer.adjustedMarginPct, 2)}</span>
+        </span>
+      )}
+    </div>
+  );
+}
+
+// ── Barra de composição: pra onde vai cada dólar de receita econômica ──
 function NpCompositionBar({ result, cur }) {
   const rev = result.kpis.revenue;
   const totals = {};
-  for (const ch of result.channels) for (const l of ch.lines) totals[l.key] = (totals[l.key] || 0) + l.usd;
+  for (const ch of result.channels) for (const l of ch.lines) if (l.kind === 'cost') totals[l.key] = (totals[l.key] || 0) + l.usd;
   const segs = Object.entries(NP_COST_COLORS).map(([k, m]) => ({ key: k, ...m, usd: totals[k] || 0 })).filter((s) => s.usd > 0);
   const profit = result.kpis.profit;
   const pct = (v) => (rev > 0 ? Math.max(0, (v / rev) * 100) : 0);
   return (
     <div className="panel" style={{ marginBottom: 14, padding: '14px 18px' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 10, gap: 12, flexWrap: 'wrap' }}>
-        <span className="panel-eyebrow">DE CADA $100 FATURADOS</span>
+        <span className="panel-eyebrow">DE CADA $100 DE RECEITA ECONÔMICA</span>
         <span style={{ fontSize: 11, color: 'var(--fg4)', fontFamily: 'var(--f-mono)' }}>
-          custos {npPct(rev > 0 ? (result.kpis.costs / rev) * 100 : 0)} · lucro <span style={{ color: profit >= 0 ? 'var(--money)' : 'var(--danger)', fontWeight: 700 }}>{npPct(result.kpis.marginPct)}</span>
+          custos variáveis {npPct(rev > 0 ? (result.kpis.costs / rev) * 100 : 0)} · lucro <span style={{ color: npTone(profit), fontWeight: 700 }}>{npPct(result.kpis.marginPct, 2)}</span>
         </span>
       </div>
       <div style={{ display: 'flex', height: 18, borderRadius: 9, overflow: 'hidden', background: 'color-mix(in oklab, var(--fg5) 15%, transparent)' }}>
@@ -227,37 +280,49 @@ function NpCompositionBar({ result, cur }) {
         ))}
         <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 11, color: 'var(--fg3)' }}>
           <span style={{ width: 9, height: 9, borderRadius: 3, background: 'var(--money)' }}/>
-          Lucro <span className="cell-mono" style={{ color: profit >= 0 ? 'var(--money)' : 'var(--danger)', fontWeight: 700 }}>{npMoney(profit, cur)}</span>
+          Lucro <span className="cell-mono" style={{ color: npTone(profit), fontWeight: 700 }}>{npMoney(profit, cur)}</span>
         </span>
       </div>
     </div>
   );
 }
 
-// ── Linhas da fórmula (faturamento → deduções → lucro) ──────────────────
-function NpLines({ gross, lines, profit, marginPct, cur, dense }) {
+// ── Linhas da fórmula (bruto → fora da receita → receita → custos → lucro) ─
+function NpLines({ gross, revenue, lines, profit, marginPct, cur, dense }) {
   const fs = dense ? 11.5 : 12.5;
+  const share = lines.filter((l) => l.kind === 'share');
+  const costs = lines.filter((l) => l.kind !== 'share');
+  const row = (l) => (
+    <tr key={l.key}>
+      <td style={{ color: 'var(--fg3)' }}>− {l.label}{l.note ? <span style={{ color: 'var(--fg5)', marginLeft: 6, fontSize: 10 }}>{l.note}</span> : null}</td>
+      <td className="num cell-mono" style={{ color: l.usd > 0 ? (l.kind === 'share' ? 'var(--fg3)' : 'var(--danger)') : 'var(--fg5)' }}>{l.usd > 0 ? '−' : ''}{npMoney(l.usd, cur)}</td>
+      <td className="num cell-mono" style={{ color: 'var(--fg5)' }}>{npPct(l.pctOfGross)}</td>
+      <td><NpSourceChip source={l.source}/></td>
+    </tr>
+  );
   return (
     <table className="tbl" style={{ fontSize: fs }}>
       <tbody>
         <tr>
-          <td style={{ fontWeight: 600 }}>Faturamento</td>
+          <td style={{ fontWeight: 600 }}>{share.length ? 'Bruto do parceiro' : 'Gross'}</td>
           <td className="num cell-mono" style={{ color: 'var(--fg1)', fontWeight: 600 }}>{npMoney(gross, cur)}</td>
           <td className="num cell-mono" style={{ color: 'var(--fg5)', width: 64 }}>100%</td>
           <td style={{ width: 84 }}/>
         </tr>
-        {lines.map((l) => (
-          <tr key={l.key}>
-            <td style={{ color: 'var(--fg3)' }}>− {l.label}{l.note ? <span style={{ color: 'var(--fg5)', marginLeft: 6, fontSize: 10 }}>{l.note}</span> : null}</td>
-            <td className="num cell-mono" style={{ color: l.usd > 0 ? 'var(--danger)' : 'var(--fg5)' }}>{l.usd > 0 ? '−' : ''}{npMoney(l.usd, cur)}</td>
-            <td className="num cell-mono" style={{ color: 'var(--fg5)' }}>{npPct(l.pctOfGross)}</td>
-            <td><NpSourceChip source={l.source}/></td>
+        {share.map(row)}
+        {share.length > 0 && (
+          <tr style={{ borderTop: '1px dashed var(--border)' }}>
+            <td style={{ fontWeight: 600 }}>= Receita NorthScale</td>
+            <td className="num cell-mono" style={{ fontWeight: 600, color: 'var(--money)' }}>{npMoney(revenue, cur)}</td>
+            <td className="num cell-mono" style={{ color: 'var(--fg5)' }}>{npPct(gross > 0 ? (revenue / gross) * 100 : null)}</td>
+            <td/>
           </tr>
-        ))}
+        )}
+        {costs.map(row)}
         <tr style={{ borderTop: '1px solid var(--border)' }}>
-          <td style={{ fontWeight: 700 }}>= Lucro</td>
-          <td className="num cell-mono" style={{ fontWeight: 700, color: profit >= 0 ? 'var(--money)' : 'var(--danger)' }}>{npMoney(profit, cur)}</td>
-          <td className="num cell-mono" style={{ fontWeight: 600, color: profit >= 0 ? 'var(--money)' : 'var(--danger)' }}>{npPct(marginPct)}</td>
+          <td style={{ fontWeight: 700 }}>= Lucro de contribuição</td>
+          <td className="num cell-mono" style={{ fontWeight: 700, color: npTone(profit) }}>{npMoney(profit, cur)}</td>
+          <td className="num cell-mono" style={{ fontWeight: 600, color: npTone(profit) }} title="lucro ÷ receita econômica">{npPct(marginPct)}</td>
           <td/>
         </tr>
       </tbody>
@@ -268,7 +333,10 @@ function NpLines({ gross, lines, profit, marginPct, cur, dense }) {
 // ── Card compacto de canal (clicável) ───────────────────────────────────
 function NpChannelTile({ ch, cur, active, onClick }) {
   const meta = NP_CHANNEL_META[ch.key] || { short: ch.label, icon: 'layers' };
-  const tone = !ch.available ? 'var(--fg5)' : ch.profit < 0 ? 'var(--danger)' : 'var(--money)';
+  const backend = ch.type === 'backend';
+  const tone = !ch.available ? 'var(--fg5)' : npTone(ch.profit);
+  const nsPct = ch.gross > 0 ? (ch.revenue / ch.gross) * 100 : 0;
+  const barPct = backend ? nsPct : ch.marginPct;
   return (
     <button onClick={onClick} className="panel" style={{
       textAlign: 'left', cursor: 'pointer', padding: '14px 16px', margin: 0, width: '100%',
@@ -280,59 +348,69 @@ function NpChannelTile({ ch, cur, active, onClick }) {
           <span style={{ width: 26, height: 26, borderRadius: 8, display: 'grid', placeItems: 'center', background: 'var(--accent-soft, color-mix(in oklab, var(--accent) 12%, transparent))', color: 'var(--accent)' }}><Icon name={meta.icon} size={13}/></span>
           {meta.short}
         </span>
-        <span className="cell-mono" style={{ fontSize: 10, color: 'var(--fg5)' }}>{ch.available ? `${npPct(ch.shareOfRevenuePct, 0)} do fat.` : 'sem dado'}</span>
+        <span className="cell-mono" style={{ fontSize: 10, color: 'var(--fg5)' }}>{ch.available ? `${npPct(ch.shareOfRevenuePct, 0)} da receita` : 'sem dado'}</span>
       </div>
       <div className="cell-mono" style={{ fontSize: 22, fontWeight: 700, color: tone, letterSpacing: '-0.02em', lineHeight: 1 }}>{ch.available ? npMoney(ch.profit, cur) : '—'}</div>
-      <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 8, fontSize: 11, color: 'var(--fg4)', fontFamily: 'var(--f-mono)' }}>
-        <span>fat. <span style={{ color: 'var(--fg2)' }}>{npMoney(ch.gross, cur)}</span></span>
-        <span>margem <span style={{ color: tone, fontWeight: 600 }}>{ch.available ? npPct(ch.marginPct) : '—'}</span></span>
+      <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 8, fontSize: 11, color: 'var(--fg4)', fontFamily: 'var(--f-mono)', gap: 8 }}>
+        <span>{backend ? 'bruto' : 'gross'} <span style={{ color: 'var(--fg2)' }}>{npMoney(ch.gross, cur)}</span></span>
+        {backend
+          ? <span>NS fica <span style={{ color: tone, fontWeight: 600 }}>{ch.available ? npPct(nsPct) : '—'}</span></span>
+          : <span>margem <span style={{ color: tone, fontWeight: 600 }}>{ch.available ? npPct(ch.marginPct) : '—'}</span></span>}
       </div>
       <div style={{ height: 4, borderRadius: 2, background: 'color-mix(in oklab, var(--fg5) 18%, transparent)', marginTop: 8, overflow: 'hidden' }}>
-        <div style={{ width: `${Math.max(0, Math.min(100, ch.marginPct))}%`, height: '100%', background: tone }}/>
+        <div style={{ width: `${Math.max(0, Math.min(100, barPct))}%`, height: '100%', background: tone }}/>
       </div>
     </button>
   );
 }
 
-function NpChannelDetail({ ch, cur, onClose }) {
+function NpChannelDetail({ ch, cur, salesbound, onClose }) {
   const meta = NP_CHANNEL_META[ch.key] || {};
   const [open, setOpen] = useStateNP(null);
+  const backend = ch.type === 'backend';
   return (
     <div className="panel" style={{ marginBottom: 14, borderColor: 'color-mix(in oklab, var(--accent) 35%, transparent)' }}>
       <div className="panel-head" style={{ marginBottom: 8 }}>
         <div className="panel-title">
           <span className="panel-eyebrow">{ch.label.toUpperCase()} · COMO O LUCRO É CALCULADO</span>
-          <div className="panel-sub">{meta.desc} · {fmtInt(ch.orders)} vendas · {npPct(ch.shareOfRevenuePct)} do faturamento · {npPct(ch.shareOfProfitPct)} do lucro</div>
+          <div className="panel-sub">{meta.desc} · {fmtInt(ch.orders)} vendas · {npPct(ch.shareOfRevenuePct)} da receita econômica · {npPct(ch.shareOfProfitPct)} do lucro</div>
+          {ch.key === 'salesbound' && salesbound?.mode === 'measured' && salesbound.coverage && (
+            <div className="panel-sub" style={{ marginTop: 2 }}>
+              export do CRM: {salesbound.coverage.firstAt.slice(0, 10)} → {salesbound.coverage.lastAt.slice(0, 10)} · importado {fmtDateTime(salesbound.coverage.importedAt)}
+              {salesbound.voids > 0 ? ` · ${npMoney(salesbound.voids, cur)} em voids já fora do bruto` : ''}
+              {salesbound.refundsCohort != null ? ` · estornos das vendas do período (qualquer data): ${npMoney(salesbound.refundsCohort, cur)}` : ''}
+            </div>
+          )}
         </div>
         <button className="icon-btn" onClick={onClose} title="fechar"><Icon name="x" size={13}/></button>
       </div>
       <div className="tbl-wrap" style={{ margin: 0, padding: 0 }}>
-        <NpLines gross={ch.gross} lines={ch.lines} profit={ch.profit} marginPct={ch.marginPct} cur={cur}/>
+        <NpLines gross={ch.gross} revenue={ch.revenue} lines={ch.lines} profit={ch.profit} marginPct={ch.marginPct} cur={cur}/>
       </div>
       {ch.breakdown.length > 1 && (
         <div style={{ marginTop: 12 }}>
           <div className="f-label" style={{ marginBottom: 6 }}>DESAGREGAÇÃO · {ch.breakdown.length} {ch.key === 'front' ? 'plataformas' : ch.key === 'callcenter' ? 'parceiros' : 'fontes'}</div>
           <div className="tbl-wrap" style={{ margin: 0, padding: 0 }}>
             <table className="tbl" style={{ fontSize: 12 }}>
-              <thead><tr><th/><th className="num">Faturamento</th><th className="num">% do canal</th><th className="num">Custos</th><th className="num">Lucro</th><th className="num">Margem</th><th/></tr></thead>
+              <thead><tr><th/><th className="num">{backend ? 'Bruto' : 'Gross'}</th>{backend && <th className="num">Receita NS</th>}<th className="num">Custos</th><th className="num">Lucro</th><th className="num">{backend ? 'NS fica' : 'Margem'}</th><th/></tr></thead>
               <tbody>
                 {ch.breakdown.map((b) => {
-                  const costs = b.lines.reduce((s, l) => s + l.usd, 0);
+                  const costs = b.lines.filter((l) => l.kind !== 'share').reduce((s, l) => s + l.usd, 0);
                   const on = open === b.key;
                   return (
                     <React.Fragment key={b.key}>
                       <tr onClick={() => setOpen(on ? null : b.key)} style={{ cursor: 'pointer' }}>
                         <td style={{ fontWeight: 600 }}>{b.label}<span style={{ color: 'var(--fg5)', marginLeft: 6, fontSize: 10 }}>{fmtInt(b.orders)} vendas</span></td>
                         <td className="num cell-mono">{npMoney(b.gross, cur)}</td>
-                        <td className="num cell-mono" style={{ color: 'var(--fg5)' }}>{npPct(ch.gross > 0 ? (b.gross / ch.gross) * 100 : 0)}</td>
-                        <td className="num cell-mono" style={{ color: 'var(--danger)' }}>{npMoney(costs, cur)}</td>
-                        <td className="num cell-mono" style={{ fontWeight: 700, color: b.profit >= 0 ? 'var(--money)' : 'var(--danger)' }}>{npMoney(b.profit, cur)}</td>
-                        <td className="num cell-mono">{npPct(b.marginPct)}</td>
+                        {backend && <td className="num cell-mono" style={{ color: 'var(--money)' }}>{npMoney(b.revenue, cur)}</td>}
+                        <td className="num cell-mono" style={{ color: costs > 0 ? 'var(--danger)' : 'var(--fg5)' }}>{npMoney(costs, cur)}</td>
+                        <td className="num cell-mono" style={{ fontWeight: 700, color: npTone(b.profit) }}>{npMoney(b.profit, cur)}</td>
+                        <td className="num cell-mono">{backend ? npPct(b.gross > 0 ? (b.revenue / b.gross) * 100 : null) : npPct(b.marginPct)}</td>
                         <td style={{ width: 24, color: 'var(--fg5)' }}><Icon name={on ? 'chevron-down' : 'chevron-right'} size={11}/></td>
                       </tr>
                       {on && (
-                        <tr><td colSpan={7} style={{ padding: '4px 0 10px 16px', background: 'color-mix(in oklab, var(--fg5) 6%, transparent)' }}>
-                          <NpLines gross={b.gross} lines={b.lines} profit={b.profit} marginPct={b.marginPct} cur={cur} dense/>
+                        <tr><td colSpan={backend ? 7 : 6} style={{ padding: '4px 0 10px 16px', background: 'color-mix(in oklab, var(--fg5) 6%, transparent)' }}>
+                          <NpLines gross={b.gross} revenue={b.revenue} lines={b.lines} profit={b.profit} marginPct={b.marginPct} cur={cur} dense/>
                         </td></tr>
                       )}
                     </React.Fragment>
@@ -379,18 +457,65 @@ function NpNeedsStrip({ needs }) {
   );
 }
 
+// ── Import do export da SalesBound (CSV) ────────────────────────────────
+function NpSalesboundImport({ salesbound, busy, onImport }) {
+  const inputRef = useRefNP(null);
+  const cov = salesbound?.coverage;
+  return (
+    <div style={{ display: 'grid', gap: 8 }}>
+      {salesbound?.mode === 'measured' && cov ? (
+        <div style={{ fontSize: 12, color: 'var(--fg2)', lineHeight: 1.45 }}>
+          <span style={{ color: 'var(--success)', fontWeight: 600 }}>● medido pelo export</span> · cobre {cov.firstAt.slice(0, 10)} → {cov.lastAt.slice(0, 10)} · importado {fmtDateTime(cov.importedAt)}
+        </div>
+      ) : (
+        <div style={{ fontSize: 12, color: 'var(--fg4)', lineHeight: 1.45 }}>Nenhum export importado — o canal usa os números manuais abaixo.</div>
+      )}
+      <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+        <input ref={inputRef} type="file" accept=".csv,text/csv" style={{ display: 'none' }}
+          onChange={(e) => { const f = e.target.files && e.target.files[0]; e.target.value = ''; if (f) onImport(f); }}/>
+        <button className="btn btn-ghost" disabled={busy} onClick={() => inputRef.current && inputRef.current.click()}>
+          <Icon name="upload" size={12}/> {busy ? 'importando…' : cov ? 'Importar export novo (CSV)' : 'Importar export (CSV)'}
+        </button>
+        <span style={{ fontSize: 10.5, color: 'var(--fg5)', lineHeight: 1.35 }}>CRM deles → Reports → Transaction Details → Export. Reimportar não duplica.</span>
+      </div>
+    </div>
+  );
+}
+
+// ── Histórico de premissas (§10.5) ──────────────────────────────────────
+function NpParamsHistory({ history }) {
+  const [all, setAll] = useStateNP(false);
+  if (!history || history.length === 0) return <div style={{ fontSize: 12, color: 'var(--fg5)' }}>Nenhuma alteração registrada ainda.</div>;
+  const shown = all ? history : history.slice(0, 6);
+  return (
+    <div style={{ display: 'grid', gap: 10 }}>
+      {shown.map((h) => (
+        <div key={h.id} style={{ fontSize: 12, borderLeft: '2px solid var(--border)', paddingLeft: 10 }}>
+          <div className="cell-mono" style={{ fontSize: 11, color: 'var(--fg4)' }}>{fmtDateTime(h.createdAt)}{h.createdBy ? ` · ${h.createdBy}` : ''}</div>
+          {h.initial
+            ? <div style={{ color: 'var(--fg3)' }}>premissas vigentes antes do histórico</div>
+            : h.changes.map((c) => (
+              <div key={c.path} style={{ color: 'var(--fg2)' }}>
+                {npParamLabel(c.path)}: <span className="cell-mono" style={{ color: 'var(--fg5)', textDecoration: 'line-through' }}>{npParamValue(c.from)}</span> → <span className="cell-mono" style={{ fontWeight: 600 }}>{npParamValue(c.to)}</span>
+              </div>
+            ))}
+        </div>
+      ))}
+      {history.length > shown.length && <button className="btn btn-ghost" style={{ justifySelf: 'start', fontSize: 11 }} onClick={() => setAll(true)}>ver todas ({history.length})</button>}
+    </div>
+  );
+}
+
 // ── Drawer de parâmetros ────────────────────────────────────────────────
-function NpParamsDrawer({ params, setParam, setParams, obs, platforms, dirty, busy, onSave, onReset, onSaveScenario, onClose }) {
+function NpParamsDrawer({ params, setParam, setParams, obs, platforms, salesbound, history, dirty, busy, onSave, onReset, onSaveScenario, onImportSalesbound, onClose }) {
   const [advanced, setAdvanced] = useStateNP(false);
-  const [perChannelRefund, setPerChannelRefund] = useStateNP(() => {
-    const v = Object.values(params.refundPct); return new Set(v.map((x) => (x == null ? '∅' : String(x)))).size > 1;
-  });
+  const [perChannelRefund, setPerChannelRefund] = useStateNP(() => params.refundPct.recovery != null && params.refundPct.recovery !== params.refundPct.front);
   const [perChannelCost, setPerChannelCost] = useStateNP(() => params.productCostPct.callcenter != null || params.productCostPct.recovery != null || params.productCostPct.salesbound != null);
   const [scnName, setScnName] = useStateNP('');
   const grid2 = { display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 12 };
-  const refundAll = params.refundPct.front;
-  const setRefundAll = (v) => setParams((p) => ({ ...p, refundPct: { front: v, callcenter: v, recovery: v, salesbound: v } }));
   const obsFe = obs?.front?.FRONTEND;
+  const nsHint = (pct, fallback) => (pct != null ? `NorthScale fica com ${Math.round((100 - pct) * 100) / 100}%` : fallback);
+  const measured = salesbound?.mode === 'measured';
   return (
     <>
       <div className="drawer-backdrop" onClick={onClose}/>
@@ -399,13 +524,13 @@ function NpParamsDrawer({ params, setParam, setParams, obs, platforms, dirty, bu
           <div>
             <div className="eyebrow" style={{ fontSize: 10 }}>LUCRO REAL · PARÂMETROS</div>
             <h3 style={{ margin: '4px 0 2px' }}>Premissas do cálculo</h3>
-            <div style={{ fontSize: 11.5, color: 'var(--fg4)' }}>Tudo recalcula ao digitar. Campo vazio = usa o valor observado/cadastrado.</div>
+            <div style={{ fontSize: 11.5, color: 'var(--fg4)' }}>Tudo recalcula ao digitar. Campo vazio = usa o valor observado/cadastrado. Salvar registra a data de cada mudança.</div>
           </div>
           <button className="icon-btn" onClick={onClose}><Icon name="x" size={14}/></button>
         </div>
 
         <div style={{ padding: '0 24px', overflowY: 'auto', flex: 1 }}>
-          <NpSection title="REEMBOLSO / CHARGEBACK" hint="Observado = valor real por data do estorno, já calculado no dashboard. % fixo = projeção.">
+          <NpSection title="REEMBOLSO" hint="Incide sobre o gross das plataformas (front e recuperação). Observado = estorno real por data do estorno; % fixo = projeção. O backend usa o estorno informado pelo parceiro.">
             <div className="seg" style={{ marginBottom: 12 }}>
               <button className={params.refundMode === 'observed' ? 'is-active' : ''} onClick={() => setParam(['refundMode'], 'observed')}>observado</button>
               <button className={params.refundMode === 'manual' ? 'is-active' : ''} onClick={() => setParam(['refundMode'], 'manual')}>% fixo</button>
@@ -413,63 +538,81 @@ function NpParamsDrawer({ params, setParam, setParams, obs, platforms, dirty, bu
             {params.refundMode === 'manual' && (
               perChannelRefund ? (
                 <div style={grid2}>
-                  {[['front', 'Front-end'], ['callcenter', 'Call centers'], ['recovery', 'Recuperação'], ['salesbound', 'SalesBound']].map(([k, l]) => (
-                    <NpField key={k} label={l}><NpNum value={params.refundPct[k]} onChange={(v) => setParam(['refundPct', k], v)} placeholder="0" max={100}/></NpField>
-                  ))}
-                  <button className="btn btn-ghost" style={{ gridColumn: '1 / -1', justifySelf: 'start', fontSize: 11 }} onClick={() => { setPerChannelRefund(false); setRefundAll(refundAll); }}>usar um % só</button>
+                  <NpField label="Front-end"><NpNum value={params.refundPct.front} onChange={(v) => setParam(['refundPct', 'front'], v)} placeholder="0" max={100}/></NpField>
+                  <NpField label="Recuperação" hint="vazio = % do front"><NpNum value={params.refundPct.recovery} onChange={(v) => setParam(['refundPct', 'recovery'], v)} placeholder="front" max={100}/></NpField>
+                  <button className="btn btn-ghost" style={{ gridColumn: '1 / -1', justifySelf: 'start', fontSize: 11 }} onClick={() => { setPerChannelRefund(false); setParam(['refundPct', 'recovery'], null); }}>usar um % só</button>
                 </div>
               ) : (
                 <div style={grid2}>
-                  <NpField label="% sobre o faturamento" hint="vale pra todos os canais"><NpNum value={refundAll} onChange={setRefundAll} placeholder="ex.: 13" max={100} size="lg"/></NpField>
+                  <NpField label="% sobre o gross" hint="front e recuperação"><NpNum value={params.refundPct.front} onChange={(v) => setParam(['refundPct', 'front'], v)} placeholder="ex.: 20" max={100} size="lg"/></NpField>
                   <div style={{ alignSelf: 'end' }}><button className="btn btn-ghost" style={{ fontSize: 11 }} onClick={() => setPerChannelRefund(true)}>ajustar por canal</button></div>
                 </div>
               )
             )}
           </NpSection>
 
-          <NpSection title="CUSTO DE PRODUTO" hint="% do faturamento, um valor só (front, upsell, downsell e bump são a mesma etapa).">
+          <NpSection title="PRODUTO + FULFILLMENT" hint="% do gross das plataformas, um valor só (front, upsell, downsell, bump e recuperação). Backend não tem custo — entra a parcela líquida.">
             <div style={grid2}>
-              <NpField label="% do faturamento" hint={obsFe != null ? `vazio = real observado (front ${npPct(obsFe)}${obs?.front?.UPSELL != null ? `, upsell ${npPct(obs.front.UPSELL)}` : ''})` : 'vazio = sem dado (0%)'}>
+              <NpField label="% do gross" hint={obsFe != null ? `vazio = real observado (front ${npPct(obsFe)}${obs?.front?.UPSELL != null ? `, upsell ${npPct(obs.front.UPSELL)}` : ''})` : 'vazio = sem dado (0%)'}>
                 <NpNum value={params.productCostDefaultPct} onChange={(v) => setParam(['productCostDefaultPct'], v)} placeholder={obsFe != null ? String(obsFe) : 'ex.: 12'} max={100} size="lg"/>
               </NpField>
               <div style={{ alignSelf: 'end' }}><button className="btn btn-ghost" style={{ fontSize: 11 }} onClick={() => setPerChannelCost((v) => !v)}>{perChannelCost ? 'ocultar por canal' : 'ajustar por canal'}</button></div>
               {perChannelCost && (
                 <>
-                  <NpField label="Call centers" hint="vazio = usa o % único"><NpNum value={params.productCostPct.callcenter} onChange={(v) => setParam(['productCostPct', 'callcenter'], v)} placeholder="único" max={100}/></NpField>
                   <NpField label="Recuperação" hint="vazio = usa o % único"><NpNum value={params.productCostPct.recovery} onChange={(v) => setParam(['productCostPct', 'recovery'], v)} placeholder="único" max={100}/></NpField>
-                  <NpField label="SalesBound" hint="vazio = usa o % único"><NpNum value={params.productCostPct.salesbound} onChange={(v) => setParam(['productCostPct', 'salesbound'], v)} placeholder="único" max={100}/></NpField>
+                  <NpField label="Call centers" hint="vazio = sem custo (parcela líquida)"><NpNum value={params.productCostPct.callcenter} onChange={(v) => setParam(['productCostPct', 'callcenter'], v)} placeholder="0" max={100}/></NpField>
+                  <NpField label="SalesBound" hint="vazio = sem custo (parcela líquida)"><NpNum value={params.productCostPct.salesbound} onChange={(v) => setParam(['productCostPct', 'salesbound'], v)} placeholder="0" max={100}/></NpField>
                 </>
               )}
             </div>
           </NpSection>
 
-          <NpSection title="COMISSÕES" hint="Vazio = acordo cadastrado (aba Call Center / Recuperação).">
+          <NpSection title="PARCELA DOS PARCEIROS · BACKEND" hint="% do bruto que fica com o parceiro — a receita da NorthScale é o resto. Vazio = acordo cadastrado (aba Call Center).">
             <div style={grid2}>
-              <NpField label="Tauk"><NpNum value={params.commissionPct.tauk} onChange={(v) => setParam(['commissionPct', 'tauk'], v)} placeholder="cadastro" max={100}/></NpField>
-              <NpField label="Logicall"><NpNum value={params.commissionPct.logicall} onChange={(v) => setParam(['commissionPct', 'logicall'], v)} placeholder="cadastro" max={100}/></NpField>
-              <NpField label="Skill99 / recuperação" hint="sobrescreve a taxa de cada afiliado de recuperação"><NpNum value={params.commissionPct.recoveryOverride} onChange={(v) => setParam(['commissionPct', 'recoveryOverride'], v)} placeholder="por afiliado" max={100}/></NpField>
-              <NpField label="SalesBound"><NpNum value={params.commissionPct.salesbound} onChange={(v) => setParam(['commissionPct', 'salesbound'], v)} placeholder="ex.: 65" max={100}/></NpField>
+              <NpField label="Tauk" hint={nsHint(params.commissionPct.tauk, 'cadastro')}><NpNum value={params.commissionPct.tauk} onChange={(v) => setParam(['commissionPct', 'tauk'], v)} placeholder="cadastro" max={100}/></NpField>
+              <NpField label="Logicall" hint={nsHint(params.commissionPct.logicall, 'cadastro')}><NpNum value={params.commissionPct.logicall} onChange={(v) => setParam(['commissionPct', 'logicall'], v)} placeholder="cadastro" max={100}/></NpField>
+              <NpField label="SalesBound" hint={nsHint(params.commissionPct.salesbound, 'obrigatório')}><NpNum value={params.commissionPct.salesbound} onChange={(v) => setParam(['commissionPct', 'salesbound'], v)} placeholder="ex.: 50" max={100}/></NpField>
+              <div/>
+              <div style={{ gridColumn: '1 / -1' }}>
+                <NpSwitch on={params.backendNetOfRefunds} onChange={(v) => setParam(['backendNetOfRefunds'], v)} label="Parcela calculada sobre o bruto menos estornos do parceiro"
+                  hint="Logicall e SalesBound informam estorno; a Tauk não. Desligado = bruto × parcela (fórmula literal do cálculo de margem)."/>
+              </div>
             </div>
           </NpSection>
 
-          <NpSection title="SALESBOUND · DADOS DO PERÍODO" hint="Informado manualmente enquanto o postback não traz eventos. Estornos vazio = usa o % de reembolso acima.">
+          <NpSection title="COMISSÃO DE RECUPERAÇÃO" hint="Entra como custo de afiliados. Vazio = taxa de cada afiliado de recuperação (aba Recuperação).">
             <div style={grid2}>
-              <NpField label="Faturamento" wide><NpNum value={params.salesbound.grossUsd || null} onChange={(v) => setParam(['salesbound', 'grossUsd'], v ?? 0)} suffix="USD" placeholder="0" size="lg"/></NpField>
-              <NpField label="Vendas"><NpNum value={params.salesbound.sales} onChange={(v) => setParam(['salesbound', 'sales'], v)} suffix="un." placeholder="0"/></NpField>
-              <NpField label="Estornos"><NpNum value={params.salesbound.refundsUsd} onChange={(v) => setParam(['salesbound', 'refundsUsd'], v)} suffix="USD" placeholder="% acima"/></NpField>
+              <NpField label="Skill99 / recuperação"><NpNum value={params.commissionPct.recoveryOverride} onChange={(v) => setParam(['commissionPct', 'recoveryOverride'], v)} placeholder="por afiliado" max={100}/></NpField>
             </div>
           </NpSection>
 
-          <NpSection title="TAXA DA PLATAFORMA E ALLOWANCE" hint="Vazio = cadastro da aba Plataformas. Override vale só nesta projeção.">
+          <NpSection title="SALESBOUND · DADOS" hint="Vêm do export de transações do CRM deles (vendas, reembolsos e voids por data). Sem export, use os campos manuais.">
+            <NpSalesboundImport salesbound={salesbound} busy={busy} onImport={onImportSalesbound}/>
+            {!measured && (
+              <div style={{ ...grid2, marginTop: 12 }}>
+                <NpField label="Faturamento (manual)" wide><NpNum value={params.salesbound.grossUsd || null} onChange={(v) => setParam(['salesbound', 'grossUsd'], v ?? 0)} suffix="USD" placeholder="0" size="lg"/></NpField>
+                <NpField label="Vendas"><NpNum value={params.salesbound.sales} onChange={(v) => setParam(['salesbound', 'sales'], v)} suffix="un." placeholder="0"/></NpField>
+                <NpField label="Estornos"><NpNum value={params.salesbound.refundsUsd} onChange={(v) => setParam(['salesbound', 'refundsUsd'], v)} suffix="USD" placeholder="0"/></NpField>
+              </div>
+            )}
+          </NpSection>
+
+          <NpSection title="FEE DA PLATAFORMA E RESERVA" hint="Vazio = cadastro da aba Plataformas. Override vale só neste cálculo.">
             <div style={{ display: 'grid', gap: 10 }}>
               {platforms.map((p) => (
                 <div key={p.slug} style={{ display: 'grid', gridTemplateColumns: '44px 1fr 1fr', gap: 10, alignItems: 'end' }}>
                   <span className={`plat ${platBadge(p.slug).cls}`} style={{ justifySelf: 'start', marginBottom: 8 }}>{platBadge(p.slug).short}</span>
-                  <NpField label="taxa" hint={p.feePct == null ? 'não cadastrada' : `cadastro ${npPct(p.feePct, 2)}`}><NpNum value={params.feePctOverride[p.slug] ?? null} onChange={(v) => setParam(['feePctOverride', p.slug], v)} placeholder={p.feePct == null ? '—' : String(p.feePct)} max={100}/></NpField>
-                  <NpField label="allowance" hint={p.allowancePct == null ? 'não cadastrado' : `cadastro ${npPct(p.allowancePct, 2)}`}><NpNum value={params.allowancePctOverride[p.slug] ?? null} onChange={(v) => setParam(['allowancePctOverride', p.slug], v)} placeholder={p.allowancePct == null ? '—' : String(p.allowancePct)} max={100}/></NpField>
+                  <NpField label="fee" hint={p.feePct == null ? 'não cadastrada' : `cadastro ${npPct(p.feePct, 2)}`}><NpNum value={params.feePctOverride[p.slug] ?? null} onChange={(v) => setParam(['feePctOverride', p.slug], v)} placeholder={p.feePct == null ? '—' : String(p.feePct)} max={100}/></NpField>
+                  <NpField label="reserva" hint={p.allowancePct == null ? 'não cadastrada' : `cadastro ${npPct(p.allowancePct, 2)}`}><NpNum value={params.allowancePctOverride[p.slug] ?? null} onChange={(v) => setParam(['allowancePctOverride', p.slug], v)} placeholder={p.allowancePct == null ? '—' : String(p.allowancePct)} max={100}/></NpField>
                 </div>
               ))}
-              <NpSwitch on={params.includeAllowance} onChange={(v) => setParam(['includeAllowance'], v)} label="Descontar allowance do lucro do front" hint="reserva retida pela plataforma (rolling reserve)"/>
+              <NpSwitch on={params.includeAllowance} onChange={(v) => setParam(['includeAllowance'], v)} label="Tratar a reserva como custo" hint="Se um dia for confirmado que a reserva volta inteira, desligue — aí ela é impacto de caixa, não margem."/>
+            </div>
+          </NpSection>
+
+          <NpSection title="BUFFER DE RISCO" hint="Margem de erro conservadora sobre a receita econômica. Aparece numa linha separada — não altera o lucro nem as taxas reais.">
+            <div style={grid2}>
+              <NpField label="% da receita econômica" hint="vazio = sem buffer · usual 1–2%"><NpNum value={params.riskBufferPct} onChange={(v) => setParam(['riskBufferPct'], v)} placeholder="0" max={50}/></NpField>
             </div>
           </NpSection>
 
@@ -484,6 +627,10 @@ function NpParamsDrawer({ params, setParam, setParams, obs, platforms, dirty, bu
               </div>
             )}
           </NpSection>
+
+          <NpSection title="HISTÓRICO DE PREMISSAS" hint="Cada “Salvar como padrão” registra o que mudou e quando.">
+            <NpParamsHistory history={history}/>
+          </NpSection>
         </div>
 
         <div style={{ padding: '12px 24px', borderTop: '1px solid var(--border)', background: 'var(--bg-elev)', display: 'grid', gap: 10 }}>
@@ -493,7 +640,7 @@ function NpParamsDrawer({ params, setParam, setParams, obs, platforms, dirty, bu
             <span style={{ marginLeft: 'auto', fontSize: 11, color: dirty ? 'var(--warning)' : 'var(--fg5)', fontFamily: 'var(--f-mono)' }}>{dirty ? '● alterações não salvas' : 'padrão salvo'}</span>
           </div>
           <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-            <input value={scnName} onChange={(e) => setScnName(e.target.value)} placeholder="nome da projeção (ex.: cenário CPA 20%)"
+            <input value={scnName} onChange={(e) => setScnName(e.target.value)} placeholder="nome da projeção (ex.: cenário refund 25%)"
               autoComplete="off"
               onKeyDown={(e) => { if (e.key === 'Enter' && scnName.trim()) { onSaveScenario(scnName.trim()); setScnName(''); } }}
               style={{ flex: 1, height: 34, padding: '0 10px', fontSize: 12, color: 'var(--fg1)', background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: 9, fontFamily: 'var(--f-body)', outline: 'none' }}/>
@@ -502,6 +649,164 @@ function NpParamsDrawer({ params, setParam, setParams, obs, platforms, dirty, bu
         </div>
       </div>
     </>
+  );
+}
+
+// ── Por dia (§10.8: mesma fórmula, dia a dia) ───────────────────────────
+function npDayLabel(iso) {
+  return new Date(iso).toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo', weekday: 'short', day: '2-digit', month: '2-digit' });
+}
+function NpDaily({ filters, params, cur }) {
+  const [state, setState] = useStateNP({ status: 'loading', days: [], truncated: false, error: null });
+  const paramsKey = JSON.stringify(params);
+  useEffectNP(() => {
+    let cancelled = false;
+    setState((s) => ({ ...s, status: 'loading', error: null }));
+    const t = setTimeout(() => {
+      window.NSApi.computeNetProfitDaily(filters, params)
+        .then((d) => { if (!cancelled) setState({ status: 'ready', days: d.days || [], truncated: !!d.truncated, error: null }); })
+        .catch((err) => { if (!cancelled) setState({ status: 'error', days: [], truncated: false, error: err.message }); });
+    }, 400);
+    return () => { cancelled = true; clearTimeout(t); };
+  }, [filters.dateRange.start.getTime(), filters.dateRange.end.getTime(), paramsKey]);
+
+  const days = state.days;
+  const hasBuffer = days.some((d) => d.kpis.buffer);
+  const maxAbs = Math.max(1, ...days.map((d) => Math.abs(d.kpis.profit)));
+  const tot = days.reduce((a, d) => ({ revenue: a.revenue + d.kpis.revenue, costs: a.costs + d.kpis.costs, profit: a.profit + d.kpis.profit, fes: a.fes + d.kpis.fes, adj: a.adj + (d.kpis.buffer ? d.kpis.buffer.adjustedProfit : d.kpis.profit) }), { revenue: 0, costs: 0, profit: 0, fes: 0, adj: 0 });
+  return (
+    <div className="panel" style={{ marginBottom: 14 }}>
+      <div className="panel-head">
+        <div className="panel-title">
+          <span className="panel-eyebrow">MARGEM POR DIA</span>
+          <div className="panel-sub">A mesma fórmula aplicada a cada dia do período (dia BRT). Estornos contam pela data do estorno, então um dia fraco pode carregar estornos de vendas antigas.{state.truncated ? ' Mostrando os primeiros 62 dias.' : ''}</div>
+        </div>
+        {state.status === 'loading' && days.length > 0 && <span style={{ fontSize: 11, color: 'var(--fg5)', fontFamily: 'var(--f-mono)' }}>recalculando…</span>}
+      </div>
+      {state.status === 'error' && <div style={{ color: 'var(--danger)', fontSize: 12 }}>Erro: {state.error}</div>}
+      <div className="tbl-wrap" style={{ margin: 0, padding: 0, maxHeight: 640, overflowY: 'auto' }}>
+        <table className="tbl tbl--sticky-first">
+          <thead>
+            <tr>
+              <th>Dia</th>
+              <th className="num" title="gross das plataformas + parcela NS do backend">Receita econômica</th>
+              <th className="num">Custos variáveis</th>
+              <th className="num">Lucro</th>
+              <th style={{ width: 120 }}/>
+              <th className="num">Margem</th>
+              <th className="num">FEs</th>
+              <th className="num">Lucro/FE</th>
+              {hasBuffer && <th className="num">Lucro ajustado</th>}
+            </tr>
+          </thead>
+          <tbody>
+            {state.status === 'loading' && days.length === 0 && <SkelTableRows rows={7} cols={hasBuffer ? 9 : 8}/>}
+            {state.status === 'ready' && days.length === 0 && <tr><td colSpan={9} style={{ textAlign: 'center', padding: 16, opacity: 0.6 }}>Sem dias no período</td></tr>}
+            {days.map((d) => {
+              const k = d.kpis;
+              const w = (Math.abs(k.profit) / maxAbs) * 100;
+              return (
+                <tr key={d.start}>
+                  <td className="cell-mono" style={{ fontSize: 12, whiteSpace: 'nowrap' }}>{npDayLabel(d.start)}</td>
+                  <td className="num cell-mono" style={{ color: 'var(--fg1)' }}>{npMoney(k.revenue, cur)}</td>
+                  <td className="num cell-mono" style={{ color: 'var(--danger)' }}>{npMoney(k.costs, cur)}</td>
+                  <td className="num cell-mono" style={{ fontWeight: 700, color: npTone(k.profit) }}>{npMoney(k.profit, cur)}</td>
+                  <td>
+                    <div style={{ height: 6, borderRadius: 3, background: 'color-mix(in oklab, var(--fg5) 14%, transparent)', overflow: 'hidden' }}>
+                      <div style={{ width: `${w}%`, height: '100%', background: npTone(k.profit), opacity: 0.8 }}/>
+                    </div>
+                  </td>
+                  <td className="num cell-mono" style={{ color: npTone(k.profit) }}>{npPct(k.marginPct, 2)}</td>
+                  <td className="num cell-mono">{fmtInt(k.fes)}</td>
+                  <td className="num cell-mono">{k.profitPerFe == null ? '—' : npMoney(k.profitPerFe, cur, 2)}</td>
+                  {hasBuffer && <td className="num cell-mono" style={{ color: npTone(k.buffer ? k.buffer.adjustedProfit : k.profit) }}>{npMoney(k.buffer ? k.buffer.adjustedProfit : k.profit, cur)}</td>}
+                </tr>
+              );
+            })}
+            {days.length > 1 && (
+              <tr style={{ borderTop: '1px solid var(--border)', fontWeight: 700 }}>
+                <td>Soma dos dias</td>
+                <td className="num cell-mono">{npMoney(tot.revenue, cur)}</td>
+                <td className="num cell-mono" style={{ color: 'var(--danger)' }}>{npMoney(tot.costs, cur)}</td>
+                <td className="num cell-mono" style={{ color: npTone(tot.profit) }}>{npMoney(tot.profit, cur)}</td>
+                <td/>
+                <td className="num cell-mono">{npPct(tot.revenue > 0 ? (tot.profit / tot.revenue) * 100 : 0, 2)}</td>
+                <td className="num cell-mono">{fmtInt(tot.fes)}</td>
+                <td className="num cell-mono">{tot.fes > 0 ? npMoney(tot.profit / tot.fes, cur, 2) : '—'}</td>
+                {hasBuffer && <td className="num cell-mono" style={{ color: npTone(tot.adj) }}>{npMoney(tot.adj, cur)}</td>}
+              </tr>
+            )}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
+// ── Por produto (família) ───────────────────────────────────────────────
+function NpProducts({ rows, cur }) {
+  const [q, setQ] = useStateNP('');
+  const [detail, setDetail] = useStateNP(false);
+  const qn = q.trim().toLowerCase();
+  const list = rows.filter((r) => !qn || r.family.toLowerCase().includes(qn));
+  return (
+    <div className="panel" style={{ marginBottom: 14 }}>
+      <div className="panel-head" style={{ flexWrap: 'wrap' }}>
+        <div className="panel-title">
+          <span className="panel-eyebrow">MARGEM POR PRODUTO</span>
+          <div className="panel-sub">Vendas de front (plataformas) por família, com o fee e a reserva de cada plataforma. Recuperação e backend não são alocados por produto.</div>
+        </div>
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+          <div className="select-btn" style={{ padding: '0 10px', width: 'min(200px, 100%)' }}>
+            <Icon name="search" size={13}/>
+            <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Buscar família…" style={{ background: 'transparent', border: 0, color: 'var(--fg1)', outline: 'none', flex: 1, fontFamily: 'var(--f-body)', fontSize: 12 }}/>
+          </div>
+          <div className="seg">
+            <button className={!detail ? 'is-active' : ''} onClick={() => setDetail(false)}>resumo</button>
+            <button className={detail ? 'is-active' : ''} onClick={() => setDetail(true)}>linha a linha</button>
+          </div>
+        </div>
+      </div>
+      <div className="tbl-wrap" style={{ margin: 0, padding: 0, maxHeight: 640, overflowY: 'auto' }}>
+        <table className="tbl tbl--sticky-first">
+          <thead>
+            <tr>
+              <th>Família</th>
+              <th className="num">Gross</th>
+              <th className="num" title="do gross do front">% front</th>
+              <th className="num">FEs</th>
+              {detail && <>
+                <th className="num">Afiliados</th><th className="num">Reembolso</th><th className="num">Fee</th><th className="num">Produto</th><th className="num">Reserva</th>
+              </>}
+              <th className="num">Lucro</th>
+              <th className="num">Margem</th>
+              <th className="num">Lucro/FE</th>
+            </tr>
+          </thead>
+          <tbody>
+            {list.length === 0 && <tr><td colSpan={detail ? 12 : 7} style={{ textAlign: 'center', padding: 20, opacity: 0.6 }}>Nenhum produto</td></tr>}
+            {list.map((r) => (
+              <tr key={r.family}>
+                <td style={{ fontWeight: 600 }}>{r.family === '—' ? <span style={{ color: 'var(--fg4)' }}>sem família no catálogo</span> : r.family}</td>
+                <td className="num cell-mono" style={{ color: 'var(--fg1)' }}>{npMoney(r.gross, cur)}</td>
+                <td className="num cell-mono">{npPct(r.shareOfFrontPct)}</td>
+                <td className="num cell-mono">{fmtInt(r.fes)}</td>
+                {detail && <>
+                  <td className="num cell-mono">{npMoney(r.cpa, cur)}</td>
+                  <td className="num cell-mono">{npMoney(r.refund, cur)}</td>
+                  <td className="num cell-mono">{npMoney(r.fee, cur)}</td>
+                  <td className="num cell-mono">{npMoney(r.productCost, cur)}</td>
+                  <td className="num cell-mono">{npMoney(r.allowance, cur)}</td>
+                </>}
+                <td className="num cell-mono" style={{ fontWeight: 700, color: npTone(r.profit) }}>{npMoney(r.profit, cur)}</td>
+                <td className="num cell-mono" style={{ color: r.marginPct >= 0 ? 'var(--fg1)' : 'var(--danger)' }}>{npPct(r.marginPct)}</td>
+                <td className="num cell-mono">{r.profitPerFe == null ? '—' : npMoney(r.profitPerFe, cur, 2)}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
   );
 }
 
@@ -517,8 +822,8 @@ function NpAffiliates({ rows, cur }) {
     <div className="panel" style={{ marginBottom: 14 }}>
       <div className="panel-head" style={{ flexWrap: 'wrap' }}>
         <div className="panel-title">
-          <span className="panel-eyebrow">LUCRO POR AFILIADO</span>
-          <div className="panel-sub">{fmtInt(rows.length)} contas com venda no período · mesma fórmula do canal, com a taxa e o allowance da plataforma de cada um</div>
+          <span className="panel-eyebrow">MARGEM POR AFILIADO</span>
+          <div className="panel-sub">{fmtInt(rows.length)} contas com venda no período · mesma fórmula das plataformas, com o fee e a reserva da plataforma de cada um</div>
         </div>
         <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
           <div className="select-btn" style={{ padding: '0 10px', width: 'min(220px, 100%)' }}>
@@ -536,18 +841,19 @@ function NpAffiliates({ rows, cur }) {
           <thead>
             <tr>
               <th>Afiliado</th><th>Plat.</th>
-              <th className="num">Faturamento</th>
-              <th className="num" title="participação no faturamento TOTAL (todos os canais)">% total</th>
+              <th className="num">Gross</th>
+              <th className="num" title="participação na receita econômica total">% receita</th>
               {detail && <>
                 <th className="num" title="front: CPA pago · recuperação: comissão">CPA / comissão</th>
-                <th className="num">Reembolso</th><th className="num">Taxa</th><th className="num">Custo prod.</th><th className="num">Allowance</th>
+                <th className="num">Reembolso</th><th className="num">Fee</th><th className="num">Produto</th><th className="num">Reserva</th>
               </>}
               <th className="num">Lucro</th>
               <th className="num">Margem</th>
+              <th className="num">Lucro/FE</th>
             </tr>
           </thead>
           <tbody>
-            {shown.length === 0 && <tr><td colSpan={detail ? 11 : 6} style={{ textAlign: 'center', padding: 20, opacity: 0.6 }}>Nenhum afiliado</td></tr>}
+            {shown.length === 0 && <tr><td colSpan={detail ? 12 : 7} style={{ textAlign: 'center', padding: 20, opacity: 0.6 }}>Nenhum afiliado</td></tr>}
             {shown.map((a) => {
               const pb = platBadge(a.platformSlug);
               return (
@@ -566,8 +872,9 @@ function NpAffiliates({ rows, cur }) {
                     <td className="num cell-mono">{npMoney(a.productCost, cur)}</td>
                     <td className="num cell-mono">{npMoney(a.allowance, cur)}</td>
                   </>}
-                  <td className="num cell-mono" style={{ fontWeight: 700, color: a.profit >= 0 ? 'var(--money)' : 'var(--danger)' }}>{npMoney(a.profit, cur)}</td>
+                  <td className="num cell-mono" style={{ fontWeight: 700, color: npTone(a.profit) }}>{npMoney(a.profit, cur)}</td>
                   <td className="num cell-mono" style={{ color: a.marginPct >= 0 ? 'var(--fg1)' : 'var(--danger)' }}>{npPct(a.marginPct)}</td>
+                  <td className="num cell-mono">{a.profitPerFe == null ? '—' : npMoney(a.profitPerFe, cur, 2)}</td>
                 </tr>
               );
             })}
@@ -603,7 +910,7 @@ function NpScenarios({ scenarios, current, cur, onApply, onDelete, busy }) {
       <div className="tbl-wrap" style={{ margin: 0, padding: 0 }}>
         <table className="tbl">
           <thead>
-            <tr><th>Projeção</th><th>Período</th><th>Criada</th><th className="num">Faturado</th><th className="num">Custos</th><th className="num">Lucro</th><th className="num">Margem</th><th/></tr>
+            <tr><th>Projeção</th><th>Período</th><th>Criada</th><th className="num">Receita</th><th className="num">Custos</th><th className="num">Lucro</th><th className="num">Margem</th><th/></tr>
           </thead>
           <tbody>
             {scenarios.length === 0 && <tr><td colSpan={8} style={{ textAlign: 'center', padding: 16, opacity: 0.6 }}>Nenhuma projeção salva ainda</td></tr>}
@@ -642,6 +949,7 @@ function NetProfitPage({ filters }) {
   const [result, setResult] = useStateNP(null);
   const [needs, setNeeds] = useStateNP([]);
   const [scenarios, setScenarios] = useStateNP([]);
+  const [history, setHistory] = useStateNP([]);
   const [platforms, setPlatforms] = useStateNP([]);
   const [computing, setComputing] = useStateNP(false);
   const [busy, setBusy] = useStateNP(false);
@@ -649,6 +957,7 @@ function NetProfitPage({ filters }) {
   const [drawer, setDrawer] = useStateNP(false);
   const [view, setView] = useStateNP('canais');
   const [openChannel, setOpenChannel] = useStateNP(null);
+  const [recomputeTick, setRecomputeTick] = useStateNP(0);
   const skipCompute = useRefNP(true);
   const timer = useRefNP(null);
   const seq = useRefNP(0);
@@ -661,7 +970,7 @@ function NetProfitPage({ filters }) {
     window.NSApi.fetchNetProfit(filters)
       .then((d) => {
         if (cancelled) return;
-        setParams(d.params); setSavedParams(d.params); setResult(d.result); setNeeds(d.needs || []); setScenarios(d.scenarios || []);
+        setParams(d.params); setSavedParams(d.params); setResult(d.result); setNeeds(d.needs || []); setScenarios(d.scenarios || []); setHistory(d.history || []);
         const front = d.result?.channels?.find((c) => c.key === 'front');
         const pct = (l) => (l && l.note && /^[\d.]+%$/.test(l.note) ? Number(l.note.replace('%', '')) : null);
         setPlatforms((front?.breakdown || []).map((b) => ({ slug: b.key, displayName: b.label, feePct: pct(b.lines.find((l) => l.key === 'fee')), allowancePct: pct(b.lines.find((l) => l.key === 'allowance')) })));
@@ -684,16 +993,22 @@ function NetProfitPage({ filters }) {
         .finally(() => { if (mySeq === seq.current) setComputing(false); });
     }, 150);   // o campo já segura 350ms antes de propagar
     return () => { if (timer.current) clearTimeout(timer.current); };
-  }, [params]);
+  }, [params, recomputeTick]);
 
-  useEffectNP(() => { if (!msg) return; const t = setTimeout(() => setMsg(null), 4000); return () => clearTimeout(t); }, [msg]);
+  useEffectNP(() => { if (!msg) return; const t = setTimeout(() => setMsg(null), 6000); return () => clearTimeout(t); }, [msg]);
 
   const dirty = useMemoNP(() => JSON.stringify(params) !== JSON.stringify(savedParams), [params, savedParams]);
   const setParam = (path, value) => setParams((p) => npSet(p, path, value));
 
   async function saveParams() {
     setBusy(true);
-    try { const r = await window.NSApi.adminSaveNetProfitParams(params); setSavedParams(r.params); setParams(r.params); setMsg({ ok: true, text: 'parâmetros salvos como padrão da aba' }); }
+    try {
+      const r = await window.NSApi.adminSaveNetProfitParams(params);
+      setSavedParams(r.params); setParams(r.params);
+      const d = await window.NSApi.fetchNetProfit(filters).catch(() => null);
+      if (d) setHistory(d.history || []);
+      setMsg({ ok: true, text: 'parâmetros salvos como padrão (mudança registrada no histórico)' });
+    }
     catch (e) { setMsg({ ok: false, text: e.message }); }
     finally { setBusy(false); }
   }
@@ -707,6 +1022,17 @@ function NetProfitPage({ filters }) {
     setBusy(true);
     try { await window.NSApi.adminDeleteNetProfitScenario(id); setScenarios((await window.NSApi.adminListNetProfitScenarios()).scenarios); }
     catch (e) { setMsg({ ok: false, text: e.message }); }
+    finally { setBusy(false); }
+  }
+  async function importSalesbound(file) {
+    setBusy(true);
+    try {
+      const r = await window.NSApi.adminImportSalesbound(await file.text());
+      const s = r.import.success;
+      setMsg({ ok: true, text: `SalesBound: ${fmtInt(r.import.parsed)} transações (${fmtInt(r.import.inserted)} novas) · ${fmtInt(s.sales)} vendas ${npMoney(s.salesUsd, cur)} · estornos ${npMoney(s.refundsUsd, cur)}` });
+      setRecomputeTick((t) => t + 1);
+    }
+    catch (e) { setMsg({ ok: false, text: `import SalesBound: ${e.message}` }); }
     finally { setBusy(false); }
   }
 
@@ -724,7 +1050,7 @@ function NetProfitPage({ filters }) {
         <div className="lead">
           <span className="eyebrow">ADMIN · LUCRO REAL</span>
           <h2>Quanto <em>sobra de verdade</em>.</h2>
-          <span className="sub">Plataformas + call centers + recuperação + SalesBound, líquido de todos os custos · período da barra acima{computing ? ' · recalculando…' : ''}</span>
+          <span className="sub">Margem de contribuição: plataformas + parcela NorthScale do backend, menos os custos variáveis · sem OPEX fixo · período da barra acima{computing ? ' · recalculando…' : ''}</span>
         </div>
         <div className="page-head-actions" style={{ flexWrap: 'wrap', alignItems: 'center' }}>
           {msg && <span style={{ fontSize: 11, fontFamily: 'var(--f-mono)', color: msg.ok ? 'var(--success)' : 'var(--danger)' }}>{msg.text}</span>}
@@ -736,18 +1062,21 @@ function NetProfitPage({ filters }) {
       </div>
 
       <div className="mini-kpis" style={{ marginBottom: 14 }}>
-        <NpKpi label="Total faturado" value={loading ? '…' : npMoney(k.revenue, cur)} money sub="todos os canais, vendas aprovadas"/>
-        <NpKpi label="Total de custos" value={loading ? '…' : npMoney(k.costs, cur)} accent="var(--danger)" sub={loading ? '' : `${npPct(k.revenue > 0 ? (k.costs / k.revenue) * 100 : 0)} do faturamento`}/>
-        <NpKpi label="Lucro líquido" value={loading ? '…' : npMoney(k.profit, cur)} accent={!loading && k.profit < 0 ? 'var(--danger)' : 'var(--money)'} sub="soma dos lucros por canal"/>
-        <NpKpi label="Margem" value={loading ? '…' : npPct(k.marginPct)} accent={!loading && (k.marginPct >= 15 ? 'var(--success)' : k.marginPct >= 5 ? 'var(--warning)' : 'var(--danger)')} sub="lucro ÷ faturamento"/>
+        <NpKpi label="Receita econômica" value={loading ? '…' : npMoney(k.revenue, cur)} money sub={loading ? '' : `plataformas ${npMoney(k.platformGross, cur)} + backend líquido ${npMoney(k.backendNet, cur)}`}/>
+        <NpKpi label="Custos variáveis" value={loading ? '…' : npMoney(k.costs, cur)} accent="var(--danger)" sub={loading ? '' : `${npPct(k.revenue > 0 ? (k.costs / k.revenue) * 100 : 0)} da receita · afiliados, reembolso, fee, reserva, produto`}/>
+        <NpKpi label="Lucro de contribuição" value={loading ? '…' : npMoney(k.profit, cur)} accent={!loading && k.profit < 0 ? 'var(--danger)' : 'var(--money)'} sub={loading ? '' : `${k.profitPerFe == null ? '—' : npMoney(k.profitPerFe, cur, 2)} por FE`}/>
+        <NpKpi label="Margem oficial" value={loading ? '…' : npPct(k.marginPct, 2)} accent={!loading && (k.marginPct >= 15 ? 'var(--success)' : k.marginPct >= 5 ? 'var(--warning)' : 'var(--danger)')} sub={loading ? '' : `lucro ÷ receita econômica · sobre o gross ${npPct(k.marginOnGrossPct, 2)}`}/>
       </div>
 
+      {!loading && <NpUnitStrip k={k} cur={cur}/>}
       {!loading && <NpCompositionBar result={result} cur={cur}/>}
       {!loading && <NpNeedsStrip needs={needs}/>}
 
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12, flexWrap: 'wrap' }}>
         <div className="seg">
           <button className={view === 'canais' ? 'is-active' : ''} onClick={() => setView('canais')}>Canais</button>
+          <button className={view === 'dias' ? 'is-active' : ''} onClick={() => setView('dias')}>Por dia</button>
+          <button className={view === 'produtos' ? 'is-active' : ''} onClick={() => setView('produtos')}>Por produto{!loading && result.products ? <span style={{ marginLeft: 6, opacity: 0.55 }}>{fmtInt(result.products.length)}</span> : null}</button>
           <button className={view === 'afiliados' ? 'is-active' : ''} onClick={() => setView('afiliados')}>Afiliados{!loading ? <span style={{ marginLeft: 6, opacity: 0.55 }}>{fmtInt(result.affiliates.length)}</span> : null}</button>
           <button className={view === 'projecoes' ? 'is-active' : ''} onClick={() => setView('projecoes')}>Projeções{scenarios.length ? <span style={{ marginLeft: 6, opacity: 0.55 }}>{scenarios.length}</span> : null}</button>
         </div>
@@ -760,7 +1089,7 @@ function NetProfitPage({ filters }) {
             {loading ? [0, 1, 2, 3].map((i) => <div key={i} className="panel" style={{ margin: 0, minHeight: 120 }}/>)
               : result.channels.map((ch) => <NpChannelTile key={ch.key} ch={ch} cur={cur} active={openChannel === ch.key} onClick={() => setOpenChannel(openChannel === ch.key ? null : ch.key)}/>)}
           </div>
-          {openCh && <NpChannelDetail ch={openCh} cur={cur} onClose={() => setOpenChannel(null)}/>}
+          {openCh && <NpChannelDetail ch={openCh} cur={cur} salesbound={result.salesbound} onClose={() => setOpenChannel(null)}/>}
           {!loading && result.warnings?.length > 0 && (
             <div className="panel" style={{ marginBottom: 14, fontSize: 12, color: 'var(--warning)' }}>
               {result.warnings.map((w) => <div key={w}>⚠ {w}</div>)}
@@ -768,6 +1097,8 @@ function NetProfitPage({ filters }) {
           )}
         </>
       )}
+      {view === 'dias' && !loading && params && <NpDaily filters={filters} params={params} cur={cur}/>}
+      {view === 'produtos' && !loading && <NpProducts rows={result.products || []} cur={cur}/>}
       {view === 'afiliados' && !loading && <NpAffiliates rows={result.affiliates} cur={cur}/>}
       {view === 'projecoes' && !loading && (
         <NpScenarios scenarios={scenarios} current={k} cur={cur} busy={busy} onDelete={deleteScenario}
@@ -776,7 +1107,8 @@ function NetProfitPage({ filters }) {
 
       {drawer && params && (
         <NpParamsDrawer params={params} setParam={setParam} setParams={setParams} obs={result?.observedProductCostPct} platforms={platforms}
-          dirty={dirty} busy={busy} onSave={saveParams} onSaveScenario={saveScenario}
+          salesbound={result?.salesbound} history={history}
+          dirty={dirty} busy={busy} onSave={saveParams} onSaveScenario={saveScenario} onImportSalesbound={importSalesbound}
           onReset={() => setParams(savedParams)} onClose={() => setDrawer(false)}/>
       )}
     </div>

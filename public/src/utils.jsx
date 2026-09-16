@@ -217,6 +217,8 @@ function Icon({ name, size = 16, stroke = 1.5, className = '' }) {
     'search': ['M11 19a8 8 0 1 0 0-16 8 8 0 0 0 0 16Z','m21 21-4.3-4.3'],
     'calendar': ['M3 4h18v18H3z','M16 2v4','M8 2v4','M3 10h18'],
     'download': ['M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4','M7 10l5 5 5-5','M12 15V3'],
+    'upload': ['M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4','M17 8l-5-5-5 5','M12 3v12'],
+    'sliders': ['M4 21v-7','M4 10V3','M12 21v-9','M12 8V3','M20 21v-5','M20 12V3','M1 14h6','M9 8h6','M17 16h6'],
     'arrow-up-right': ['M7 17 17 7','M7 7h10v10'],
     'arrow-down-right': ['M7 7l10 10','M17 7v10H7'],
     'check': ['M20 6 9 17l-5-5'],
