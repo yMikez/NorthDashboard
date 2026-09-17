@@ -2,11 +2,15 @@
 // (parceira de cross-sell). FASE 1: CAPTURA.
 //
 // A URL vai direto pra eles (sem n8n): GET com macros na querystring ou
-// POST JSON/form — tudo é aceito. Auth = `token` na querystring (postback
-// não manda header), comparado em tempo constante com
-// SALESBOUND_POSTBACK_TOKEN (env) ou o setting salesbound.postbackToken
-// (IntegrationSetting, gravado via PUT /api/admin/integration-settings).
+// POST JSON/form — tudo é aceito. Auth = `token` na querystring, no header
+// X-Postback-Token OU NO CORPO (o CRM deles manda `"token"` dentro do JSON
+// e não aceita querystring — pedido deles em 2026-09-17), comparado em
+// tempo constante com SALESBOUND_POSTBACK_TOKEN (env) ou o setting
+// salesbound.postbackToken (IntegrationSetting, gravado via
+// PUT /api/admin/integration-settings).
 // Também aceita X-Ingest-Secret (testes manuais internos).
+// O token NUNCA é gravado: parseSalesboundPostback tira as chaves de segredo
+// do payload antes de salvar.
 //
 // Grava UM IngestLog por request (platformSlug 'salesbound', eventType e
 // externalId extraídos do que der; payload = query + body + _meta) e
@@ -24,7 +28,7 @@ import { db } from '@/lib/db';
 import { checkIngestSecret } from '@/lib/ingest/auth';
 import { checkIntegrationKey } from '@/lib/services/affiliateIntegrationHandlers';
 import { getSalesboundPostbackToken } from '@/lib/services/integrationSettings';
-import { parseSalesboundBody, parseSalesboundPostback } from '@/lib/connectors/salesbound/ingest';
+import { parseSalesboundBody, parseSalesboundPostback, tokenFromBody } from '@/lib/connectors/salesbound/ingest';
 import { logger } from '@/lib/logger';
 
 export const runtime = 'nodejs';
@@ -38,12 +42,7 @@ async function capture(req: Request): Promise<NextResponse> {
   if (!expected) {
     return NextResponse.json({ error: 'postback não configurado no servidor' }, { status: 503 });
   }
-  const token = url.searchParams.get('token') ?? req.headers.get('x-postback-token');
-  const internal = req.headers.get('x-ingest-secret');
-  if (!checkIntegrationKey(token, expected) && !(internal && checkIngestSecret(internal))) {
-    return NextResponse.json({ error: 'unauthorized' }, { status: 401 });
-  }
-
+  // O corpo é lido ANTES da autenticação porque o token pode vir nele.
   let raw = '';
   if (req.method !== 'GET' && req.method !== 'HEAD') {
     raw = await req.text();
@@ -53,6 +52,13 @@ async function capture(req: Request): Promise<NextResponse> {
   }
   const contentType = req.headers.get('content-type');
   const body = parseSalesboundBody(raw, contentType);
+
+  const token = url.searchParams.get('token') ?? req.headers.get('x-postback-token') ?? tokenFromBody(body);
+  const internal = req.headers.get('x-ingest-secret');
+  if (!checkIntegrationKey(token, expected) && !(internal && checkIngestSecret(internal))) {
+    logger.warn({ platform: 'salesbound', method: req.method, hasToken: Boolean(token), source: url.searchParams.get('token') ? 'query' : req.headers.get('x-postback-token') ? 'header' : tokenFromBody(body) ? 'body' : 'nenhum' }, 'salesbound postback unauthorized');
+    return NextResponse.json({ error: 'unauthorized' }, { status: 401 });
+  }
   const query = Object.fromEntries(url.searchParams);
   const capture = parseSalesboundPostback(query, body, {
     method: req.method,

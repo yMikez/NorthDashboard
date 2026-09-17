@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { parseSalesboundBody, parseSalesboundPostback } from './ingest';
+import { parseSalesboundBody, parseSalesboundPostback, tokenFromBody } from './ingest';
 
 const meta = { method: 'GET', contentType: null, userAgent: 'SalesBound/1.0', ip: '1.2.3.4' };
 
@@ -45,5 +45,27 @@ describe('parseSalesboundPostback', () => {
   it('status como fallback de evento quando não há event/type; type como alternativa a event', () => {
     expect(parseSalesboundPostback({ status: 'APPROVED', id: '9' }, {}, meta)).toMatchObject({ eventType: 'approved', externalId: '9' });
     expect(parseSalesboundPostback({}, { type: 'Chargeback', txid: 'T1' }, meta)).toMatchObject({ eventType: 'chargeback', externalId: 'T1' });
+  });
+  it('webhook real do CRM (2026-09-17): id é a TRANSAÇÃO (chave do razão), não o pedido; token fora do payload', () => {
+    const c = parseSalesboundPostback({}, {
+      orderId: '74916789FB', transactionId: '280035', campaignName: 'Salesbound - Phone Sales Team',
+      emailAddress: 'x@y.com', totalPrice: '294.00', product1_name: 'Glyco Pulse - 1 Bottle',
+      token: '77bdcaf6768234d4adb87ecff61353b6efbb2e15a4a7f3b5',
+    }, { ...meta, method: 'POST', contentType: 'application/json' });
+    expect(c.externalId).toBe('280035');
+    expect(c.eventType).toBe('unknown');   // o CRM não manda tipo de evento
+    expect(c.payload).not.toHaveProperty('token');
+    expect(c.payload).toMatchObject({ orderId: '74916789FB', totalPrice: '294.00' });
+  });
+});
+
+describe('tokenFromBody', () => {
+  it('lê o token do CORPO (o CRM deles não manda querystring) só nas chaves de segredo', () => {
+    expect(tokenFromBody({ orderId: 'A', token: ' abc ' })).toBe('abc');
+    expect(tokenFromBody({ postback_token: 'xyz' })).toBe('xyz');
+    expect(tokenFromBody({ Token: 'maiusculo' })).toBe('maiusculo');
+    expect(tokenFromBody({ orderId: 'A' })).toBeNull();
+    expect(tokenFromBody({ token: '' })).toBeNull();
+    expect(tokenFromBody({ token: 123 })).toBeNull();   // só string conta
   });
 });

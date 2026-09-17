@@ -18,8 +18,11 @@ export interface SalesboundCapture {
 
 // Chaves candidatas, em ordem de preferência (case-insensitive).
 const EVENT_KEYS = ['event', 'event_type', 'eventtype', 'type', 'txn_type', 'transaction_type', 'status', 'action'];
-const ID_KEYS = ['order_id', 'orderid', 'transaction_id', 'transactionid', 'txn_id', 'txid', 'invoice', 'invoice_id', 'sale_id', 'order', 'id'];
-const SECRET_KEYS = new Set(['token', 'secret', 'api_key', 'apikey']);
+// A transação vem primeiro: no CRM deles um orderId junta várias transações
+// (venda + reembolsos) e o transactionId é a chave única do razão
+// (SalesboundTransaction, mesma do export CSV).
+const ID_KEYS = ['transaction_id', 'transactionid', 'txn_id', 'txid', 'order_id', 'orderid', 'invoice', 'invoice_id', 'sale_id', 'order', 'id'];
+const SECRET_KEYS = new Set(['token', 'secret', 'api_key', 'apikey', 'postback_token', 'auth_token']);
 
 function pick(obj: Record<string, unknown>, keys: string[]): string | null {
   const lower = new Map<string, unknown>();
@@ -28,6 +31,19 @@ function pick(obj: Record<string, unknown>, keys: string[]): string | null {
     const v = lower.get(k);
     if (v == null) continue;
     const s = typeof v === 'string' ? v.trim() : typeof v === 'number' ? String(v) : '';
+    if (s) return s;
+  }
+  return null;
+}
+
+/**
+ * Token mandado DENTRO do corpo (o CRM da SalesBound põe `"token"` no JSON e
+ * não manda querystring). Só chaves de segredo conhecidas, string não-vazia.
+ */
+export function tokenFromBody(body: Record<string, unknown>): string | null {
+  for (const [k, v] of Object.entries(body)) {
+    if (!SECRET_KEYS.has(k.toLowerCase())) continue;
+    const s = typeof v === 'string' ? v.trim() : '';
     if (s) return s;
   }
   return null;
