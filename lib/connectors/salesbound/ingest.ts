@@ -18,10 +18,14 @@ export interface SalesboundCapture {
 
 // Chaves candidatas, em ordem de preferência (case-insensitive).
 const EVENT_KEYS = ['event', 'event_type', 'eventtype', 'type', 'txn_type', 'transaction_type', 'status', 'action'];
-// A transação vem primeiro: no CRM deles um orderId junta várias transações
-// (venda + reembolsos) e o transactionId é a chave única do razão
-// (SalesboundTransaction, mesma do export CSV).
-const ID_KEYS = ['transaction_id', 'transactionid', 'txn_id', 'txid', 'order_id', 'orderid', 'invoice', 'invoice_id', 'sale_id', 'order', 'id'];
+// ATENÇÃO — os nomes do webhook deles são INVERTIDOS em relação ao export CSV
+// (confirmado nos eventos reais de 2026-09-17):
+//   webhook orderId (279415)        = export transactionId  ← chave ÚNICA do razão
+//   webhook clientOrderID (3ABA…DD) = export orderId (agrupa venda + estornos)
+//   webhook transactionId (1256…87) = export txnId (id do gateway; REPETE —
+//                                     2.256 valores em 2.369 linhas do export)
+// Por isso `orderId` vem primeiro: é ele que casa 1-pra-1 com SalesboundTransaction.
+const ID_KEYS = ['order_id', 'orderid', 'transaction_id', 'transactionid', 'txn_id', 'txid', 'invoice', 'invoice_id', 'sale_id', 'order', 'id'];
 const SECRET_KEYS = new Set(['token', 'secret', 'api_key', 'apikey', 'postback_token', 'auth_token']);
 
 function pick(obj: Record<string, unknown>, keys: string[]): string | null {

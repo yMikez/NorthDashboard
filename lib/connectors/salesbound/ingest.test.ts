@@ -46,16 +46,23 @@ describe('parseSalesboundPostback', () => {
     expect(parseSalesboundPostback({ status: 'APPROVED', id: '9' }, {}, meta)).toMatchObject({ eventType: 'approved', externalId: '9' });
     expect(parseSalesboundPostback({}, { type: 'Chargeback', txid: 'T1' }, meta)).toMatchObject({ eventType: 'chargeback', externalId: 'T1' });
   });
-  it('webhook real do CRM (2026-09-17): id é a TRANSAÇÃO (chave do razão), não o pedido; token fora do payload', () => {
+  // Payload real recebido em 2026-09-17: o `orderId` DELES é a transação do
+  // CRM (= transactionId do export CSV) e o `transactionId` é o id do gateway,
+  // que repete. O índice tem que ser o orderId.
+  it('webhook real do CRM: indexa pelo orderId (chave do razão), não pelo id do gateway; token fora do payload', () => {
     const c = parseSalesboundPostback({}, {
-      orderId: '74916789FB', transactionId: '280035', campaignName: 'Salesbound - Phone Sales Team',
-      emailAddress: 'x@y.com', totalPrice: '294.00', product1_name: 'Glyco Pulse - 1 Bottle',
+      orderId: 279415, clientOrderID: '3ABA6A99DD', transactionId: '12569839087', clientTxnId: '67FAC581C1A7',
+      campaignName: 'Salesbound - Phone Sales Team', emailAddress: 'x@y.com', totalPrice: '282.00',
+      dateCreated: '2026-09-17 16:23:08', product1_name: 'NeuroRecall - 1 Bottle', product1_crmId: '601',
       token: '77bdcaf6768234d4adb87ecff61353b6efbb2e15a4a7f3b5',
     }, { ...meta, method: 'POST', contentType: 'application/json' });
-    expect(c.externalId).toBe('280035');
+    expect(c.externalId).toBe('279415');
     expect(c.eventType).toBe('unknown');   // o CRM não manda tipo de evento
     expect(c.payload).not.toHaveProperty('token');
-    expect(c.payload).toMatchObject({ orderId: '74916789FB', totalPrice: '294.00' });
+    expect(c.payload).toMatchObject({ clientOrderID: '3ABA6A99DD', totalPrice: '282.00' });
+  });
+  it('transação sem passagem pelo gateway (valor 0) não tem transactionId — cai no orderId igual', () => {
+    expect(parseSalesboundPostback({}, { orderId: 276449, clientOrderID: '8102DFAECD', totalPrice: '0.00' }, meta).externalId).toBe('276449');
   });
 });
 
