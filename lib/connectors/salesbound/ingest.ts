@@ -18,14 +18,20 @@ export interface SalesboundCapture {
 
 // Chaves candidatas, em ordem de preferência (case-insensitive).
 const EVENT_KEYS = ['event', 'event_type', 'eventtype', 'type', 'txn_type', 'transaction_type', 'status', 'action'];
-// ATENÇÃO — os nomes do webhook deles são INVERTIDOS em relação ao export CSV
-// (confirmado nos eventos reais de 2026-09-17):
-//   webhook orderId (279415)        = export transactionId  ← chave ÚNICA do razão
-//   webhook clientOrderID (3ABA…DD) = export orderId (agrupa venda + estornos)
-//   webhook transactionId (1256…87) = export txnId (id do gateway; REPETE —
-//                                     2.256 valores em 2.369 linhas do export)
-// Por isso `orderId` vem primeiro: é ele que casa 1-pra-1 com SalesboundTransaction.
-const ID_KEYS = ['order_id', 'orderid', 'transaction_id', 'transactionid', 'txn_id', 'txid', 'invoice', 'invoice_id', 'sale_id', 'order', 'id'];
+// ATENÇÃO — os nomes do webhook NÃO batem com os do export CSV (conferido nos
+// eventos reais e nas 2.369 linhas do export, 2026-09-17):
+//   webhook clientTxnId (67FA…A7)  = export clientTxnId  ← por TRANSAÇÃO
+//                                    (2.365 únicos em 2.369 linhas, 4 vazios)
+//   webhook clientOrderID (3ABA…DD)= export orderId (agrupa venda + estornos)
+//   webhook transactionId (1256…87)= export txnId, id do GATEWAY: repete
+//                                    (2.255 únicos, 60 vazios)
+//   webhook orderId (279415)       = id do PEDIDO no CRM (a sequência das URLs
+//                                    do export, 16529→275123) — NÃO é a linha
+//                                    de transação (export transactionId, 9527→280035)
+// Ou seja: o export NÃO traz o `orderId` do webhook como coluna, e o webhook
+// não traz o `transactionId` do export. A ponte entre os dois é o clientTxnId,
+// por isso ele indexa o log.
+const ID_KEYS = ['client_txn_id', 'clienttxnid', 'transaction_id', 'transactionid', 'txn_id', 'txid', 'order_id', 'orderid', 'invoice', 'invoice_id', 'sale_id', 'order', 'id'];
 const SECRET_KEYS = new Set(['token', 'secret', 'api_key', 'apikey', 'postback_token', 'auth_token']);
 
 function pick(obj: Record<string, unknown>, keys: string[]): string | null {
