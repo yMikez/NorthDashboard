@@ -7,7 +7,7 @@
 import { NextResponse } from 'next/server';
 import { requireAdmin } from '@/lib/auth/guard';
 import { checkIngestSecret } from '@/lib/ingest/auth';
-import { importSalesboundCsv, salesboundBreakdown, salesboundCoverage, salesboundRows } from '@/lib/services/salesboundLedger';
+import { importSalesboundCsv, salesboundBreakdown, salesboundCallCenterRows, salesboundCoverage, salesboundRows } from '@/lib/services/salesboundLedger';
 import { clearNetProfitInputsCache } from '@/lib/services/netProfit';
 import { logger } from '@/lib/logger';
 
@@ -33,7 +33,37 @@ export async function GET(req: Request) {
   const breakdown = from && to ? await salesboundBreakdown(new Date(from), new Date(to)) : null;
   // &detail=1 → as linhas do período (pra cruzar pedido × fonte).
   const rows = from && to && searchParams.get('detail') ? await salesboundRows(new Date(from), new Date(to)) : null;
-  return NextResponse.json({ coverage: await salesboundCoverage(), ...(breakdown ? { breakdown } : {}), ...(rows ? { rows } : {}) });
+  // &cc=1 → o mesmo que a aba Call Center enxerga (venda com estorno já
+  // abatido, lente de coorte), resumido — confere a conversão sem precisar
+  // de sessão de usuário.
+  let cc = null;
+  if (from && to && searchParams.get('cc')) {
+    const ccRows = await salesboundCallCenterRows(new Date(from), new Date(to));
+    const approved = ccRows.filter((r) => r.status === 'APPROVED');
+    const n2 = (v: number) => Math.round(v * 100) / 100;
+    const group = (key: (r: (typeof ccRows)[number]) => string | null) => {
+      const m = new Map<string, { sales: number; usd: number }>();
+      for (const r of approved) {
+        const k = key(r) ?? '—';
+        const cur = m.get(k) ?? { sales: 0, usd: 0 };
+        cur.sales++; cur.usd += Math.max(0, r.amountUsd - (r.refundedUsd ?? 0));
+        m.set(k, cur);
+      }
+      return [...m.entries()].sort((a, b) => b[1].usd - a[1].usd).map(([k, v]) => ({ key: k, sales: v.sales, usd: n2(v.usd) }));
+    };
+    cc = {
+      rows: ccRows.length,
+      approved: approved.length,
+      reversed: ccRows.length - approved.length,
+      voided: ccRows.filter((r) => r.voided).length,
+      grossUsd: n2(approved.reduce((s, r) => s + Math.max(0, r.amountUsd - (r.refundedUsd ?? 0)), 0)),
+      refundedUsd: n2(ccRows.reduce((s, r) => s + (r.refundedUsd ?? 0), 0)),
+      bySource: group((r) => r.sourcePlatform),
+      byAgent: group((r) => r.agentName).slice(0, 10),
+      byFamily: group((r) => r.family).slice(0, 10),
+    };
+  }
+  return NextResponse.json({ coverage: await salesboundCoverage(), ...(breakdown ? { breakdown } : {}), ...(rows ? { rows } : {}), ...(cc ? { cc } : {}) });
 }
 
 export async function POST(req: Request) {
