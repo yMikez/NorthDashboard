@@ -7,7 +7,7 @@
 import { NextResponse } from 'next/server';
 import { requireAdmin } from '@/lib/auth/guard';
 import { checkIngestSecret } from '@/lib/ingest/auth';
-import { importSalesboundCsv, salesboundBreakdown, salesboundCoverage } from '@/lib/services/salesboundLedger';
+import { importSalesboundCsv, salesboundBreakdown, salesboundCoverage, salesboundRows } from '@/lib/services/salesboundLedger';
 import { clearNetProfitInputsCache } from '@/lib/services/netProfit';
 import { logger } from '@/lib/logger';
 
@@ -31,7 +31,9 @@ export async function GET(req: Request) {
   const to = searchParams.get('to');
   // ?from=&to= (ISO ou YYYY-MM-DD) → o que cada fonte pôs no razão, por dia.
   const breakdown = from && to ? await salesboundBreakdown(new Date(from), new Date(to)) : null;
-  return NextResponse.json({ coverage: await salesboundCoverage(), ...(breakdown ? { breakdown } : {}) });
+  // &detail=1 → as linhas do período (pra cruzar pedido × fonte).
+  const rows = from && to && searchParams.get('detail') ? await salesboundRows(new Date(from), new Date(to)) : null;
+  return NextResponse.json({ coverage: await salesboundCoverage(), ...(breakdown ? { breakdown } : {}), ...(rows ? { rows } : {}) });
 }
 
 export async function POST(req: Request) {

@@ -3,7 +3,31 @@
     "allow": [
       "WebFetch(domain:support.clickbank.com)",
       "WebFetch(domain:dev.digistore24.com)",
-      "Bash(echo \"esbuild $?\")"
+      "Bash(echo \"esbuild $?\")",
+      "Bash(npx tsc *)",
+      "Bash(npx vitest *)",
+      "Bash(node scripts/build-spa.mjs)",
+      "Bash(npx next *)",
+      "Bash(npx prisma *)",
+      "Bash(python -c ' *)",
+      "Bash(node -e ' *)",
+      "Bash(git add *)",
+      "Bash(git commit -m ' *)",
+      "Bash(git push *)",
+      "Bash(gh run *)",
+      "Bash(curl -s -o /dev/null -w \"ingest sem secret: %{http_code}\\\\n\" -X POST -H \"Content-Type: application/json\" -d '{}' https://dash.thenorthscales.com/api/ingest/sms-events)",
+      "Bash(curl -s -o /dev/null -w \"metrics sem sessão: %{http_code}\\\\n\" \"https://dash.thenorthscales.com/api/metrics/sms?start_date=2026-07-01&end_date=2026-07-09\")",
+      "Bash(curl -s -o /dev/null -w \"tauk sem secret: %{http_code}\\\\n\" -X POST -H \"Content-Type: application/json\" -d '{}' https://dash.thenorthscales.com/api/ingest/tauk)",
+      "Bash(curl -s -o /dev/null -w \"health: %{http_code}\\\\n\" https://dash.thenorthscales.com/api/health)",
+      "Bash(gh api *)",
+      "Bash(gh workflow *)",
+      "Bash(curl -s -w \"\\\\nhttp %{http_code}\\\\n\" -X POST -H \"Content-Type: application/json\" -d '{}' https://dash.thenorthscales.com/api/ingest/sms-events)",
+      "Bash(curl -s -w '\\\\nhttp %{http_code}\\\\n' -X POST -H 'Content-Type: application/json' -H 'x-ingest-secret: __TRACKED_VAR__' -d '{\"event_type\":\"smoke_test_claude\"}' https://dash.thenorthscales.com/api/ingest/sms-events)",
+      "Bash(curl -s -o /dev/null -w \"http %{http_code}\\\\n\" \"https://dash.thenorthscales.com/api/metrics/sms?start_date=2026-07-01&end_date=2026-07-09\")",
+      "Bash(sed -n 's/^INGEST_SECRET=\"\\\\\\(.*\\\\\\)\"/\\\\1/p' .env)",
+      "Bash(curl -s -H 'Authorization: Bearer __TRACKED_VAR__' 'https://dash.thenorthscales.com/api/admin/ingest-logs?platform=digistore24&limit=3')",
+      "Bash(curl -s -H 'Authorization: Bearer __TRACKED_VAR__' https://dash.thenorthscales.com/api/admin/ingest-logs?id=cmrfbkt270oou60l9ydxrlg1l)",
+      "Bash(curl -s -w '\\\\nhttp %{http_code}\\\\n' -X POST -H 'Authorization: Bearer __TRACKED_VAR__' https://dash.thenorthscales.com/api/admin/backfill-utm-tracking)"
     ]
   }
 }

@@ -254,6 +254,16 @@ export async function salesboundBreakdown(start: Date, end: Date): Promise<Sales
   return rows.map((r) => ({ day: r.day, source: r.source, type: r.type, n: Number(r.n), usd: Math.round(Number(r.usd) * 100) / 100 }));
 }
 
+/** Auditoria linha a linha (pra cruzar pedido × fonte quando algo não bate). */
+export async function salesboundRows(start: Date, end: Date, take = 300) {
+  const rows = await db.salesboundTransaction.findMany({
+    where: { txnAt: { gte: start, lte: end } },
+    select: { transactionId: true, clientTxnId: true, source: true, orderId: true, type: true, result: true, amountUsd: true, txnAt: true, email: true, family: true },
+    orderBy: { txnAt: 'asc' }, take,
+  });
+  return rows.map((r) => ({ ...r, amountUsd: Number(r.amountUsd), txnAt: r.txnAt.toISOString() }));
+}
+
 /** Cobertura do razão (null = vazio → canal cai no manual). */
 export async function salesboundCoverage(): Promise<SalesboundCoverage | null> {
   const [row] = await db.$queryRaw<Array<{ first: Date | null; last: Date | null; imported: Date | null; csv_last: Date | null; webhook_last: Date | null; webhook_n: bigint }>>(Prisma.sql`
