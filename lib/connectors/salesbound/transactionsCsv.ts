@@ -20,7 +20,16 @@
 import { wallClockToUtc } from '../../shared/datetime';
 import { classifyProduct } from '../../services/productClassification';
 
+// Fuso do WEBHOOK (dateCreated): America/New_York. Confirmado pela hora de
+// chegada — o CRM posta 21–26 min depois do evento; com qualquer fuso mais a
+// oeste o evento chegaria "antes de acontecer".
 export const SALESBOUND_TIMEZONE = 'America/New_York';
+
+// Fuso do EXPORT (coluna date): America/Chicago — UMA HORA ATRÁS do webhook.
+// Descoberto em 2026-09-18 cruzando 15 transações que vieram pelas duas fontes:
+// mesmo pedido, mesmo valor, hora do CSV sempre 1h (e 1–2 s) antes da do
+// webhook, que é a âncora. Tratar o export como Eastern gravava tudo 1h adiantado.
+export const SALESBOUND_CSV_TIMEZONE = 'America/Chicago';
 
 export interface SalesboundItem { name: string; sku: string | null; qty: number; price: number; family: string | null; bottles: number | null }
 
@@ -116,7 +125,7 @@ export function parseSalesboundTransactionsCsv(text: string): SalesboundCsvParse
     const date = (r[0] ?? '').trim();
     if (!date || /^total$/i.test(date)) continue;          // vazio / rodapé
     const line = i + 1;
-    const txnAt = wallClockToUtc(date, SALESBOUND_TIMEZONE);
+    const txnAt = wallClockToUtc(date, SALESBOUND_CSV_TIMEZONE);
     if (!txnAt) { skipped.push({ line, reason: `data inválida: ${date.slice(0, 40)}` }); continue; }
     const transactionId = str(get(r, 'transactionId'));
     const orderId = str(get(r, 'orderId'));

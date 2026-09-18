@@ -34,8 +34,10 @@ describe('parseSalesboundTransactionsCsv', () => {
     expect(refund.items.map((i) => [i.name, i.qty, i.price])).toEqual([['Glyco Pulse - 1 Bottle', 12, 540], ['Thermoburn Pro - 1 Bottle', 18, 810]]);
     expect(r.rows[1]).toMatchObject({ type: 'SALE', result: 'HARD_DECLINE', amountUsd: 348, sourcePlatform: 'jvzoo' });
   });
-  it('data é wall clock America/New_York (EDT = UTC−4)', () => {
-    expect(r.rows[0].txnAt.toISOString()).toBe('2026-09-16T02:52:29.000Z');
+  // O export vem 1h atrás do webhook (America/Chicago) — ver comentário no
+  // parser: 15 transações que chegaram pelas duas fontes provaram isso.
+  it('data do export é wall clock America/Chicago (CDT = UTC−5)', () => {
+    expect(r.rows[0].txnAt.toISOString()).toBe('2026-09-16T03:52:29.000Z');
   });
   it('arquivo sem o cabeçalho do export → nenhuma linha e motivo', () => {
     const bad = parseSalesboundTransactionsCsv('a,b,c\n1,2,3');

@@ -191,10 +191,16 @@ export async function recordSalesboundWebhook(payload: Record<string, unknown>):
  *
  * Existe por causa dos exports importados antes de a coluna `clientTxnId`
  * existir: sem ela a reconciliação por chave não acha o par, e a mesma venda
- * ficaria contada duas vezes (uma por fonte). Casa por pedido + instante +
- * valor + tipo, copia o clientTxnId pra linha do export (assim os próximos
- * imports reconciliam sozinhos) e apaga a do webhook.
+ * ficaria contada duas vezes (uma por fonte). Casa por pedido + valor + tipo,
+ * com TOLERÂNCIA no instante (as duas fontes vêm em fusos diferentes e o
+ * relógio delas difere 1–2 s), copia o clientTxnId pra linha do export (assim
+ * os próximos imports reconciliam sozinhos) e apaga a do webhook.
+ *
+ * Quem manda na hora é o WEBHOOK (ancorado pela chegada): se a linha do export
+ * estiver com outro instante, ela adota o do webhook — conserta as linhas
+ * importadas quando o parser ainda tratava o export como Eastern.
  */
+const MERGE_TOLERANCE_MS = 100 * 60_000;
 export async function mergeWebhookIntoCsv(dryRun = false): Promise<{ candidates: number; merged: number; pairs: Array<{ clientTxnId: string | null; orderId: string; txnAt: string; amountUsd: number }> }> {
   const webhookRows = await db.salesboundTransaction.findMany({
     where: { source: 'webhook' },
@@ -203,16 +209,31 @@ export async function mergeWebhookIntoCsv(dryRun = false): Promise<{ candidates:
   const pairs: Array<{ clientTxnId: string | null; orderId: string; txnAt: string; amountUsd: number }> = [];
   let merged = 0;
   for (const w of webhookRows) {
-    const twin = await db.salesboundTransaction.findFirst({
-      where: { source: 'csv', orderId: w.orderId, txnAt: w.txnAt, amountUsd: w.amountUsd, type: w.type },
-      select: { id: true, clientTxnId: true },
+    const candidates = await db.salesboundTransaction.findMany({
+      where: {
+        source: 'csv', orderId: w.orderId, amountUsd: w.amountUsd, type: w.type,
+        txnAt: { gte: new Date(w.txnAt.getTime() - MERGE_TOLERANCE_MS), lte: new Date(w.txnAt.getTime() + MERGE_TOLERANCE_MS) },
+      },
+      select: { id: true, clientTxnId: true, txnAt: true, saleAt: true },
     });
+    // O mais próximo no tempo; e nunca uma linha que já é par de outro webhook.
+    const twin = candidates
+      .filter((c) => !c.clientTxnId || c.clientTxnId === w.clientTxnId)
+      .sort((a, b) => Math.abs(a.txnAt.getTime() - w.txnAt.getTime()) - Math.abs(b.txnAt.getTime() - w.txnAt.getTime()))[0];
     if (!twin) continue;
     pairs.push({ clientTxnId: w.clientTxnId, orderId: w.orderId, txnAt: w.txnAt.toISOString(), amountUsd: Number(w.amountUsd) });
     if (dryRun) continue;
+    const sameSaleAt = twin.saleAt && twin.txnAt.getTime() === twin.saleAt.getTime();
     await db.$transaction([
       db.salesboundTransaction.delete({ where: { id: w.id } }),
-      ...(twin.clientTxnId ? [] : [db.salesboundTransaction.update({ where: { id: twin.id }, data: { clientTxnId: w.clientTxnId } })]),
+      db.salesboundTransaction.update({
+        where: { id: twin.id },
+        data: {
+          ...(twin.clientTxnId ? {} : { clientTxnId: w.clientTxnId }),
+          // a hora boa é a do webhook (ancorada pela chegada do evento)
+          ...(twin.txnAt.getTime() !== w.txnAt.getTime() ? { txnAt: w.txnAt, ...(sameSaleAt ? { saleAt: w.txnAt } : {}) } : {}),
+        },
+      }),
     ]);
     merged++;
   }
