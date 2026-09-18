@@ -133,6 +133,9 @@ export async function importSalesboundCsv(text: string): Promise<SalesboundImpor
     lastAt: times.length ? new Date(Math.max(...times)).toISOString() : null,
   };
   logger.info({ ...result, skipped: parsed.skipped.length }, '[salesbound] export importado');
+  // Export antigo (sem clientTxnId gravado) pode ter deixado par duplicado.
+  const dedupe = await mergeWebhookIntoCsv();
+  result.reconciled += dedupe.merged;
   return result;
 }
 
@@ -183,6 +186,40 @@ export async function recordSalesboundWebhook(payload: Record<string, unknown>):
   return { status: 'created', clientTxnId: sale.clientTxnId, type: sale.type, amountUsd: sale.amountUsd };
 }
 
+/**
+ * Junta linha de webhook com a linha do export que for a MESMA transação.
+ *
+ * Existe por causa dos exports importados antes de a coluna `clientTxnId`
+ * existir: sem ela a reconciliação por chave não acha o par, e a mesma venda
+ * ficaria contada duas vezes (uma por fonte). Casa por pedido + instante +
+ * valor + tipo, copia o clientTxnId pra linha do export (assim os próximos
+ * imports reconciliam sozinhos) e apaga a do webhook.
+ */
+export async function mergeWebhookIntoCsv(dryRun = false): Promise<{ candidates: number; merged: number; pairs: Array<{ clientTxnId: string | null; orderId: string; txnAt: string; amountUsd: number }> }> {
+  const webhookRows = await db.salesboundTransaction.findMany({
+    where: { source: 'webhook' },
+    select: { id: true, clientTxnId: true, orderId: true, txnAt: true, amountUsd: true, type: true },
+  });
+  const pairs: Array<{ clientTxnId: string | null; orderId: string; txnAt: string; amountUsd: number }> = [];
+  let merged = 0;
+  for (const w of webhookRows) {
+    const twin = await db.salesboundTransaction.findFirst({
+      where: { source: 'csv', orderId: w.orderId, txnAt: w.txnAt, amountUsd: w.amountUsd, type: w.type },
+      select: { id: true, clientTxnId: true },
+    });
+    if (!twin) continue;
+    pairs.push({ clientTxnId: w.clientTxnId, orderId: w.orderId, txnAt: w.txnAt.toISOString(), amountUsd: Number(w.amountUsd) });
+    if (dryRun) continue;
+    await db.$transaction([
+      db.salesboundTransaction.delete({ where: { id: w.id } }),
+      ...(twin.clientTxnId ? [] : [db.salesboundTransaction.update({ where: { id: twin.id }, data: { clientTxnId: w.clientTxnId } })]),
+    ]);
+    merged++;
+  }
+  if (pairs.length) logger.info({ candidates: pairs.length, merged, dryRun }, '[salesbound] webhook × export: linhas duplicadas juntadas');
+  return { candidates: pairs.length, merged, pairs: pairs.slice(0, 20) };
+}
+
 /** Reprocessa os IngestLogs do postback pro razão (nada se perde na fase 1). */
 export async function replaySalesboundLogs(limit = 500): Promise<{ logs: number; created: number; updated: number; keptCsv: number; skipped: number }> {
   const logs = await db.ingestLog.findMany({
@@ -199,6 +236,7 @@ export async function replaySalesboundLogs(limit = 500): Promise<{ logs: number;
     else out.skipped++;
   }
   logger.info(out, '[salesbound] replay dos logs do postback');
+  await mergeWebhookIntoCsv();
   return out;
 }
 
