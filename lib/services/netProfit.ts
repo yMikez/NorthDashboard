@@ -403,7 +403,7 @@ export async function computeNeeds(inputs: NetProfitInputs, params: NetProfitPar
       format: importFormat,
     });
   }
-  if (params.commissionPct.salesbound == null && (sb || params.salesbound.grossUsd > 0)) needs.push({ key: 'salesbound.commission', severity: 'required', title: 'SalesBound: parcela do parceiro', detail: 'Percentual do bruto que fica com a SalesBound (a NorthScale fica com o resto).', format: 'Parâmetros → Parcela dos parceiros → SalesBound: % (ex.: 50).' });
+  if (params.commissionPct.salesbound == null && (sb || params.salesbound.grossUsd > 0)) needs.push({ key: 'salesbound.commission', severity: 'required', title: 'SalesBound: parcela do parceiro', detail: 'Percentual do bruto que fica com a SalesBound (a NorthScale fica com o resto).', format: 'Parâmetros → Parcela dos parceiros → SalesBound: % (acordo atual: 65).' });
   // Custo de produto: um % único (vendas de plataforma); sem ele, cada linha
   // usa o real observado dos snapshots. Backend não tem custo (parcela líquida).
   const obs = result.observedProductCostPct;

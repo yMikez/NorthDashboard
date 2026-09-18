@@ -44,6 +44,12 @@ Para o cálculo da margem, considerar somente a parcela pertencente à NorthScal
 
 - **Backend líquido total NorthScale:** **US$ 42.441,20**
 
+> **Correção de taxa — 2026-09-18 (regra §10.5):** a parcela real da SalesBound é
+> **65%**, ou seja, a NorthScale fica com **35%**, e não com os 50% usados no
+> exemplo acima. O dashboard já calcula com 65% (parâmetro da aba Lucro real e
+> `salesbound.commissionPct` nas Integrações). Os números deste exemplo foram
+> mantidos como estavam para não reescrever a memória do cálculo original.
+
 ---
 
 ## 2. Fórmulas

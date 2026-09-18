@@ -35,7 +35,7 @@ export const SETTING_KEYS = {
   // SalesBound (cross-sell): token do postback GET|POST /api/ingest/salesbound?token=
   salesboundPostbackToken: 'salesbound.postbackToken',
   // Parcela que a SalesBound leva sobre cada venda (a NorthScale fica com o
-  // resto). Sem isso, o dash assume 50% (o número do cálculo de margem).
+  // resto). Sem isso, o dash usa 65% — o acordo confirmado em 2026-09-18.
   salesboundCommissionPct: 'salesbound.commissionPct',
 } as const;
 
@@ -182,8 +182,9 @@ export async function getProviderCommission(
   const fromDb = parseSettingPercent(await getSetting(settingKey));
   if (fromDb != null) return { pct: fromDb, assumed: false, source: 'setting' };
   // Tauk: 35% é o acordo real (memória do projeto). Logicall: ainda não
-  // informado — assume o mesmo e marca como ASSUMIDO. SalesBound: 50% é o que
-  // o cálculo de margem usa (calculo_margem_northscale.md §2.6), também ASSUMIDO.
-  if (provider === 'salesbound') return { pct: 0.5, assumed: true, source: 'default' };
+  // informado — assume o mesmo e marca como ASSUMIDO. SalesBound: 65% é o
+  // acordo REAL (usuário confirmou em 2026-09-18; a NorthScale fica com 35%,
+  // e não com os 50% que o exemplo do calculo_margem_northscale.md usava).
+  if (provider === 'salesbound') return { pct: 0.65, assumed: false, source: 'default' };
   return { pct: DEFAULT_COMMISSION_PCT, assumed: provider !== 'tauk', source: 'default' };
 }

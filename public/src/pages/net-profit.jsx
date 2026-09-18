@@ -576,7 +576,7 @@ function NpParamsDrawer({ params, setParam, setParams, obs, platforms, salesboun
             <div style={grid2}>
               <NpField label="Tauk" hint={nsHint(params.commissionPct.tauk, 'cadastro')}><NpNum value={params.commissionPct.tauk} onChange={(v) => setParam(['commissionPct', 'tauk'], v)} placeholder="cadastro" max={100}/></NpField>
               <NpField label="Logicall" hint={nsHint(params.commissionPct.logicall, 'cadastro')}><NpNum value={params.commissionPct.logicall} onChange={(v) => setParam(['commissionPct', 'logicall'], v)} placeholder="cadastro" max={100}/></NpField>
-              <NpField label="SalesBound" hint={nsHint(params.commissionPct.salesbound, 'obrigatório')}><NpNum value={params.commissionPct.salesbound} onChange={(v) => setParam(['commissionPct', 'salesbound'], v)} placeholder="ex.: 50" max={100}/></NpField>
+              <NpField label="SalesBound" hint={nsHint(params.commissionPct.salesbound, 'obrigatório')}><NpNum value={params.commissionPct.salesbound} onChange={(v) => setParam(['commissionPct', 'salesbound'], v)} placeholder="ex.: 65" max={100}/></NpField>
               <div/>
               <div style={{ gridColumn: '1 / -1' }}>
                 <NpSwitch on={params.backendNetOfRefunds} onChange={(v) => setParam(['backendNetOfRefunds'], v)} label="Parcela calculada sobre o bruto menos estornos do parceiro"
