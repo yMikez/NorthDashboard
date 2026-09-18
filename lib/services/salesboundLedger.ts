@@ -261,6 +261,86 @@ export async function replaySalesboundLogs(limit = 500): Promise<{ logs: number;
   return out;
 }
 
+/**
+ * Razão → linhas no formato da aba Call Center (lente de COORTE, como o resto
+ * da aba: o estorno abate a venda que o gerou, na data da VENDA).
+ *
+ * O razão guarda venda, reembolso e void como linhas separadas; aqui elas
+ * viram uma linha por venda com `refundedUsd`. Void = venda anulada antes de
+ * capturar, então entra como estorno total.
+ */
+export interface SalesboundCcRow {
+  id: string;
+  provider: 'salesbound';
+  status: string;                  // APPROVED | REFUNDED
+  email: string | null;
+  firstName: string | null;
+  lastName: string | null;
+  phone: string | null;
+  amountUsd: number;
+  refundedUsd: number | null;
+  fulfillmentStatus: string | null; // a SalesBound não informa
+  productName: string | null;
+  family: string | null;
+  agentName: string | null;
+  purchasedAt: Date;
+  sourcePlatform: string | null;    // de onde veio o cliente
+  voided: boolean;
+}
+
+export async function salesboundCallCenterRows(start: Date, end: Date): Promise<SalesboundCcRow[]> {
+  const [sales, reversals] = await Promise.all([
+    db.salesboundTransaction.findMany({
+      where: { result: 'SUCCESS', type: 'SALE', txnAt: { gte: start, lte: end } },
+      select: { id: true, orderId: true, amountUsd: true, txnAt: true, email: true, agentName: true, family: true, items: true, sourcePlatform: true },
+      orderBy: { txnAt: 'asc' },
+    }),
+    // Estorno/void das vendas DO PERÍODO, mesmo que tenham acontecido depois.
+    db.salesboundTransaction.findMany({
+      where: { result: 'SUCCESS', type: { in: ['REFUND', 'VOID'] }, saleAt: { gte: start, lte: end } },
+      select: { orderId: true, type: true, amountUsd: true },
+    }),
+  ]);
+
+  // Um pedido pode ter vários estornos (parciais) e mais de uma venda: as
+  // vendas do pedido consomem esse bolo por ordem de data.
+  const backByOrder = new Map<string, { remaining: number; hadVoid: boolean }>();
+  for (const r of reversals) {
+    const cur = backByOrder.get(r.orderId) ?? { remaining: 0, hadVoid: false };
+    cur.remaining += Number(r.amountUsd);
+    if (r.type === 'VOID') cur.hadVoid = true;
+    backByOrder.set(r.orderId, cur);
+  }
+
+  return sales.map((s) => {
+    const amount = Number(s.amountUsd);
+    const back = backByOrder.get(s.orderId);
+    let refunded = 0; let voided = false;
+    if (back && back.remaining > 0) {
+      refunded = Math.min(amount, back.remaining);
+      back.remaining -= refunded;
+      voided = back.hadVoid && refunded >= amount;
+    }
+    const items = Array.isArray(s.items) ? (s.items as Array<{ name?: string; price?: number }>) : [];
+    const top = items.reduce<{ name?: string; price?: number } | null>((best, it) => (!best || (it.price ?? 0) > (best.price ?? 0) ? it : best), null);
+    const full = refunded >= amount && amount > 0;
+    return {
+      id: s.id, provider: 'salesbound' as const,
+      status: full ? 'REFUNDED' : 'APPROVED',
+      email: s.email, firstName: null, lastName: null, phone: null,
+      amountUsd: amount,
+      refundedUsd: refunded > 0 ? Math.round(refunded * 100) / 100 : null,
+      fulfillmentStatus: null,
+      productName: top?.name ?? null,
+      family: s.family,
+      agentName: s.agentName,
+      purchasedAt: s.txnAt,
+      sourcePlatform: s.sourcePlatform,
+      voided,
+    };
+  });
+}
+
 /** Auditoria: o que cada fonte colocou no razão, por dia (dia BRT). */
 export interface SalesboundDayStat { day: string; source: string; type: string; n: number; usd: number }
 

@@ -12,6 +12,7 @@ import { requireAdmin } from '@/lib/auth/guard';
 import { checkIngestSecret } from '@/lib/ingest/auth';
 import { mergeWebhookIntoCsv, replaySalesboundLogs, salesboundCoverage } from '@/lib/services/salesboundLedger';
 import { clearNetProfitInputsCache } from '@/lib/services/netProfit';
+import { db } from '@/lib/db';
 import { logger } from '@/lib/logger';
 
 export const runtime = 'nodejs';
@@ -31,6 +32,15 @@ export async function POST(req: Request) {
   const limitRaw = Number(searchParams.get('limit') ?? '500');
   const limit = Number.isFinite(limitRaw) ? Math.min(Math.max(Math.trunc(limitRaw), 1), 5000) : 500;
   try {
+    // ?purge=<clientTxnId> → tira UMA linha do razão (teste de saúde do
+    // endpoint, evento sabidamente errado). Não mexe no IngestLog.
+    const purge = searchParams.get('purge');
+    if (purge) {
+      const { count } = await db.salesboundTransaction.deleteMany({ where: { clientTxnId: purge } });
+      if (count) clearNetProfitInputsCache();
+      logger.warn({ clientTxnId: purge, count }, '[salesbound] linha do razão removida à mão');
+      return NextResponse.json({ ok: true, purged: count, clientTxnId: purge });
+    }
     if (searchParams.get('dedupe')) {
       const dry = searchParams.get('dry') === '1';
       const dedupe = await mergeWebhookIntoCsv(dry);

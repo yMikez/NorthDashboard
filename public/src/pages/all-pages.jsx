@@ -7615,8 +7615,9 @@ function fmtTaukWhen(iso) {
 // desde 2026-08-22). Substitui a TaukPage. Endpoint e id da tab seguem
 // 'tauk' (permissões dos usuários apontam pra ele).
 const CC_PROVIDER_META = {
-  tauk:     { label: 'Tauk',     color: 'var(--accent)' },
-  logicall: { label: 'Logicall', color: 'var(--warning)' },
+  tauk:       { label: 'Tauk',       color: 'var(--accent)' },
+  logicall:   { label: 'Logicall',   color: 'var(--warning)' },
+  salesbound: { label: 'SalesBound', color: 'var(--accent2)' },
 };
 
 function CcProviderBadge({ provider }) {
@@ -7656,14 +7657,14 @@ function CallCenterPage({ filters, user }) {
       <div className="page-head">
         <div className="lead">
           <span className="eyebrow">CAPTAÇÃO · CALL CENTER</span>
-          <h2>Call Center <em>· Tauk + Logicall</em></h2>
+          <h2>Call Center <em>· Tauk + Logicall + SalesBound</em></h2>
           <span className="sub">
-            Vendas recuperadas por telefone/SMS pelos parceiros. Tauk chega por webhook; Logicall é puxada da API deles a cada 30 min. Respeita o filtro de período.
+            Vendas por telefone dos parceiros. Tauk chega por webhook; Logicall é puxada da API deles a cada 30 min; SalesBound (cross-sell) chega por webhook do CRM deles, com reembolso e void vindo do export. Respeita o filtro de período.
           </span>
         </div>
         <div className="page-head-actions" style={{ flexWrap: 'wrap' }}>
           <div className="seg">
-            {[['all', 'Todos'], ['tauk', 'Tauk'], ['logicall', 'Logicall']].map(([kk, l]) => (
+            {[['all', 'Todos'], ['tauk', 'Tauk'], ['logicall', 'Logicall'], ['salesbound', 'SalesBound']].map(([kk, l]) => (
               <button key={kk} className={provider === kk ? 'is-active' : ''} onClick={() => setProvider(kk)}>{l}</button>
             ))}
           </div>
@@ -7694,10 +7695,10 @@ function CallCenterPage({ filters, user }) {
             <CopyKpi
               label={`COMISSÃO (${Math.round((k.commissionPct || 0) * 100)}%)${k.commissionAssumed ? ' · assumida' : ''}`}
               value={fmtCurrency(k.commissionUsd || 0, 'USD', 2)} tone="danger"
-              sub={k.commissionAssumed ? 'Logicall sem % configurada — usando 35%' : undefined}/>
+              sub={k.commissionAssumed ? 'parceiro sem % configurada — usando o padrão' : undefined}/>
             <CopyKpi label="LÍQUIDO (pós-comissão)" value={fmtCurrency(k.netUsd || 0, 'USD', 2)} tone="ok"/>
             <CopyKpi label="PENDENTES (HOLD/PENDING)" value={fmtInt(k.pendingCount)} tone={k.pendingCount > 0 ? 'danger' : undefined}/>
-            <CopyKpi label="ESTORNOS" value={fmtInt(k.refundedCount)} sub={k.refundedCount > 0 ? fmtCurrency(k.refundedUsd, 'USD', 0) : 'só a Logicall reporta'}/>
+            <CopyKpi label="ESTORNOS" value={fmtInt(k.refundedCount)} sub={k.refundedCount > 0 ? fmtCurrency(k.refundedUsd, 'USD', 0) : 'a Tauk não reporta'}/>
           </div>
 
           {/* Por parceiro — sempre os dois, mesmo com filtro, pra comparar. */}
@@ -7713,8 +7714,14 @@ function CallCenterPage({ filters, user }) {
                 </tr></thead>
                 <tbody>
                   {m.providers.map((p) => {
+                    const cov = m.salesbound?.coverage;
                     const integ = p.provider === 'tauk'
                       ? { ok: true, text: 'webhook via n8n' }
+                      : p.provider === 'salesbound'
+                      ? (!cov ? { ok: false, text: 'nenhum dado importado' }
+                        : { ok: (cov.webhookCount || 0) > 0,
+                            text: ((cov.webhookCount || 0) > 0 ? 'webhook: ' + fmtInt(cov.webhookCount) + ' vendas' : 'webhook sem evento')
+                              + ' · export até ' + (cov.csvLastAt ? cov.csvLastAt.slice(8, 10) + '/' + cov.csvLastAt.slice(5, 7) : '—') })
                       : !sync?.configured ? { ok: false, text: 'chave não configurada' }
                       : sync.running ? { ok: true, text: 'sincronizando agora…' }
                       : sync.lastOk === false ? { ok: false, text: `última sync falhou: ${sync.lastError || '?'}` }
@@ -7752,10 +7759,11 @@ function CallCenterPage({ filters, user }) {
                 </div>
               </div>
               <NSTimeSeries height={220} currency="USD"
-                data={m.daily.map((d) => ({ date: d.date, tauk: d.tauk, logicall: d.logicall }))}
+                data={m.daily.map((d) => ({ date: d.date, tauk: d.tauk, logicall: d.logicall, salesbound: d.salesbound }))}
                 series={[
                   { key: 'tauk', label: 'Tauk', color: CC_PROVIDER_META.tauk.color },
                   { key: 'logicall', label: 'Logicall', color: CC_PROVIDER_META.logicall.color },
+                  { key: 'salesbound', label: 'SalesBound', color: CC_PROVIDER_META.salesbound.color },
                 ]}/>
             </div>
           )}
@@ -7764,7 +7772,7 @@ function CallCenterPage({ filters, user }) {
             {/* Agentes — só a Logicall informa. IA × humano é a leitura que interessa. */}
             <div className="panel" style={{ padding: 0 }}>
               <div className="panel-head" style={{ padding: '12px 14px 0' }}>
-                <div className="panel-title">Por agente <span style={{ color: 'var(--fg5)', fontSize: 10, marginLeft: 6 }}>Logicall · IA × humano</span></div>
+                <div className="panel-title">Por agente <span style={{ color: 'var(--fg5)', fontSize: 10, marginLeft: 6 }}>Logicall (IA × humano) + SalesBound</span></div>
               </div>
               <div className="tbl-wrap" style={{ margin: 0, padding: '0 4px', maxHeight: 320, overflowY: 'auto' }}>
                 <table className="tbl">
@@ -7791,7 +7799,7 @@ function CallCenterPage({ filters, user }) {
 
             <div className="panel" style={{ padding: 0 }}>
               <div className="panel-head" style={{ padding: '12px 14px 0' }}>
-                <div className="panel-title">Por produto <span style={{ color: 'var(--fg5)', fontSize: 10, marginLeft: 6 }}>Logicall</span></div>
+                <div className="panel-title">Por produto <span style={{ color: 'var(--fg5)', fontSize: 10, marginLeft: 6 }}>Logicall + SalesBound</span></div>
               </div>
               <div className="tbl-wrap" style={{ margin: 0, padding: '0 4px', maxHeight: 320, overflowY: 'auto' }}>
                 <table className="tbl">
@@ -7812,9 +7820,33 @@ function CallCenterPage({ filters, user }) {
               </div>
             </div>
 
+            {m.bySourcePlatform?.length > 0 && (
+              <div className="panel" style={{ padding: 0 }}>
+                <div className="panel-head" style={{ padding: '12px 14px 0' }}>
+                  <div className="panel-title">Origem do cliente <span style={{ color: 'var(--fg5)', fontSize: 10, marginLeft: 6 }}>SalesBound · onde ele comprou antes</span></div>
+                </div>
+                <div className="tbl-wrap" style={{ margin: 0, padding: '0 4px', maxHeight: 320, overflowY: 'auto' }}>
+                  <table className="tbl">
+                    <thead><tr><th>Plataforma</th><th className="num">Vendas</th><th className="num">Receita</th></tr></thead>
+                    <tbody>
+                      {m.bySourcePlatform.map((b) => (
+                        <tr key={b.platform}>
+                          <td>{b.platform === 'sem origem'
+                            ? <span style={{ color: 'var(--fg5)' }}>sem origem no evento</span>
+                            : <span className={`plat ${platBadge(b.platform).cls}`}>{platBadge(b.platform).short}</span>}</td>
+                          <td className="num">{fmtInt(b.sales)}</td>
+                          <td className="num" style={{ color: 'var(--money)' }}>{fmtCurrency(b.grossUsd, 'USD', 0)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+
             <div className="panel" style={{ padding: 0 }}>
               <div className="panel-head" style={{ padding: '12px 14px 0' }}>
-                <div className="panel-title">Por status de fulfillment</div>
+                <div className="panel-title">Por status de fulfillment <span style={{ color: 'var(--fg5)', fontSize: 10, marginLeft: 6 }}>Tauk + Logicall</span></div>
               </div>
               <div className="tbl-wrap" style={{ margin: 0, padding: '0 4px' }}>
                 <table className="tbl">
@@ -7876,11 +7908,14 @@ function CallCenterPage({ filters, user }) {
 
           <div style={{ marginTop: 10, fontFamily: 'var(--f-mono)', fontSize: 10, color: 'var(--fg5)', lineHeight: 1.6 }}>
             Fontes: Tauk = webhook (via n8n), sem produto nem ID de transação; Logicall = API de transações (polling: janela de 3 dias
-            a cada 30 min + releitura de 45 dias uma vez por dia, idempotente por ID). Comissão = receita × % de cada parceiro sobre
-            cada venda recuperada; líquido = receita − comissão. Estornos (só a Logicall reporta): total tira a venda inteira,
-            parcial abate só o valor devolvido — e entram pela DATA DA VENDA (coorte), diferente dos cards de reembolso da Visão
-            Geral (data do estorno). Números FORA das métricas das plataformas (uma venda recuperada pode também transitar pela
-            plataforma principal — separado evita dupla contagem). Horários convertidos de Eastern (EUA) pra BRT.
+            a cada 30 min + releitura de 45 dias uma vez por dia, idempotente por ID); SalesBound = webhook do CRM deles (chega em
+            minutos, mas NÃO marca tipo de evento — tudo entra como venda) mais o export "Transaction Details", de onde vêm reembolso
+            e void; as duas fontes se juntam pelo clientTxnId, sem contar duas vezes. Comissão = receita × % de cada parceiro sobre
+            cada venda; líquido = receita − comissão. Estornos (a Tauk não reporta): total tira a venda inteira, parcial abate só o
+            valor devolvido — e entram pela DATA DA VENDA (coorte), diferente dos cards de reembolso da Visão Geral (data do
+            estorno); na SalesBound, venda anulada (void) conta como estorno total. Números FORA das métricas das plataformas (a
+            mesma venda pode transitar pela plataforma principal — separado evita dupla contagem). Horários: Tauk/Logicall e o
+            webhook da SalesBound vêm em Eastern, o export da SalesBound em Central; tudo é convertido pra BRT.
           </div>
         </div>
       )}

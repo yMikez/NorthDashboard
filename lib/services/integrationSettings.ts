@@ -34,6 +34,9 @@ export const SETTING_KEYS = {
   affiliatesDashboardApiKey: 'affiliates.dashboardApiKey',
   // SalesBound (cross-sell): token do postback GET|POST /api/ingest/salesbound?token=
   salesboundPostbackToken: 'salesbound.postbackToken',
+  // Parcela que a SalesBound leva sobre cada venda (a NorthScale fica com o
+  // resto). Sem isso, o dash assume 50% (o número do cálculo de margem).
+  salesboundCommissionPct: 'salesbound.commissionPct',
 } as const;
 
 // Chaves INTERNAS (não editáveis pela UI): marcador incremental do mapping.
@@ -159,7 +162,7 @@ export function parseSettingPercent(raw: string | null | undefined): number | nu
   return Number.isFinite(n) && n >= 0 && n <= 100 ? n / 100 : null;
 }
 
-export type CallCenterProvider = 'tauk' | 'logicall';
+export type CallCenterProvider = 'tauk' | 'logicall' | 'salesbound';
 
 export const DEFAULT_COMMISSION_PCT = 0.35;
 
@@ -170,13 +173,17 @@ export const DEFAULT_COMMISSION_PCT = 0.35;
 export async function getProviderCommission(
   provider: CallCenterProvider,
 ): Promise<{ pct: number; assumed: boolean; source: 'env' | 'setting' | 'default' }> {
-  const envKey = provider === 'tauk' ? 'TAUK_COMMISSION_PCT' : 'LOGICALL_COMMISSION_PCT';
+  const envKey = provider === 'tauk' ? 'TAUK_COMMISSION_PCT' : provider === 'salesbound' ? 'SALESBOUND_COMMISSION_PCT' : 'LOGICALL_COMMISSION_PCT';
   const fromEnv = parseEnvFraction(process.env[envKey]);
   if (fromEnv != null) return { pct: fromEnv, assumed: false, source: 'env' };
-  const settingKey = provider === 'tauk' ? SETTING_KEYS.taukCommissionPct : SETTING_KEYS.logicallCommissionPct;
+  const settingKey = provider === 'tauk' ? SETTING_KEYS.taukCommissionPct
+    : provider === 'salesbound' ? SETTING_KEYS.salesboundCommissionPct
+    : SETTING_KEYS.logicallCommissionPct;
   const fromDb = parseSettingPercent(await getSetting(settingKey));
   if (fromDb != null) return { pct: fromDb, assumed: false, source: 'setting' };
   // Tauk: 35% é o acordo real (memória do projeto). Logicall: ainda não
-  // informado — assume o mesmo e marca como ASSUMIDO.
+  // informado — assume o mesmo e marca como ASSUMIDO. SalesBound: 50% é o que
+  // o cálculo de margem usa (calculo_margem_northscale.md §2.6), também ASSUMIDO.
+  if (provider === 'salesbound') return { pct: 0.5, assumed: true, source: 'default' };
   return { pct: DEFAULT_COMMISSION_PCT, assumed: provider !== 'tauk', source: 'default' };
 }

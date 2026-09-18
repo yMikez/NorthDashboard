@@ -1,7 +1,7 @@
 // GET /api/metrics/tauk — aba "Call Center" (Tauk + Logicall). O path e o
 // id da tab ('tauk') ficaram de propósito: permissões dos usuários já
 // apontam pra ele. Mesmo contrato de datas dos demais /api/metrics/*.
-//   ?provider=all|tauk|logicall (default all)
+//   ?provider=all|tauk|logicall|salesbound (default all)
 
 import { NextResponse } from 'next/server';
 import { requireTab } from '@/lib/auth/guard';
@@ -28,7 +28,7 @@ export async function GET(req: Request) {
     return NextResponse.json({ error: 'invalid date format' }, { status: 400 });
   }
   const providerRaw = searchParams.get('provider') ?? 'all';
-  const provider = providerRaw === 'tauk' || providerRaw === 'logicall' ? providerRaw : 'all';
+  const provider = providerRaw === 'tauk' || providerRaw === 'logicall' || providerRaw === 'salesbound' ? providerRaw : 'all';
 
   try {
     return await respondCached('tauk', searchParams, () =>

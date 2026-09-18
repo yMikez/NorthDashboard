@@ -8,7 +8,7 @@ const row = (over: Partial<CallCenterRow>): CallCenterRow => ({
   productName: null, family: null, agentName: null, purchasedAt: at('2026-08-22T15:00:00Z'),
   ...over,
 });
-const COMM = { tauk: { pct: 0.35, assumed: false }, logicall: { pct: 0.2, assumed: true } };
+const COMM = { tauk: { pct: 0.35, assumed: false }, logicall: { pct: 0.2, assumed: true }, salesbound: { pct: 0.5, assumed: true } };
 
 describe('aggregateCallCenter', () => {
   it('separa por parceiro com a comissão de cada um; total soma as comissões', () => {
@@ -56,8 +56,8 @@ describe('aggregateCallCenter', () => {
       row({ provider: 'logicall', amountUsd: 20, purchasedAt: at('2026-08-22T20:00:00Z') }), // 22/08
     ], COMM);
     expect(r.daily).toEqual([
-      { date: '2026-08-21', tauk: 50, logicall: 0, taukSales: 1, logicallSales: 0 },
-      { date: '2026-08-22', tauk: 0, logicall: 100, taukSales: 0, logicallSales: 2 },
+      { date: '2026-08-21', tauk: 50, logicall: 0, salesbound: 0, taukSales: 1, logicallSales: 0, salesboundSales: 0 },
+      { date: '2026-08-22', tauk: 0, logicall: 100, salesbound: 0, taukSales: 0, logicallSales: 2, salesboundSales: 0 },
     ]);
   });
 
@@ -85,6 +85,31 @@ describe('aggregateCallCenter', () => {
     expect(lc).toMatchObject({ sales: 1, approved: 1, grossUsd: 244, refundedCount: 0, partialRefundCount: 1, refundedUsd: 50 });
     expect(lc.commissionUsd).toBeCloseTo(244 * 0.2, 2);
     expect(r.daily[0].logicall).toBe(244);
+  });
+
+  // A SalesBound entra na mesma aba, mas vem do razão dela (SalesboundTransaction):
+  // traz produto, agente e origem do cliente, e NÃO tem feed de fulfillment.
+  it('SalesBound: soma no parceiro dela, com série e origem do cliente próprias', () => {
+    const r = aggregateCallCenter([
+      row({ provider: 'salesbound', amountUsd: 846, agentName: 'Joshua.Fields-NorthScale', productName: 'NeuroRecall - 1 Bottle', family: 'NeuroRecall', fulfillmentStatus: null, sourcePlatform: 'jvzoo' }),
+      row({ provider: 'salesbound', amountUsd: 294, fulfillmentStatus: null, sourcePlatform: 'buygoods' }),
+      row({ provider: 'salesbound', amountUsd: 500, refundedUsd: 500, status: 'REFUNDED', fulfillmentStatus: null, sourcePlatform: 'buygoods' }),
+      row({ provider: 'tauk', amountUsd: 200 }),
+    ], COMM);
+    const sb = r.providers.find((p) => p.provider === 'salesbound')!;
+    expect(sb).toMatchObject({ label: 'SalesBound', sales: 3, approved: 2, grossUsd: 1140, refundedCount: 1, refundedUsd: 500 });
+    expect(sb.commissionUsd).toBe(570);      // 50% fica com a parceira
+    expect(sb.netUsd).toBe(570);
+    expect(r.daily[0]).toMatchObject({ salesbound: 1140, salesboundSales: 2, tauk: 200, taukSales: 1 });
+    expect(r.bySourcePlatform).toEqual([
+      { platform: 'jvzoo', sales: 1, grossUsd: 846 },
+      { platform: 'buygoods', sales: 1, grossUsd: 294 },
+    ]);
+    // fulfillment: só Tauk/Logicall entram (a SalesBound não informa)
+    expect(r.byStatus.reduce((s, x) => s + x.sales, 0)).toBe(1);
+    // agente e produto aparecem normalmente
+    expect(r.byAgent.map((a) => a.agent)).toContain('Joshua.Fields-NorthScale');
+    expect(r.byProduct.map((p) => p.product)).toContain('NeuroRecall - 1 Bottle');
   });
 
   it('placeholder (estorno antes da venda) conta como estorno, não como venda', () => {

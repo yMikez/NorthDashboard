@@ -3,10 +3,13 @@
 // antiga lib/services/tauk.ts; mesma semântica de dia (BRT) e mesmo
 // endpoint (/api/metrics/tauk — id da tab preservado pra permissões).
 //
-// Lê CallCenterSale direto (fora do pipeline Order/MV — ver model). As duas
-// fontes têm profundidade diferente: a Tauk manda só cliente/valor/status;
-// a Logicall traz produto, agente (humano × IA) e estorno. A resposta expõe
-// o que existe e a UI mostra "—" onde a fonte não informa.
+// Lê CallCenterSale direto (fora do pipeline Order/MV — ver model) e, desde
+// 2026-09-18, também a SalesBound — que NÃO mora em CallCenterSale e sim no
+// razão SalesboundTransaction (webhook do CRM deles + export CSV). As fontes
+// têm profundidade diferente: a Tauk manda só cliente/valor/status; a Logicall
+// traz produto, agente (humano × IA) e estorno; a SalesBound traz produto,
+// agente, estorno/void e de qual plataforma veio o cliente, mas não informa
+// fulfillment. A resposta expõe o que existe e a UI mostra "—" no resto.
 //
 // Semântica de RECEITA: Σ (valor − refundedUsd) das vendas APPROVED — um
 // refund PARCIAL abate só a parte devolvida; estorno TOTAL (status
@@ -21,11 +24,13 @@ import { db } from '../db';
 import { getProviderCommission, type CallCenterProvider } from './integrationSettings';
 import { getLogicallSyncStatus } from './logicallSync';
 import { isAiAgent } from '../connectors/logicall/ingest';
+import { salesboundCallCenterRows, salesboundCoverage, type SalesboundCoverage } from './salesboundLedger';
 
-export const PROVIDERS: CallCenterProvider[] = ['tauk', 'logicall'];
+export const PROVIDERS: CallCenterProvider[] = ['tauk', 'logicall', 'salesbound'];
 export const PROVIDER_LABEL: Record<CallCenterProvider, string> = {
   tauk: 'Tauk',
   logicall: 'Logicall',
+  salesbound: 'SalesBound',
 };
 
 export interface CallCenterFilters {
@@ -56,7 +61,7 @@ export interface CallCenterResponse {
   provider: CallCenterProvider | 'all';
   totals: ProviderSummary;
   providers: ProviderSummary[];
-  daily: Array<{ date: string; tauk: number; logicall: number; taukSales: number; logicallSales: number }>;
+  daily: Array<{ date: string; tauk: number; logicall: number; salesbound: number; taukSales: number; logicallSales: number; salesboundSales: number }>;
   byStatus: Array<{ status: string; sales: number; grossUsd: number }>;
   byAgent: Array<{ agent: string; isAi: boolean; sales: number; grossUsd: number; aovUsd: number }>;
   byProduct: Array<{ product: string; family: string | null; sales: number; grossUsd: number }>;
@@ -76,6 +81,9 @@ export interface CallCenterResponse {
     placeholder: boolean;
   }>;
   logicallSync: Awaited<ReturnType<typeof getLogicallSyncStatus>>;
+  // De onde veio o cliente que a SalesBound converteu (só ela informa).
+  bySourcePlatform: Array<{ platform: string; sales: number; grossUsd: number }>;
+  salesbound: { coverage: SalesboundCoverage | null; voidedCount: number };
 }
 
 // Linha mínima que a agregação precisa — a mesma shape do select abaixo,
@@ -97,6 +105,9 @@ export interface CallCenterRow {
   purchasedAt: Date;
   /** Estorno cuja venda ainda não foi sincronizada (ver logicallSync). */
   placeholder?: boolean;
+  /** SalesBound: plataforma de origem do cliente e venda anulada (void). */
+  sourcePlatform?: string | null;
+  voided?: boolean;
 }
 
 const BRT_OFFSET_MS = 3 * 3600_000;
@@ -107,6 +118,9 @@ function round2(n: number): number {
   return Math.round(n * 100) / 100;
 }
 const PENDING_STATUSES = new Set(['HOLD', 'PENDING', 'PROCESSING']);
+
+const providerOf = (raw: string): CallCenterProvider =>
+  (raw === 'logicall' || raw === 'salesbound' ? raw : 'tauk');
 
 function emptySummary(provider: CallCenterProvider | 'all', label: string, pct: number, assumed: boolean): ProviderSummary {
   return {
@@ -137,7 +151,7 @@ export function summarizeProviders(
     summaries.set(p, emptySummary(p, PROVIDER_LABEL[p], commissions[p].pct, commissions[p].assumed));
   }
   for (const r of rows) {
-    const provider = (r.provider === 'logicall' ? 'logicall' : 'tauk') as CallCenterProvider;
+    const provider = providerOf(r.provider);
     const s = summaries.get(provider)!;
     const reversed = r.status === 'REFUNDED' || r.status === 'CHARGEBACK';
     if (reversed) {
@@ -181,25 +195,35 @@ export function summarizeProviders(
 export function aggregateCallCenter(
   rows: CallCenterRow[],
   commissions: Record<CallCenterProvider, { pct: number; assumed: boolean }>,
-): Pick<CallCenterResponse, 'totals' | 'providers' | 'daily' | 'byStatus' | 'byAgent' | 'byProduct'> {
+): Pick<CallCenterResponse, 'totals' | 'providers' | 'daily' | 'byStatus' | 'byAgent' | 'byProduct' | 'bySourcePlatform'> {
   const { totals, providers } = summarizeProviders(rows, commissions);
-  const byDay = new Map<string, { tauk: number; logicall: number; taukSales: number; logicallSales: number }>();
+  const byDay = new Map<string, { tauk: number; logicall: number; salesbound: number; taukSales: number; logicallSales: number; salesboundSales: number }>();
   const byStatus = new Map<string, { sales: number; gross: number }>();
   const byAgent = new Map<string, { sales: number; gross: number }>();
   const byProduct = new Map<string, { family: string | null; sales: number; gross: number }>();
 
+  const bySource = new Map<string, { sales: number; gross: number }>();
+
   for (const r of rows) {
     if (r.status === 'REFUNDED' || r.status === 'CHARGEBACK') continue;
-    const provider = (r.provider === 'logicall' ? 'logicall' : 'tauk') as CallCenterProvider;
+    const provider = providerOf(r.provider);
     const net = Math.max(0, r.amountUsd - (r.refundedUsd ?? 0));
-    const fs = (r.fulfillmentStatus ?? '').toUpperCase() || 'DESCONHECIDO';
 
-    const st = byStatus.get(fs) ?? { sales: 0, gross: 0 };
-    st.sales++; st.gross += net;
-    byStatus.set(fs, st);
+    // A SalesBound não tem feed de fulfillment: ficaria tudo em DESCONHECIDO.
+    if (provider !== 'salesbound') {
+      const fs = (r.fulfillmentStatus ?? '').toUpperCase() || 'DESCONHECIDO';
+      const st = byStatus.get(fs) ?? { sales: 0, gross: 0 };
+      st.sales++; st.gross += net;
+      byStatus.set(fs, st);
+    } else {
+      const src = r.sourcePlatform || 'sem origem';
+      const b = bySource.get(src) ?? { sales: 0, gross: 0 };
+      b.sales++; b.gross += net;
+      bySource.set(src, b);
+    }
 
     const day = brtDay(r.purchasedAt);
-    const d = byDay.get(day) ?? { tauk: 0, logicall: 0, taukSales: 0, logicallSales: 0 };
+    const d = byDay.get(day) ?? { tauk: 0, logicall: 0, salesbound: 0, taukSales: 0, logicallSales: 0, salesboundSales: 0 };
     d[provider] += net;
     d[`${provider}Sales`]++;
     byDay.set(day, d);
@@ -219,11 +243,14 @@ export function aggregateCallCenter(
   return {
     totals,
     providers,
+    bySourcePlatform: Array.from(bySource.entries())
+      .sort(([, a], [, b]) => b.gross - a.gross)
+      .map(([platform, b]) => ({ platform, sales: b.sales, grossUsd: round2(b.gross) })),
     daily: Array.from(byDay.entries())
       .sort(([a], [b]) => (a < b ? -1 : 1))
       .map(([date, d]) => ({
-        date, tauk: round2(d.tauk), logicall: round2(d.logicall),
-        taukSales: d.taukSales, logicallSales: d.logicallSales,
+        date, tauk: round2(d.tauk), logicall: round2(d.logicall), salesbound: round2(d.salesbound),
+        taukSales: d.taukSales, logicallSales: d.logicallSales, salesboundSales: d.salesboundSales,
       })),
     byStatus: Array.from(byStatus.entries())
       .sort(([, a], [, b]) => b.sales - a.sales)
@@ -242,7 +269,7 @@ export function aggregateCallCenter(
 
 export async function getCallCenterSales(filters: CallCenterFilters): Promise<CallCenterResponse> {
   const provider = filters.provider && filters.provider !== 'all' ? filters.provider : 'all';
-  const [rows, tauk, logicall, logicallSync] = await Promise.all([
+  const [rows, tauk, logicall, salesbound, logicallSync, sbRows, sbCoverage] = await Promise.all([
     db.callCenterSale.findMany({
       where: { purchasedAt: { gte: filters.startDate, lte: filters.endDate } },
       orderBy: { purchasedAt: 'desc' },
@@ -254,16 +281,23 @@ export async function getCallCenterSales(filters: CallCenterFilters): Promise<Ca
     }),
     getProviderCommission('tauk'),
     getProviderCommission('logicall'),
+    getProviderCommission('salesbound'),
     getLogicallSyncStatus(),
+    // SalesBound vem do razão próprio (webhook do CRM + export CSV).
+    salesboundCallCenterRows(filters.startDate, filters.endDate),
+    salesboundCoverage(),
   ]);
 
-  const all: CallCenterRow[] = rows.map((r) => ({
-    ...r,
-    amountUsd: Number(r.amountUsd),
-    refundedUsd: r.refundedUsd != null ? Number(r.refundedUsd) : null,
-    placeholder: Boolean((r.raw as { _placeholder?: boolean } | null)?._placeholder),
-  }));
-  const commissions = { tauk, logicall };
+  const all: CallCenterRow[] = [
+    ...rows.map((r) => ({
+      ...r,
+      amountUsd: Number(r.amountUsd),
+      refundedUsd: r.refundedUsd != null ? Number(r.refundedUsd) : null,
+      placeholder: Boolean((r.raw as { _placeholder?: boolean } | null)?._placeholder),
+    })),
+    ...sbRows,
+  ];
+  const commissions = { tauk, logicall, salesbound };
   const scoped = provider === 'all' ? all : all.filter((r) => r.provider === provider);
 
   const agg = aggregateCallCenter(scoped, commissions);
@@ -275,9 +309,10 @@ export async function getCallCenterSales(filters: CallCenterFilters): Promise<Ca
     provider,
     ...agg,
     providers,
-    recent: scoped.slice(0, 80).map((r) => ({
+    salesbound: { coverage: sbCoverage, voidedCount: sbRows.filter((r) => r.voided).length },
+    recent: [...scoped].sort((a, b) => b.purchasedAt.getTime() - a.purchasedAt.getTime()).slice(0, 80).map((r) => ({
       id: r.id,
-      provider: (r.provider === 'logicall' ? 'logicall' : 'tauk') as CallCenterProvider,
+      provider: providerOf(r.provider),
       name: [r.firstName, r.lastName].filter(Boolean).join(' ') || '—',
       email: r.email,
       phone: r.phone,
