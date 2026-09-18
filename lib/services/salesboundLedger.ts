@@ -266,7 +266,9 @@ export interface SalesboundDayStat { day: string; source: string; type: string; 
 
 export async function salesboundBreakdown(start: Date, end: Date): Promise<SalesboundDayStat[]> {
   const rows = await db.$queryRaw<Array<{ day: string; source: string; type: string; n: bigint; usd: Prisma.Decimal }>>(Prisma.sql`
-    SELECT to_char("txnAt" AT TIME ZONE 'America/Sao_Paulo', 'YYYY-MM-DD') AS day,
+    -- txnAt é timestamp SEM fuso guardando UTC: precisa marcar como UTC ANTES
+    -- de converter, senão o AT TIME ZONE faz o caminho inverso (dia errado).
+    SELECT to_char(("txnAt" AT TIME ZONE 'UTC') AT TIME ZONE 'America/Sao_Paulo', 'YYYY-MM-DD') AS day,
            "source", "type", COUNT(*) AS n, COALESCE(SUM("amountUsd"), 0) AS usd
     FROM "SalesboundTransaction"
     WHERE "result" = 'SUCCESS' AND "txnAt" >= ${start} AND "txnAt" <= ${end}
