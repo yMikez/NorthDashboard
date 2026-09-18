@@ -378,7 +378,9 @@ function NpChannelDetail({ ch, cur, salesbound, onClose }) {
           <div className="panel-sub">{meta.desc} · {fmtInt(ch.orders)} vendas · {npPct(ch.shareOfRevenuePct)} da receita econômica · {npPct(ch.shareOfProfitPct)} do lucro</div>
           {ch.key === 'salesbound' && salesbound?.mode === 'measured' && salesbound.coverage && (
             <div className="panel-sub" style={{ marginTop: 2 }}>
-              export do CRM: {salesbound.coverage.firstAt.slice(0, 10)} → {salesbound.coverage.lastAt.slice(0, 10)} · importado {fmtDateTime(salesbound.coverage.importedAt)}
+              razão: {salesbound.coverage.firstAt.slice(0, 10)} → {salesbound.coverage.lastAt.slice(0, 10)}
+              {salesbound.coverage.webhookCount > 0 ? ` · webhook ao vivo (${fmtInt(salesbound.coverage.webhookCount)} vendas, última ${salesbound.coverage.webhookLastAt.slice(0, 10)})` : ''}
+              {salesbound.coverage.csvLastAt ? ` · export até ${salesbound.coverage.csvLastAt.slice(0, 10)} (é dele que vêm os estornos)` : ''}
               {salesbound.voids > 0 ? ` · ${npMoney(salesbound.voids, cur)} em voids já fora do bruto` : ''}
               {salesbound.refundsCohort != null ? ` · estornos das vendas do período (qualquer data): ${npMoney(salesbound.refundsCohort, cur)}` : ''}
             </div>
@@ -467,7 +469,8 @@ function NpSalesboundImport({ salesbound, busy, onImport }) {
     <div style={{ display: 'grid', gap: 8 }}>
       {salesbound?.mode === 'measured' && cov ? (
         <div style={{ fontSize: 12, color: 'var(--fg2)', lineHeight: 1.45 }}>
-          <span style={{ color: 'var(--success)', fontWeight: 600 }}>● medido pelo export</span> · cobre {cov.firstAt.slice(0, 10)} → {cov.lastAt.slice(0, 10)} · importado {fmtDateTime(cov.importedAt)}
+          <span style={{ color: 'var(--success)', fontWeight: 600 }}>● medido</span> · razão cobre {cov.firstAt.slice(0, 10)} → {cov.lastAt.slice(0, 10)}
+          {cov.webhookCount > 0 && <><br/><span style={{ color: 'var(--fg4)' }}>webhook ao vivo: {fmtInt(cov.webhookCount)} vendas (última {cov.webhookLastAt.slice(0, 10)}). Reembolso e void só vêm do export — último em {cov.csvLastAt ? cov.csvLastAt.slice(0, 10) : '—'}.</span></>}
         </div>
       ) : (
         <div style={{ fontSize: 12, color: 'var(--fg4)', lineHeight: 1.45 }}>Nenhum export importado — o canal usa os números manuais abaixo.</div>

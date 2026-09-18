@@ -12,6 +12,16 @@ import { Prisma } from '@prisma/client';
 import { db } from '../db';
 import { logger } from '../logger';
 import { parseSalesboundTransactionsCsv, type SalesboundCsvParse } from '../connectors/salesbound/transactionsCsv';
+import { parseSalesboundWebhookSale } from '../connectors/salesbound/webhook';
+
+export interface SalesboundCoverage {
+  firstAt: string;
+  lastAt: string;
+  importedAt: string;
+  csvLastAt: string | null;
+  webhookLastAt: string | null;
+  webhookCount: number;
+}
 
 export interface SalesboundMeasured {
   gross: number;
@@ -19,7 +29,7 @@ export interface SalesboundMeasured {
   refunds: number;
   refundsCohort: number;
   voids: number;
-  coverage: { firstAt: string; lastAt: string; importedAt: string };
+  coverage: SalesboundCoverage;
 }
 
 export interface SalesboundImportResult {
@@ -29,7 +39,8 @@ export interface SalesboundImportResult {
   inserted: number;
   updated: number;
   skipped: SalesboundCsvParse['skipped'];
-  unlinked: number;   // reembolso/void sem venda conhecida do pedido
+  unlinked: number;    // reembolso/void sem venda conhecida do pedido
+  reconciled: number;  // linhas criadas pelo webhook que o export reidentificou
   success: { sales: number; salesUsd: number; refunds: number; refundsUsd: number; voids: number; voidsUsd: number };
   firstAt: string | null;
   lastAt: string | null;
@@ -63,6 +74,31 @@ export async function importSalesboundCsv(text: string): Promise<SalesboundImpor
       .map((e) => e.transactionId),
   );
 
+  // Linhas que o WEBHOOK já criou (chave clientTxnId, transactionId sintético
+  // "wh:…"): o export agora traz o id de verdade → renomeia a MESMA linha em
+  // vez de duplicar. Se as duas já existirem, a do webhook some.
+  let reconciled = 0;
+  const clientIds = rows.map((r) => r.clientTxnId).filter((x): x is string => !!x);
+  if (clientIds.length) {
+    const known = await db.salesboundTransaction.findMany({
+      where: { clientTxnId: { in: clientIds } },
+      select: { id: true, clientTxnId: true, transactionId: true },
+    });
+    const byClient = new Map(known.filter((k) => k.clientTxnId).map((k) => [k.clientTxnId as string, k]));
+    for (const r of rows) {
+      const hit = r.clientTxnId ? byClient.get(r.clientTxnId) : undefined;
+      if (!hit || hit.transactionId === r.transactionId) continue;
+      try {
+        await db.salesboundTransaction.update({ where: { id: hit.id }, data: { transactionId: r.transactionId } });
+        reconciled++;
+      } catch {
+        // já existe uma linha com o transactionId do export: a do webhook é a duplicata.
+        await db.salesboundTransaction.delete({ where: { id: hit.id } }).catch(() => undefined);
+        reconciled++;
+      }
+    }
+  }
+
   let unlinked = 0;
   const CHUNK = 100;
   for (let i = 0; i < rows.length; i += CHUNK) {
@@ -70,6 +106,7 @@ export async function importSalesboundCsv(text: string): Promise<SalesboundImpor
       const saleAt = r.type === 'SALE' ? r.txnAt : (saleAtByOrder.get(r.orderId) ?? null);
       if (r.type !== 'SALE' && r.result === 'SUCCESS' && !saleAt) unlinked++;
       const data = {
+        clientTxnId: r.clientTxnId, source: 'csv',
         orderId: r.orderId, type: r.type, result: r.result, amountUsd: new Prisma.Decimal(r.amountUsd), txnAt: r.txnAt, saleAt,
         chargedback: r.chargedback, agentName: r.agentName, customerId: r.customerId, email: r.email,
         sourcePlatform: r.sourcePlatform, merchant: r.merchant, response: r.response,
@@ -86,7 +123,7 @@ export async function importSalesboundCsv(text: string): Promise<SalesboundImpor
   const result: SalesboundImportResult = {
     campaign: parsed.meta.campaign, dateRange: parsed.meta.dateRange,
     parsed: rows.length, inserted: rows.filter((r) => !existing.has(r.transactionId)).length, updated: rows.filter((r) => existing.has(r.transactionId)).length,
-    skipped: parsed.skipped.slice(0, 50), unlinked,
+    skipped: parsed.skipped.slice(0, 50), unlinked, reconciled,
     success: {
       sales: ok.filter((r) => r.type === 'SALE').length, salesUsd: sum('SALE'),
       refunds: ok.filter((r) => r.type === 'REFUND').length, refundsUsd: sum('REFUND'),
@@ -99,13 +136,87 @@ export async function importSalesboundCsv(text: string): Promise<SalesboundImpor
   return result;
 }
 
-/** Cobertura do razão (null = nunca importado → canal cai no manual). */
-export async function salesboundCoverage(): Promise<SalesboundMeasured['coverage'] | null> {
-  const [row] = await db.$queryRaw<Array<{ first: Date | null; last: Date | null; imported: Date | null }>>(Prisma.sql`
-    SELECT MIN("txnAt") AS first, MAX("txnAt") AS last, MAX("importedAt") AS imported
+/**
+ * FASE 2 — evento do webhook vira linha do razão.
+ *
+ * Decisão do usuário (2026-09-17): o CRM deles não manda tipo de evento, então
+ * TUDO conta como VENDA (só valor negativo vira REFUND). A linha nasce com
+ * `transactionId` sintético "wh:<clientTxnId>" porque esse id só existe no
+ * export; quando o CSV for importado, a mesma linha é reidentificada pelo
+ * clientTxnId (não duplica). Linha que já veio do export NÃO é sobrescrita —
+ * o CSV é mais rico (agente, resultado, recusa, origem do cliente).
+ */
+export type WebhookLedgerStatus = 'created' | 'updated' | 'kept-csv' | 'skipped';
+
+export async function recordSalesboundWebhook(payload: Record<string, unknown>): Promise<{ status: WebhookLedgerStatus; clientTxnId: string | null; type?: string; amountUsd?: number }> {
+  const sale = parseSalesboundWebhookSale(payload);
+  if (!sale) return { status: 'skipped', clientTxnId: null };
+
+  const existing = await db.salesboundTransaction.findUnique({ where: { clientTxnId: sale.clientTxnId }, select: { id: true, source: true } });
+  if (existing?.source === 'csv') return { status: 'kept-csv', clientTxnId: sale.clientTxnId };
+
+  // Estorno ancora na venda do mesmo pedido (se ela já estiver no razão).
+  let saleAt: Date | null = sale.txnAt;
+  if (sale.type !== 'SALE') {
+    const parent = await db.salesboundTransaction.findFirst({
+      where: { orderId: sale.orderId, type: 'SALE', result: 'SUCCESS' },
+      select: { txnAt: true }, orderBy: { txnAt: 'asc' },
+    });
+    saleAt = parent?.txnAt ?? null;
+  }
+  const data = {
+    clientTxnId: sale.clientTxnId, source: 'webhook',
+    orderId: sale.orderId, type: sale.type, result: 'SUCCESS',
+    amountUsd: new Prisma.Decimal(sale.amountUsd), txnAt: sale.txnAt, saleAt,
+    chargedback: false, agentName: null, customerId: sale.customerId, email: sale.email,
+    sourcePlatform: null, merchant: null,
+    // Rastro do que o webhook mandou como id (o export chama esses campos de
+    // txnId e de orderId-da-URL).
+    response: [sale.gatewayTxnId ? `gateway:${sale.gatewayTxnId}` : null, sale.crmOrderId ? `crmOrder:${sale.crmOrderId}` : null].filter(Boolean).join(' ') || null,
+    items: sale.items as unknown as Prisma.InputJsonValue, family: sale.family, bottles: sale.bottles,
+  };
+  if (existing) {
+    await db.salesboundTransaction.update({ where: { id: existing.id }, data });
+    return { status: 'updated', clientTxnId: sale.clientTxnId, type: sale.type, amountUsd: sale.amountUsd };
+  }
+  await db.salesboundTransaction.create({ data: { transactionId: `wh:${sale.clientTxnId}`, ...data } });
+  return { status: 'created', clientTxnId: sale.clientTxnId, type: sale.type, amountUsd: sale.amountUsd };
+}
+
+/** Reprocessa os IngestLogs do postback pro razão (nada se perde na fase 1). */
+export async function replaySalesboundLogs(limit = 500): Promise<{ logs: number; created: number; updated: number; keptCsv: number; skipped: number }> {
+  const logs = await db.ingestLog.findMany({
+    where: { source: 'postback-salesbound' },
+    orderBy: { receivedAt: 'asc' }, take: limit, select: { id: true, payload: true },
+  });
+  const out = { logs: logs.length, created: 0, updated: 0, keptCsv: 0, skipped: 0 };
+  for (const l of logs) {
+    const payload = (l.payload ?? {}) as Record<string, unknown>;
+    const r = await recordSalesboundWebhook(payload);
+    if (r.status === 'created') out.created++;
+    else if (r.status === 'updated') out.updated++;
+    else if (r.status === 'kept-csv') out.keptCsv++;
+    else out.skipped++;
+  }
+  logger.info(out, '[salesbound] replay dos logs do postback');
+  return out;
+}
+
+/** Cobertura do razão (null = vazio → canal cai no manual). */
+export async function salesboundCoverage(): Promise<SalesboundCoverage | null> {
+  const [row] = await db.$queryRaw<Array<{ first: Date | null; last: Date | null; imported: Date | null; csv_last: Date | null; webhook_last: Date | null; webhook_n: bigint }>>(Prisma.sql`
+    SELECT MIN("txnAt") AS first, MAX("txnAt") AS last, MAX("importedAt") AS imported,
+           MAX("txnAt") FILTER (WHERE "source" = 'csv') AS csv_last,
+           MAX("txnAt") FILTER (WHERE "source" = 'webhook') AS webhook_last,
+           COUNT(*) FILTER (WHERE "source" = 'webhook') AS webhook_n
     FROM "SalesboundTransaction" WHERE "result" = 'SUCCESS'`);
   if (!row?.first || !row.last) return null;
-  return { firstAt: row.first.toISOString(), lastAt: row.last.toISOString(), importedAt: (row.imported ?? row.last).toISOString() };
+  return {
+    firstAt: row.first.toISOString(), lastAt: row.last.toISOString(), importedAt: (row.imported ?? row.last).toISOString(),
+    csvLastAt: row.csv_last?.toISOString() ?? null,
+    webhookLastAt: row.webhook_last?.toISOString() ?? null,
+    webhookCount: Number(row.webhook_n ?? 0),
+  };
 }
 
 export async function measureSalesbound(start: Date, end: Date): Promise<SalesboundMeasured | null> {

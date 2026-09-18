@@ -114,7 +114,9 @@ export interface SalesboundMeasuredInput {
   refunds: number;
   refundsCohort?: number;
   voids?: number;
-  coverage?: { firstAt: string; lastAt: string; importedAt: string };
+  // Duas fontes no mesmo razão: export CSV (venda + estorno + void) e webhook
+  // do CRM (só venda — eles não mandam tipo de evento).
+  coverage?: { firstAt: string; lastAt: string; importedAt: string; csvLastAt?: string | null; webhookLastAt?: string | null; webhookCount?: number };
 }
 
 export interface NetProfitInputs {

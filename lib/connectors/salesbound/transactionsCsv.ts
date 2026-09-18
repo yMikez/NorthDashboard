@@ -26,6 +26,7 @@ export interface SalesboundItem { name: string; sku: string | null; qty: number;
 
 export interface SalesboundTxnRow {
   transactionId: string;
+  clientTxnId: string | null;   // ponte com o webhook (ver connectors/salesbound/webhook.ts)
   orderId: string;
   type: string;        // SALE | REFUND | VOID | …
   result: string;      // SUCCESS | SOFT_DECLINE | HARD_DECLINE | …
@@ -137,7 +138,7 @@ export function parseSalesboundTransactionsCsv(text: string): SalesboundCsvParse
     const qty = items.reduce((s, it) => s + it.qty, 0);
 
     rows.push({
-      transactionId, orderId,
+      transactionId, clientTxnId: str(get(r, 'clientTxnId')), orderId,
       type: upperSnake(get(r, 'type')),
       result: upperSnake(get(r, 'result')),
       amountUsd: Math.round(Math.abs(money(get(r, 'amount'))) * 100) / 100,

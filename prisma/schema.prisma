@@ -1248,7 +1248,16 @@ model NetProfitParamsLog {
 // New_York assumido (agentes operam 8h–18h com pausa às 13h).
 model SalesboundTransaction {
   id             String    @id @default(cuid())
+  // Linha de transação do CRM. Vem do export; o webhook NÃO manda esse id, e
+  // enquanto a linha só existir pelo webhook fica o sintético "wh:<clientTxnId>".
   transactionId  String    @unique
+  // PONTE webhook × export (2.365 únicos em 2.369 linhas do export): é por
+  // ele que o import do CSV reconhece a linha que o webhook já criou, em vez
+  // de duplicar. Nulo nas 4 linhas do export que vêm sem ele.
+  clientTxnId    String?   @unique
+  // 'csv' = importado do export · 'webhook' = criado pelo postback (ainda não
+  // reconciliado com o export).
+  source         String    @default("csv")
   orderId        String
   type           String    // SALE | REFUND | VOID | outro (maiúsculo, cru)
   result         String    // SUCCESS | SOFT_DECLINE | HARD_DECLINE | …
@@ -1274,4 +1283,5 @@ model SalesboundTransaction {
   @@index([txnAt])
   @@index([saleAt])
   @@index([orderId])
+  @@index([source])
 }

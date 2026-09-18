@@ -389,8 +389,17 @@ export async function computeNeeds(inputs: NetProfitInputs, params: NetProfitPar
   } else if (Date.parse(inputs.period.end) > Date.parse(sb.coverage?.lastAt ?? inputs.period.end) + 36 * 3600_000) {
     needs.push({
       key: 'salesbound.stale', severity: 'suggested',
-      title: `SalesBound: export importado vai só até ${(sb.coverage?.lastAt ?? '').slice(0, 10)}`,
+      title: `SalesBound: o razão vai só até ${(sb.coverage?.lastAt ?? '').slice(0, 10)}`,
       detail: 'Os dias do período depois disso aparecem sem venda SalesBound.',
+      format: importFormat,
+    });
+  } else if ((sb.coverage?.webhookCount ?? 0) > 0 && sb.coverage?.csvLastAt && Date.parse(inputs.period.end) > Date.parse(sb.coverage.csvLastAt) + 36 * 3600_000) {
+    // O webhook deles manda só venda (sem tipo de evento): reembolso, void e
+    // recusa continuam vindo do export.
+    needs.push({
+      key: 'salesbound.refunds-stale', severity: 'suggested',
+      title: `SalesBound: estornos só até ${sb.coverage.csvLastAt.slice(0, 10)}`,
+      detail: 'As vendas chegam ao vivo pelo webhook, mas o webhook deles não marca reembolso/void — isso só vem do export. Depois dessa data o canal está sem estorno, ou seja, otimista.',
       format: importFormat,
     });
   }

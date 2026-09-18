@@ -29,6 +29,8 @@ import { checkIngestSecret } from '@/lib/ingest/auth';
 import { checkIntegrationKey } from '@/lib/services/affiliateIntegrationHandlers';
 import { getSalesboundPostbackToken } from '@/lib/services/integrationSettings';
 import { parseSalesboundBody, parseSalesboundPostback, tokenFromBody } from '@/lib/connectors/salesbound/ingest';
+import { recordSalesboundWebhook } from '@/lib/services/salesboundLedger';
+import { clearNetProfitInputsCache } from '@/lib/services/netProfit';
 import { logger } from '@/lib/logger';
 
 export const runtime = 'nodejs';
@@ -82,11 +84,27 @@ async function capture(req: Request): Promise<NextResponse> {
       },
       select: { id: true, receivedAt: true },
     });
+    // FASE 2: o evento também vira linha do razão (SalesboundTransaction).
+    // Tudo conta como VENDA — o CRM deles não manda tipo de evento (decisão do
+    // usuário, 2026-09-17); só valor negativo vira estorno. Se isto falhar, o
+    // IngestLog acima já garante o replay, então a resposta continua 200.
+    let ledger: Awaited<ReturnType<typeof recordSalesboundWebhook>> | null = null;
+    if (!capture.isTest) {
+      try {
+        ledger = await recordSalesboundWebhook(capture.payload);
+        if (ledger.status === 'created' || ledger.status === 'updated') {
+          clearNetProfitInputsCache();
+          await db.ingestLog.update({ where: { id: log.id }, data: { eventType: `${ledger.type === 'REFUND' ? 'refund' : 'sale'}:assumed` } }).catch(() => undefined);
+        }
+      } catch (err) {
+        logger.error({ err, logId: log.id }, 'salesbound ledger write failed (payload guardado pra replay)');
+      }
+    }
     logger.info(
-      { platform: 'salesbound', logId: log.id, event: capture.eventType, externalId: capture.externalId, test: capture.isTest, method: req.method, keys: Object.keys(capture.payload).filter((k) => k !== '_meta') },
+      { platform: 'salesbound', logId: log.id, event: capture.eventType, externalId: capture.externalId, test: capture.isTest, method: req.method, ledger: ledger?.status ?? 'none', keys: Object.keys(capture.payload).filter((k) => k !== '_meta') },
       'salesbound postback captured',
     );
-    return NextResponse.json({ ok: true, id: log.id, event: capture.eventType, external_id: capture.externalId, received_at: log.receivedAt.toISOString() });
+    return NextResponse.json({ ok: true, id: log.id, event: capture.eventType, external_id: capture.externalId, ledger: ledger?.status ?? 'none', received_at: log.receivedAt.toISOString() });
   } catch (err) {
     logger.error({ err }, 'salesbound postback capture failed');
     return NextResponse.json({ error: 'processing failed' }, { status: 500 });
