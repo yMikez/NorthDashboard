@@ -240,6 +240,20 @@ export async function replaySalesboundLogs(limit = 500): Promise<{ logs: number;
   return out;
 }
 
+/** Auditoria: o que cada fonte colocou no razão, por dia (dia BRT). */
+export interface SalesboundDayStat { day: string; source: string; type: string; n: number; usd: number }
+
+export async function salesboundBreakdown(start: Date, end: Date): Promise<SalesboundDayStat[]> {
+  const rows = await db.$queryRaw<Array<{ day: string; source: string; type: string; n: bigint; usd: Prisma.Decimal }>>(Prisma.sql`
+    SELECT to_char("txnAt" AT TIME ZONE 'America/Sao_Paulo', 'YYYY-MM-DD') AS day,
+           "source", "type", COUNT(*) AS n, COALESCE(SUM("amountUsd"), 0) AS usd
+    FROM "SalesboundTransaction"
+    WHERE "result" = 'SUCCESS' AND "txnAt" >= ${start} AND "txnAt" <= ${end}
+    GROUP BY 1, 2, 3
+    ORDER BY 1 DESC, 2, 3`);
+  return rows.map((r) => ({ day: r.day, source: r.source, type: r.type, n: Number(r.n), usd: Math.round(Number(r.usd) * 100) / 100 }));
+}
+
 /** Cobertura do razão (null = vazio → canal cai no manual). */
 export async function salesboundCoverage(): Promise<SalesboundCoverage | null> {
   const [row] = await db.$queryRaw<Array<{ first: Date | null; last: Date | null; imported: Date | null; csv_last: Date | null; webhook_last: Date | null; webhook_n: bigint }>>(Prisma.sql`

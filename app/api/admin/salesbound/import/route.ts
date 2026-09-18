@@ -7,7 +7,7 @@
 import { NextResponse } from 'next/server';
 import { requireAdmin } from '@/lib/auth/guard';
 import { checkIngestSecret } from '@/lib/ingest/auth';
-import { importSalesboundCsv, salesboundCoverage } from '@/lib/services/salesboundLedger';
+import { importSalesboundCsv, salesboundBreakdown, salesboundCoverage } from '@/lib/services/salesboundLedger';
 import { clearNetProfitInputsCache } from '@/lib/services/netProfit';
 import { logger } from '@/lib/logger';
 
@@ -26,7 +26,12 @@ async function authorized(req: Request): Promise<{ ok: true } | { ok: false; res
 export async function GET(req: Request) {
   const auth = await authorized(req);
   if (!auth.ok) return auth.response;
-  return NextResponse.json({ coverage: await salesboundCoverage() });
+  const { searchParams } = new URL(req.url);
+  const from = searchParams.get('from');
+  const to = searchParams.get('to');
+  // ?from=&to= (ISO ou YYYY-MM-DD) → o que cada fonte pôs no razão, por dia.
+  const breakdown = from && to ? await salesboundBreakdown(new Date(from), new Date(to)) : null;
+  return NextResponse.json({ coverage: await salesboundCoverage(), ...(breakdown ? { breakdown } : {}) });
 }
 
 export async function POST(req: Request) {
