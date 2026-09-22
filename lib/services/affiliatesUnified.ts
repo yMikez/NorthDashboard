@@ -84,6 +84,9 @@ export function mergeAffiliateRows(accounts: AffiliateRow[], partnerName: string
     feApprovedCount: fe,
     feCpaPaidCount: sum(accounts, (a) => a.feCpaPaidCount),
     cpaPerFe: feWithCpa > 0 ? wavgCpaBase((a) => a.cpaPerFe) : 0,
+    // Parceiro conta como recuperação se QUALQUER conta dele for — é pago
+    // por comissão, então fica fora da média de CPA negociado.
+    isRecovery: accounts.some((x) => x.isRecovery),
     cpaPerFeApproved: fe > 0 ? r2(cpa / fe) : 0,
     netAovUsd: wavgCpaBase((a) => a.netAovUsd),
     netAfterCpaUsd: nAfter,

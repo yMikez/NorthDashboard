@@ -402,6 +402,11 @@ export interface AffiliatesResponse {
     feApprovedCount: number;       // FE+APPROVED no período (qualquer cpa)
     feCpaPaidCount: number;        // FE+APPROVED+cpa>0 (sales que pagaram CPA)
     cpaPerFe: number;              // CPA negociado (último valor observado)
+    // Afiliado de RECUPERAÇÃO (RecoveryAffiliate ativo): é pago por comissão
+    // % sobre a venda, não por CPA. O CPA/venda dele é uma fração do CPA de
+    // contrato (ex.: $38 contra ~$245) e afundaria a média de CPA negociado,
+    // por isso a aba Ranking tira ele desse KPI.
+    isRecovery: boolean;
     cpaPerFeApproved: number;      // mean ponderada (deflaciona com cpa=0)
     // Modelo de lucro estilo planilha CPA (lib/services/profitModel.ts):
     // netAovUsd = AOV atribuído × (1 − refund&cb% − fee% − opex%);
@@ -3365,6 +3370,7 @@ export async function getAffiliatesLegacy(
         id: true,
         refundCbPctOverride: true,
         mappedAffiliateId: true,
+        recovery: { select: { enabled: true } },
       },
     }),
   ]);
@@ -3639,6 +3645,7 @@ export async function getAffiliatesLegacy(
       feApprovedCount: a?.feApprovedCount ?? 0,
       feCpaPaidCount: a?.feCpaPaidCount ?? 0,
       cpaPerFe: a ? round2(a.latestCpa) : 0,
+      isRecovery: Boolean(aff.recovery?.enabled),
       // Modelo planilha CPA: AOV atribuído (sessão FE+UPs+DWs ÷ FEs) ×
       // fatores da plataforma/global → NET AOV → NET AFTER CPA → status.
       ...(() => {
@@ -3930,6 +3937,7 @@ export async function getAffiliatesSql(
           id: true,
           refundCbPctOverride: true,
           mappedAffiliateId: true,
+          recovery: { select: { enabled: true } },
         },
       }),
     ]);
@@ -4051,6 +4059,7 @@ export async function getAffiliatesSql(
       feApprovedCount,
       feCpaPaidCount: a ? Number(a.fe_cpa_paid_count) : 0,
       cpaPerFe: latestCpa != null ? round2(latestCpa) : 0,
+      isRecovery: Boolean(aff.recovery?.enabled),
       // Modelo planilha CPA — mesmas contas da legacy (paridade).
       ...(() => {
         // AOV padrão do usuário: receita do funil atribuído ÷ FEs APROVADAS.

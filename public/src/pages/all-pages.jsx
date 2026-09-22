@@ -556,10 +556,15 @@ function LeaderboardPage({ filters, onOpenAffiliate, user }) {
   // valor observado). Roda sobre `all` — a lista completa do período, NÃO
   // sobre `rows` (que o usuário filtra por mín. de pedidos e ordenação):
   // o card mede o contrato médio da base, não da fatia visível.
+  //
+  // Afiliado de RECUPERAÇÃO fica FORA (pedido do usuário, 2026-09-22): ele é
+  // pago por comissão % sobre a venda, não por CPA de contrato — o skill99
+  // entra com ~$38/venda contra ~$245 dos outros e afunda a média.
   const cpaStats = (() => {
-    const withCpa = all.filter((a) => (a.cpaPerFe || 0) > 0);
+    const withCpa = all.filter((a) => (a.cpaPerFe || 0) > 0 && !a.isRecovery);
     const sum = withCpa.reduce((s, a) => s + a.cpaPerFe, 0);
-    return { sum, count: withCpa.length, avg: withCpa.length ? sum / withCpa.length : 0 };
+    const excluded = all.filter((a) => (a.cpaPerFe || 0) > 0 && a.isRecovery);
+    return { sum, count: withCpa.length, avg: withCpa.length ? sum / withCpa.length : 0, excluded: excluded.length };
   })();
 
   // Busca por nome OU id. Quando há termo, o mínimo de pedidos é ignorado —
@@ -684,16 +689,20 @@ function LeaderboardPage({ filters, onOpenAffiliate, user }) {
             entra uma vez, independente do volume dele (é a média do CPA
             NEGOCIADO, não o custo médio por venda). Denominador = quem tem
             CPA > 0; afiliado organic (coluna "—") ficaria como zero e
-            puxaria a média pra baixo. O sub deixa a conta explícita. */}
+            puxaria a média pra baixo. Afiliado de recuperação também fica de
+            fora — é comissão %, não CPA. O sub deixa a conta explícita. */}
         <div className="mini-kpi">
           <div className="l">CPA médio por afiliado</div>
           <div className="v" style={{ color: 'var(--money)' }}>
             {cpaStats.count > 0 ? fmtCurrency(cpaStats.avg, cur, 0) : '—'}
           </div>
-          <div className="s">
+          <div className="s" title={cpaStats.excluded > 0 ? 'Afiliado de recuperação é pago por comissão % sobre a venda, não por CPA — entra na aba Recuperação, não nesta média.' : undefined}>
             {cpaStats.count > 0
               ? `${fmtCurrency(cpaStats.sum, cur, 0)} ÷ ${cpaStats.count} afiliados com CPA`
               : 'nenhum afiliado com CPA no período'}
+            {cpaStats.excluded > 0
+              ? ` · fora ${cpaStats.excluded} de recuperação`
+              : ''}
           </div>
         </div>
       </div>
@@ -1678,9 +1687,12 @@ function AllAffiliatesPage({ filters, onOpenAffiliate }) {
   //
   // Fórmula: sum(cpaPerFe) / count, onde cada afiliado entra uma vez,
   // independente de quantas vendas teve.
+  // Afiliado de recuperação (comissão %, não CPA) fica fora — a faixa abaixo
+  // já o excluiria hoje, mas a intenção fica explícita se ela mudar.
   const VALID_CPA_MIN = 200;
   const VALID_CPA_MAX = 290;
   const affsWithValidCpa = all.filter((r) => {
+    if (r.isRecovery) return false;
     const c = r.cpaPerFe || 0;
     return c >= VALID_CPA_MIN && c <= VALID_CPA_MAX;
   });
