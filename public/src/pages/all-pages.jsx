@@ -552,35 +552,19 @@ function LeaderboardPage({ filters, onOpenAffiliate, user }) {
     return a.revenue / a.feApprovedCount;
   }
 
-  // CPA médio PAGO = o que saiu do caixa por venda: soma do CPA de cada
-  // venda ÷ vendas que pagaram CPA. É a leitura que bate com a tabela —
-  // "a maioria roda acima de 240" é verdade POR VENDA.
+  // Média simples da coluna CPA/venda (cpaPerFe = CPA negociado, último
+  // valor observado). Roda sobre `all` — a lista completa do período, NÃO
+  // sobre `rows` (que o usuário filtra por mín. de pedidos e ordenação):
+  // o card mede o contrato médio da base, não da fatia visível.
   //
-  // A média SIMPLES por afiliado (cada conta valendo 1, independente do
-  // volume) fica no rodapé do card, mas não pode ser o número principal:
-  // conta com 1 venda a $95 pesa igual à que tem 1.200 vendas a $245, e o
-  // resultado cai pra ~$204 mesmo com 86% das vendas saindo a 240+.
-  //
-  // Afiliado de RECUPERAÇÃO fica fora das duas (pedido do usuário,
-  // 2026-09-22): é pago por comissão %, não por CPA de contrato.
-  //
-  // Roda sobre `all` — a base inteira do período, NÃO sobre `rows` (que o
-  // usuário filtra por mín. de pedidos e busca).
+  // Afiliado de RECUPERAÇÃO fica FORA (pedido do usuário, 2026-09-22): ele é
+  // pago por comissão % sobre a venda, não por CPA de contrato — o skill99
+  // entra com ~$38/venda contra ~$245 dos outros e afunda a média.
   const cpaStats = (() => {
     const withCpa = all.filter((a) => (a.cpaPerFe || 0) > 0 && !a.isRecovery);
     const sum = withCpa.reduce((s, a) => s + a.cpaPerFe, 0);
-    const paidSales = withCpa.reduce((s, a) => s + (a.feCpaPaidCount || 0), 0);
-    const paidUsd = withCpa.reduce((s, a) => s + a.cpaPerFe * (a.feCpaPaidCount || 0), 0);
     const excluded = all.filter((a) => (a.cpaPerFe || 0) > 0 && a.isRecovery);
-    return {
-      sum,
-      count: withCpa.length,
-      simpleAvg: withCpa.length ? sum / withCpa.length : 0,
-      paidSales,
-      paidUsd,
-      avg: paidSales > 0 ? paidUsd / paidSales : 0,
-      excluded: excluded.length,
-    };
+    return { sum, count: withCpa.length, avg: withCpa.length ? sum / withCpa.length : 0, excluded: excluded.length };
   })();
 
   // Busca por nome OU id. Quando há termo, o mínimo de pedidos é ignorado —
@@ -701,24 +685,24 @@ function LeaderboardPage({ filters, onOpenAffiliate, user }) {
           <div className="v" style={{ color: summary.churnedAff > 3 ? 'var(--warning)' : 'inherit' }}>{summary.churnedAff}</div>
           <div className="s">ativos antes · silenciosos agora</div>
         </div>
-        {/* CPA médio pago: ponderado por VENDA (CPA pago ÷ vendas com CPA).
-            A média simples por afiliado vai no rodapé — as duas juntas
-            mostram quando a cauda de contas pequenas tem contrato diferente
-            do que a operação realmente paga. Organic (coluna "—") e afiliado
-            de recuperação ficam fora das duas. */}
+        {/* CPA médio: média SIMPLES da coluna CPA/venda — cada afiliado
+            entra uma vez, independente do volume dele (é a média do CPA
+            NEGOCIADO, não o custo médio por venda). Denominador = quem tem
+            CPA > 0; afiliado organic (coluna "—") ficaria como zero e
+            puxaria a média pra baixo. Afiliado de recuperação também fica de
+            fora — é comissão %, não CPA. O sub deixa a conta explícita. */}
         <div className="mini-kpi">
-          <div className="l">CPA médio pago</div>
+          <div className="l">CPA médio por afiliado</div>
           <div className="v" style={{ color: 'var(--money)' }}>
-            {cpaStats.paidSales > 0 ? fmtCurrency(cpaStats.avg, cur, 0) : '—'}
+            {cpaStats.count > 0 ? fmtCurrency(cpaStats.avg, cur, 0) : '—'}
           </div>
-          <div className="s" title="Ponderado por venda: soma do CPA pago ÷ vendas que pagaram CPA. A média simples trata uma conta de 1 venda igual a uma de 1.000 — por isso as duas aparecem.">
-            {cpaStats.paidSales > 0
-              ? `${fmtCurrency(cpaStats.paidUsd, cur, 0)} ÷ ${fmtInt(cpaStats.paidSales)} vendas com CPA`
-              : 'nenhuma venda com CPA no período'}
+          <div className="s" title={cpaStats.excluded > 0 ? 'Afiliado de recuperação é pago por comissão % sobre a venda, não por CPA — entra na aba Recuperação, não nesta média.' : undefined}>
             {cpaStats.count > 0
-              ? ` · simples por afiliado ${fmtCurrency(cpaStats.simpleAvg, cur, 0)} (${cpaStats.count} contas)`
+              ? `${fmtCurrency(cpaStats.sum, cur, 0)} ÷ ${cpaStats.count} afiliados com CPA`
+              : 'nenhum afiliado com CPA no período'}
+            {cpaStats.excluded > 0
+              ? ` · fora ${cpaStats.excluded} de recuperação`
               : ''}
-            {cpaStats.excluded > 0 ? ' · fora recuperação' : ''}
           </div>
         </div>
       </div>
