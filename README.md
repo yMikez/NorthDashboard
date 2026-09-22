@@ -174,6 +174,11 @@ Campo `signatureOk`:
 - `false` — assinatura inválida (payload rejeitado)
 - `null` — assinatura ausente (Digistore sem passphrase configurada; ClickBank não usa aqui)
 
+## API para sistemas externos
+
+Guia de quem vai consumir o dashboard de fora (autenticação, endpoints de leitura,
+filtros, semântica dos números): [`API.md`](API.md).
+
 ## Integração NorthScale Afiliados (sistema de afiliados)
 
 Contrato completo em [`integration-dashboard.md`](integration-dashboard.md). O sistema de
