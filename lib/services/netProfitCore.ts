@@ -599,6 +599,10 @@ export function computeNetProfit(inputs: NetProfitInputs, params: NetProfitParam
   const backendNet = r2(callcenter.revenue + salesbound.revenue);
   const fes = front.fes + recovery.fes;
   const affiliateCost = r2([front, recovery].reduce((s, c) => s + c.lines.filter((l) => l.key === 'cpa' || l.key === 'commission').reduce((t, l) => t + l.usd, 0), 0));
+  // CPA médio = CPA pago ÷ FEs do FRONT. Afiliado de recuperação fica fora
+  // (mesma regra da aba Ranking, pedido do usuário 2026-09-22): ele recebe
+  // comissão %, não CPA — misturar os dois puxava a média pra baixo.
+  const frontCpa = front.lines.find((l) => l.key === 'cpa')?.usd ?? 0;
   const bufferPct = params.riskBufferPct ?? 0;
   const bufferUsd = r2(revenue * (bufferPct / 100));
   const channels: ChannelResult[] = partial.map((c) => ({
@@ -662,7 +666,7 @@ export function computeNetProfit(inputs: NetProfitInputs, params: NetProfitParam
       revenue, grossTotal: r2(partial.reduce((s, c) => s + c.gross, 0)), platformGross, backendNet,
       costs, profit, marginPct: pctOf(profit, revenue), marginOnGrossPct: pctOf(profit, platformGross),
       fes, profitPerFe: fes > 0 ? r2(profit / fes) : null,
-      affiliateCost, cpaAvg: fes > 0 ? r2(affiliateCost / fes) : null,
+      affiliateCost, cpaAvg: front.fes > 0 ? r2(frontCpa / front.fes) : null,
       buffer: bufferPct > 0 ? { pct: bufferPct, usd: bufferUsd, adjustedProfit: r2(profit - bufferUsd), adjustedMarginPct: pctOf(profit - bufferUsd, revenue) } : null,
     },
     channels,

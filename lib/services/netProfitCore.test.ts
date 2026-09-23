@@ -180,6 +180,15 @@ describe('dedupe da recuperação no front', () => {
     expect(r.kpis.revenue).toBe(1400);
     expect(r.kpis.fes).toBe(14);
   });
+  it('CPA médio é só do FRONT: a comissão do afiliado de recuperação não entra (regra do Ranking)', () => {
+    const r = computeNetProfit(inputs({
+      platforms: [platform({ byStage: { ...emptyStages(), FRONTEND: st({ gross: 10000, cpa: 2450, orders: 10 }) } })],
+      recoveryAffiliates: [recAff({ gross: 3000, orders: 20, feOrders: 20, commissionUsd: 750 })],
+    }), defaultParams());
+    expect(r.kpis.affiliateCost).toBe(3200);      // CPA + comissão (custo total de afiliados)
+    expect(r.kpis.fes).toBe(30);                   // lucro/FE segue sobre todas as FEs
+    expect(r.kpis.cpaAvg).toBe(245);               // 2450 ÷ 10 FEs do front — não (3200 ÷ 30 = 106,67)
+  });
   it('dedupeRecovery=false: front inclui (dupla contagem deliberada) e os estornos também', () => {
     const p = defaultParams(); p.dedupeRecovery = false;
     const r = computeNetProfit(inp, p);

@@ -234,7 +234,7 @@ function NpUnitStrip({ k, cur }) {
     <div className="panel" style={{ marginBottom: 14, padding: '10px 18px', display: 'flex', flexWrap: 'wrap', gap: '8px 22px', alignItems: 'center' }}>
       {item('Lucro por FE', k.profitPerFe == null ? '—' : npMoney(k.profitPerFe, cur, 2), k.profitPerFe == null ? undefined : npTone(k.profitPerFe))}
       {item('FEs', fmtInt(k.fes))}
-      {item('CPA médio', k.cpaAvg == null ? '—' : npMoney(k.cpaAvg, cur, 2))}
+      <span title="CPA pago ÷ FEs do front. Afiliado de recuperação (comissão %) fica fora.">{item('CPA médio', k.cpaAvg == null ? '—' : npMoney(k.cpaAvg, cur, 2))}</span>
       {item('Backend líquido', npMoney(k.backendNet, cur), 'var(--money)')}
       {k.buffer && (
         <span style={{ display: 'inline-flex', alignItems: 'baseline', gap: 6, flexWrap: 'wrap', paddingLeft: 14, borderLeft: '1px solid var(--border-soft)' }}>
