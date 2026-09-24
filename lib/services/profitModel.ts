@@ -1,7 +1,11 @@
 // Modelo de lucro estilo planilha CPA (.xlsx na raiz do repo, decodificada
 // em 2026-07-29):
-//   NET AOV       = AOV × (1 − refund&cb% − fee da plataforma − opex%)
+//   NET AOV       = AOV × (1 − refund&cb% − fee da plataforma − opex% − allowance%)
 //   NET AFTER CPA = NET AOV − CPA
+//
+// allowance% (reserva retida pela plataforma, Platform.allowancePct) entrou
+// em 2026-09-23 a pedido do usuário: "allowance também deve ser considerado
+// como custo" — antes o NET AFTER CPA ignorava a reserva e saía otimista.
 //   STATUS        : ≥ healthyMinUsd → SAUDÁVEL · ≥ attentionMinUsd →
 //                   ATENÇÃO · abaixo → RENEGOCIAR (régua editável, admin)
 //
@@ -60,6 +64,9 @@ export interface ProfitPcts {
   refundCbPct: number;
   feePct: number;
   opexPct: number;
+  // Reserva/allowance retida pela plataforma. Opcional só pra não quebrar
+  // chamadas antigas — em produção SEMPRE vem do cadastro da plataforma.
+  allowancePct?: number;
 }
 
 export interface ProfitThresholds {
@@ -70,12 +77,15 @@ export interface ProfitThresholds {
 export interface ProfitModelInputs {
   opexPct: number;
   thresholds: ProfitThresholds;
-  // slug → { feePct, refundCbPct } (0 quando não cadastrado).
-  byPlatform: Map<string, { feePct: number; refundCbPct: number }>;
+  // slug → { feePct, refundCbPct, allowancePct } (0 quando não cadastrado).
+  byPlatform: Map<string, PlatformPcts>;
 }
 
+export interface PlatformPcts { feePct: number; refundCbPct: number; allowancePct: number }
+export const ZERO_PLATFORM_PCTS: PlatformPcts = { feePct: 0, refundCbPct: 0, allowancePct: 0 };
+
 export function netAovUsd(aov: number, pcts: ProfitPcts): number {
-  const keep = 1 - (pcts.refundCbPct + pcts.feePct + pcts.opexPct) / 100;
+  const keep = 1 - (pcts.refundCbPct + pcts.feePct + pcts.opexPct + (pcts.allowancePct ?? 0)) / 100;
   return Math.round(aov * keep * 100) / 100;
 }
 
@@ -88,7 +98,7 @@ export function cpaStatus(netAfterCpa: number, th: ProfitThresholds): CpaStatus 
 export async function getProfitModelInputs(): Promise<ProfitModelInputs> {
   const [config, platforms, observed] = await Promise.all([
     db.profitConfig.findUnique({ where: { id: 'global' } }),
-    db.platform.findMany({ select: { slug: true, feeRatePct: true, refundCbPct: true } }),
+    db.platform.findMany({ select: { slug: true, feeRatePct: true, refundCbPct: true, allowancePct: true } }),
     getObservedRefundCbPct(),
   ]);
   return {
@@ -113,6 +123,7 @@ export async function getProfitModelInputs(): Promise<ProfitModelInputs> {
         {
           feePct: p.feeRatePct ? Number(p.feeRatePct) : 0,
           refundCbPct: useReal ? obs.valuePct : manual,
+          allowancePct: p.allowancePct ? Number(p.allowancePct) : 0,
         },
       ];
     })),

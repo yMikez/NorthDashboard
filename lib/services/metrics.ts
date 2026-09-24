@@ -9,7 +9,7 @@ import {
 } from './dailyMetrics';
 import {
   getProfitModelInputs, getObservedRefundCbPct, netAovUsd, cpaStatus,
-  realOrderCount, EXTRA_ROW_REFUND_PLATFORMS,
+  realOrderCount, EXTRA_ROW_REFUND_PLATFORMS, ZERO_PLATFORM_PCTS,
 } from './profitModel';
 import { DEFAULT_SUPPLIER } from './cogs';
 
@@ -1130,12 +1130,13 @@ async function topAffiliatesQuery(
     const feApproved = Number(r.fe_approved);
     const revenue = round2(Number(r.revenue));
     const aov = feApproved > 0 ? revenue / feApproved : 0;
-    const ppBase = pm.byPlatform.get(r.platform_slug) ?? { feePct: 0, refundCbPct: 0 };
+    const ppBase = pm.byPlatform.get(r.platform_slug) ?? ZERO_PLATFORM_PCTS;
     const ovr = r.refund_override != null ? Number(r.refund_override) : null;
     const nAov = netAovUsd(aov, {
       feePct: ppBase.feePct,
       refundCbPct: ovr ?? ppBase.refundCbPct,
       opexPct: pm.opexPct,
+      allowancePct: ppBase.allowancePct,
     });
     const latestCpa = r.latest_cpa != null ? round2(Number(r.latest_cpa)) : 0;
     const nAfter = latestCpa > 0 ? round2(nAov - latestCpa) : null;
@@ -3092,9 +3093,9 @@ export async function getAffiliateDetail(
   // AOV direto (mesmo numerador/denominador do ranking) alimenta o modelo.
   const aovDirect = feApprovedCount > 0 ? revenue / feApprovedCount : 0;
   const modelKpis = (() => {
-    const ppBase = pm.byPlatform.get(aff.platform.slug) ?? { feePct: 0, refundCbPct: 0 };
+    const ppBase = pm.byPlatform.get(aff.platform.slug) ?? ZERO_PLATFORM_PCTS;
     const ovr = aff.refundCbPctOverride != null ? Number(aff.refundCbPctOverride) : null;
-    const pp = { feePct: ppBase.feePct, refundCbPct: ovr ?? ppBase.refundCbPct };
+    const pp = { feePct: ppBase.feePct, refundCbPct: ovr ?? ppBase.refundCbPct, allowancePct: ppBase.allowancePct };
     const nAov = netAovUsd(aovDirect, { ...pp, opexPct: pm.opexPct });
     const nAfter = latestCpa > 0 ? round2(nAov - latestCpa) : null;
     return {
@@ -3652,10 +3653,10 @@ export async function getAffiliatesLegacy(
         const feCount = a?.feApprovedCount ?? 0;
         // AOV padrão do usuário: receita do funil atribuído ÷ FEs APROVADAS.
         const aovGlobal = feCount > 0 ? (a?.revenue ?? 0) / feCount : 0; // RECEITA da linha ÷ FEs (verificável a olho)
-        const ppBase = pm.byPlatform.get(aff.platform.slug) ?? { feePct: 0, refundCbPct: 0 };
+        const ppBase = pm.byPlatform.get(aff.platform.slug) ?? ZERO_PLATFORM_PCTS;
         // Override por afiliado > default da plataforma (decisão do usuário).
         const ovr = aff.refundCbPctOverride != null ? Number(aff.refundCbPctOverride) : null;
-        const pp = { feePct: ppBase.feePct, refundCbPct: ovr ?? ppBase.refundCbPct };
+        const pp = { feePct: ppBase.feePct, refundCbPct: ovr ?? ppBase.refundCbPct, allowancePct: ppBase.allowancePct };
         const nAov = netAovUsd(aovGlobal, { ...pp, opexPct: pm.opexPct });
         const cpaVal = a ? round2(a.latestCpa) : 0;
         const nAfter = cpaVal > 0 ? round2(nAov - cpaVal) : null;
@@ -4064,10 +4065,10 @@ export async function getAffiliatesSql(
       ...(() => {
         // AOV padrão do usuário: receita do funil atribuído ÷ FEs APROVADAS.
         const aovGlobal = feApprovedCount > 0 ? (a ? toNumber(a.revenue) : 0) / feApprovedCount : 0; // RECEITA da linha ÷ FEs
-        const ppBase = pm.byPlatform.get(aff.platform.slug) ?? { feePct: 0, refundCbPct: 0 };
+        const ppBase = pm.byPlatform.get(aff.platform.slug) ?? ZERO_PLATFORM_PCTS;
         // Override por afiliado > default da plataforma (decisão do usuário).
         const ovr = aff.refundCbPctOverride != null ? Number(aff.refundCbPctOverride) : null;
-        const pp = { feePct: ppBase.feePct, refundCbPct: ovr ?? ppBase.refundCbPct };
+        const pp = { feePct: ppBase.feePct, refundCbPct: ovr ?? ppBase.refundCbPct, allowancePct: ppBase.allowancePct };
         const nAov = netAovUsd(aovGlobal, { ...pp, opexPct: pm.opexPct });
         const cpaVal = latestCpa != null ? round2(latestCpa) : 0;
         const nAfter = cpaVal > 0 ? round2(nAov - cpaVal) : null;
@@ -4691,11 +4692,12 @@ async function computeTopAffiliates(orders: OrderWithJoins[], limit: number) {
     .slice(0, limit)
     .map((e) => {
       const aov = e.feApproved > 0 ? e.revenue / e.feApproved : 0;
-      const ppBase = pm.byPlatform.get(e.platformSlug) ?? { feePct: 0, refundCbPct: 0 };
+      const ppBase = pm.byPlatform.get(e.platformSlug) ?? ZERO_PLATFORM_PCTS;
       const nAov = netAovUsd(aov, {
         feePct: ppBase.feePct,
         refundCbPct: e.refundCbPctOverride ?? ppBase.refundCbPct,
         opexPct: pm.opexPct,
+        allowancePct: ppBase.allowancePct,
       });
       const nAfter = e.latestCpa > 0 ? round2(nAov - e.latestCpa) : null;
       return {

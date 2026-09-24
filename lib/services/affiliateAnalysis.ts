@@ -11,7 +11,7 @@
 
 import { Prisma } from '@prisma/client';
 import { db } from '../db';
-import { getProfitModelInputs, type ProfitModelInputs } from './profitModel';
+import { getProfitModelInputs, ZERO_PLATFORM_PCTS, type ProfitModelInputs } from './profitModel';
 import { effectiveInternal, suggestLinks, type IdentityAffiliate } from './affiliateIdentityCore';
 import {
   COVERAGE_DAYS, WINDOWS, windowRanges, sumRange, latestCpaInRange, metricsFor, mergeMetrics,
@@ -313,11 +313,11 @@ interface Entity {
 }
 
 function ratesFor(a: AffMeta, pm: ProfitModelInputs): RateInputs {
-  const base = pm.byPlatform.get(a.slug) ?? { feePct: 0, refundCbPct: 0 };
+  const base = pm.byPlatform.get(a.slug) ?? ZERO_PLATFORM_PCTS;
   return {
     slug: a.slug, feePct: base.feePct,
     refundCbPct: a.refundCbPctOverride ?? base.refundCbPct,
-    opexPct: pm.opexPct, thresholds: pm.thresholds,
+    opexPct: pm.opexPct, allowancePct: base.allowancePct, thresholds: pm.thresholds,
   };
 }
 

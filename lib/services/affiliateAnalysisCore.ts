@@ -106,6 +106,7 @@ export interface RateInputs {
   feePct: number;
   refundCbPct: number;
   opexPct: number;
+  allowancePct?: number;   // reserva da plataforma — entra no NET AOV desde 2026-09-23
   thresholds: ProfitThresholds;
 }
 
@@ -144,7 +145,7 @@ export function metricsFor(bucket: Bucket, activeDays: number, days: number, cpa
   const denom = realOrders || 1;
   const fe = bucket.feApproved;
   const aov = fe > 0 ? bucket.revenue / fe : 0;
-  const netAov = netAovUsd(aov, { feePct: rates.feePct, refundCbPct: rates.refundCbPct, opexPct: rates.opexPct });
+  const netAov = netAovUsd(aov, { feePct: rates.feePct, refundCbPct: rates.refundCbPct, opexPct: rates.opexPct, allowancePct: rates.allowancePct ?? 0 });
   const cpaVal = round2(cpaPerFe);
   const nAfter = cpaVal > 0 && fe > 0 ? round2(netAov - cpaVal) : null;
   return {

@@ -314,6 +314,23 @@ describe('totais, participações, afiliados e produtos (§10.8)', () => {
     expect(r.affiliates.find((a) => a.affiliateId === 'a2')).toMatchObject({ fee: 200, allowance: 0 });
     expect(r.affiliates[0].affiliateId).toBe('a1');
   });
+  it('projeção (modelo CPA): NET AOV com reembolso do MODELO, fee, opex e reserva, menos CPA por FE, × FEs', () => {
+    // plataforma padrão do teste: fee 8, reserva 2, refund do modelo 10; opex 10 → keep = 70%
+    const r = computeNetProfit(inputs({
+      platforms: [platform({ byStage: { ...emptyStages(), FRONTEND: st({ gross: 6000, cpa: 2000, orders: 20 }) } })],
+      affiliates: [{ affiliateId: 'a1', externalId: 'maria', nickname: 'Maria', platformSlug: 'digistore24', mappedName: null, byStage: { ...emptyStages(), FRONTEND: st({ gross: 6000, cpa: 2000, orders: 20 }) }, refundsObserved: 300 }],
+      profitModel: { opexPct: 10 },
+    }), defaultParams());
+    const m = r.affiliates[0];
+    // AOV 300 × 0,70 = 210 · CPA/FE 100 · 110 por FE · × 20 = 2.200
+    expect(m.projectionPerFe).toBe(110);
+    expect(m.projection).toBe(2200);
+    // o Lucro da aba usa o reembolso OBSERVADO (300) e o custo de produto — é outro número
+    expect(m.profit).not.toBe(m.projection);
+    // sem FE não há projeção
+    const r0 = computeNetProfit(inputs({ affiliates: [{ affiliateId: 'a2', externalId: 'x', nickname: null, platformSlug: 'digistore24', mappedName: null, byStage: { ...emptyStages(), UPSELL: st({ gross: 500, orders: 2 }) }, refundsObserved: 0 }] }), defaultParams());
+    expect(r0.affiliates[0].projection).toBeNull();
+  });
   it('afiliado de recuperação: comissão no lugar do CPA + fee e reserva da plataforma', () => {
     const r = computeNetProfit(inputs({
       platforms: [platform({ byStage: { ...emptyStages(), FRONTEND: st({ gross: 1000, orders: 5, cogs: 100, fulfillment: 0 }) } })],

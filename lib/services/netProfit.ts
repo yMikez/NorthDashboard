@@ -270,6 +270,7 @@ async function measureInputs(start: Date, end: Date, lite: boolean): Promise<Net
     affiliates,
     products,
     salesbound: { measured: sbMeasured },
+    profitModel: { opexPct: pm.opexPct },
   };
 }
 

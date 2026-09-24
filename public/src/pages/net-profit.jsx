@@ -816,19 +816,28 @@ function NpProducts({ rows, cur }) {
 }
 
 // ── Afiliados ───────────────────────────────────────────────────────────
-function NpAffiliates({ rows, cur }) {
+// Projeção (modelo CPA da planilha): NET AOV − CPA por FE, × FEs. O texto do
+// tooltip é a explicação inteira — a coluna fica ao lado do Lucro de
+// propósito, pra comparação direta.
+const NP_PROJ_HINT = 'Projeção pelo modelo CPA: (AOV × (1 − reembolso do modelo − fee − opex − reserva) − CPA por FE) × FEs. Difere do Lucro em duas premissas: usa a taxa de reembolso do modelo (por plataforma, coorte madura) e o opex% global no lugar do custo de produto.';
+
+function NpAffiliates({ rows, cur, onlyLoss, setOnlyLoss }) {
   const [q, setQ] = useStateNP('');
   const [detail, setDetail] = useStateNP(false);
   const [showAll, setShowAll] = useStateNP(false);
   const qn = q.trim().toLowerCase();
-  const list = rows.filter((a) => !qn || (a.nickname || '').toLowerCase().includes(qn) || a.externalId.toLowerCase().includes(qn) || (a.mappedName || '').toLowerCase().includes(qn));
+  const list = rows
+    .filter((a) => !onlyLoss || a.profit < 0)
+    .filter((a) => !qn || (a.nickname || '').toLowerCase().includes(qn) || a.externalId.toLowerCase().includes(qn) || (a.mappedName || '').toLowerCase().includes(qn));
   const shown = showAll ? list : list.slice(0, 50);
+  const lossCount = rows.filter((a) => a.profit < 0).length;
+  const cols = 8 + (detail ? 6 : 0);
   return (
     <div className="panel" style={{ marginBottom: 14 }}>
       <div className="panel-head" style={{ flexWrap: 'wrap' }}>
         <div className="panel-title">
           <span className="panel-eyebrow">MARGEM POR AFILIADO</span>
-          <div className="panel-sub">{fmtInt(rows.length)} contas com venda no período · mesma fórmula das plataformas, com o fee e a reserva da plataforma de cada um</div>
+          <div className="panel-sub">{fmtInt(rows.length)} contas com venda no período · Lucro = fórmula das plataformas com os parâmetros da aba · Projeção = modelo CPA</div>
         </div>
         <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
           <div className="select-btn" style={{ padding: '0 10px', width: 'min(220px, 100%)' }}>
@@ -839,6 +848,9 @@ function NpAffiliates({ rows, cur }) {
             <button className={!detail ? 'is-active' : ''} onClick={() => setDetail(false)}>resumo</button>
             <button className={detail ? 'is-active' : ''} onClick={() => setDetail(true)}>linha a linha</button>
           </div>
+          <button className={`btn ${onlyLoss ? 'btn-primary' : 'btn-ghost'}`} style={{ fontSize: 11 }} onClick={() => setOnlyLoss(!onlyLoss)} title="mostrar só quem fechou o período no vermelho">
+            só prejuízo{lossCount ? ` (${fmtInt(lossCount)})` : ''}
+          </button>
         </div>
       </div>
       <div className="tbl-wrap" style={{ margin: 0, padding: 0, maxHeight: 640, overflowY: 'auto' }}>
@@ -853,12 +865,14 @@ function NpAffiliates({ rows, cur }) {
                 <th className="num">Reembolso</th><th className="num">Fee</th><th className="num">Produto</th><th className="num">Reserva</th>
               </>}
               <th className="num">Lucro</th>
+              <th className="num" title={NP_PROJ_HINT}>Projeção</th>
               <th className="num">Margem</th>
               <th className="num">Lucro/FE</th>
+              {detail && <th className="num" title={NP_PROJ_HINT}>Proj./FE</th>}
             </tr>
           </thead>
           <tbody>
-            {shown.length === 0 && <tr><td colSpan={detail ? 12 : 7} style={{ textAlign: 'center', padding: 20, opacity: 0.6 }}>Nenhum afiliado</td></tr>}
+            {shown.length === 0 && <tr><td colSpan={cols} style={{ textAlign: 'center', padding: 20, opacity: 0.6 }}>{onlyLoss ? 'Nenhum afiliado no prejuízo' : 'Nenhum afiliado'}</td></tr>}
             {shown.map((a) => {
               const pb = platBadge(a.platformSlug);
               return (
@@ -878,8 +892,10 @@ function NpAffiliates({ rows, cur }) {
                     <td className="num cell-mono">{npMoney(a.allowance, cur)}</td>
                   </>}
                   <td className="num cell-mono" style={{ fontWeight: 700, color: npTone(a.profit) }}>{npMoney(a.profit, cur)}</td>
+                  <td className="num cell-mono" style={{ color: a.projection == null ? 'var(--fg5)' : npTone(a.projection) }} title={NP_PROJ_HINT}>{a.projection == null ? '—' : npMoney(a.projection, cur)}</td>
                   <td className="num cell-mono" style={{ color: a.marginPct >= 0 ? 'var(--fg1)' : 'var(--danger)' }}>{npPct(a.marginPct)}</td>
                   <td className="num cell-mono">{a.profitPerFe == null ? '—' : npMoney(a.profitPerFe, cur, 2)}</td>
+                  {detail && <td className="num cell-mono" style={{ color: a.projectionPerFe == null ? 'var(--fg5)' : npTone(a.projectionPerFe) }}>{a.projectionPerFe == null ? '—' : npMoney(a.projectionPerFe, cur, 2)}</td>}
                 </tr>
               );
             })}
@@ -888,6 +904,60 @@ function NpAffiliates({ rows, cur }) {
       </div>
       {list.length > shown.length && (
         <div style={{ marginTop: 8 }}><button className="btn btn-ghost" onClick={() => setShowAll(true)}>ver todos ({fmtInt(list.length)})</button></div>
+      )}
+    </div>
+  );
+}
+
+// ── Alerta: afiliados que estão dando prejuízo ──────────────────────────
+// Faixa vermelha logo abaixo das pendências (fica visível em qualquer
+// visão). Lista os maiores buracos e manda pra tabela de afiliados já
+// filtrada em "só prejuízo".
+function NpLossAlert({ affiliates, cur, onOpen }) {
+  const [open, setOpen] = useStateNP(false);
+  const losers = affiliates.filter((a) => a.profit < 0).sort((a, b) => a.profit - b.profit);
+  if (losers.length === 0) return null;
+  const total = losers.reduce((s, a) => s + a.profit, 0);
+  const gross = losers.reduce((s, a) => s + a.gross, 0);
+  const top = losers.slice(0, 8);
+  const alsoNegProj = losers.filter((a) => a.projection != null && a.projection < 0).length;
+  return (
+    <div className="panel" style={{ marginBottom: 14, padding: '10px 16px', borderColor: 'color-mix(in oklab, var(--danger) 45%, transparent)' }}>
+      <button onClick={() => setOpen((v) => !v)} style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 10, background: 'none', border: 0, padding: 0, cursor: 'pointer', color: 'var(--fg1)', textAlign: 'left' }}>
+        <span style={{ width: 8, height: 8, borderRadius: 4, background: 'var(--danger)', flex: 'none' }}/>
+        <span style={{ fontSize: 12, fontWeight: 700 }}>{fmtInt(losers.length)} {losers.length === 1 ? 'afiliado está dando' : 'afiliados estão dando'} prejuízo</span>
+        <span className="cell-mono" style={{ fontSize: 12, color: 'var(--danger)', fontWeight: 700 }}>{npMoney(total, cur)}</span>
+        <span style={{ fontSize: 11, color: 'var(--fg4)' }}>sobre {npMoney(gross, cur)} de gross{alsoNegProj ? ` · ${fmtInt(alsoNegProj)} também negativo${alsoNegProj === 1 ? '' : 's'} na projeção` : ''}</span>
+        <span style={{ marginLeft: 'auto', color: 'var(--fg5)' }}><Icon name={open ? 'chevron-down' : 'chevron-right'} size={12}/></span>
+      </button>
+      {open && (
+        <div style={{ marginTop: 12, paddingTop: 10, borderTop: '1px solid var(--border-soft)' }}>
+          <div className="tbl-wrap" style={{ margin: 0, padding: 0 }}>
+            <table className="tbl" style={{ fontSize: 12 }}>
+              <thead><tr><th>Afiliado</th><th>Plat.</th><th className="num">Gross</th><th className="num">CPA</th><th className="num">Lucro</th><th className="num">Margem</th><th className="num" title={NP_PROJ_HINT}>Projeção</th></tr></thead>
+              <tbody>
+                {top.map((a) => {
+                  const pb = platBadge(a.platformSlug);
+                  return (
+                    <tr key={a.affiliateId}>
+                      <td style={{ fontWeight: 600 }}>{a.nickname || a.externalId}{a.channel === 'recovery' && <span className="badge warn" style={{ fontSize: 8, marginLeft: 6 }}>RECUPERAÇÃO</span>}</td>
+                      <td><span className={`plat ${pb.cls}`}>{pb.short}</span></td>
+                      <td className="num cell-mono">{npMoney(a.gross, cur)}</td>
+                      <td className="num cell-mono">{npMoney(a.cpa, cur)}</td>
+                      <td className="num cell-mono" style={{ fontWeight: 700, color: 'var(--danger)' }}>{npMoney(a.profit, cur)}</td>
+                      <td className="num cell-mono" style={{ color: 'var(--danger)' }}>{npPct(a.marginPct)}</td>
+                      <td className="num cell-mono" style={{ color: a.projection == null ? 'var(--fg5)' : npTone(a.projection) }}>{a.projection == null ? '—' : npMoney(a.projection, cur)}</td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+          <div style={{ display: 'flex', gap: 10, alignItems: 'center', marginTop: 8, flexWrap: 'wrap' }}>
+            <button className="btn btn-ghost" style={{ fontSize: 11 }} onClick={onOpen}>ver {losers.length > top.length ? `todos os ${fmtInt(losers.length)}` : 'na tabela'} →</button>
+            <span style={{ fontSize: 10.5, color: 'var(--fg5)' }}>Lucro = parâmetros da aba (reembolso {'&'} custo como configurados). Projeção = modelo CPA. Quando as duas estão negativas, o CPA desse afiliado não fecha nem no melhor cenário.</span>
+          </div>
+        </div>
       )}
     </div>
   );
@@ -961,6 +1031,7 @@ function NetProfitPage({ filters }) {
   const [msg, setMsg] = useStateNP(null);
   const [drawer, setDrawer] = useStateNP(false);
   const [view, setView] = useStateNP('canais');
+  const [onlyLoss, setOnlyLoss] = useStateNP(false);
   const [openChannel, setOpenChannel] = useStateNP(null);
   const [recomputeTick, setRecomputeTick] = useStateNP(0);
   const skipCompute = useRefNP(true);
@@ -1076,6 +1147,7 @@ function NetProfitPage({ filters }) {
       {!loading && <NpUnitStrip k={k} cur={cur}/>}
       {!loading && <NpCompositionBar result={result} cur={cur}/>}
       {!loading && <NpNeedsStrip needs={needs}/>}
+      {!loading && <NpLossAlert affiliates={result.affiliates} cur={cur} onOpen={() => { setOnlyLoss(true); setView('afiliados'); }}/>}
 
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12, flexWrap: 'wrap' }}>
         <div className="seg">
@@ -1104,7 +1176,7 @@ function NetProfitPage({ filters }) {
       )}
       {view === 'dias' && !loading && params && <NpDaily filters={filters} params={params} cur={cur}/>}
       {view === 'produtos' && !loading && <NpProducts rows={result.products || []} cur={cur}/>}
-      {view === 'afiliados' && !loading && <NpAffiliates rows={result.affiliates} cur={cur}/>}
+      {view === 'afiliados' && !loading && <NpAffiliates rows={result.affiliates} cur={cur} onlyLoss={onlyLoss} setOnlyLoss={setOnlyLoss}/>}
       {view === 'projecoes' && !loading && (
         <NpScenarios scenarios={scenarios} current={k} cur={cur} busy={busy} onDelete={deleteScenario}
           onApply={(p) => { setParams(p); setDrawer(true); setMsg({ ok: true, text: 'parâmetros da projeção carregados (não salvos)' }); }}/>

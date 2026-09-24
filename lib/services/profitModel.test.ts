@@ -13,6 +13,11 @@ describe('netAovUsd (fórmula da planilha CPA)', () => {
   it('AOV 0 (sem sessões) → 0', () => {
     expect(netAovUsd(0, { refundCbPct: 15, feePct: 8, opexPct: 10 })).toBe(0);
   });
+  // Pedido do usuário (2026-09-23): a reserva retida pela plataforma é custo.
+  it('allowance (reserva) entra como custo; ausente = 0 (compatível com o que já existia)', () => {
+    expect(netAovUsd(340, { refundCbPct: 15, feePct: 8, opexPct: 10, allowancePct: 5 })).toBe(210.8);   // 340 × 0,62
+    expect(netAovUsd(340, { refundCbPct: 15, feePct: 8, opexPct: 10, allowancePct: 0 })).toBe(227.8);
+  });
 });
 
 describe('cpaStatus (régua da planilha: ≥10 saudável, ≥0 atenção, <0 renegociar)', () => {
