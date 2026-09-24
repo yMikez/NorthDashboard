@@ -166,6 +166,44 @@ export interface CrmRow {
   reason: string;
 }
 
+// ── séries diárias → números da régua ──────────────────────────────────
+// (puro: entra a série da cobertura, sai o que a classificação precisa)
+
+/** Índice do último dia com venda aprovada. null = não vendeu na cobertura. */
+export function lastSaleIndex(sales: number[]): number | null {
+  for (let i = sales.length - 1; i >= 0; i--) if (sales[i] > 0) return i;
+  return null;
+}
+
+/**
+ * Blocos de 7 dias terminando em `lastIdx`, mais recente por ÚLTIMO.
+ * O último bloco é "os últimos 7 dias" — é ele que vira `sales7`.
+ */
+export function weeklyBlocks(sales: number[], lastIdx: number, blocks: number): number[] {
+  const out: number[] = [];
+  for (let i = blocks - 1; i >= 0; i--) {
+    const to = lastIdx - i * 7;
+    let sum = 0;
+    for (let d = Math.max(0, to - 6); d <= to; d++) sum += sales[d] ?? 0;
+    out.push(sum);
+  }
+  return out;
+}
+
+/** Melhor soma de `size` dias corridos na série (o "melhor mês" dele). */
+export function peakWindow(daily: number[], size: number): number {
+  if (!daily.length) return 0;
+  if (daily.length < size) return Math.round(daily.reduce((a, b) => a + b, 0) * 100) / 100;
+  let sum = 0;
+  for (let i = 0; i < size; i++) sum += daily[i];
+  let best = sum;
+  for (let i = size; i < daily.length; i++) {
+    sum += daily[i] - daily[i - size];
+    if (sum > best) best = sum;
+  }
+  return Math.round(best * 100) / 100;
+}
+
 // ── normalizações ──────────────────────────────────────────────────────
 
 /** Aceita o rótulo cru da plataforma de afiliados; devolve null se não reconhecer. */

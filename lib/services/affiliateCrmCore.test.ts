@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   DEFAULT_CRM_CONFIG, buildCrmRow, classifySegment, cycleKeyFor, isAtRisk, normalizePhone, normalizeTier,
   reactivationLadder, resolvePhone, resolveTier, rowsToCsv, sortForQueue, summarize, upgradeTarget,
+  lastSaleIndex, weeklyBlocks, peakWindow,
   type CrmInput, type CrmConfigInput,
 } from './affiliateCrmCore';
 
@@ -195,5 +196,37 @@ describe('resumo e CSV', () => {
     const [head, line] = csv.split('\n');
     expect(head.startsWith('nome,whatsapp,tier,dias_sem_venda,produto_principal,cpa_atual,tag_sugerida')).toBe(true);
     expect(line.startsWith('"Silva, João",5511988887777,Base,12,NeuroMindPro,200.00,reativacao_d7')).toBe(true);
+  });
+});
+
+// A aritmética que define dormência e valor. Errar aqui é mandar "sumiu?"
+// pra quem vendeu ontem, ou ordenar a fila pelo afiliado errado.
+describe('séries diárias', () => {
+  it('última venda é o dia mais recente com venda, não o último dia da série', () => {
+    expect(lastSaleIndex([0, 3, 0, 0])).toBe(1);
+    expect(lastSaleIndex([0, 0, 0])).toBeNull();
+    expect(lastSaleIndex([])).toBeNull();
+  });
+  it('blocos semanais: o último é sempre "os últimos 7 dias"', () => {
+    // 28 dias, 1 venda por dia
+    const sales = new Array(28).fill(1);
+    expect(weeklyBlocks(sales, 27, 4)).toEqual([7, 7, 7, 7]);
+  });
+  it('blocos semanais respeitam a ordem (mais recente por último)', () => {
+    const sales = new Array(28).fill(0);
+    sales[27] = 5;            // ontem/hoje
+    sales[0] = 9;             // 4 semanas atrás
+    expect(weeklyBlocks(sales, 27, 4)).toEqual([9, 0, 0, 5]);
+  });
+  it('bloco que cai antes do início da cobertura não inventa venda', () => {
+    expect(weeklyBlocks([1, 1, 1], 2, 3)).toEqual([0, 0, 3]);
+  });
+  it('melhor janela pega o pico, não o começo nem o fim', () => {
+    expect(peakWindow([0, 0, 10, 20, 0, 0], 2)).toBe(30);
+    expect(peakWindow([5, 5, 5], 2)).toBe(10);
+  });
+  it('série menor que a janela vira a soma inteira', () => {
+    expect(peakWindow([3, 4], 30)).toBe(7);
+    expect(peakWindow([], 30)).toBe(0);
   });
 });

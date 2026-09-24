@@ -22,6 +22,7 @@ import {
 import { windowRanges, round2 } from './affiliateAnalysisCore';
 import {
   DEFAULT_CRM_CONFIG, buildCrmRow, rowsToCsv, sortForQueue, summarize,
+  lastSaleIndex, weeklyBlocks, peakWindow,
   SEGMENT_ORDER, SKIP_TOUCHPOINT,
   type CrmConfigInput, type CrmInput, type CrmRow, type CrmSegment, type CrmSummary, type Tier, type TouchRecord,
 } from './affiliateCrmCore';
@@ -204,25 +205,6 @@ function brtDayString(d: Date): string {
   return new Date(d.getTime() - 3 * 3600 * 1000).toISOString().slice(0, 10);
 }
 
-/** Último índice de dia com venda aprovada, olhando a cobertura inteira. */
-function lastSaleIdx(sales: number[]): number | null {
-  for (let i = sales.length - 1; i >= 0; i--) if (sales[i] > 0) return i;
-  return null;
-}
-
-/** Melhor receita de 30 dias corridos dentro da cobertura. */
-function peakWindow(daily: number[], size: number): number {
-  if (daily.length < size) return round2(daily.reduce((a, b) => a + b, 0));
-  let sum = 0;
-  for (let i = 0; i < size; i++) sum += daily[i];
-  let best = sum;
-  for (let i = size; i < daily.length; i++) {
-    sum += daily[i] - daily[i - size];
-    if (sum > best) best = sum;
-  }
-  return round2(best);
-}
-
 interface MappingInfo { phone: string | null; tier: string | null; status: string; name: string; createdAt: Date }
 
 function entityMappedId(raw: RawData, e: Entity): string | null {
@@ -284,7 +266,7 @@ export async function listAffiliateCrm(opts: CrmListOptions = {}): Promise<CrmLi
   for (const e of entities) {
     const full = entityRange(raw, e, coverage);
     const m30 = entityRange(raw, e, cur30).m;
-    const idx = lastSaleIdx(full.sales);
+    const idx = lastSaleIndex(full.sales);
     const mappedId = entityMappedId(raw, e);
     if (mappedId) seenMapped.add(mappedId);
     const mapping = mappedId ? mappingById.get(mappedId) ?? null : null;
@@ -317,14 +299,7 @@ export async function listAffiliateCrm(opts: CrmListOptions = {}): Promise<CrmLi
     let mainFamily: string | null = null; let bestSales = 0;
     for (const [fam, v] of fams) if (v.sales > bestSales) { mainFamily = fam; bestSales = v.sales; }
 
-    const weekly: number[] = [];
-    for (let i = WEEK_BLOCKS - 1; i >= 0; i--) {
-      const to = raw.lastIdx - i * 7;
-      const from = to - 6;
-      let s = 0;
-      for (let d = Math.max(0, from); d <= to; d++) s += full.sales[d] ?? 0;
-      weekly.push(s);
-    }
+    const weekly = weeklyBlocks(full.sales, raw.lastIdx, WEEK_BLOCKS);
     const sales7 = weekly[weekly.length - 1] ?? 0;
     let sales30 = 0;
     for (let d = cur30.from; d <= cur30.to; d++) sales30 += full.sales[d] ?? 0;
