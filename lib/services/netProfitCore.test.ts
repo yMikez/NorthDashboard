@@ -325,11 +325,33 @@ describe('totais, participações, afiliados e produtos (§10.8)', () => {
     // AOV 300 × 0,70 = 210 · CPA/FE 100 · 110 por FE · × 20 = 2.200
     expect(m.projectionPerFe).toBe(110);
     expect(m.projection).toBe(2200);
+    // sem backend no período, a projeção total é só o front
+    expect(m.backendProjection).toBe(0);
+    expect(m.projectionTotal).toBe(2200);
+    expect(r.kpis.backendPerFe).toBe(0);
     // o Lucro da aba usa o reembolso OBSERVADO (300) e o custo de produto — é outro número
     expect(m.profit).not.toBe(m.projection);
     // sem FE não há projeção
     const r0 = computeNetProfit(inputs({ affiliates: [{ affiliateId: 'a2', externalId: 'x', nickname: null, platformSlug: 'digistore24', mappedName: null, byStage: { ...emptyStages(), UPSELL: st({ gross: 500, orders: 2 }) }, refundsObserved: 0 }] }), defaultParams());
     expect(r0.affiliates[0].projection).toBeNull();
+  });
+  it('projeção TOTAL soma o backend: lucro de call centers + SalesBound ÷ FEs de plataforma, × FEs do afiliado', () => {
+    const r = computeNetProfit(inputs({
+      platforms: [platform({ byStage: { ...emptyStages(), FRONTEND: st({ gross: 6000, cpa: 2000, orders: 20 }) } })],
+      affiliates: [
+        { affiliateId: 'a1', externalId: 'maria', nickname: 'Maria', platformSlug: 'digistore24', mappedName: null, byStage: { ...emptyStages(), FRONTEND: st({ gross: 4500, cpa: 1500, orders: 15 }) }, refundsObserved: 0 },
+        { affiliateId: 'a2', externalId: 'joao', nickname: 'João', platformSlug: 'digistore24', mappedName: null, byStage: { ...emptyStages(), FRONTEND: st({ gross: 1500, cpa: 500, orders: 5 }) }, refundsObserved: 0 },
+      ],
+      callcenters: [cc({ gross: 2000, sales: 4, commissionPct: 30 })],   // NS fica 1.400
+      profitModel: { opexPct: 10 },
+    }), defaultParams());
+    expect(r.kpis.backendPerFe).toBe(70);                       // 1.400 ÷ 20 FEs
+    const maria = r.affiliates.find((a) => a.affiliateId === 'a1')!;
+    expect(maria).toMatchObject({ projection: 1650, backendProjection: 1050, projectionTotal: 2700, projectionTotalPerFe: 180 });   // 110/FE + 70/FE
+    const joao = r.affiliates.find((a) => a.affiliateId === 'a2')!;
+    expect(joao).toMatchObject({ projection: 550, backendProjection: 350, projectionTotal: 900 });
+    // a soma das projeções de backend devolve o lucro do backend
+    expect(maria.backendProjection! + joao.backendProjection!).toBe(1400);
   });
   it('afiliado de recuperação: comissão no lugar do CPA + fee e reserva da plataforma', () => {
     const r = computeNetProfit(inputs({

@@ -236,6 +236,7 @@ function NpUnitStrip({ k, cur }) {
       {item('FEs', fmtInt(k.fes))}
       <span title="CPA pago ÷ FEs do front. Afiliado de recuperação (comissão %) fica fora.">{item('CPA médio', k.cpaAvg == null ? '—' : npMoney(k.cpaAvg, cur, 2))}</span>
       {item('Backend líquido', npMoney(k.backendNet, cur), 'var(--money)')}
+      <span title="Lucro de call centers + SalesBound ÷ FEs de plataforma — a taxa que a projeção por afiliado usa">{item('Backend por FE', k.backendPerFe == null ? '—' : npMoney(k.backendPerFe, cur, 2), 'var(--money)')}</span>
       {k.buffer && (
         <span style={{ display: 'inline-flex', alignItems: 'baseline', gap: 6, flexWrap: 'wrap', paddingLeft: 14, borderLeft: '1px solid var(--border-soft)' }}>
           <span style={{ fontSize: 11, color: 'var(--fg4)' }}>Buffer de risco {npPct(k.buffer.pct)}</span>
@@ -819,9 +820,11 @@ function NpProducts({ rows, cur }) {
 // Projeção (modelo CPA da planilha): NET AOV − CPA por FE, × FEs. O texto do
 // tooltip é a explicação inteira — a coluna fica ao lado do Lucro de
 // propósito, pra comparação direta.
-const NP_PROJ_HINT = 'Projeção pelo modelo CPA: (AOV × (1 − reembolso do modelo − fee − opex − reserva) − CPA por FE) × FEs. Difere do Lucro em duas premissas: usa a taxa de reembolso do modelo (por plataforma, coorte madura) e o opex% global no lugar do custo de produto.';
+const NP_PROJ_HINT = 'Projeção do lucro TOTAL que o faturamento do afiliado gera: FRONT pelo modelo CPA ((AOV × (1 − reembolso do modelo − fee − opex − reserva) − CPA por FE) × FEs) + BACKEND (lucro de call centers + SalesBound por FE de plataforma no período × FEs do afiliado). Difere do Lucro porque o Lucro só olha o front, com os parâmetros da aba.';
+const NP_PROJ_FRONT_HINT = 'Só o front, pelo modelo CPA: (AOV × (1 − reembolso do modelo − fee − opex − reserva) − CPA por FE) × FEs.';
+const NP_PROJ_BACK_HINT = 'Backend que esses clientes rendem: lucro de call centers + SalesBound por FE de plataforma (taxa da operação no período) × FEs do afiliado.';
 
-function NpAffiliates({ rows, cur, onlyLoss, setOnlyLoss }) {
+function NpAffiliates({ rows, cur, onlyLoss, setOnlyLoss, backendPerFe }) {
   const [q, setQ] = useStateNP('');
   const [detail, setDetail] = useStateNP(false);
   const [showAll, setShowAll] = useStateNP(false);
@@ -831,13 +834,13 @@ function NpAffiliates({ rows, cur, onlyLoss, setOnlyLoss }) {
     .filter((a) => !qn || (a.nickname || '').toLowerCase().includes(qn) || a.externalId.toLowerCase().includes(qn) || (a.mappedName || '').toLowerCase().includes(qn));
   const shown = showAll ? list : list.slice(0, 50);
   const lossCount = rows.filter((a) => a.profit < 0).length;
-  const cols = 8 + (detail ? 6 : 0);
+  const cols = 8 + (detail ? 8 : 0);
   return (
     <div className="panel" style={{ marginBottom: 14 }}>
       <div className="panel-head" style={{ flexWrap: 'wrap' }}>
         <div className="panel-title">
           <span className="panel-eyebrow">MARGEM POR AFILIADO</span>
-          <div className="panel-sub">{fmtInt(rows.length)} contas com venda no período · Lucro = fórmula das plataformas com os parâmetros da aba · Projeção = modelo CPA</div>
+          <div className="panel-sub">{fmtInt(rows.length)} contas com venda no período · Lucro = só o front, com os parâmetros da aba · Projeção = front pelo modelo CPA + backend que esses clientes rendem{backendPerFe != null ? ` (${npMoney(backendPerFe, cur, 2)} por FE no período)` : ''}</div>
         </div>
         <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
           <div className="select-btn" style={{ padding: '0 10px', width: 'min(220px, 100%)' }}>
@@ -866,6 +869,10 @@ function NpAffiliates({ rows, cur, onlyLoss, setOnlyLoss }) {
               </>}
               <th className="num">Lucro</th>
               <th className="num" title={NP_PROJ_HINT}>Projeção</th>
+              {detail && <>
+                <th className="num" title={NP_PROJ_FRONT_HINT}>Proj. front</th>
+                <th className="num" title={NP_PROJ_BACK_HINT}>Proj. back</th>
+              </>}
               <th className="num">Margem</th>
               <th className="num">Lucro/FE</th>
               {detail && <th className="num" title={NP_PROJ_HINT}>Proj./FE</th>}
@@ -892,10 +899,14 @@ function NpAffiliates({ rows, cur, onlyLoss, setOnlyLoss }) {
                     <td className="num cell-mono">{npMoney(a.allowance, cur)}</td>
                   </>}
                   <td className="num cell-mono" style={{ fontWeight: 700, color: npTone(a.profit) }}>{npMoney(a.profit, cur)}</td>
-                  <td className="num cell-mono" style={{ color: a.projection == null ? 'var(--fg5)' : npTone(a.projection) }} title={NP_PROJ_HINT}>{a.projection == null ? '—' : npMoney(a.projection, cur)}</td>
+                  <td className="num cell-mono" style={{ fontWeight: 600, color: a.projectionTotal == null ? 'var(--fg5)' : npTone(a.projectionTotal) }} title={NP_PROJ_HINT}>{a.projectionTotal == null ? '—' : npMoney(a.projectionTotal, cur)}</td>
+                  {detail && <>
+                    <td className="num cell-mono" style={{ color: a.projection == null ? 'var(--fg5)' : npTone(a.projection) }}>{a.projection == null ? '—' : npMoney(a.projection, cur)}</td>
+                    <td className="num cell-mono" style={{ color: a.backendProjection == null ? 'var(--fg5)' : 'var(--money)' }}>{a.backendProjection == null ? '—' : npMoney(a.backendProjection, cur)}</td>
+                  </>}
                   <td className="num cell-mono" style={{ color: a.marginPct >= 0 ? 'var(--fg1)' : 'var(--danger)' }}>{npPct(a.marginPct)}</td>
                   <td className="num cell-mono">{a.profitPerFe == null ? '—' : npMoney(a.profitPerFe, cur, 2)}</td>
-                  {detail && <td className="num cell-mono" style={{ color: a.projectionPerFe == null ? 'var(--fg5)' : npTone(a.projectionPerFe) }}>{a.projectionPerFe == null ? '—' : npMoney(a.projectionPerFe, cur, 2)}</td>}
+                  {detail && <td className="num cell-mono" style={{ color: a.projectionTotalPerFe == null ? 'var(--fg5)' : npTone(a.projectionTotalPerFe) }}>{a.projectionTotalPerFe == null ? '—' : npMoney(a.projectionTotalPerFe, cur, 2)}</td>}
                 </tr>
               );
             })}
@@ -920,14 +931,14 @@ function NpLossAlert({ affiliates, cur, onOpen }) {
   const total = losers.reduce((s, a) => s + a.profit, 0);
   const gross = losers.reduce((s, a) => s + a.gross, 0);
   const top = losers.slice(0, 8);
-  const alsoNegProj = losers.filter((a) => a.projection != null && a.projection < 0).length;
+  const alsoNegProj = losers.filter((a) => a.projectionTotal != null && a.projectionTotal < 0).length;
   return (
     <div className="panel" style={{ marginBottom: 14, padding: '10px 16px', borderColor: 'color-mix(in oklab, var(--danger) 45%, transparent)' }}>
       <button onClick={() => setOpen((v) => !v)} style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 10, background: 'none', border: 0, padding: 0, cursor: 'pointer', color: 'var(--fg1)', textAlign: 'left' }}>
         <span style={{ width: 8, height: 8, borderRadius: 4, background: 'var(--danger)', flex: 'none' }}/>
         <span style={{ fontSize: 12, fontWeight: 700 }}>{fmtInt(losers.length)} {losers.length === 1 ? 'afiliado está dando' : 'afiliados estão dando'} prejuízo</span>
         <span className="cell-mono" style={{ fontSize: 12, color: 'var(--danger)', fontWeight: 700 }}>{npMoney(total, cur)}</span>
-        <span style={{ fontSize: 11, color: 'var(--fg4)' }}>sobre {npMoney(gross, cur)} de gross{alsoNegProj ? ` · ${fmtInt(alsoNegProj)} também negativo${alsoNegProj === 1 ? '' : 's'} na projeção` : ''}</span>
+        <span style={{ fontSize: 11, color: 'var(--fg4)' }}>no front, sobre {npMoney(gross, cur)} de gross · {alsoNegProj ? `${fmtInt(alsoNegProj)} ${alsoNegProj === 1 ? 'continua' : 'continuam'} negativo${alsoNegProj === 1 ? '' : 's'} mesmo com o backend` : 'todos fecham no positivo com o backend'}</span>
         <span style={{ marginLeft: 'auto', color: 'var(--fg5)' }}><Icon name={open ? 'chevron-down' : 'chevron-right'} size={12}/></span>
       </button>
       {open && (
@@ -946,7 +957,7 @@ function NpLossAlert({ affiliates, cur, onOpen }) {
                       <td className="num cell-mono">{npMoney(a.cpa, cur)}</td>
                       <td className="num cell-mono" style={{ fontWeight: 700, color: 'var(--danger)' }}>{npMoney(a.profit, cur)}</td>
                       <td className="num cell-mono" style={{ color: 'var(--danger)' }}>{npPct(a.marginPct)}</td>
-                      <td className="num cell-mono" style={{ color: a.projection == null ? 'var(--fg5)' : npTone(a.projection) }}>{a.projection == null ? '—' : npMoney(a.projection, cur)}</td>
+                      <td className="num cell-mono" style={{ fontWeight: 600, color: a.projectionTotal == null ? 'var(--fg5)' : npTone(a.projectionTotal) }}>{a.projectionTotal == null ? '—' : npMoney(a.projectionTotal, cur)}</td>
                     </tr>
                   );
                 })}
@@ -955,7 +966,7 @@ function NpLossAlert({ affiliates, cur, onOpen }) {
           </div>
           <div style={{ display: 'flex', gap: 10, alignItems: 'center', marginTop: 8, flexWrap: 'wrap' }}>
             <button className="btn btn-ghost" style={{ fontSize: 11 }} onClick={onOpen}>ver {losers.length > top.length ? `todos os ${fmtInt(losers.length)}` : 'na tabela'} →</button>
-            <span style={{ fontSize: 10.5, color: 'var(--fg5)' }}>Lucro = parâmetros da aba (reembolso {'&'} custo como configurados). Projeção = modelo CPA. Quando as duas estão negativas, o CPA desse afiliado não fecha nem no melhor cenário.</span>
+            <span style={{ fontSize: 10.5, color: 'var(--fg5)' }}>Lucro = só o front, com os parâmetros da aba. Projeção = front pelo modelo CPA + o backend que esses clientes rendem. Quem fica negativo na Projeção não se paga nem contando o call center e a SalesBound.</span>
           </div>
         </div>
       )}
@@ -1176,7 +1187,7 @@ function NetProfitPage({ filters }) {
       )}
       {view === 'dias' && !loading && params && <NpDaily filters={filters} params={params} cur={cur}/>}
       {view === 'produtos' && !loading && <NpProducts rows={result.products || []} cur={cur}/>}
-      {view === 'afiliados' && !loading && <NpAffiliates rows={result.affiliates} cur={cur} onlyLoss={onlyLoss} setOnlyLoss={setOnlyLoss}/>}
+      {view === 'afiliados' && !loading && <NpAffiliates rows={result.affiliates} cur={cur} onlyLoss={onlyLoss} setOnlyLoss={setOnlyLoss} backendPerFe={k.backendPerFe}/>}
       {view === 'projecoes' && !loading && (
         <NpScenarios scenarios={scenarios} current={k} cur={cur} busy={busy} onDelete={deleteScenario}
           onApply={(p) => { setParams(p); setDrawer(true); setMsg({ ok: true, text: 'parâmetros da projeção carregados (não salvos)' }); }}/>

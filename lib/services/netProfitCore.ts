@@ -310,8 +310,17 @@ export interface AffiliateResult {
   // Difere do `profit` acima em duas premissas: o reembolso é a taxa do
   // MODELO (por plataforma, calibrada em coorte madura) em vez do parâmetro
   // da aba, e o custo é o opex% global em vez do custo de produto %.
-  projection: number | null;
+  projection: number | null;          // só o FRONT (modelo CPA)
   projectionPerFe: number | null;
+  // O que esses clientes ainda rendem no BACKEND (call centers + SalesBound):
+  // lucro do backend no período ÷ FEs de plataforma × FEs do afiliado. É a
+  // taxa da operação inteira — o backend não é atribuído por afiliado.
+  backendProjection: number | null;
+  // Projeção TOTAL = front (modelo CPA) + backend. É o número da coluna
+  // "Projeção": o que o faturamento do afiliado vai deixar de lucro pra
+  // operação (pedido do usuário, 2026-09-23).
+  projectionTotal: number | null;
+  projectionTotalPerFe: number | null;
   shareOfRevenuePct: number;   // da receita econômica TOTAL
   shareOfChannelPct: number;   // do bruto do próprio canal
 }
@@ -343,6 +352,9 @@ export interface NetProfitKpis {
   profitPerFe: number | null;  // §7
   affiliateCost: number;       // CPA + comissões de recuperação
   cpaAvg: number | null;       // §2.1
+  // Lucro do backend (call centers + SalesBound) por FE de plataforma —
+  // a taxa usada na projeção por afiliado.
+  backendPerFe: number | null;
   buffer: { pct: number; usd: number; adjustedProfit: number; adjustedMarginPct: number } | null; // §9
 }
 export interface NetProfitResult {
@@ -628,6 +640,18 @@ export function computeNetProfit(inputs: NetProfitInputs, params: NetProfitParam
   // Projeção pelo modelo CPA (mesma conta de lib/services/profitModel.ts —
   // replicada aqui pra este núcleo continuar sem dependência de banco).
   const opexPct = inputs.profitModel?.opexPct ?? 0;
+  // Backend por FE: o que call centers + SalesBound deixaram ÷ FEs que as
+  // plataformas trouxeram no mesmo período (front + recuperação). Premissa
+  // de regime: o backend deste período veio de clientes de períodos
+  // anteriores, e as FEs deste período rendem backend nos próximos.
+  const platformFes = front.fes + recovery.fes;
+  const backendPerFe = platformFes > 0 ? r2((callcenter.profit + salesbound.profit) / platformFes) : 0;
+  const withBackend = (pj: { total: number | null; perFe: number | null }, fes: number) => ({
+    projection: pj.total, projectionPerFe: pj.perFe,
+    backendProjection: fes > 0 ? r2(fes * backendPerFe) : null,
+    projectionTotal: pj.total != null ? r2(pj.total + fes * backendPerFe) : null,
+    projectionTotalPerFe: pj.perFe != null ? r2(pj.perFe + backendPerFe) : null,
+  });
   const projectionFor = (slug: string, gross: number, fes: number, affiliateCostUsd: number): { total: number | null; perFe: number | null } => {
     if (fes <= 0) return { total: null, perFe: null };
     const p = platBySlug.get(slug);
@@ -647,7 +671,7 @@ export function computeNetProfit(inputs: NetProfitInputs, params: NetProfitParam
       channel: 'front', gross: r2(f.tot.gross), orders: f.tot.orders, fes: feCount, cpa: r2(f.tot.cpa), refund: r2(f.refund), fee: r2(f.feeUsd),
       productCost: r2(f.cost.usd), allowance: r2(f.allowanceUsd), profit: prof, marginPct: pctOf(prof, f.tot.gross),
       profitPerFe: feCount > 0 ? r2(prof / feCount) : null,
-      ...(() => { const pj = projectionFor(a.platformSlug, f.tot.gross, feCount, f.tot.cpa); return { projection: pj.total, projectionPerFe: pj.perFe }; })(),
+      ...withBackend(projectionFor(a.platformSlug, f.tot.gross, feCount, f.tot.cpa), feCount),
       shareOfRevenuePct: pctOf(f.tot.gross, revenue), shareOfChannelPct: pctOf(f.tot.gross, front.gross),
     });
   }
@@ -662,7 +686,7 @@ export function computeNetProfit(inputs: NetProfitInputs, params: NetProfitParam
       channel: 'recovery', gross: r2(a.gross), orders: a.orders, fes: a.feOrders, cpa: r2(commission), refund: r2(s.refund), fee: r2(s.feeUsd),
       productCost: r2(productCost), allowance: r2(s.allowanceUsd), profit: prof, marginPct: pctOf(prof, a.gross),
       profitPerFe: a.feOrders > 0 ? r2(prof / a.feOrders) : null,
-      ...(() => { const pj = projectionFor(a.platformSlug, a.gross, a.feOrders, commission); return { projection: pj.total, projectionPerFe: pj.perFe }; })(),
+      ...withBackend(projectionFor(a.platformSlug, a.gross, a.feOrders, commission), a.feOrders),
       shareOfRevenuePct: pctOf(a.gross, revenue), shareOfChannelPct: pctOf(a.gross, recovery.gross),
     });
   }
@@ -693,6 +717,7 @@ export function computeNetProfit(inputs: NetProfitInputs, params: NetProfitParam
       costs, profit, marginPct: pctOf(profit, revenue), marginOnGrossPct: pctOf(profit, platformGross),
       fes, profitPerFe: fes > 0 ? r2(profit / fes) : null,
       affiliateCost, cpaAvg: front.fes > 0 ? r2(frontCpa / front.fes) : null,
+      backendPerFe: platformFes > 0 ? backendPerFe : null,
       buffer: bufferPct > 0 ? { pct: bufferPct, usd: bufferUsd, adjustedProfit: r2(profit - bufferUsd), adjustedMarginPct: pctOf(profit - bufferUsd, revenue) } : null,
     },
     channels,
