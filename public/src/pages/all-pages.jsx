@@ -747,7 +747,7 @@ function LeaderboardPage({ filters, onOpenAffiliate, user }) {
                 <th className="num" title="Chargebacks ÷ pedidos REAIS do período.">Chargeback</th>
                 <th className="num">CPA pago</th>
                 <th className="num" title="Custos operacionais % (global, modelo CPA) — editável no painel de config acima">Custos op.</th>
-                <th className="num" title="NET AOV = AOV global × (1 − refund&cb% da plataforma − taxa real da plataforma − custos operacionais %). Modelo da planilha CPA — % editáveis em Plataformas e no painel de config acima.">NET AOV</th>
+                <th className="num" title="NET AOV = AOV global × (1 − refund&cb% − taxa da plataforma − custos operacionais % − reserva retida %). Modelo da planilha CPA — % editáveis em Plataformas e no painel de config acima.">NET AOV</th>
                 <th className="num" title="CPA por venda FE — último valor observado nas transações">CPA/venda</th>
                 <th className="num" title="NET AFTER CPA = NET AOV − CPA por venda. Quanto sobra por pedido depois de pagar o afiliado.">Net after CPA</th>
                 <th title="≥ limiar saudável → SAUDÁVEL · ≥ limiar atenção → ATENÇÃO · abaixo → RENEGOCIAR (régua editável no painel de config)">Status CPA</th>

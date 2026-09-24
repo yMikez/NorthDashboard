@@ -409,7 +409,7 @@ export interface AffiliatesResponse {
     isRecovery: boolean;
     cpaPerFeApproved: number;      // mean ponderada (deflaciona com cpa=0)
     // Modelo de lucro estilo planilha CPA (lib/services/profitModel.ts):
-    // netAovUsd = AOV atribuído × (1 − refund&cb% − fee% − opex%);
+    // netAovUsd = AOV atribuído × (1 − refund&cb% − fee% − opex% − allowance%);
     // netAfterCpaUsd = netAovUsd − cpaPerFe (null sem CPA detectado);
     // cpaStatus: 'saudavel' | 'atencao' | 'renegociar' | null.
     netAovUsd: number;
