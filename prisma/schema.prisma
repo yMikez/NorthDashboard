@@ -399,6 +399,8 @@ model Order {
   // entram, então é pequeno mesmo com centenas de milhares de orders.
   @@index([refundedAt])
   @@index([chargebackAt])
+  // Pull incremental dos parceiros (?updated_since=): varre por updatedAt.
+  @@index([updatedAt])
   @@index([funnelSessionId])
   @@index([parentExternalId])
   @@index([vendorAccount, orderedAt])
@@ -1022,6 +1024,13 @@ model ProfitConfig {
   // abaixo → RENEGOCIAR. (Planilha: 10 e 0.)
   healthyMinUsd  Decimal  @default(10) @db.Decimal(10, 2)
   attentionMinUsd Decimal @default(0) @db.Decimal(10, 2)
+  // Metas de reembolso/chargeback da operação (2026-09-23, pedido do
+  // SendTrace): fonte ÚNICA pros dois lados, exposta em
+  // GET /api/integrations/targets. Percentuais 0–100.
+  refundTargetD30Pct Decimal @default(10) @db.Decimal(5, 2)
+  refundLimitD30Pct  Decimal @default(18) @db.Decimal(5, 2)
+  chargebackWarnPct  Decimal @default(0.5) @db.Decimal(5, 2)
+  chargebackLimitPct Decimal @default(0.9) @db.Decimal(5, 2)
   updatedAt      DateTime @updatedAt
 }
 

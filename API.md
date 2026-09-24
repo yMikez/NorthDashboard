@@ -13,14 +13,17 @@ o beacon das páginas de funil): chame do **servidor**, nunca do navegador.
 
 | Quero… | Use | Header |
 | --- | --- | --- |
+| Integrar um sistema parceiro (só leitura de vendas, metas e catálogo) | **Chave de parceiro** | `X-Api-Key: <chave>` |
 | Puxar qualquer dado (ordens, lucro, logs) de um job/backend | **Chave de operação** (`INGEST_SECRET`) | `Authorization: Bearer <chave>` |
 | Puxar o ranking por afiliado (sistema de afiliados) | **Chave de integração** (`DASHBOARD_API_KEY`) | `X-Api-Key: <chave>` |
 | Ler exatamente o que uma aba mostra | **Sessão de usuário** | `Cookie: ns_session=…` (ver §2.3) |
 | Mandar venda/evento pra dentro | **Chave de ingestão** (`INGEST_SECRET`) | `X-Ingest-Secret: <chave>` |
 
 > A chave de operação abre **tudo**, inclusive rotas que escrevem no banco. Guarde como
-> segredo de servidor, nunca em front-end, app mobile ou repositório. Para dar acesso
-> parcial a um parceiro, prefira a sessão de usuário (§2.3), que respeita permissão por aba.
+> segredo de servidor, nunca em front-end, app mobile ou repositório. **Nunca entregue ela a
+> um parceiro**: além do acesso de escrita, é a mesma chave que o n8n usa na ingestão, então
+> rotacioná-la depois derruba a entrada de vendas. Para terceiros use a chave de parceiro
+> (§2.4) ou a sessão de usuário (§2.3), que respeita permissão por aba.
 
 Cada chave vive numa variável de ambiente do servidor; a de afiliados também pode ficar no
 banco (painel → Plataformas → Sistema de afiliados). Peça as chaves a quem administra o
@@ -70,6 +73,27 @@ curl -s -b cookies.txt \
 O cookie `ns_session` é `HttpOnly` e vale **20 dias**, renovando a cada uso. Faça login de
 novo quando receber `401`. Sem permissão na aba → `403 {"error":"forbidden","tab":"…"}`.
 `GET /api/me` devolve o usuário da sessão — bom para testar se o cookie ainda vale.
+
+### 2.4 Chave de parceiro (X-Api-Key)
+
+Acesso **só de leitura** aos três endpoints de `/api/integrations/*` abaixo — vendas, metas e
+catálogo. Não abre nada que escreve e é rotacionável sem afetar a ingestão.
+
+```bash
+curl -H "X-Api-Key: $CHAVE_PARCEIRO" \
+  "https://dash.thenorthscales.com/api/integrations/orders?platform=all&updated_since=2026-09-23T00:00:00Z"
+```
+
+Cada parceiro tem a sua chave, guardada em `IntegrationSetting` (`partner.<nome>.apiKey`) ou
+na env `PARTNER_<NOME>_API_KEY`, que vence o banco. Para criar ou rotacionar:
+
+```bash
+curl -X PUT -H "Authorization: Bearer $DASH_KEY" -H "Content-Type: application/json" \
+  -d '{"key":"partner.sendtrace.apiKey","value":"<nova chave>"}' \
+  https://dash.thenorthscales.com/api/admin/integration-settings
+```
+
+Chave errada → `401`. Sem chave configurada no servidor, qualquer `X-Api-Key` → `401`.
 
 ---
 
@@ -124,6 +148,75 @@ Campos que costumam gerar dúvida:
 | `net` | o que sobrou depois da taxa da plataforma e da comissão do afiliado |
 | `cpa` | comissão paga ao afiliado por essa venda |
 | `refundedAt` / `chargebackAt` | quando o estorno aconteceu (pode ser muito depois da venda) |
+
+### 3.1.1 O mesmo dump para parceiros, com pull incremental
+
+```
+GET /api/integrations/orders?platform=<slug|all>&start=&end=
+GET /api/integrations/orders?platform=all&updated_since=<ISO 8601>&limit=50000
+Auth: X-Api-Key (parceiro) · Bearer · sessão ADMIN
+```
+
+Mesma resposta do `orders-dump`, com duas lentes de janela:
+
+- **por data da compra** (`start`/`end`, dia BRT) — o retrato de um período;
+- **por atualização** (`updated_since`) — tudo que **mudou** desde então, mesmo com compra
+  antiga. É esta que pega o reembolso que chegou 25 dias depois da venda sem re-puxar uma
+  janela rolante inteira.
+
+No modo `updated_since` a resposta ordena por `updatedAt` crescente e traz
+`next_updated_since` quando bate o teto de 50.000 linhas — passe esse valor no pull seguinte
+e deduplique por `platform` + `externalId`.
+
+**Campos de estorno (importante).** O dado bruto tem dois formatos:
+
+| `refundModel` | Plataformas | Como o estorno aparece |
+| --- | --- | --- |
+| `in-place` | jvzoo, buygoods, clickbank, cartpanda, pagamerican | a própria linha da venda vira `REFUNDED`/`CHARGEBACK` |
+| `extra-row` | digistore24 | a venda continua `APPROVED` e entra uma linha nova, negativa, com `parentExternalId` apontando pra ela |
+
+Somar `gross` sem saber disso conta a venda da Digistore duas vezes e some com a venda
+estornada da JVZoo. Para não precisar conhecer a diferença, cada linha traz:
+
+| Campo | O que é |
+| --- | --- |
+| `refundedUsd` | quanto foi devolvido nesta linha, **sempre positivo**; 0 se não houve |
+| `chargebackUsd` | idem para chargeback |
+| `originalGross` | valor da venda no ingest, antes de qualquer evento de estorno |
+| `updatedAt` | quando a linha mudou pela última vez (eixo do `updated_since`) |
+
+Reembolso parcial sai como parcial quando a plataforma reporta o valor devolvido; quando ela
+manda o valor cheio, `refundedUsd` sai igual ao total — limitação do dado de origem.
+
+### 3.1.2 Metas e taxas configuradas no dash
+
+```
+GET /api/integrations/targets
+Auth: X-Api-Key (parceiro) · Bearer · sessão ADMIN
+```
+
+Fonte única das metas de reembolso/chargeback (editáveis em `PATCH /api/admin/profit-config`),
+mais fee, reserva e taxa de reembolso do modelo por plataforma:
+
+```json
+{ "reembolso_meta_d30_pct": 10, "reembolso_limite_d30_pct": 18,
+  "chargeback_atencao_pct": 0.5, "chargeback_limite_pct": 0.9,
+  "opex_pct": 10, "atualizado_em": "2026-09-23T22:00:00.000Z",
+  "plataformas": [{ "slug": "jvzoo", "fee_pct": 9, "reserva_pct": 5,
+                    "refund_cb_pct_modelo": 15, "modelo_estorno": "in-place" }] }
+```
+
+### 3.1.3 De-para de produto entre plataformas
+
+```
+GET /api/integrations/catalog[?family=&platform=&verified=1]
+Auth: X-Api-Key (parceiro) · Bearer · sessão ADMIN
+```
+
+`productId`/`productName` são crus da plataforma e o mesmo codinome já apareceu em produtos
+diferentes. Quem agrupa é **`family`** — a mesma dimensão usada em todas as abas, já presente
+em cada linha do dump. `verificado: false` = família inferida pelo classificador, ainda não
+confirmada por humano; `?verified=1` filtra só as confirmadas.
 
 ### 3.2 Ranking por afiliado
 
@@ -283,6 +376,14 @@ Estes detalhes decidem se o seu relatório vai bater com o dashboard:
   diferentes — escolha um e diga qual está usando.
 - **Estorno demora semanas.** Um período recente sempre parece melhor do que vai ficar
   depois que a coorte amadurece (a aba de coortes de reembolso mostra essa curva).
+- **A latência do estorno varia por plataforma.** JVZoo, BuyGoods, ClickBank e Cartpanda
+  chegam em segundos por postback. Na Digistore, ~28% dos estornos nunca disparam IPN e só
+  entram na reconciliação por CSV — dias depois. SalesBound só traz estorno pelo export, e a
+  Tauk não reporta estorno nenhum. Quem consome deve refazer uma varredura de 90 dias
+  periodicamente, além do pull incremental.
+- **BuyGoods está sem estorno hoje.** Em 24/08–22/09 o dash registrou zero reembolso de
+  BuyGoods sobre US$ 234 mil vendidos: o evento de refund não está chegando. Trate
+  `refundedUsd = 0` dessa plataforma como dado ausente, não como ausência de reembolso.
 - **`gross` é valor cheio.** Taxa da plataforma e comissão de afiliado só saem no `net` e no
   Lucro real.
 - **Venda de call center fica fora das métricas de plataforma**, de propósito: a mesma venda

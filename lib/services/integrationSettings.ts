@@ -37,6 +37,9 @@ export const SETTING_KEYS = {
   // Parcela que a SalesBound leva sobre cada venda (a NorthScale fica com o
   // resto). Sem isso, o dash usa 65% — o acordo confirmado em 2026-09-18.
   salesboundCommissionPct: 'salesbound.commissionPct',
+  // Chaves de PARCEIRO (leitura em /api/integrations/*). Uma por sistema —
+  // rotação independente e sem acesso de escrita. Ver lib/auth/partnerKey.ts.
+  partnerSendtraceApiKey: 'partner.sendtrace.apiKey',
 } as const;
 
 // Chaves INTERNAS (não editáveis pela UI): marcador incremental do mapping.
@@ -139,6 +142,23 @@ export async function getSalesboundPostbackToken(): Promise<string | null> {
   if (env) return env;
   const v = await getSetting(SETTING_KEYS.salesboundPostbackToken);
   return v?.trim() || null;
+}
+
+/**
+ * Chaves de parceiro válidas hoje: [nome, chave]. env PARTNER_<NOME>_API_KEY
+ * vence o banco. Vazio = nenhum parceiro configurado (todo X-Api-Key dá 401).
+ */
+export async function getPartnerApiKeys(): Promise<Array<[string, string]>> {
+  const out: Array<[string, string]> = [];
+  const partners: Array<[string, SettingKey, string]> = [
+    ['sendtrace', SETTING_KEYS.partnerSendtraceApiKey, 'PARTNER_SENDTRACE_API_KEY'],
+  ];
+  for (const [name, key, envVar] of partners) {
+    const env = process.env[envVar]?.trim();
+    const value = env || (await getSetting(key))?.trim();
+    if (value) out.push([name, value]);
+  }
+  return out;
 }
 
 /** Chave da API Logicall: env > banco > null (integração desligada). */

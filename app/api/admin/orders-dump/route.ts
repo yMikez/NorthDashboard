@@ -1,21 +1,23 @@
-// Dump bruto das ordens de uma plataforma num intervalo — pra reconciliação
-// com exports do painel (JVZoo/Digistore/etc.) feita fora do dashboard.
+// Dump bruto das ordens pra reconciliação com exports do painel
+// (JVZoo/Digistore/etc.) feita fora do dashboard.
 //
 //   GET /api/admin/orders-dump?platform=jvzoo&start=YYYY-MM-DD&end=YYYY-MM-DD
+//   GET /api/admin/orders-dump?platform=all&updated_since=<ISO 8601>
 //   Auth: bearer INGEST_SECRET (curl) OU sessão ADMIN.
-//   Datas em BRT (dia inteiro). Limite duro de 50k linhas.
+//
+// Mesma resposta de GET /api/integrations/orders (a lógica vive em
+// lib/services/ordersDump.ts) — aquela rota é a que os parceiros usam, com
+// chave de escopo de leitura. Datas em BRT (dia inteiro), limite de 50k linhas.
 
 import { NextResponse } from 'next/server';
 import { requireAdmin } from '@/lib/auth/guard';
 import { checkIngestSecret } from '@/lib/ingest/auth';
-import { db } from '@/lib/db';
+import { ordersDump } from '@/lib/services/ordersDump';
+import { logger } from '@/lib/logger';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 export const maxDuration = 120;
-
-const YMD = /^\d{4}-\d{2}-\d{2}$/;
-const BRT = 3 * 3600 * 1000;
 
 export async function GET(req: Request) {
   const bearer = req.headers.get('authorization')?.replace(/^Bearer\s+/i, '') ?? null;
@@ -24,40 +26,18 @@ export async function GET(req: Request) {
     if (!auth.ok) return auth.response;
   }
   const { searchParams } = new URL(req.url);
-  const platform = (searchParams.get('platform') ?? '').trim();
-  const start = searchParams.get('start') ?? '';
-  const end = searchParams.get('end') ?? '';
-  if (!platform || !YMD.test(start) || !YMD.test(end)) {
-    return NextResponse.json({ error: 'platform, start e end (YYYY-MM-DD) obrigatórios' }, { status: 400 });
+  try {
+    const res = await ordersDump({
+      platform: searchParams.get('platform'),
+      start: searchParams.get('start'),
+      end: searchParams.get('end'),
+      updatedSince: searchParams.get('updated_since'),
+      limit: searchParams.get('limit') ? Number(searchParams.get('limit')) : null,
+    });
+    if (!res.ok) return NextResponse.json({ error: res.error }, { status: 400 });
+    return NextResponse.json(res);
+  } catch (err) {
+    logger.error({ err }, 'admin/orders-dump failed');
+    return NextResponse.json({ error: 'query failed' }, { status: 500 });
   }
-  const startDate = new Date(new Date(start + 'T00:00:00Z').getTime() + BRT);
-  const endDate = new Date(new Date(end + 'T23:59:59.999Z').getTime() + BRT);
-  const rows = await db.order.findMany({
-    where: { platform: { slug: platform }, orderedAt: { gte: startDate, lte: endDate } },
-    orderBy: { orderedAt: 'asc' },
-    take: 50_000,
-    select: {
-      externalId: true, parentExternalId: true, funnelSessionId: true, status: true, productType: true, funnelStep: true,
-      trafficSource: true, trackingId: true, clickId: true, campaignKey: true,
-      grossAmountUsd: true, netAmountUsd: true, cpaPaidUsd: true, orderedAt: true, refundedAt: true, chargebackAt: true,
-      country: true,
-      product: { select: { externalId: true, name: true, family: true } },
-      affiliate: { select: { externalId: true, nickname: true } },
-      customer: { select: { email: true } },
-    },
-  });
-  return NextResponse.json({
-    platform, start, end, count: rows.length, truncated: rows.length >= 50_000,
-    orders: rows.map((o) => ({
-      externalId: o.externalId, parentExternalId: o.parentExternalId, sessionId: o.funnelSessionId,
-      status: o.status, productType: o.productType, funnelStep: o.funnelStep,
-      trafficSource: o.trafficSource, trackingId: o.trackingId, clickId: o.clickId, campaignKey: o.campaignKey,
-      gross: Number(o.grossAmountUsd), net: Number(o.netAmountUsd), cpa: Number(o.cpaPaidUsd),
-      orderedAt: o.orderedAt.toISOString(), refundedAt: o.refundedAt?.toISOString() ?? null, chargebackAt: o.chargebackAt?.toISOString() ?? null,
-      country: o.country,
-      productId: o.product.externalId, productName: o.product.name, family: o.product.family,
-      affiliateId: o.affiliate?.externalId ?? null, affiliateName: o.affiliate?.nickname ?? null,
-      customerEmail: o.customer?.email ?? null,
-    })),
-  });
 }

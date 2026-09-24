@@ -1,7 +1,11 @@
 // /api/admin/profit-config — config global do modelo de lucro CPA.
-//   GET   → { opexPct, healthyMinUsd, attentionMinUsd }
-//   PATCH → atualiza qualquer um dos três (admin). opexPct em percentual
+//   GET   → { opexPct, healthyMinUsd, attentionMinUsd, metas de reembolso/CB }
+//   PATCH → atualiza qualquer campo (admin). opexPct em percentual
 //           (10 = 10%); régua do STATUS em USD sobre o NET AFTER CPA.
+//
+// As metas de reembolso/chargeback (2026-09-23) existem pra virar fonte única
+// dos dois lados: o dash mostra e o SendTrace lê por
+// GET /api/integrations/targets, em vez de cada sistema repetir o número.
 
 import { NextResponse } from 'next/server';
 import { Prisma } from '@prisma/client';
@@ -13,13 +17,25 @@ import { logger } from '@/lib/logger';
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
-function serialize(c: { opexPct: Prisma.Decimal; healthyMinUsd: Prisma.Decimal; attentionMinUsd: Prisma.Decimal }) {
+type ConfigRow = {
+  opexPct: Prisma.Decimal; healthyMinUsd: Prisma.Decimal; attentionMinUsd: Prisma.Decimal;
+  refundTargetD30Pct: Prisma.Decimal; refundLimitD30Pct: Prisma.Decimal;
+  chargebackWarnPct: Prisma.Decimal; chargebackLimitPct: Prisma.Decimal;
+};
+
+function serialize(c: ConfigRow) {
   return {
     opexPct: Number(c.opexPct),
     healthyMinUsd: Number(c.healthyMinUsd),
     attentionMinUsd: Number(c.attentionMinUsd),
+    refundTargetD30Pct: Number(c.refundTargetD30Pct),
+    refundLimitD30Pct: Number(c.refundLimitD30Pct),
+    chargebackWarnPct: Number(c.chargebackWarnPct),
+    chargebackLimitPct: Number(c.chargebackLimitPct),
   };
 }
+
+const PCT_FIELDS = ['refundTargetD30Pct', 'refundLimitD30Pct', 'chargebackWarnPct', 'chargebackLimitPct'] as const;
 
 async function ensureConfig() {
   return db.profitConfig.upsert({
@@ -65,6 +81,14 @@ export async function PATCH(req: Request) {
   if (body.attentionMinUsd !== undefined) {
     if (attention === null) return NextResponse.json({ error: 'attentionMinUsd inválido' }, { status: 400 });
     data.attentionMinUsd = new Prisma.Decimal(attention.toFixed(2));
+  }
+  for (const f of PCT_FIELDS) {
+    if (body[f] === undefined) continue;
+    const v = num(body[f]);
+    if (v === null || v < 0 || v > 100) {
+      return NextResponse.json({ error: `${f} deve estar entre 0 e 100` }, { status: 400 });
+    }
+    data[f] = new Prisma.Decimal(v.toFixed(2));
   }
   if (Object.keys(data).length === 0) {
     return NextResponse.json({ error: 'nada pra atualizar' }, { status: 400 });
