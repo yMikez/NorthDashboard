@@ -8,7 +8,7 @@ import { Prisma, type UserRole } from '@prisma/client';
 import { db } from '@/lib/db';
 import { requireAdmin } from '@/lib/auth/guard';
 import { hashPassword, validatePasswordStrength } from '@/lib/auth/password';
-import { sanitizeTabs } from '@/lib/auth/tabs';
+import { sanitizeTabs, AVAILABLE_TABS } from '@/lib/auth/tabs';
 import { parsePagination, paginatedResponse } from '@/lib/pagination';
 import { logger } from '@/lib/logger';
 
@@ -61,7 +61,13 @@ export async function GET(req: Request) {
   // Backward-compat: caller antigo lê `users` direto. Mantemos o array no top
   // level + envelope `pagination` ao lado pra novos consumidores.
   const paged = paginatedResponse(mapped, total, pagination);
-  return NextResponse.json({ users: paged.items, pagination: { page: paged.page, pageSize: paged.pageSize, total: paged.total, hasMore: paged.hasMore } });
+  // availableTabs vai junto pra tela de permissão não manter uma cópia do
+  // catálogo (era o que fazia aba nova não aparecer no formulário).
+  return NextResponse.json({
+    users: paged.items,
+    availableTabs: AVAILABLE_TABS,
+    pagination: { page: paged.page, pageSize: paged.pageSize, total: paged.total, hasMore: paged.hasMore },
+  });
 }
 
 interface CreateBody {

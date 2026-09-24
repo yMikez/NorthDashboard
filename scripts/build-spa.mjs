@@ -119,6 +119,23 @@ function checkGlobals() {
     }
   }
 
+  // Toda tab do catálogo (lib/auth/tabs.ts) precisa aparecer na sidebar e
+  // ter rota no app.jsx — senão dá pra liberar a permissão e o usuário não
+  // acha a aba (ou acha e cai em tela branca).
+  // Exceção declarada: Ranking e Diretório viraram uma aba só; o id
+  // all-affiliates continua válido como rota (redireciona) mas não tem
+  // item próprio no menu.
+  const SEM_ITEM_NO_MENU = new Set(['all-affiliates']);
+  const tabsTs = read('lib/auth/tabs.ts');
+  const catalogBlock = tabsTs.slice(tabsTs.indexOf('AVAILABLE_TABS'));
+  const shell = read('public/src/shell.jsx');
+  const app = read('public/src/app.jsx');
+  for (const m of catalogBlock.matchAll(/\{\s*id:\s*'([a-z0-9-]+)'/g)) {
+    const id = m[1];
+    if (!SEM_ITEM_NO_MENU.has(id) && !shell.includes(`id: '${id}'`)) errors.push(`tab '${id}' está em lib/auth/tabs.ts mas não na sidebar (shell.jsx)`);
+    if (!app.includes(`'${id}'`)) errors.push(`tab '${id}' está em lib/auth/tabs.ts mas não tem rota em app.jsx`);
+  }
+
   if (errors.length) {
     console.error('[build-spa] GUARD DE GLOBALS FALHOU:');
     for (const e of [...new Set(errors)]) console.error('  ✗ ' + e);

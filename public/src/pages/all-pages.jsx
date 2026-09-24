@@ -4064,16 +4064,19 @@ function FXPage({ filters }) {
   );
 }
 
-// Catálogo de tabs no client (espelha lib/auth/tabs.ts). Pra renderizar
-// os checkboxes na criação/edição de Member. Mantenha em sincronia com
-// o backend — se adicionar uma tab nova, atualize os DOIS lados.
+// Catálogo de tabs: vem do servidor em GET /api/admin/users (availableTabs),
+// que lê lib/auth/tabs.ts. Esta lista é só o FALLBACK pra resposta antiga —
+// não é a fonte da verdade. Aba nova entra em lib/auth/tabs.ts e aparece aqui
+// sozinha.
 const TAB_CATALOG = [
   { group: 'Análise',   id: 'overview',       label: 'Visão geral' },
   { group: 'Análise',   id: 'funnel',         label: 'Funil' },
   { group: 'Análise',   id: 'refund-cohorts', label: 'Reembolsos' },
+  { group: 'Análise',   id: 'custos',         label: 'Custos' },
   { group: 'Afiliados', id: 'leaderboard',    label: 'Ranking' },
   { group: 'Afiliados', id: 'all-affiliates', label: 'Todos os afiliados' },
   { group: 'Afiliados', id: 'affiliate-analysis', label: 'Análise' },
+  { group: 'Afiliados', id: 'affiliate-crm',  label: 'CRM' },
   { group: 'Captação',  id: 'recovery',       label: 'Recuperação' },
   { group: 'Captação',  id: 'tauk',           label: 'Call Center' },
   { group: 'Captação',  id: 'sms',            label: 'SMS' },
@@ -4083,7 +4086,15 @@ const TAB_CATALOG = [
   { group: 'Sistema',   id: 'costs',          label: 'Fulfillment' },
   { group: 'Sistema',   id: 'health',         label: 'Saúde do dado' },
 ];
-const TAB_GROUPS = ['Análise', 'Afiliados', 'Captação', 'Catálogo', 'Sistema'];
+// Preenchido por GET /api/admin/users. Enquanto não chega (ou se a resposta
+// for de uma versão antiga), vale a cópia local acima.
+let SERVER_TAB_CATALOG = null;
+function tabCatalog() { return SERVER_TAB_CATALOG && SERVER_TAB_CATALOG.length ? SERVER_TAB_CATALOG : TAB_CATALOG; }
+function tabGroups() {
+  const out = [];
+  for (const t of tabCatalog()) if (!out.includes(t.group)) out.push(t.group);
+  return out;
+}
 
 function UsersPage({ currentUser }) {
   const [state, setState] = useState({ status: 'loading', users: [], pagination: null, error: null });
@@ -4096,7 +4107,11 @@ function UsersPage({ currentUser }) {
     let cancelled = false;
     setState((s) => ({ ...s, status: 'loading' }));
     window.NSApi.adminListUsers({ page, pageSize: 50 })
-      .then((data) => { if (!cancelled) setState({ status: 'ready', users: data.users, pagination: data.pagination || null, error: null }); })
+      .then((data) => {
+        if (cancelled) return;
+        if (Array.isArray(data.availableTabs) && data.availableTabs.length) SERVER_TAB_CATALOG = data.availableTabs;
+        setState({ status: 'ready', users: data.users, pagination: data.pagination || null, error: null });
+      })
       .catch((err) => {
         if (cancelled) return;
         console.error('adminListUsers failed', err);
@@ -4271,19 +4286,19 @@ function UserFormDrawer({ mode, initial, isSelf, onClose, onSaved }) {
   function selectAllInGroup(group) {
     setAllowedTabs((prev) => {
       const next = new Set(prev);
-      for (const t of TAB_CATALOG) if (t.group === group) next.add(t.id);
+      for (const t of tabCatalog()) if (t.group === group) next.add(t.id);
       return next;
     });
   }
   function clearGroup(group) {
     setAllowedTabs((prev) => {
       const next = new Set(prev);
-      for (const t of TAB_CATALOG) if (t.group === group) next.delete(t.id);
+      for (const t of tabCatalog()) if (t.group === group) next.delete(t.id);
       return next;
     });
   }
   function selectAllTabs() {
-    setAllowedTabs(new Set(TAB_CATALOG.map((t) => t.id)));
+    setAllowedTabs(new Set(tabCatalog().map((t) => t.id)));
   }
 
   async function save() {
@@ -4420,8 +4435,8 @@ function UserFormDrawer({ mode, initial, isSelf, onClose, onSaved }) {
                   TUDO
                 </button>
               </div>
-              {TAB_GROUPS.map((group) => {
-                const tabs = TAB_CATALOG.filter((t) => t.group === group);
+              {tabGroups().map((group) => {
+                const tabs = tabCatalog().filter((t) => t.group === group);
                 const checked = tabs.filter((t) => allowedTabs.has(t.id)).length;
                 return (
                   <div key={group} style={{ border: '1px solid var(--border-soft)', borderRadius: 6, padding: 10 }}>
