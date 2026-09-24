@@ -820,8 +820,7 @@ function NpProducts({ rows, cur }) {
 // Projeção (modelo CPA da planilha): NET AOV − CPA por FE, × FEs. O texto do
 // tooltip é a explicação inteira — a coluna fica ao lado do Lucro de
 // propósito, pra comparação direta.
-const NP_PROJ_HINT = 'Projeção do lucro TOTAL que o faturamento do afiliado gera: FRONT pelo modelo CPA ((AOV × (1 − reembolso do modelo − fee − opex − reserva) − CPA por FE) × FEs) + BACKEND (lucro de call centers + SalesBound por FE de plataforma no período × FEs do afiliado). Difere do Lucro porque o Lucro só olha o front, com os parâmetros da aba.';
-const NP_PROJ_FRONT_HINT = 'Só o front, pelo modelo CPA: (AOV × (1 − reembolso do modelo − fee − opex − reserva) − CPA por FE) × FEs.';
+const NP_PROJ_HINT = 'Projeção do lucro TOTAL que o faturamento do afiliado gera pra operação: o Lucro (front, com os parâmetros desta aba) + o backend que esses clientes rendem (lucro de call centers + SalesBound por FE de plataforma no período × FEs do afiliado).';
 const NP_PROJ_BACK_HINT = 'Backend que esses clientes rendem: lucro de call centers + SalesBound por FE de plataforma (taxa da operação no período) × FEs do afiliado.';
 
 function NpAffiliates({ rows, cur, onlyLoss, setOnlyLoss, backendPerFe }) {
@@ -834,13 +833,13 @@ function NpAffiliates({ rows, cur, onlyLoss, setOnlyLoss, backendPerFe }) {
     .filter((a) => !qn || (a.nickname || '').toLowerCase().includes(qn) || a.externalId.toLowerCase().includes(qn) || (a.mappedName || '').toLowerCase().includes(qn));
   const shown = showAll ? list : list.slice(0, 50);
   const lossCount = rows.filter((a) => a.profit < 0).length;
-  const cols = 8 + (detail ? 8 : 0);
+  const cols = 8 + (detail ? 7 : 0);
   return (
     <div className="panel" style={{ marginBottom: 14 }}>
       <div className="panel-head" style={{ flexWrap: 'wrap' }}>
         <div className="panel-title">
           <span className="panel-eyebrow">MARGEM POR AFILIADO</span>
-          <div className="panel-sub">{fmtInt(rows.length)} contas com venda no período · Lucro = só o front, com os parâmetros da aba · Projeção = front pelo modelo CPA + backend que esses clientes rendem{backendPerFe != null ? ` (${npMoney(backendPerFe, cur, 2)} por FE no período)` : ''}</div>
+          <div className="panel-sub">{fmtInt(rows.length)} contas com venda no período · Lucro = só o front, com os parâmetros da aba · Projeção = Lucro + backend que esses clientes rendem{backendPerFe != null ? ` (${npMoney(backendPerFe, cur, 2)} por FE no período)` : ''}</div>
         </div>
         <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
           <div className="select-btn" style={{ padding: '0 10px', width: 'min(220px, 100%)' }}>
@@ -869,10 +868,7 @@ function NpAffiliates({ rows, cur, onlyLoss, setOnlyLoss, backendPerFe }) {
               </>}
               <th className="num">Lucro</th>
               <th className="num" title={NP_PROJ_HINT}>Projeção</th>
-              {detail && <>
-                <th className="num" title={NP_PROJ_FRONT_HINT}>Proj. front</th>
-                <th className="num" title={NP_PROJ_BACK_HINT}>Proj. back</th>
-              </>}
+              {detail && <th className="num" title={NP_PROJ_BACK_HINT}>Proj. back</th>}
               <th className="num">Margem</th>
               <th className="num">Lucro/FE</th>
               {detail && <th className="num" title={NP_PROJ_HINT}>Proj./FE</th>}
@@ -900,10 +896,7 @@ function NpAffiliates({ rows, cur, onlyLoss, setOnlyLoss, backendPerFe }) {
                   </>}
                   <td className="num cell-mono" style={{ fontWeight: 700, color: npTone(a.profit) }}>{npMoney(a.profit, cur)}</td>
                   <td className="num cell-mono" style={{ fontWeight: 600, color: a.projectionTotal == null ? 'var(--fg5)' : npTone(a.projectionTotal) }} title={NP_PROJ_HINT}>{a.projectionTotal == null ? '—' : npMoney(a.projectionTotal, cur)}</td>
-                  {detail && <>
-                    <td className="num cell-mono" style={{ color: a.projection == null ? 'var(--fg5)' : npTone(a.projection) }}>{a.projection == null ? '—' : npMoney(a.projection, cur)}</td>
-                    <td className="num cell-mono" style={{ color: a.backendProjection == null ? 'var(--fg5)' : 'var(--money)' }}>{a.backendProjection == null ? '—' : npMoney(a.backendProjection, cur)}</td>
-                  </>}
+                  {detail && <td className="num cell-mono" style={{ color: a.backendProjection == null ? 'var(--fg5)' : 'var(--money)' }}>{a.backendProjection == null ? '—' : npMoney(a.backendProjection, cur)}</td>}
                   <td className="num cell-mono" style={{ color: a.marginPct >= 0 ? 'var(--fg1)' : 'var(--danger)' }}>{npPct(a.marginPct)}</td>
                   <td className="num cell-mono">{a.profitPerFe == null ? '—' : npMoney(a.profitPerFe, cur, 2)}</td>
                   {detail && <td className="num cell-mono" style={{ color: a.projectionTotalPerFe == null ? 'var(--fg5)' : npTone(a.projectionTotalPerFe) }}>{a.projectionTotalPerFe == null ? '—' : npMoney(a.projectionTotalPerFe, cur, 2)}</td>}
@@ -966,7 +959,7 @@ function NpLossAlert({ affiliates, cur, onOpen }) {
           </div>
           <div style={{ display: 'flex', gap: 10, alignItems: 'center', marginTop: 8, flexWrap: 'wrap' }}>
             <button className="btn btn-ghost" style={{ fontSize: 11 }} onClick={onOpen}>ver {losers.length > top.length ? `todos os ${fmtInt(losers.length)}` : 'na tabela'} →</button>
-            <span style={{ fontSize: 10.5, color: 'var(--fg5)' }}>Lucro = só o front, com os parâmetros da aba. Projeção = front pelo modelo CPA + o backend que esses clientes rendem. Quem fica negativo na Projeção não se paga nem contando o call center e a SalesBound.</span>
+            <span style={{ fontSize: 10.5, color: 'var(--fg5)' }}>Lucro = só o front, com os parâmetros da aba. Projeção = Lucro + o backend que esses clientes rendem. Quem fica negativo na Projeção não se paga nem contando o call center e a SalesBound.</span>
           </div>
         </div>
       )}
