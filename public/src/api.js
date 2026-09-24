@@ -915,6 +915,22 @@ function fetchCopyAutotuneLogs(params = {}) {
   return coGet(`/api/admin/copy-autotune/logs${qs.toString() ? `?${qs}` : ''}`);
 }
 
+// ---------- CRM de afiliados ----------
+function _crmQs(params = {}) {
+  const qs = new URLSearchParams();
+  for (const [k, v] of Object.entries(params)) { if (v !== null && v !== undefined && v !== '') qs.set(k, v); }
+  return qs.toString();
+}
+function fetchAffiliateCrm(params = {}) {
+  const qs = _crmQs(params);
+  return coGet(`/api/admin/affiliate-crm${qs ? `?${qs}` : ''}`);
+}
+function adminAffiliateCrm(body) { return coSend('/api/admin/affiliate-crm', 'POST', body); }
+function affiliateCrmExportUrl(params = {}) {
+  const qs = _crmQs(params);
+  return `/api/admin/affiliate-crm/export${qs ? `?${qs}` : ''}`;
+}
+
 // Mutações invalidam o cache client-side de GETs: depois de salvar algo, o
 // refetch da página precisa ver o dado novo — não o cache de 15s. Cobertura
 // por convenção de nome (add/create/patch/delete/save/apply/...); helpers
@@ -1014,4 +1030,7 @@ window.NSApi = _wrapMutations({
   aiGetConversation,
   aiDeleteConversation,
   aiSendMessage,
+  fetchAffiliateCrm,
+  adminAffiliateCrm,
+  affiliateCrmExportUrl,
 });

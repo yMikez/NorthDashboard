@@ -360,6 +360,28 @@ POST /api/integrations/affiliates/webhook     (evento affiliate.updated)
 Header: X-Api-Key: <chave de integração>
 ```
 
+**Campos opcionais de CRM (novos).** Se o payload trouxer contato e tier, o
+dash guarda e a aba CRM passa a usar:
+
+```json
+{ "affiliate_id": "...", "name": "Maria Silva", "status": "active",
+  "platforms": [{ "platform": "jvzoo", "external_id": "1234567" }],
+  "updated_at": "2026-09-24T13:37:00Z",
+  "phone": "+55 11 98888-7777",
+  "tier": "North" }
+```
+
+| Campo | Apelidos aceitos | O que acontece |
+| --- | --- | --- |
+| `phone` | `whatsapp`, `telefone`, `phone_number`, `celular` | normalizado pra só dígitos; menos de 10 ou mais de 15 vira `null` |
+| `tier` | `nivel`, `level`, `plan` | guardado como veio (maiúsculas); reconhecemos Base / Ascendente / North |
+
+Os dois são **opcionais e não destrutivos**: campo ausente não apaga o que já
+está gravado, e quem editar o número ou o tier à mão no dash vence o que vier
+do webhook (o operador corrige o cadastro sem o próximo sync desfazer).
+Sem `tier`, o dash infere pelo CPA pago; sem `phone`, o afiliado aparece na
+régua marcado como "sem WhatsApp" e não dá pra contatar.
+
 ---
 
 ## 6. Como ler os números sem errar

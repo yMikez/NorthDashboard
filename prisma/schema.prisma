@@ -19,20 +19,20 @@ model Platform {
   // (ex: Digistore24 ~8.37%). Usuário atualiza manualmente — não é
   // derivada do payload do IPN (que muda por país/método). Multiplica
   // pelo faturado no período pra mostrar "Taxas pagas" no card.
-  feeRatePct      Decimal? @db.Decimal(5, 2)
+  feeRatePct    Decimal?  @db.Decimal(5, 2)
   // Percentual do faturamento que a plataforma retém como allowance
   // (rolling reserve contra refund/chargeback — Digistore ~2.37%).
   // Mesma lógica: usuário atualiza, multiplica pelo período.
-  allowancePct    Decimal? @db.Decimal(5, 2)
+  allowancePct  Decimal?  @db.Decimal(5, 2)
   // Timestamp da última atualização dos % acima. Driva o popup de 7d
   // que solicita re-confirmação periódica dos valores.
-  feesUpdatedAt   DateTime?
+  feesUpdatedAt DateTime?
   // Taxa MANUAL de refund+chargeback da plataforma (PERCENTUAL como os
   // irmãos acima: 15.00 = 15%) usada no modelo de lucro estilo planilha
   // CPA (NET AOV). Manual porque a taxa observada pelos eventos subestima
   // até a coorte maturar (refund chega até 60-90d após a venda) — a UI
   // mostra a observada por coorte madura ao lado, pra calibrar.
-  refundCbPct     Decimal? @db.Decimal(5, 2)
+  refundCbPct   Decimal?  @db.Decimal(5, 2)
 
   orders     Order[]
   products   Product[]
@@ -98,12 +98,12 @@ model Product {
   // funnelStep: etapa canônica do SKU (1..4); null = sessão/connector decide.
   // comboComponents: [{family, bottles}] na ordem do nome — COGS soma por
   // componente (combos sem custo por permutação).
-  verified            Boolean   @default(false)
-  verifiedAt          DateTime?
-  verifiedBy          String?
-  nameAtVerification  String?
-  funnelStep          Int?
-  comboComponents     Json?
+  verified           Boolean   @default(false)
+  verifiedAt         DateTime?
+  verifiedBy         String?
+  nameAtVerification String?
+  funnelStep         Int?
+  comboComponents    Json?
 
   platform Platform  @relation(fields: [platformId], references: [id])
   parent   Product?  @relation("FunnelTree", fields: [parentProductId], references: [id])
@@ -132,15 +132,15 @@ model Affiliate {
   // A mesma pessoa roda contas em várias plataformas (ex.: "Eduardo Godoy"
   // na JVZoo e "edugodoy…" na Digistore). partnerId agrupa as contas num
   // AffiliatePartner (contato + métricas somadas). NULL = conta solta.
-  partnerId   String?
-  partner     AffiliatePartner? @relation(fields: [partnerId], references: [id], onDelete: SetNull)
+  partnerId         String?
+  partner           AffiliatePartner? @relation(fields: [partnerId], references: [id], onDelete: SetNull)
   // E-mail do afiliado quando a plataforma manda (hoje só JVZoo
   // `affiliate_email`). Chave do auto-vínculo entre contas.
-  email       String?
+  email             String?
   // Pseudo-afiliado INTERNO (tracking de produto/orgânico, ex.
   // "neuromindpro12", ID "0") — sai do ranking. NULL = decide a heurística
   // (isInternalGuess); true/false = decisão manual do admin.
-  isInternal  Boolean?
+  isInternal        Boolean?
   // affiliate_id do sistema NorthScale Afiliados (fonte de verdade da
   // identidade — ver lib/services/affiliateMapping.ts). Cache por CONTA da
   // resolução (platform + external_id/nickname → affiliate_id); a mesma
@@ -180,17 +180,17 @@ enum AffiliateOrigin {
 }
 
 model AffiliatePartner {
-  id          String   @id @default(cuid())
+  id          String           @id @default(cuid())
   displayName String
   email       String?
   phone       String?
   notes       String?
   originType  AffiliateOrigin?
   originRef   String?
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
 
-  affiliates  Affiliate[]
+  affiliates Affiliate[]
 
   @@index([email])
 }
@@ -209,22 +209,22 @@ model AffiliateLinkDismiss {
 // Afiliado de recuperação: marca quem traz vendas via SMS/email recovery e a
 // % de comissão que recebe sobre cada venda aprovada. Seção "Recuperação".
 model RecoveryAffiliate {
-  id            String    @id @default(cuid())
-  affiliateId   String    @unique
-  affiliate     Affiliate @relation(fields: [affiliateId], references: [id], onDelete: Cascade)
+  id          String    @id @default(cuid())
+  affiliateId String    @unique
+  affiliate   Affiliate @relation(fields: [affiliateId], references: [id], onDelete: Cascade)
 
   // Fração: 0.30 = 30%. Taxa VIGENTE (denormalizada pra listagem rápida).
   // A fonte de verdade pra COMISSIONAR cada venda é ratePeriods: a venda usa
   // a taxa do período que continha o orderedAt dela — mudar a % não reescreve
   // comissões passadas.
-  commissionPct Decimal   @db.Decimal(5, 4)
-  enabled       Boolean   @default(true)
+  commissionPct Decimal @db.Decimal(5, 4)
+  enabled       Boolean @default(true)
   note          String?
 
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime  @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
-  ratePeriods   RecoveryRatePeriod[]
+  ratePeriods RecoveryRatePeriod[]
 
   @@index([enabled])
 }
@@ -243,7 +243,7 @@ model RecoveryRatePeriod {
   effectiveFrom DateTime
   effectiveTo   DateTime?
 
-  createdAt     DateTime  @default(now())
+  createdAt DateTime @default(now())
 
   @@index([recoveryAffiliateId, effectiveFrom])
 }
@@ -354,13 +354,13 @@ model Order {
   // Cost-of-goods snapshot at ingest time. Stored to preserve historical
   // accuracy: if pricing changes later, old orders still show the cost
   // they actually had. Computed via lib/services/cogs.ts.
-  cogsUsd        Decimal? @db.Decimal(10, 2)
-  fulfillmentUsd Decimal? @db.Decimal(10, 2)
+  cogsUsd               Decimal? @db.Decimal(10, 2)
+  fulfillmentUsd        Decimal? @db.Decimal(10, 2)
   // COGS/família irresolvíveis no ingest (família fora do dicionário, potes
   // desconhecidos, custo não cadastrado): cogs/frete ficam NULL (nunca $0
   // falso) e esta flag marca o pedido pra re-processo pelo backfill-cogs
   // depois que o humano confirmar o SKU na fila do catálogo.
-  classificationPending Boolean @default(false)
+  classificationPending Boolean  @default(false)
 
   // Potes desta order (bottles + bonusBottles do Product NO MOMENTO do
   // ingest). Snapshot de propósito: reclassificar o produto depois não
@@ -440,13 +440,13 @@ model IngestLog {
 // UI). Snapshot is captured into Order.cogsUsd at ingest time, so changing
 // values here only affects future orders — historical numbers are preserved.
 model ProductFamilyCost {
-  family      String   @id // 'NeuroMindPro', 'GlycoPulse', etc.
-  unitCostUsd Decimal  @db.Decimal(10, 4) // custo do pote NO FORNECEDOR desta família
+  family              String   @id // 'NeuroMindPro', 'GlycoPulse', etc.
+  unitCostUsd         Decimal  @db.Decimal(10, 4) // custo do pote NO FORNECEDOR desta família
   // Quem entrega esta família: 'redrock' | 'shipoffers'. Define qual
   // tabela de FulfillmentRate consultar e qual custo unitário aplicar.
   // NeuroMind + funil (NightCalm, FlexImmuneGuard) = redrock; resto = shipoffers.
-  fulfillmentSupplier String @default("shipoffers")
-  updatedAt   DateTime @updatedAt
+  fulfillmentSupplier String   @default("shipoffers")
+  updatedAt           DateTime @updatedAt
 }
 
 // Fulfillment (shipping) por (fornecedor, família, bottlesMax). Lookup:
@@ -793,32 +793,32 @@ model NetworkAuditLog {
 // Lida pelo /api/copy-decision a cada decisão pedida pelo funnel-renderer.
 // Editada pelo painel /copy-optimizer (manual) ou pelo cron auto-tune.
 model AffiliateCopyRule {
-  id        String   @id @default(cuid())
+  id String @id @default(cuid())
 
   // aff_id (ex: "46") OU aff_name (ex: "Matheus Petersen"). Case-sensitive —
   // bate verbatim contra o que vem do INS BuyGoods (Affiliate.externalId/nickname).
-  key       String   @unique
+  key     String @unique
   // 'id' | 'name' — pra UI saber como exibir/filtrar.
-  keyType   String
+  keyType String
 
   // 0..100. % de leads desse afiliado que vê Black 2 (bucket sticky por venda).
-  black2Pct Int      @default(0)
+  black2Pct Int @default(0)
 
   // Se false, regra é ignorada (vira 0%).
-  enabled   Boolean  @default(true)
+  enabled  Boolean @default(true)
   // Se true, o cron auto-tune ajusta o black2Pct (dentro de min/max/step).
-  autotune  Boolean  @default(false)
+  autotune Boolean @default(false)
 
   // Rails de segurança do auto-tune.
-  minPct    Int      @default(0)
-  maxPct    Int      @default(80)
-  stepPct   Int      @default(5)
+  minPct  Int @default(0)
+  maxPct  Int @default(80)
+  stepPct Int @default(5)
 
   // Target AOV específico do afiliado (opcional; senão usa o global da config).
   targetAov Decimal? @db.Decimal(10, 2)
 
   // Quem mudou por último: 'manual' | 'autotune' | 'seed'.
-  updatedBy String   @default("manual")
+  updatedBy String @default("manual")
 
   updatedAt DateTime @updatedAt
   createdAt DateTime @default(now())
@@ -910,7 +910,7 @@ model AutotuneLog {
 // cards de Produto. Endpoint aberto + validado + auto-corrigível (cada visita
 // reescreve o estado real), então não precisa de segredo client-side.
 model FunnelPageState {
-  id           String   @id @default(cuid())
+  id           String  @id @default(cuid())
   // Slug da plataforma (clickbank/digistore24/buygoods/cartpanda) — minúsculo.
   platformSlug String
   // Identificador do produto/funil que o usuário define no script (slug livre,
@@ -921,8 +921,8 @@ model FunnelPageState {
   // URL da página que reportou (opcional, pra auditoria).
   pageUrl      String?
 
-  reportedAt   DateTime @default(now())
-  createdAt    DateTime @default(now())
+  reportedAt DateTime @default(now())
+  createdAt  DateTime @default(now())
 
   @@unique([platformSlug, productKey])
   @@index([reportedAt])
@@ -955,8 +955,8 @@ model SmsEvent {
   // Marca/subconta Twilio (mapa fixo em lib/connectors/sms/config.ts).
   // Em sms_stop vêm vazios do gateway — o ingest enriquece via número
   // (config) ou via último sms_status daquele from_number.
-  brand    String?
-  subIndex Int?
+  brand      String?
+  subIndex   Int?
 
   // sms_status: 'delivered' | 'undelivered' | 'failed' (finais; os
   // intermediários são filtrados na origem). errorCode 30007 = filtragem
@@ -965,7 +965,7 @@ model SmsEvent {
   errorCode Int?
   // sms_skipped: motivo em texto livre do gateway (mobile inválido,
   // marca não cadastrada, quiet hours, ...).
-  reason String?
+  reason    String?
 
   // fromNumber/toNumber dependem do tipo: em sent/status `to` é o lead;
   // em sms_stop `from` é o lead e `to` é o NOSSO número (identifica a
@@ -1017,21 +1017,21 @@ model SmsCampaign {
 // da plataforma − opexPct); NET AFTER CPA = NET AOV − CPA; status pela
 // régua healthy/attention (editável na UI, decisão do usuário).
 model ProfitConfig {
-  id             String   @id @default("global")
+  id                 String   @id @default("global")
   // Custos operacionais em PERCENTUAL do gross (10.00 = 10%). Global.
-  opexPct        Decimal  @default(10) @db.Decimal(5, 2)
+  opexPct            Decimal  @default(10) @db.Decimal(5, 2)
   // NET AFTER CPA ≥ healthyMinUsd → SAUDÁVEL; ≥ attentionMinUsd → ATENÇÃO;
   // abaixo → RENEGOCIAR. (Planilha: 10 e 0.)
-  healthyMinUsd  Decimal  @default(10) @db.Decimal(10, 2)
-  attentionMinUsd Decimal @default(0) @db.Decimal(10, 2)
+  healthyMinUsd      Decimal  @default(10) @db.Decimal(10, 2)
+  attentionMinUsd    Decimal  @default(0) @db.Decimal(10, 2)
   // Metas de reembolso/chargeback da operação (2026-09-23, pedido do
   // SendTrace): fonte ÚNICA pros dois lados, exposta em
   // GET /api/integrations/targets. Percentuais 0–100.
-  refundTargetD30Pct Decimal @default(10) @db.Decimal(5, 2)
-  refundLimitD30Pct  Decimal @default(18) @db.Decimal(5, 2)
-  chargebackWarnPct  Decimal @default(0.5) @db.Decimal(5, 2)
-  chargebackLimitPct Decimal @default(0.9) @db.Decimal(5, 2)
-  updatedAt      DateTime @updatedAt
+  refundTargetD30Pct Decimal  @default(10) @db.Decimal(5, 2)
+  refundLimitD30Pct  Decimal  @default(18) @db.Decimal(5, 2)
+  chargebackWarnPct  Decimal  @default(0.5) @db.Decimal(5, 2)
+  chargebackLimitPct Decimal  @default(0.9) @db.Decimal(5, 2)
+  updatedAt          DateTime @updatedAt
 }
 
 // Watchlist do monitor de call center (aba Produtos). Produtos AINDA NÃO
@@ -1043,11 +1043,11 @@ model ProfitConfig {
 // "Retra Burn"; watch de família que ainda nem vendeu fica dormente e
 // casa sozinho quando o produto nascer no catálogo.
 model CallCenterWatch {
-  id           String  @id @default(cuid())
+  id           String   @id @default(cuid())
   platformSlug String
   // NULL = TODAS as famílias da plataforma (ex.: JVZoo inteira).
   family       String?
-  enabled      Boolean @default(true)
+  enabled      Boolean  @default(true)
   note         String?
   createdAt    DateTime @default(now())
 
@@ -1072,17 +1072,17 @@ model CallCenterWatch {
 //   provider 'logicall' — polling da API deles (lib/services/logicallSync):
 //                         tem transactionId, produto/SKU, agente, refund.
 model CallCenterSale {
-  id                String   @id @default(cuid())
+  id                String    @id @default(cuid())
   // Dedup: tauk = email|purchase-date; logicall = "logicall:<transactionId>".
-  externalKey       String   @unique
-  provider          String   @default("tauk")
+  externalKey       String    @unique
+  provider          String    @default("tauk")
   // ID nativo do parceiro quando existe (logicall transactionId) + pedido.
   externalId        String?
   orderId           String?
   // APPROVED | REFUNDED | CHARGEBACK — só a Logicall reporta estorno.
-  status            String   @default("APPROVED")
+  status            String    @default("APPROVED")
   refundedAt        DateTime?
-  refundedUsd       Decimal? @db.Decimal(12, 2)
+  refundedUsd       Decimal?  @db.Decimal(12, 2)
   email             String?
   firstName         String?
   lastName          String?
@@ -1090,7 +1090,7 @@ model CallCenterSale {
   address           String?
   state             String?
   country           String?
-  amountUsd         Decimal  @db.Decimal(12, 2)
+  amountUsd         Decimal   @db.Decimal(12, 2)
   fulfillmentStatus String?
   // Produto (Logicall manda items[]): nome/SKU crus + família/potes pelo
   // classificador — habilita filtro por família e, no futuro, COGS.
@@ -1101,8 +1101,8 @@ model CallCenterSale {
   // Agente do call center (Logicall: "LC-1287", ou "lc-ai-process" = IA).
   agentName         String?
   purchasedAt       DateTime
-  receivedAt        DateTime @default(now())
-  updatedAt         DateTime @updatedAt
+  receivedAt        DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
   raw               Json?
 
   @@index([purchasedAt])
@@ -1145,7 +1145,12 @@ model FamilyAlias {
 model AffiliateMappingState {
   affiliateId String    @id @map("affiliate_id")
   name        String
-  status      String    // 'active' | 'inactive'
+  status      String // 'active' | 'inactive'
+  // Contato e tier vindos do NorthScale Afiliados. Opcionais: o contrato
+  // não os exige e nem todo afiliado tem. São ESPELHO — quem edita à mão
+  // edita em AffiliateCrmProfile, que vence na hora de resolver.
+  phone       String?
+  tier        String? // rótulo cru deles, normalizado em maiúsculas
   occurredAt  DateTime  @map("occurred_at")
   syncedAt    DateTime  @map("synced_at")
   // Sumiu do mapping completo (sem evento de exclusão no contrato) —
@@ -1153,7 +1158,7 @@ model AffiliateMappingState {
   removedAt   DateTime? @map("removed_at")
   createdAt   DateTime  @default(now()) @map("created_at")
 
-  mappings    AffiliateMapping[]
+  mappings AffiliateMapping[]
 
   @@index([occurredAt])
   @@map("affiliate_mapping_state")
@@ -1167,11 +1172,11 @@ model AffiliateMapping {
   affiliateId String   @map("affiliate_id")
   name        String
   status      String
-  platform    String   // 'buygoods' | 'digistore24' | 'jvzoo'
+  platform    String // 'buygoods' | 'digistore24' | 'jvzoo'
   externalId  String   @map("external_id")
   syncedAt    DateTime @map("synced_at")
 
-  state       AffiliateMappingState @relation(fields: [affiliateId], references: [affiliateId], onDelete: Cascade)
+  state AffiliateMappingState @relation(fields: [affiliateId], references: [affiliateId], onDelete: Cascade)
 
   @@unique([platform, externalId])
   @@index([affiliateId])
@@ -1234,14 +1239,13 @@ model NetProfitScenario {
   @@index([createdAt])
 }
 
-
 // Histórico das premissas do Lucro real — cada "Salvar como padrão" grava o
 // snapshot e o diff (caminho → antes/depois). Regra do cálculo de margem:
 // taxa não muda sem registro de data (calculo_margem_northscale.md §10.5).
 model NetProfitParamsLog {
   id          String   @id @default(cuid())
   params      Json
-  changes     Json     // [{ path, from, to }] — vazio no snapshot inicial
+  changes     Json // [{ path, from, to }] — vazio no snapshot inicial
   createdAt   DateTime @default(now())
   createdById String?
 
@@ -1268,8 +1272,8 @@ model SalesboundTransaction {
   // reconciliado com o export).
   source         String    @default("csv")
   orderId        String
-  type           String    // SALE | REFUND | VOID | outro (maiúsculo, cru)
-  result         String    // SUCCESS | SOFT_DECLINE | HARD_DECLINE | …
+  type           String // SALE | REFUND | VOID | outro (maiúsculo, cru)
+  result         String // SUCCESS | SOFT_DECLINE | HARD_DECLINE | …
   amountUsd      Decimal   @db.Decimal(12, 2) // valor ABSOLUTO (reembolso vem negativo no CSV)
   txnAt          DateTime
   // Data da VENDA do pedido (= txnAt na própria venda). Void anula a venda
@@ -1283,8 +1287,8 @@ model SalesboundTransaction {
   sourcePlatform String?
   merchant       String?
   response       String?
-  items          Json      // [{ name, sku, qty, price, family, bottles }]
-  family         String?   // família do item de maior valor
+  items          Json // [{ name, sku, qty, price, family, bottles }]
+  family         String? // família do item de maior valor
   bottles        Int?
   importedAt     DateTime  @default(now())
   updatedAt      DateTime  @updatedAt
@@ -1293,4 +1297,80 @@ model SalesboundTransaction {
   @@index([saleAt])
   @@index([orderId])
   @@index([source])
+}
+
+// ══ CRM de afiliados (WhatsApp) ════════════════════════════════════════
+// A régua de relacionamento do playbook: quem está em qual fase, quem já
+// foi tocado e com qual mensagem. O DISPARO é manual por enquanto
+// (decisão do usuário, 2026-09-24) — aqui mora só a classificação.
+
+enum AffiliateTier {
+  BASE
+  ASCENDENTE
+  NORTH
+}
+
+// Dados preenchidos à mão. Vencem o que vem da plataforma de afiliados
+// (AffiliateMappingState.phone/tier): o humano sempre ganha do espelho.
+// crmKey = 'partner:<id>' | 'aff:<id>' | 'map:<affiliate_id>' — a mesma
+// chave de entidade da Análise de afiliados, mais o afiliado que só existe
+// no mapeamento (cadastrado lá e ainda sem venda nenhuma).
+model AffiliateCrmProfile {
+  crmKey    String         @id
+  phone     String?
+  tier      AffiliateTier?
+  notes     String?
+  optOut    Boolean        @default(false)
+  createdAt DateTime       @default(now())
+  updatedAt DateTime       @updatedAt
+}
+
+// Um toque enviado. cycleKey é a âncora do ciclo: dia da última venda pra
+// régua de reativação, dia do cadastro pro onboarding, semana ISO pro
+// resto. Vendeu de novo → o cycleKey muda → a régua reinicia sozinha, sem
+// job nenhum e sem risco de mandar "sumiu?" pra quem vendeu ontem.
+model AffiliateCrmTouch {
+  id         String   @id @default(cuid())
+  crmKey     String
+  cycleKey   String
+  segment    String
+  touchpoint String // R1..R4 | F1 | O1..O6 | RISK | UP | TOP10 | SKIP
+  tag        String?
+  sentAt     DateTime
+  origin     String   @default("manual") // manual | import
+  notes      String?
+  createdBy  String?
+  createdAt  DateTime @default(now())
+
+  @@unique([crmKey, cycleKey, touchpoint])
+  @@index([crmKey, sentAt])
+  @@index([sentAt])
+}
+
+// Parâmetros da régua. Todo "a confirmar" do playbook vira config editável,
+// não constante no código. Singleton (id 'global').
+model CrmConfig {
+  id                     String   @id @default("global")
+  // Limiar de dormência POR TIER (decisão do usuário: North some antes).
+  dormantDaysBase        Int      @default(7)
+  dormantDaysAscendente  Int      @default(5)
+  dormantDaysNorth       Int      @default(3)
+  coldDays               Int      @default(30)
+  // Dias APÓS o limiar em que cada toque da régua vence (Base: 7/11/14/21).
+  ladderOffsets          Int[]    @default([0, 4, 7, 14])
+  onboardingOffsets      Int[]    @default([0, 1, 3, 5, 7, 10])
+  onboardingDays         Int      @default(10)
+  // "Em risco": queda ≥ X% frente à média semanal das últimas N semanas.
+  atRiskDropPct          Decimal  @default(40) @db.Decimal(5, 2)
+  atRiskWeeks            Int      @default(4)
+  // Upgrade: N semanas seguidas batendo o volume semanal do tier de cima.
+  upgradeWeeks           Int      @default(3)
+  upgradeSalesAscendente Int      @default(10)
+  upgradeSalesNorth      Int      @default(25)
+  // Inferência de tier pelo CPA pago, quando a plataforma não manda.
+  tierCpaAscendenteMin   Decimal  @default(230) @db.Decimal(10, 2)
+  tierCpaNorthMin        Decimal  @default(240) @db.Decimal(10, 2)
+  // Piso de relevância: abaixo disso a reativação é de baixa prioridade.
+  minValueUsd            Decimal  @default(500) @db.Decimal(10, 2)
+  updatedAt              DateTime @updatedAt
 }

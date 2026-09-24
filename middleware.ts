@@ -46,6 +46,7 @@ const SPA_ROUTES = new Set([
   '/leaderboard',
   '/all-affiliates',
   '/affiliate-analysis',
+  '/affiliate-crm',
   '/products',
   '/transactions',
   '/platforms',

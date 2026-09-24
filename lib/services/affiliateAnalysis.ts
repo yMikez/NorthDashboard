@@ -134,7 +134,7 @@ export interface AffiliateExplainResponse {
 
 // ── carga ───────────────────────────────────────────────────────────────
 
-interface AffMeta {
+export interface AffMeta {
   id: string;
   slug: string;
   externalId: string;
@@ -142,6 +142,9 @@ interface AffMeta {
   email: string | null;
   partnerId: string | null;
   isInternal: boolean | null;
+  firstSeenAt: Date | null;
+  lastOrderAt: Date | null;
+  mappedAffiliateId: string | null;
   refundCbPctOverride: number | null;
   partner: { id: string; displayName: string; email: string | null; phone: string | null; notes: string | null; originType: string | null; originRef: string | null } | null;
 }
@@ -150,7 +153,7 @@ function originOf(p: AffMeta['partner']): { type: string; ref: string | null } |
   return p?.originType ? { type: p.originType, ref: p.originRef } : null;
 }
 
-interface RawData {
+export interface RawData {
   coverageStart: Date;
   lastIdx: number;      // último dia das janelas (âncora, ontem, ou hoje com includeToday)
   lastDayStart: Date;
@@ -172,7 +175,7 @@ function resolveLastDay(opts: AnalysisOptions): Date {
   return opts.includeToday ? todayStart : new Date(todayStart.getTime() - DAY_MS);
 }
 
-async function loadRaw(opts: AnalysisOptions, affiliateIds?: string[], coverageDays = COVERAGE_DAYS): Promise<RawData> {
+export async function loadRaw(opts: AnalysisOptions, affiliateIds?: string[], coverageDays = COVERAGE_DAYS): Promise<RawData> {
   const lastDayStart = resolveLastDay(opts);
   const days = Math.max(coverageDays, 2 * opts.window, COVERAGE_DAYS);
   const coverageStart = new Date(lastDayStart.getTime() - (days - 1) * DAY_MS);
@@ -257,6 +260,7 @@ async function loadRaw(opts: AnalysisOptions, affiliateIds?: string[], coverageD
       where: affiliateIds?.length ? { id: { in: affiliateIds } } : undefined,
       select: {
         id: true, externalId: true, nickname: true, email: true, partnerId: true, isInternal: true,
+        firstSeenAt: true, lastOrderAt: true, mappedAffiliateId: true,
         refundCbPctOverride: true, platform: { select: { slug: true } },
         partner: { select: { id: true, displayName: true, email: true, phone: true, notes: true, originType: true, originRef: true } },
       },
@@ -269,6 +273,7 @@ async function loadRaw(opts: AnalysisOptions, affiliateIds?: string[], coverageD
     affiliates.set(a.id, {
       id: a.id, slug: a.platform.slug, externalId: a.externalId, nickname: a.nickname, email: a.email,
       partnerId: a.partnerId, isInternal: a.isInternal,
+      firstSeenAt: a.firstSeenAt ?? null, lastOrderAt: a.lastOrderAt ?? null, mappedAffiliateId: a.mappedAffiliateId ?? null,
       refundCbPctOverride: a.refundCbPctOverride != null ? Number(a.refundCbPctOverride) : null,
       partner: a.partner,
     });
@@ -304,7 +309,7 @@ async function loadRaw(opts: AnalysisOptions, affiliateIds?: string[], coverageD
 
 // ── cálculo por entidade ────────────────────────────────────────────────
 
-interface Entity {
+export interface Entity {
   key: string;
   kind: 'partner' | 'affiliate';
   name: string;
@@ -332,7 +337,7 @@ function accountRange(raw: RawData, a: AffMeta, r: WindowRange): { m: WindowMetr
   return { m: metricsFor(s.bucket, s.activeDays, days, latestCpaInRange(cpaMap, r), ratesFor(a, raw.pm)), daily: s.daily, sales };
 }
 
-function entityRange(raw: RawData, e: Entity, r: WindowRange): { m: WindowMetrics; daily: number[]; sales: number[] } {
+export function entityRange(raw: RawData, e: Entity, r: WindowRange): { m: WindowMetrics; daily: number[]; sales: number[] } {
   const parts = e.accountIds.map((id) => accountRange(raw, raw.affiliates.get(id)!, r));
   const len = r.to - r.from + 1;
   const sumSeries = (pick: (p: typeof parts[number]) => number[]) => {
@@ -357,7 +362,7 @@ function entityWindow(raw: RawData, e: Entity, days: WindowDays) {
   return { cur: c.m, prev: p.m, dailyCur: c.daily, dailyPrev: p.daily, salesCur: c.sales, salesPrev: p.sales };
 }
 
-function familyTotals(raw: RawData, ids: string[], r: WindowRange): Map<string, { revenue: number; sales: number }> {
+export function familyTotals(raw: RawData, ids: string[], r: WindowRange): Map<string, { revenue: number; sales: number }> {
   const out = new Map<string, { revenue: number; sales: number }>();
   for (const id of ids) {
     const byDay = raw.families.get(id);
@@ -381,7 +386,7 @@ function toRef(a: AffMeta, includeContact: boolean): AccountRef {
   };
 }
 
-function buildEntities(raw: RawData, view: 'partner' | 'platform', includeInternal: boolean): { entities: Entity[]; excludedIds: string[] } {
+export function buildEntities(raw: RawData, view: 'partner' | 'platform', includeInternal: boolean): { entities: Entity[]; excludedIds: string[] } {
   const all = [...raw.affiliates.values()];
   const kept = includeInternal ? all : all.filter((a) => !effectiveInternal(a));
   const keptIds = new Set(kept.map((a) => a.id));
@@ -421,7 +426,7 @@ function compactWindows(raw: RawData, e: Entity, custom: WindowDays): WindowComp
   });
 }
 
-function dateAt(raw: RawData, idx: number): string {
+export function dateAt(raw: RawData, idx: number): string {
   return brtDateStr(new Date(raw.coverageStart.getTime() + idx * DAY_MS));
 }
 

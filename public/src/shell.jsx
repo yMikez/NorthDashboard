@@ -21,6 +21,7 @@ function Sidebar({ active, onNav, user, open, onClose }) {
         // 'all-affiliates' continua rota válida (redireciona pra mesma página).
         { id: 'leaderboard', label: 'Afiliados', icon: 'trophy' },
         { id: 'affiliate-analysis', label: 'Análise', icon: 'trending-up' },
+        { id: 'affiliate-crm', label: 'CRM', icon: 'message-square' },
       ]
     },
     {

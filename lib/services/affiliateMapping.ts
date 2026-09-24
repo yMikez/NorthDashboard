@@ -74,6 +74,8 @@ export interface MappingRepo {
   /** Upsert do estado + substituição do conjunto. Devolve os pares que pertenciam a OUTRO afiliado. */
   applyState(state: AffiliateStateInput, plan: StatePlan, now: Date): Promise<{ transferred: Pair[] }>;
   touchState(affiliateId: string, now: Date): Promise<void>;
+  /** Espelha telefone/tier do contrato. Opcional (repos de teste não precisam). */
+  saveContact?(affiliateId: string, data: { phone: string | null; tier: string | null }): Promise<void>;
   /** Contas (Affiliate) das plataformas do contrato cujo externalId OU nickname normalizado bate com algum par. */
   findAccountsByPairs(pairs: Pair[]): Promise<MappingAccount[]>;
   listAccounts(platforms: readonly string[]): Promise<MappingAccount[]>;
@@ -141,6 +143,15 @@ export const prismaMappingRepo: MappingRepo = {
   },
   async touchState(affiliateId, now) {
     await db.affiliateMappingState.updateMany({ where: { affiliateId }, data: { syncedAt: now, removedAt: null } });
+  },
+  async saveContact(affiliateId, data) {
+    // Só escreve o que veio: campo ausente no payload não apaga o que já
+    // está gravado (o contrato não obriga a mandar contato em todo evento).
+    const patch: { phone?: string; tier?: string } = {};
+    if (data.phone) patch.phone = data.phone;
+    if (data.tier) patch.tier = data.tier;
+    if (!Object.keys(patch).length) return;
+    await db.affiliateMappingState.updateMany({ where: { affiliateId }, data: patch });
   },
   async findAccountsByPairs(pairs) {
     if (pairs.length === 0) return [];
@@ -409,6 +420,7 @@ export async function applyAffiliateState(
   if (plan.action === 'stale') return { action: 'stale', added: [], removed: [], transferred: [], reprocess: null };
   if (plan.action === 'unchanged') {
     await repo.touchState(state.affiliateId, now);
+    await repo.saveContact?.(state.affiliateId, { phone: state.phone ?? null, tier: state.tier ?? null });
     // Replay (retry do webhook depois de um 500, item re-buscado pelo
     // updated_since inclusivo): o estado já está gravado, mas o reprocesso
     // da tentativa anterior pode ter falhado — reprocessa os pares atuais
@@ -417,6 +429,7 @@ export async function applyAffiliateState(
     return { action: 'unchanged', added: [], removed: [], transferred: [], reprocess };
   }
   const { transferred } = await repo.applyState(state, plan, now);
+  await repo.saveContact?.(state.affiliateId, { phone: state.phone ?? null, tier: state.tier ?? null });
   notifyChanged();
   const touched: Pair[] = [...plan.added, ...plan.removed, ...transferred];
   const reprocess = opts.deferReprocess ? null : await reprocessPairs(touched, repo);

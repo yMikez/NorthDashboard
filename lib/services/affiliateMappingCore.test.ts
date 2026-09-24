@@ -99,6 +99,25 @@ describe('parseAffiliateState (corpo do webhook == item do mapping)', () => {
     ]);
     expect(r.dropped.map((d) => d.reason)).toEqual(['plataforma fora do contrato', 'external_id vazio']);
   });
+  // Contato/tier do CRM: opcionais no contrato. Ausente NÃO apaga o que já
+  // temos gravado (quem decide isso é o repo, mas o parse precisa devolver null).
+  it('lê telefone e tier quando vierem, em qualquer dos apelidos aceitos', () => {
+    const r = parseAffiliateState({
+      affiliate_id: 'a', name: 'A', status: 'active', platforms: [], updated_at: '2026-09-12T13:37:00Z',
+      whatsapp: '+55 (11) 98888-7777', nivel: 'north',
+    });
+    expect(r.ok && r.state.phone).toBe('5511988887777');
+    expect(r.ok && r.state.tier).toBe('NORTH');
+  });
+  it('telefone impossível vira null em vez de sujar o cadastro', () => {
+    const r = parseAffiliateState({ affiliate_id: 'a', name: 'A', status: 'active', platforms: [], updated_at: '2026-09-12T13:37:00Z', phone: '123' });
+    expect(r.ok && r.state.phone).toBeNull();
+  });
+  it('sem contato no payload, os campos ficam null (não vazio)', () => {
+    const r = parseAffiliateState({ affiliate_id: 'a', name: 'A', status: 'active', platforms: [], updated_at: '2026-09-12T13:37:00Z' });
+    expect(r.ok && r.state.phone).toBeNull();
+    expect(r.ok && r.state.tier).toBeNull();
+  });
   it('item do mapping usa updated_at no lugar de occurred_at', () => {
     const r = parseAffiliateState({ affiliate_id: 'a', name: 'A', status: 'inactive', platforms: [], updated_at: '2026-09-12T13:37:00.456Z' });
     expect(r.ok && r.state.occurredAt.toISOString()).toBe('2026-09-12T13:37:00.456Z');

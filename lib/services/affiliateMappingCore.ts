@@ -86,12 +86,28 @@ export function resolveAffiliateId(index: MappingIndex, platformSlug: string, id
 // ---------------------------------------------------------------------
 // Estado de afiliado (corpo do webhook §6 == item do mapping §5)
 // ---------------------------------------------------------------------
+import { normalizePhone } from './affiliateCrmCore';
+
 export interface AffiliateStateInput {
   affiliateId: string;
   name: string;
   status: 'active' | 'inactive';
   platforms: Array<{ platform: MappingPlatform; externalId: string }>; // normalizados, sem duplicata
   occurredAt: Date;
+  /** Contato e tier do CRM. Opcionais: nem todo afiliado tem, e o contrato
+   *  não os exige. Ausente ≠ vazio — ausente NÃO apaga o que já temos. */
+  phone?: string | null;
+  tier?: string | null;
+}
+
+/** Aceita os apelidos que a plataforma pode usar pro mesmo campo. */
+function pickString(b: Record<string, unknown>, keys: string[]): string | null {
+  for (const k of keys) {
+    const v = b[k];
+    if (typeof v === 'string' && v.trim()) return v.trim();
+    if (typeof v === 'number' && Number.isFinite(v)) return String(v);
+  }
+  return null;
 }
 
 export type ParseResult =
@@ -132,7 +148,10 @@ export function parseAffiliateState(body: unknown): ParseResult {
   }
   // Ordem estável (contrato §4): plataforma, depois external_id.
   platforms.sort((a, b2) => (a.platform === b2.platform ? a.externalId.localeCompare(b2.externalId) : a.platform.localeCompare(b2.platform)));
-  return { ok: true, state: { affiliateId, name: name || affiliateId, status: statusRaw, platforms, occurredAt }, dropped };
+  const phone = normalizePhone(pickString(b, ['phone', 'whatsapp', 'telefone', 'phone_number', 'celular']));
+  const tierRaw = pickString(b, ['tier', 'nivel', 'level', 'plan']);
+  const tier = tierRaw ? tierRaw.toUpperCase().slice(0, 40) : null;
+  return { ok: true, state: { affiliateId, name: name || affiliateId, status: statusRaw, platforms, occurredAt, phone, tier }, dropped };
 }
 
 export interface Pair { platform: string; externalId: string }

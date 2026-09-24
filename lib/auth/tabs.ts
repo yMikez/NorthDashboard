@@ -13,6 +13,7 @@ export type TabId =
   | 'leaderboard'
   | 'all-affiliates'
   | 'affiliate-analysis'
+  | 'affiliate-crm'
   | 'recovery'
   | 'tauk'
   | 'sms'
@@ -36,6 +37,9 @@ export const AVAILABLE_TABS: TabSpec[] = [
   { id: 'leaderboard',    label: 'Ranking',             group: 'Afiliados' },
   { id: 'all-affiliates', label: 'Todos os afiliados',  group: 'Afiliados' },
   { id: 'affiliate-analysis', label: 'Análise',         group: 'Afiliados' },
+  // CRM: aba própria de propósito — quem opera o WhatsApp recebe só ela,
+  // sem ver receita, margem nem CPA da operação inteira.
+  { id: 'affiliate-crm',  label: 'CRM',                 group: 'Afiliados' },
   // Captação: fontes novas de receita (recuperação/SMS/email). sms/email são
   // placeholders "em breve" — a tab já existe pra permissão ficar pronta.
   { id: 'recovery',       label: 'Recuperação',         group: 'Captação' },
