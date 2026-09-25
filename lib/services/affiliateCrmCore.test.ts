@@ -73,6 +73,12 @@ describe('segmentação', () => {
     expect(classifySegment(novo, 'BASE', cfg)).toBe('onboarding');
     expect(classifySegment({ ...novo, daysSinceFirstSeen: 25 }, 'BASE', cfg)).toBe('frio');
   });
+  it('parceiro de recuperação fica fora da régua (não é afiliado de tráfego)', () => {
+    const r = buildCrmRow(input({ isRecovery: true, daysSinceLastSale: null, lastSaleDay: null, daysSinceFirstSeen: 0 }), cfg);
+    expect(r.segment).toBe('fora');
+    expect(r.nextTouch).toBeNull();
+    expect(r.reason).toContain('recuperação');
+  });
   it('opt-out e inativo no sistema saem da régua', () => {
     expect(classifySegment(input({ optOut: true }), 'BASE', cfg)).toBe('fora');
     expect(classifySegment(input({ mappingStatus: 'inactive' }), 'BASE', cfg)).toBe('fora');

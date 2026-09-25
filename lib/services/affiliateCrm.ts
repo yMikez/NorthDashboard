@@ -228,7 +228,7 @@ export async function listAffiliateCrm(opts: CrmListOptions = {}): Promise<CrmLi
   const anchorDay = dateAt(raw, raw.lastIdx);
   const weekKey = isoWeekKey(raw.lastDayStart);
 
-  const [profiles, touches, mappingRows] = await Promise.all([
+  const [profiles, touches, mappingRows, recoveryRows] = await Promise.all([
     db.affiliateCrmProfile.findMany(),
     db.affiliateCrmTouch.findMany({
       where: { sentAt: { gte: new Date(now.getTime() - 365 * DAY_MS) } },
@@ -238,7 +238,10 @@ export async function listAffiliateCrm(opts: CrmListOptions = {}): Promise<CrmLi
       where: { removedAt: null },
       select: { affiliateId: true, name: true, status: true, phone: true, tier: true, createdAt: true },
     }),
+    // Parceiros de recuperação: ficam fora da régua (ver classifySegment).
+    db.recoveryAffiliate.findMany({ where: { enabled: true }, select: { affiliateId: true } }),
   ]);
+  const recoveryIds = new Set(recoveryRows.map((r) => r.affiliateId));
 
   const profileByKey = new Map(profiles.map((p) => [p.crmKey, p]));
   const touchesByKey = new Map<string, TouchRecord[]>();
@@ -315,6 +318,7 @@ export async function listAffiliateCrm(opts: CrmListOptions = {}): Promise<CrmLi
       kind: e.kind,
       platforms: [...new Set(e.accountIds.map((id) => raw.affiliates.get(id)!.slug))],
       mappingStatus: mapping ? (mapping.status === 'inactive' ? 'inactive' : 'active') : null,
+      isRecovery: e.accountIds.some((id) => recoveryIds.has(id)),
       tierManual: (profile?.tier ?? null) as Tier | null,
       tierPlatform: mapping?.tier ?? null,
       phoneManual: profile?.phone ?? null,

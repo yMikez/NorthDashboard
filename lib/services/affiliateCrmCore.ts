@@ -96,6 +96,12 @@ export interface CrmInput {
   platforms: string[];
   /** status do mapeamento do sistema de afiliados ('inactive' sai da régua). */
   mappingStatus?: 'active' | 'inactive' | null;
+  /**
+   * Parceiro de RECUPERAÇÃO (empresa de e-mail/SMS paga por % — Skill99,
+   * MailX…). Não é afiliado de tráfego: não tem régua de relacionamento,
+   * não recebe onboarding e não se "reativa" por WhatsApp. Fica fora.
+   */
+  isRecovery?: boolean;
   tierManual: Tier | null;
   tierPlatform: string | null;
   phoneManual: string | null;
@@ -320,7 +326,7 @@ export function upgradeTarget(input: CrmInput, tier: Tier, cfg: CrmConfigInput):
 }
 
 export function classifySegment(input: CrmInput, tier: Tier, cfg: CrmConfigInput): CrmSegment {
-  if (input.optOut || input.mappingStatus === 'inactive') return 'fora';
+  if (input.isRecovery || input.optOut || input.mappingStatus === 'inactive') return 'fora';
   const days = input.daysSinceLastSale;
   const everSold = days != null;
 
@@ -431,6 +437,7 @@ function reasonFor(input: CrmInput, segment: CrmSegment, tier: Tier, cfg: CrmCon
     case 'ativo':
       return `Vendendo normal: ${input.sales7} nos últimos 7 dias, US$ ${pt(input.revenue30)} no mês.`;
     case 'fora':
+      if (input.isRecovery) return 'Parceiro de recuperação (comissão por %) — não entra na régua de relacionamento.';
       return input.optOut ? 'Marcado como "não contatar".' : 'Inativo no sistema de afiliados.';
     default:
       return '';
