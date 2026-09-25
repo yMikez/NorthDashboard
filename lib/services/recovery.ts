@@ -299,12 +299,42 @@ export async function upsertRecoveryAffiliate(input: {
   platformSlug: string;
   commissionPct: number;
   note?: string | null;
-}): Promise<{ ok: true } | { error: string }> {
-  const aff = await db.affiliate.findFirst({
+  /** Nome do parceiro. Preenche o nickname só quando a plataforma não mandou um. */
+  nickname?: string | null;
+  /**
+   * Cria a conta de afiliado se ela ainda não existir. Serve pra marcar um
+   * parceiro de recuperação ANTES da primeira venda (acordo fechado, tráfego
+   * ainda não começou) — sem isso o cadastro só é possível depois da primeira
+   * venda, e a primeira leva de vendas entra classificada como front.
+   * Quando a venda chegar, upsertOrder casa pela mesma chave
+   * (platformId, externalId) e só atualiza a linha: a marca sobrevive.
+   */
+  createIfMissing?: boolean;
+}): Promise<{ ok: true; created?: boolean } | { error: string }> {
+  let aff = await db.affiliate.findFirst({
     where: { externalId: input.affiliateExternalId, platform: { slug: input.platformSlug } },
-    select: { id: true },
+    select: { id: true, nickname: true },
   });
-  if (!aff) return { error: 'afiliado não encontrado nessa plataforma' };
+  let createdAccount = false;
+  if (!aff) {
+    if (!input.createIfMissing) return { error: 'afiliado não encontrado nessa plataforma' };
+    const platform = await db.platform.findUnique({ where: { slug: input.platformSlug }, select: { id: true } });
+    if (!platform) return { error: `plataforma desconhecida: ${input.platformSlug}` };
+    aff = await db.affiliate.create({
+      data: {
+        platformId: platform.id,
+        externalId: input.affiliateExternalId,
+        nickname: input.nickname?.trim() || null,
+        firstSeenAt: new Date(),
+      },
+      select: { id: true, nickname: true },
+    });
+    createdAccount = true;
+  } else if (!aff.nickname && input.nickname?.trim()) {
+    // A plataforma não manda nome pra essa conta — usa o que o operador deu.
+    // Se já existe nickname, a plataforma continua sendo a fonte.
+    await db.affiliate.update({ where: { id: aff.id }, data: { nickname: input.nickname.trim() } });
+  }
 
   const newPct = new Prisma.Decimal(input.commissionPct);
 
@@ -370,5 +400,5 @@ export async function upsertRecoveryAffiliate(input: {
       }
     }
   });
-  return { ok: true };
+  return { ok: true, created: createdAccount };
 }
