@@ -40,11 +40,20 @@ export const SETTING_KEYS = {
   // Chaves de PARCEIRO (leitura em /api/integrations/*). Uma por sistema —
   // rotação independente e sem acesso de escrita. Ver lib/auth/partnerKey.ts.
   partnerSendtraceApiKey: 'partner.sendtrace.apiKey',
+  // Retenção (P10/R4): o dash PUXA o GET /api/retencao do SendTrace a cada
+  // 30 min. url = base da API deles; apiKey = a chave que ELES geram pra nós
+  // (vai no X-Api-Key da nossa chamada). allowInsecure libera http:// — hoje
+  // a API deles está em HTTP puro na 4400, e mandar chave e e-mail de cliente
+  // em claro precisa ser uma decisão explícita, não um default.
+  retentionApiUrl: 'sendtrace.retention.apiUrl',
+  retentionApiKey: 'sendtrace.retention.apiKey',
+  retentionAllowInsecure: 'sendtrace.retention.allowInsecure',
 } as const;
 
 // Chaves INTERNAS (não editáveis pela UI): marcador incremental do mapping.
 export const INTERNAL_SETTING_KEYS = {
   affiliatesSyncSince: 'affiliates.sync.since',
+  retentionSyncSince: 'sendtrace.retention.since',
 } as const;
 export type InternalSettingKey = (typeof INTERNAL_SETTING_KEYS)[keyof typeof INTERNAL_SETTING_KEYS];
 
@@ -162,6 +171,28 @@ export async function getPartnerApiKeys(): Promise<Array<[string, string]>> {
 }
 
 /** Chave da API Logicall: env > banco > null (integração desligada). */
+export interface RetentionConfig {
+  url: string | null;
+  apiKey: string | null;
+  allowInsecure: boolean;
+}
+
+/** Env vence o banco, como nas outras integrações. */
+export async function getRetentionConfig(): Promise<RetentionConfig> {
+  const envUrl = process.env.SENDTRACE_RETENTION_URL?.trim();
+  const envKey = process.env.SENDTRACE_RETENTION_KEY?.trim();
+  const [url, apiKey, insecure] = await Promise.all([
+    getSetting(SETTING_KEYS.retentionApiUrl),
+    getSetting(SETTING_KEYS.retentionApiKey),
+    getSetting(SETTING_KEYS.retentionAllowInsecure),
+  ]);
+  return {
+    url: envUrl || url || null,
+    apiKey: envKey || apiKey || null,
+    allowInsecure: (process.env.SENDTRACE_RETENTION_ALLOW_INSECURE ?? insecure ?? '').trim() === '1',
+  };
+}
+
 export async function getLogicallApiKey(): Promise<string | null> {
   const env = process.env.LOGICALL_API_KEY?.trim();
   if (env) return env;

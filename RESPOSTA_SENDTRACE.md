@@ -160,3 +160,115 @@ Dois cuidados: `productId`/`productName` são crus da plataforma e **o mesmo cod
 | E1, E2, E3, C3, C4, T7 | ✅ o dump já cobre |
 
 Qualquer campo que ainda falte, manda que a gente adiciona.
+
+---
+
+# Rodada 2 — respostas ao "O que faltou" (25/09/2026)
+
+## 1. Chave de parceiro
+
+Gerada e ativa. **Vai por canal separado**, não neste arquivo nem no repositório.
+Ela vale só em `/api/integrations/orders`, `/targets` e `/catalog`, é rotacionável
+sem afetar nada da ingestão, e qualquer outra rota a ignora.
+
+No `.env` de vocês ela é o `DASH_API_KEY`. Se vazar ou quiserem trocar, é uma
+chamada — sem janela de indisponibilidade.
+
+## 2. `API.md` atualizado
+
+Feito. O que mudou desde a versão que vocês leram:
+
+- **§3.1 agora traz a resposta completa**, campo a campo, do jeito que sai — o
+  exemplo antigo estava desatualizado (faltavam `refundedUsd`, `chargebackUsd`,
+  `originalGross`, `refundModel`, `currency`, `approvedAt`, `updatedAt`,
+  `bottles`, `mappedAffiliateId` e o próprio `platform` na linha). Tem tabela de
+  envelope e tabela de cada campo com tipo e significado.
+- **§3.1.1 a §3.1.3**: os três endpoints novos (`/orders` com `updated_since`,
+  `/targets`, `/catalog`).
+- **§2.4**: a chave de parceiro.
+- **§5.3** (nova): o contrato da retenção, abaixo.
+
+`/api/integrations/orders` devolve **exatamente** o mesmo corpo do
+`orders-dump` — só muda a autenticação e a existência do modo
+`updated_since`. Não tem campo a mais nem a menos.
+
+## 3. Retenção: implementado, puxando a cada 30 min
+
+Anotado e **já construído** do nosso lado — o dash puxa, como vocês preferem.
+
+- Roda **a cada 30 minutos** (primeira tentativa 90s depois de cada deploy).
+- `GET {SENDTRACE_API}/api/retencao?updated_since=<ISO>&limit=500`, com a chave
+  de vocês em `X-Api-Key`. Marcador incremental guardado aqui; pagina sozinho.
+- **Idempotente por `id`**: reprocessar não duplica. Item fora do contrato é
+  descartado com o motivo registrado, sem derrubar a página inteira.
+- Retenção **não vira venda** no dash. É estorno que não aconteceu; contar como
+  `Order` inflaria faturamento. Fica em tabela própria, ligada ao pedido por
+  `transacao_id` = `externalId` da mesma plataforma.
+- Se a retenção chegar **antes** de a venda existir aqui, ela é guardada e
+  religada ao pedido depois. Não se perde nada por ordem de chegada.
+
+Enquanto `retencao_ofertas` estiver vazia, o pull devolve zero e não faz nada —
+pode subir o endpoint quando quiser que a gente já está do outro lado. Formato
+completo e campos obrigatórios em `API.md` §5.3.
+
+**Uma condição, e ela é firme:** a URL precisa ser **HTTPS**. A resposta carrega
+e-mail de cliente e a nossa chave vai no header — na 4400 em HTTP puro isso
+trafega em claro na rede. O sincronizador recusa `http://` com erro explícito.
+Se for intencional por ser rede interna, dá para liberar com um setting, mas
+tem que ser decisão consciente e escrita, não default. O mesmo vale para o
+token de serviço que já existe aí.
+
+## 4. R1, R2 e R3 — preciso da definição, e proponho parar de trocar número por e-mail
+
+Não respondi antes porque **não tenho o catálogo de indicadores do PDF do
+Rodrigo** ("CS NorthScale · Visão Geral do SendTrace v2"). Sei que R1 é a taxa
+de reembolso contra a meta e que R3 depende do valor exato devolvido (vocês
+descreveram nos itens 1 e 2 das pendências), mas não sei a fórmula exata de
+nenhum dos três — nem o denominador (pedidos reais? faturamento? coorte D30?),
+nem o recorte de tempo.
+
+Me manda a definição dos três (ou o PDF) e eu faço melhor do que responder três
+números: **exponho um `GET /api/integrations/resumo`** que devolve os valores
+oficiais calculados aqui, com o período como parâmetro. Aí "diferença zero"
+deixa de ser um e-mail que envelhece e vira uma chamada que vocês repetem
+quando quiserem.
+
+Enquanto isso, dois cuidados para não comparar coisas diferentes:
+
+- **Estorno tem duas lentes** e elas dão números diferentes de propósito: por
+  **data do evento** (o estorno cai no dia em que aconteceu) e por **coorte**
+  (o estorno volta para o dia da venda). A matriz de coorte do dash usa a
+  segunda. Se vocês somarem por data do evento e compararmos com a coorte, a
+  diferença não é bug.
+- **Coorte recente subestima.** Reembolso chega até 60–90 dias depois da venda.
+  Nós fechamos taxa em coorte madura (60–150 dias atrás).
+
+## 5. BuyGoods — medido, e o buraco é o mesmo dos dois lados
+
+Vocês perguntaram se o dash tinha esse dado por outro caminho. Não tem, e agora
+está quantificado:
+
+- **90 dias de BuyGoods no dash: zero linhas `REFUNDED` e zero `CHARGEBACK`**,
+  sobre 29.007 pedidos aprovados.
+- **Nos últimos 200 IPNs recebidos (22 a 25/09): 100% `neworder`.** Nenhum
+  evento de refund ou chargeback chegou ao nosso endpoint.
+
+Ou seja: não é o dash deixando de processar o evento — ele não chega. Está na
+nossa fila resolver (configuração do postback do lado da BuyGoods). Até lá,
+tratem `refundedUsd = 0` da BuyGoods como **dado ausente**, nunca como ausência
+de reembolso. As outras plataformas estão íntegras.
+
+## 6. Digistore — os ~28% continuam valendo
+
+Sem novidade: os estornos executados por certas contas de suporte não disparam
+IPN e só entram quando reconciliamos com o CSV do painel deles, manualmente.
+Para vocês isso significa que a Digistore fica **temporariamente incompleta**,
+não errada. A recomendação continua: pull incremental de hora em hora mais uma
+varredura de 90 dias uma vez por semana.
+
+## 7. Sobre validar a primeira sincronização
+
+O `refundModel` (`in-place` × `extra-row`) está documentado em §3.1.1 e agora
+sai **em cada linha** — vocês não precisam deduzir do texto. Se a primeira
+sincronização divergir do que está escrito, me manda o `externalId` da linha e
+eu olho aqui: é mais rápido do que vocês investigarem no escuro.

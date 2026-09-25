@@ -375,6 +375,7 @@ model Order {
   customer          Customer?          @relation(fields: [customerId], references: [id])
   // 1:1 — uma order FE de afiliado vinculado gera no máx 1 comissão de network.
   networkCommission NetworkCommission?
+  retentionOffers   RetentionOffer[]
 
   @@unique([platformId, externalId])
   @@index([orderedAt])
@@ -1373,4 +1374,39 @@ model CrmConfig {
   // Piso de relevância: abaixo disso a reativação é de baixa prioridade.
   minValueUsd            Decimal  @default(500) @db.Decimal(10, 2)
   updatedAt              DateTime @updatedAt
+}
+
+// ══ Retenção (SendTrace) ═══════════════════════════════════════════════
+// O CS registra no SendTrace o degrau de retenção oferecido/aceito e quanto
+// foi preservado por pedido (P10). O dash PUXA (GET /api/retencao a cada
+// 30 min — frequência escolhida por eles) e guarda aqui.
+//
+// Fica FORA de Order de propósito: retenção não é uma venda nova, é um
+// estorno que não aconteceu. Contar como Order inflaria faturamento.
+// O elo com a venda é transactionId == Order.externalId da mesma plataforma;
+// orderId é resolvido quando a venda existe (pode chegar antes dela).
+model RetentionOffer {
+  id              String   @id @default(cuid())
+  // id estável do lado deles — chave de dedup do pull incremental.
+  externalId      String   @unique
+  transactionId   String
+  platform        String
+  email           String?
+  stepOffered     String?
+  stepAccepted    String?
+  preservedUsd    Decimal  @default(0) @db.Decimal(10, 2)
+  status          String // oferecido | aceito | recusado
+  occurredAt      DateTime
+  // atualizado_em deles: é o eixo do próximo updated_since.
+  sourceUpdatedAt DateTime
+  orderId         String?
+  order           Order?   @relation(fields: [orderId], references: [id], onDelete: SetNull)
+  raw             Json?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([occurredAt])
+  @@index([transactionId])
+  @@index([orderId])
+  @@index([sourceUpdatedAt])
 }

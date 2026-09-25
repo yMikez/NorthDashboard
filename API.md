@@ -114,40 +114,101 @@ Auth: Bearer
 - Teto de **50.000 linhas** por chamada; `truncated: true` avisa que bateu o limite — quebre
   o período em pedaços menores.
 
+**Resposta completa** — é exatamente esta a forma, sem campo omitido (o mesmo
+corpo sai em `/api/integrations/orders`):
+
 ```json
 {
-  "platform": "jvzoo", "start": "2026-09-20", "end": "2026-09-20",
-  "count": 1688, "truncated": false,
+  "ok": true,
+  "mode": "ordered_at",
+  "platform": "jvzoo",
+  "start": "2026-09-20",
+  "end": "2026-09-20",
+  "updated_since": null,
+  "count": 1688,
+  "truncated": false,
+  "next_updated_since": null,
   "orders": [{
     "externalId": "MRZI8U9PDAOB40NWW",
     "parentExternalId": "MRZI8U9PDAOB40NWW",
     "sessionId": "jvz:cliente@exemplo.com:2026-09-19",
+    "platform": "jvzoo",
     "status": "APPROVED",
     "productType": "FRONTEND",
     "funnelStep": 1,
-    "trafficSource": null, "trackingId": "6aaf49dd…", "clickId": null, "campaignKey": null,
-    "gross": 294, "net": 23.01, "cpa": 245,
+    "refundModel": "in-place",
+    "trafficSource": null,
+    "trackingId": "6aaf49dd…",
+    "clickId": null,
+    "campaignKey": null,
+    "gross": 294,
+    "originalGross": 294,
+    "net": 23.01,
+    "cpa": 245,
+    "refundedUsd": 0,
+    "chargebackUsd": 0,
+    "currency": "USD",
     "orderedAt": "2026-09-20T03:00:57.000Z",
-    "refundedAt": null, "chargebackAt": null,
+    "approvedAt": "2026-09-20T03:00:57.000Z",
+    "refundedAt": null,
+    "chargebackAt": null,
+    "updatedAt": "2026-09-20T03:01:02.412Z",
     "country": "US",
-    "productId": "450941", "productName": "NeuroRecall 6 Bottles", "family": "NeuroRecall",
-    "affiliateId": "3552183", "affiliateName": "xx483",
+    "productId": "450941",
+    "productName": "NeuroRecall 6 Bottles",
+    "family": "NeuroRecall",
+    "bottles": 6,
+    "affiliateId": "3552183",
+    "affiliateName": "xx483",
+    "mappedAffiliateId": "cmfgq1x2a0000v8l4h3k9d2pw",
     "customerEmail": "cliente@exemplo.com"
   }]
 }
 ```
 
-Campos que costumam gerar dúvida:
+**Envelope**
 
 | Campo | O que é |
 | --- | --- |
-| `status` | `APPROVED`, `REFUNDED`, `CHARGEBACK`, `PENDING`, `CANCELED` |
-| `productType` | papel da venda no funil: `FRONTEND`, `UPSELL`, `DOWNSELL`, `BUMP`, `SMS_RECOVERY` |
-| `sessionId` | agrupa a sessão de compra (front + upsells do mesmo cliente) |
-| `gross` | valor cheio da venda |
-| `net` | o que sobrou depois da taxa da plataforma e da comissão do afiliado |
-| `cpa` | comissão paga ao afiliado por essa venda |
-| `refundedAt` / `chargebackAt` | quando o estorno aconteceu (pode ser muito depois da venda) |
+| `mode` | `ordered_at` (filtrou por data da compra) ou `updated_since` |
+| `platform` | slug pedido, ou `all` |
+| `start` / `end` | só no modo `ordered_at`; `null` no outro |
+| `updated_since` | só no modo `updated_since`, normalizado em ISO |
+| `count` | linhas devolvidas |
+| `truncated` | bateu o teto de 50.000 — faltou coisa |
+| `next_updated_since` | só quando `truncated` no modo incremental: passe no próximo pull |
+
+**Cada linha de `orders`** (todos os campos sempre presentes; `null` quando não há valor):
+
+| Campo | Tipo | O que é |
+| --- | --- | --- |
+| `externalId` | string | id da transação **na plataforma** — a chave de conciliação |
+| `parentExternalId` | string \| null | na Digistore, aponta da linha de estorno pra venda original |
+| `sessionId` | string \| null | agrupa a sessão de compra (front + upsells do mesmo cliente) |
+| `platform` | string | `jvzoo`, `buygoods`, `digistore24`, `clickbank`, `cartpanda`, `pagamerican` |
+| `status` | string | `APPROVED`, `REFUNDED`, `CHARGEBACK`, `PENDING`, `CANCELED` |
+| `productType` | string | papel no funil: `FRONTEND`, `UPSELL`, `DOWNSELL`, `BUMP`, `SMS_RECOVERY` |
+| `funnelStep` | number \| null | posição no funil (1 = front) |
+| `refundModel` | string | `in-place` ou `extra-row` — **leia §3.1.1 antes de somar** |
+| `trafficSource`, `trackingId`, `clickId`, `campaignKey` | string \| null | rastreio como veio da plataforma |
+| `gross` | number | valor da linha **hoje** (numa venda in-place estornada, é o que o evento reportou) |
+| `originalGross` | number \| null | valor da venda no ingest, antes de qualquer evento de estorno |
+| `net` | number | sobra depois da taxa da plataforma e da comissão do afiliado |
+| `cpa` | number | comissão paga ao afiliado nessa venda |
+| `refundedUsd` | number | devolvido nesta linha, **sempre positivo**; 0 se não houve |
+| `chargebackUsd` | number | idem para chargeback |
+| `currency` | string | moeda original da transação (valores já vêm convertidos em USD) |
+| `orderedAt` | ISO | data/hora da compra (UTC; as abas bucketam em dia BRT) |
+| `approvedAt` | ISO \| null | quando foi aprovada |
+| `refundedAt` / `chargebackAt` | ISO \| null | quando o estorno aconteceu (pode ser semanas depois) |
+| `updatedAt` | ISO | última alteração da linha — **o eixo do `updated_since`** |
+| `country` | string \| null | país do comprador (ISO-2) |
+| `productId` / `productName` | string | **crus da plataforma**; o mesmo codinome já colidiu na BuyGoods |
+| `family` | string \| null | produto normalizado — **é por aqui que se agrupa** (§3.1.3) |
+| `bottles` | number \| null | frascos enviados (snapshot do fulfillment) |
+| `affiliateId` / `affiliateName` | string \| null | afiliado como a plataforma identifica |
+| `mappedAffiliateId` | string \| null | id do mesmo afiliado no NorthScale Afiliados (cruza contas) |
+| `customerEmail` | string \| null | **dado pessoal** — ver §9 |
 
 ### 3.1.1 O mesmo dump para parceiros, com pull incremental
 
@@ -381,6 +442,72 @@ está gravado, e quem editar o número ou o tier à mão no dash vence o que vie
 do webhook (o operador corrige o cadastro sem o próximo sync desfazer).
 Sem `tier`, o dash infere pelo CPA pago; sem `phone`, o afiliado aparece na
 régua marcado como "sem WhatsApp" e não dá pra contatar.
+
+### 5.3 Retenção — o dash PUXA do parceiro
+
+Único fluxo em que o dashboard é o **cliente**: o CS registra o degrau de
+retenção oferecido/aceito no SendTrace (P10) e o dash lê a cada **30 minutos**
+(cadência pedida por eles, 25/09) para tornar o R4 auditável por pedido.
+
+O que esperamos encontrar:
+
+```
+GET {SENDTRACE_API}/api/retencao?updated_since=<ISO>&limit=500
+X-Api-Key: <chave que eles geram para o dash>
+```
+
+```json
+{
+  "itens": [{
+    "id": "ret_123",
+    "transacao_id": "MRZI8U9PDAOB40NWW",
+    "plataforma": "jvzoo",
+    "email": "cliente@exemplo.com",
+    "degrau_oferecido": "50_off",
+    "degrau_aceito": "50_off",
+    "valor_preservado_usd": 147.00,
+    "status": "aceito",
+    "ocorrido_em": "2026-09-22T14:03:00Z",
+    "atualizado_em": "2026-09-22T14:03:00Z"
+  }],
+  "next_updated_since": "2026-09-22T14:03:00Z"
+}
+```
+
+| Campo | Obrigatório | Observação |
+| --- | --- | --- |
+| `id` | sim | id estável do lado deles — é a chave de dedup |
+| `transacao_id` | sim | tem que bater com o `externalId` do nosso dump; é o que torna auditável por pedido |
+| `plataforma` | sim | mesmo slug do dump |
+| `status` | sim | `oferecido` \| `aceito` \| `recusado` (aceitamos o equivalente em inglês) |
+| `ocorrido_em` | sim | ISO 8601 |
+| `atualizado_em` | não | sem ele o incremental anda pelo `ocorrido_em` |
+| `valor_preservado_usd` | não | só conta quando `status = aceito` |
+
+**Como o dash trata:** item inválido é descartado com motivo registrado, sem
+derrubar a página. Retenção **não vira venda** (`Order`) — é estorno que não
+aconteceu, e contar como venda inflaria faturamento; fica em tabela própria
+ligada ao pedido. Se a retenção chegar antes de a venda existir aqui, ela é
+guardada e religada depois. O pull é idempotente por `id`.
+
+**Configuração** (settings `sendtrace.retention.apiUrl` / `.apiKey`, ou as env
+`SENDTRACE_RETENTION_URL` / `SENDTRACE_RETENTION_KEY`):
+
+```bash
+curl -X PUT -H "Authorization: Bearer $DASH_KEY" -H "Content-Type: application/json" \
+  -d '{"key":"sendtrace.retention.apiUrl","value":"https://…"}' \
+  https://dash.thenorthscales.com/api/admin/integration-settings
+
+curl -X POST -H "Authorization: Bearer $DASH_KEY" \
+  https://dash.thenorthscales.com/api/admin/retention-sync        # roda agora
+curl -H "Authorization: Bearer $DASH_KEY" \
+  https://dash.thenorthscales.com/api/admin/retention-sync        # estado
+```
+
+> **URL sem HTTPS é recusada.** A resposta carrega e-mail de cliente e a nossa
+> chave vai no header — em HTTP puro isso trafega em claro. Se for intencional
+> (rede interna, por exemplo), libere explicitamente com o setting
+> `sendtrace.retention.allowInsecure = "1"`.
 
 ---
 
