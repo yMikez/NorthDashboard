@@ -1,6 +1,12 @@
 // Diagnóstico READ-ONLY de ATRIBUIÇÃO por afiliado (bearer INGEST_SECRET).
 //
 //   GET /api/admin/diag-affiliates?platform=buygoods&days=14[&family=Neuro][&external_id=290]
+//   GET /api/admin/diag-affiliates?platform=buygoods&days=14&by=subid
+//
+// by=subid agrupa pelos rastreios em vez da conta (clickId = subid,
+// campaignKey = subid2, trafficSource). Serve pra quando o parceiro não tem
+// conta própria na plataforma e é identificado por sub-id dentro da conta
+// de outro — a venda existe, só não está pendurada no afiliado dele.
 //
 // Responde "por que a venda não caiu no afiliado X": mostra, por conta de
 // afiliado, quantos pedidos e quanto faturou no período, com a quebra por
@@ -27,6 +33,7 @@ export async function GET(req: Request) {
   const days = Math.min(Math.max(parseInt(searchParams.get('days') ?? '14', 10) || 14, 1), 180);
   const family = searchParams.get('family');
   const externalId = searchParams.get('external_id');
+  const bySubid = searchParams.get('by') === 'subid';
   const since = new Date(Date.now() - days * 86_400_000);
 
   const conds: Prisma.Sql[] = [
@@ -36,6 +43,36 @@ export async function GET(req: Request) {
   if (family) conds.push(Prisma.sql`pr."family" ILIKE ${`%${family}%`}`);
   if (externalId) conds.push(Prisma.sql`a."externalId" = ${externalId}`);
   const where = Prisma.join(conds, ' AND ');
+
+  if (bySubid) {
+    const subs = await db.$queryRaw<Array<{
+      click_id: string | null; campaign_key: string | null; traffic_source: string | null;
+      nickname: string | null; external_id: string | null; orders: number; gross: number; last_at: Date;
+    }>>(Prisma.sql`
+      SELECT
+        o."clickId" AS click_id, o."campaignKey" AS campaign_key, o."trafficSource" AS traffic_source,
+        a."nickname" AS nickname, a."externalId" AS external_id,
+        COUNT(*)::int AS orders,
+        COALESCE(SUM(o."grossAmountUsd"), 0)::float8 AS gross,
+        MAX(o."orderedAt") AS last_at
+      FROM "Order" o
+      JOIN "Platform" pl ON pl.id = o."platformId"
+      JOIN "Product" pr  ON pr.id = o."productId"
+      LEFT JOIN "Affiliate" a ON a.id = o."affiliateId"
+      WHERE ${where}
+      GROUP BY 1, 2, 3, 4, 5
+      ORDER BY 7 DESC
+      LIMIT 200
+    `);
+    return NextResponse.json({
+      platform, days, family: family ?? null, modo: 'subid', desde: since.toISOString(),
+      rastreios: subs.map((r) => ({
+        subid: r.click_id, subid2: r.campaign_key, trafficSource: r.traffic_source,
+        conta: r.external_id, contaNome: r.nickname,
+        pedidos: r.orders, usd: Math.round(r.gross * 100) / 100, ultima: r.last_at.toISOString(),
+      })),
+    });
+  }
 
   const rows = await db.$queryRaw<Array<{
     external_id: string | null; nickname: string | null; affiliate_id: string | null;
