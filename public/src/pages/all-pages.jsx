@@ -7479,6 +7479,8 @@ function RecoveryManage({ affs, onChanged }) {
 
 function RecoveryPage({ filters }) {
   const [data, setData] = useState({ status: 'loading', m: null, err: null });
+  // Empresas abertas no acordeão (o detalhe por conta).
+  const [openCo, setOpenCo] = useState(() => new Set());
   const [affs, setAffs] = useState([]);
   const [refresh, setRefresh] = useState(0);
   const [manage, setManage] = useState(false);
@@ -7532,47 +7534,86 @@ function RecoveryPage({ filters }) {
           </div>
 
           <div className="panel" style={{ padding: 0 }}>
-            <div className="panel-head" style={{ padding: '12px 14px 0' }}><div className="panel-title">Por afiliado</div></div>
+            <div className="panel-head" style={{ padding: '12px 14px 0' }}>
+              <div className="panel-title">Por empresa</div>
+              <div className="panel-sub">clique pra ver as contas</div>
+            </div>
             <div className="tbl-wrap" style={{ margin: 0, padding: '0 4px' }}>
               <table className="tbl">
-                <thead><tr><th>Afiliado</th><th className="num">% comissão</th><th className="num">Vendas</th><th className="num">Receita</th><th className="num">Comissão devida</th></tr></thead>
+                <thead><tr><th>Empresa</th><th className="num">% comissão</th><th className="num">Vendas</th><th className="num">Receita</th><th className="num">Comissão devida</th></tr></thead>
                 <tbody>
                   {data.status === 'loading' && <SkelTableRows rows={5} cols={5}/>}
-                  {data.status === 'ready' && m.byAffiliate.length === 0 && (
+                  {data.status === 'ready' && (m.byCompany || []).length === 0 && (
                     <tr><td colSpan={5} style={{ textAlign: 'center', padding: 20, opacity: 0.6 }}>
                       Nenhuma venda de recuperação no período.{affs.length === 0 ? ' Marque um afiliado em "Gerenciar afiliados".' : ''}
                     </td></tr>
                   )}
-                  {m.byAffiliate.map((a) => {
-                    const multi = (a.periods || []).length > 1;
+                  {(m.byCompany || []).map((c) => {
+                    const aberta = openCo.has(c.company);
+                    // Uma conta só e sem histórico de taxa: não há o que abrir.
+                    const temDetalhe = c.accounts.length > 1 || (c.accounts[0]?.periods || []).length > 1;
                     return (
-                      <React.Fragment key={a.affiliateExternalId}>
-                        <tr>
-                          <td className="cell-mono">{a.nickname || a.affiliateExternalId}<span style={{ color: 'var(--fg5)', marginLeft: 6, fontSize: 10 }}>{a.affiliateExternalId}</span></td>
-                          <td className="num cell-mono">{(a.commissionPct * 100).toFixed(0)}%{multi && <span style={{ color: 'var(--warning)', marginLeft: 4 }} title="A % mudou dentro do período — contadores por taxa abaixo">*</span>}</td>
-                          <td className="num">{fmtInt(a.sales)}</td>
-                          <td className="num">{fmtCurrency(a.grossUsd, 'USD', 2)}</td>
-                          <td className="num" style={{ color: 'var(--money)' }}>{fmtCurrency(a.commissionUsd, 'USD', 2)}</td>
+                      <React.Fragment key={c.company}>
+                        <tr
+                          onClick={() => temDetalhe && setOpenCo((prev) => { const n = new Set(prev); if (n.has(c.company)) n.delete(c.company); else n.add(c.company); return n; })}
+                          style={{ cursor: temDetalhe ? 'pointer' : 'default' }}
+                        >
+                          <td style={{ fontWeight: 600 }}>
+                            {temDetalhe && (
+                              <span style={{ display: 'inline-block', transform: aberta ? 'rotate(90deg)' : 'none', transition: 'transform 150ms' }}>
+                                <Icon name="chevron-right" size={11}/>
+                              </span>
+                            )}
+                            <span style={{ marginLeft: temDetalhe ? 6 : 17 }}>{c.company}</span>
+                            <span style={{ color: 'var(--fg5)', marginLeft: 8, fontSize: 10 }}>
+                              {c.accounts.length === 1 ? c.accounts[0].platformSlug : `${c.accounts.length} contas`}
+                            </span>
+                          </td>
+                          <td className="num cell-mono">{(c.effectivePct * 100).toFixed(0)}%</td>
+                          <td className="num">{fmtInt(c.sales)}</td>
+                          <td className="num">{fmtCurrency(c.grossUsd, 'USD', 2)}</td>
+                          <td className="num" style={{ color: 'var(--money)' }}>{fmtCurrency(c.commissionUsd, 'USD', 2)}</td>
                         </tr>
-                        {/* Contadores por período de taxa: vendas feitas com a % antiga
-                            ficam registradas no contador antigo; a % nova acumula no novo. */}
-                        {multi && a.periods.map((p, i) => {
-                          const vigente = p.effectiveTo == null;
-                          const label = vigente
-                            ? `desde ${p.effectiveFrom ? fmtDateShort(p.effectiveFrom) : 'sempre'} · vigente`
-                            : p.effectiveFrom
-                              ? `${fmtDateShort(p.effectiveFrom)} → ${fmtDateShort(p.effectiveTo)}`
-                              : `até ${fmtDateShort(p.effectiveTo)}`;
+
+                        {aberta && c.accounts.map((a) => {
+                          const full = (m.byAffiliate || []).find((x) => x.affiliateExternalId === a.affiliateExternalId) || a;
+                          const periodos = full.periods || [];
+                          const multi = periodos.length > 1;
                           return (
-                            <tr key={`${a.affiliateExternalId}-p${i}`} style={{ background: 'color-mix(in oklab, var(--accent) 4%, transparent)' }}>
-                              <td className="cell-mono" style={{ paddingLeft: 26, fontSize: 10, color: vigente ? 'var(--fg3)' : 'var(--fg5)' }}>
-                                <Icon name="chevron-right" size={9}/> <span style={{ marginLeft: 4 }}>{label}</span>
-                              </td>
-                              <td className="num cell-mono" style={{ fontSize: 10, color: vigente ? 'var(--glow-cyan)' : 'var(--fg5)' }}>{(p.commissionPct * 100).toFixed(0)}%</td>
-                              <td className="num" style={{ fontSize: 11, color: 'var(--fg4)' }}>{fmtInt(p.sales)}</td>
-                              <td className="num" style={{ fontSize: 11, color: 'var(--fg4)' }}>{fmtCurrency(p.grossUsd, 'USD', 2)}</td>
-                              <td className="num" style={{ fontSize: 11, color: vigente ? 'var(--money)' : 'var(--fg4)' }}>{fmtCurrency(p.commissionUsd, 'USD', 2)}</td>
-                            </tr>
+                            <React.Fragment key={`${c.company}-${a.platformSlug}-${a.affiliateExternalId}`}>
+                              <tr style={{ background: 'color-mix(in oklab, var(--accent) 4%, transparent)' }}>
+                                <td className="cell-mono" style={{ paddingLeft: 26, fontSize: 11 }}>
+                                  {a.nickname || a.affiliateExternalId}
+                                  <span style={{ color: 'var(--fg5)', marginLeft: 6, fontSize: 10 }}>{a.affiliateExternalId} · {a.platformSlug}</span>
+                                </td>
+                                <td className="num cell-mono" style={{ fontSize: 11 }}>
+                                  {(a.commissionPct * 100).toFixed(0)}%
+                                  {multi && <span style={{ color: 'var(--warning)', marginLeft: 4 }} title="A % mudou dentro do período — contadores por taxa abaixo">*</span>}
+                                </td>
+                                <td className="num" style={{ fontSize: 11 }}>{fmtInt(a.sales)}</td>
+                                <td className="num" style={{ fontSize: 11 }}>{fmtCurrency(a.grossUsd, 'USD', 2)}</td>
+                                <td className="num" style={{ fontSize: 11, color: 'var(--money)' }}>{fmtCurrency(a.commissionUsd, 'USD', 2)}</td>
+                              </tr>
+                              {/* Contadores por período de taxa: venda feita com a % antiga
+                                  fica no contador antigo; a % nova acumula no novo. */}
+                              {multi && periodos.map((p, i) => {
+                                const vigente = p.effectiveTo == null;
+                                const label = vigente
+                                  ? `desde ${p.effectiveFrom ? fmtDateShort(p.effectiveFrom) : 'sempre'} · vigente`
+                                  : p.effectiveFrom
+                                    ? `${fmtDateShort(p.effectiveFrom)} → ${fmtDateShort(p.effectiveTo)}`
+                                    : `até ${fmtDateShort(p.effectiveTo)}`;
+                                return (
+                                  <tr key={`${a.affiliateExternalId}-p${i}`}>
+                                    <td className="cell-mono" style={{ paddingLeft: 46, fontSize: 10, color: vigente ? 'var(--fg3)' : 'var(--fg5)' }}>{label}</td>
+                                    <td className="num cell-mono" style={{ fontSize: 10, color: vigente ? 'var(--glow-cyan)' : 'var(--fg5)' }}>{(p.commissionPct * 100).toFixed(0)}%</td>
+                                    <td className="num" style={{ fontSize: 10, color: 'var(--fg4)' }}>{fmtInt(p.sales)}</td>
+                                    <td className="num" style={{ fontSize: 10, color: 'var(--fg4)' }}>{fmtCurrency(p.grossUsd, 'USD', 2)}</td>
+                                    <td className="num" style={{ fontSize: 10, color: vigente ? 'var(--money)' : 'var(--fg4)' }}>{fmtCurrency(p.commissionUsd, 'USD', 2)}</td>
+                                  </tr>
+                                );
+                              })}
+                            </React.Fragment>
                           );
                         })}
                       </React.Fragment>

@@ -29,6 +29,10 @@ export interface RecoveryOrderRow {
   affiliateId: string;
   externalId: string;
   nickname: string | null;
+  /** Empresa dona da conta (RecoveryAffiliate.note). Uma empresa pode ter
+   *  várias contas — MailX é skill99 na Digistore e 364622 na BuyGoods. */
+  company?: string | null;
+  platformSlug?: string | null;
   commissionPct: number;    // taxa aplicada NESTA venda (do período dela)
   currentPct: number;       // taxa vigente do afiliado (pro cabeçalho da UI)
   periodFrom: string | null; // ISO do início do período (null = período inicial/epoch)
@@ -54,9 +58,30 @@ export interface RecoveryResponse {
     commissionUsd: number;
     netUsd: number; // gross − comissão (residual da recuperação, pré outros custos)
   };
+  /** Visão principal da aba: uma linha por EMPRESA, com as contas dentro.
+   *  O ID da conta é detalhe de plataforma, não identidade do parceiro. */
+  byCompany: Array<{
+    company: string;
+    sales: number;
+    grossUsd: number;
+    commissionUsd: number;
+    /** Taxa efetiva (comissão ÷ bruto) — contas com % diferente não viram média falsa. */
+    effectivePct: number;
+    accounts: Array<{
+      affiliateExternalId: string;
+      nickname: string | null;
+      platformSlug: string | null;
+      commissionPct: number;
+      sales: number;
+      grossUsd: number;
+      commissionUsd: number;
+    }>;
+  }>;
   byAffiliate: Array<{
     affiliateExternalId: string;
     nickname: string | null;
+    platformSlug?: string | null;
+    company?: string | null;
     commissionPct: number; // taxa VIGENTE do afiliado
     sales: number;
     grossUsd: number;
@@ -109,6 +134,7 @@ export function reduceRecovery(
   interface PeriodAgg { pct: number; from: string | null; to: string | null; sales: number; gross: number; commission: number }
   const byAff = new Map<string, {
     externalId: string; nickname: string | null; currentPct: number;
+    company: string | null; platformSlug: string | null;
     sales: number; gross: number; commission: number;
     periods: Map<string, PeriodAgg>;
   }>();
@@ -123,6 +149,7 @@ export function reduceRecovery(
     if (!a) {
       a = {
         externalId: r.externalId, nickname: r.nickname, currentPct: r.currentPct,
+        company: r.company ?? null, platformSlug: r.platformSlug ?? null,
         sales: 0, gross: 0, commission: 0, periods: new Map(),
       };
       byAff.set(r.affiliateId, a);
@@ -149,6 +176,8 @@ export function reduceRecovery(
     .map((a) => ({
       affiliateExternalId: a.externalId,
       nickname: a.nickname,
+      platformSlug: a.platformSlug,
+      company: a.company,
       commissionPct: a.currentPct,
       sales: a.sales,
       grossUsd: round2(a.gross),
@@ -167,11 +196,46 @@ export function reduceRecovery(
     }))
     .sort((x, y) => y.grossUsd - x.grossUsd);
 
+  // Empresa: rótulo cadastrado (note) e, sem ele, o nome/ID da própria conta
+  // — assim ninguém some da tela por falta de cadastro.
+  const byCompanyMap = new Map<string, {
+    company: string; sales: number; gross: number; commission: number;
+    accounts: typeof byAffiliate;
+  }>();
+  for (const a of byAffiliate) {
+    const label = (a.company ?? '').trim() || a.nickname || a.affiliateExternalId;
+    let c = byCompanyMap.get(label);
+    if (!c) { c = { company: label, sales: 0, gross: 0, commission: 0, accounts: [] }; byCompanyMap.set(label, c); }
+    c.sales += a.sales; c.gross += a.grossUsd; c.commission += a.commissionUsd;
+    c.accounts.push(a);
+  }
+  const byCompany = Array.from(byCompanyMap.values())
+    .map((c) => ({
+      company: c.company,
+      sales: c.sales,
+      grossUsd: round2(c.gross),
+      commissionUsd: round2(c.commission),
+      effectivePct: c.gross > 0 ? Math.round((c.commission / c.gross) * 10000) / 10000 : 0,
+      accounts: c.accounts
+        .map((a) => ({
+          affiliateExternalId: a.affiliateExternalId,
+          nickname: a.nickname,
+          platformSlug: a.platformSlug ?? null,
+          commissionPct: a.commissionPct,
+          sales: a.sales,
+          grossUsd: a.grossUsd,
+          commissionUsd: a.commissionUsd,
+        }))
+        .sort((x, y) => y.grossUsd - x.grossUsd),
+    }))
+    .sort((x, y) => y.grossUsd - x.grossUsd);
+
   const daily = Array.from(byDay.entries())
     .map(([date, d]) => ({ date, sales: d.sales, grossUsd: round2(d.gross), commissionUsd: round2(d.commission) }))
     .sort((x, y) => x.date.localeCompare(y.date));
 
   return {
+    byCompany,
     range: { start: startDate.toISOString(), end: endDate.toISOString() },
     kpis: {
       sales: rows.length,
@@ -190,7 +254,8 @@ export async function getRecovery(filters: RecoveryFilters): Promise<RecoveryRes
     select: {
       affiliateId: true,
       commissionPct: true,
-      affiliate: { select: { externalId: true, nickname: true } },
+      note: true,
+      affiliate: { select: { externalId: true, nickname: true, platform: { select: { slug: true } } } },
       ratePeriods: {
         orderBy: { effectiveFrom: 'asc' },
         select: { commissionPct: true, effectiveFrom: true, effectiveTo: true },
@@ -204,6 +269,8 @@ export async function getRecovery(filters: RecoveryFilters): Promise<RecoveryRes
     currentPct: Number(r.commissionPct),
     externalId: r.affiliate.externalId,
     nickname: r.affiliate.nickname,
+    company: r.note,
+    platformSlug: r.affiliate.platform.slug,
     periods: r.ratePeriods.map((p): RatePeriod => ({
       commissionPct: Number(p.commissionPct),
       effectiveFrom: p.effectiveFrom.toISOString(),
@@ -227,6 +294,8 @@ export async function getRecovery(filters: RecoveryFilters): Promise<RecoveryRes
       affiliateId: o.affiliateId!,
       externalId: info.externalId,
       nickname: info.nickname,
+      company: info.company,
+      platformSlug: info.platformSlug,
       commissionPct: period?.commissionPct ?? info.currentPct,
       currentPct: info.currentPct,
       periodFrom: period?.effectiveFrom ?? null,

@@ -125,3 +125,39 @@ describe('reduceRecovery', () => {
     expect(r.daily).toEqual([]);
   });
 });
+
+// Uma empresa pode ter várias contas (MailX = skill99 na Digistore + 364622
+// na BuyGoods). A aba mostra a empresa; a conta é detalhe de plataforma.
+describe('reduceRecovery · agrupamento por empresa', () => {
+  const rows = [
+    row({ affiliateId: 'a1', externalId: '3722234', nickname: 'skill99', company: 'MailX', platformSlug: 'digistore24', grossUsd: 200 }),
+    row({ affiliateId: 'a2', externalId: '364622', nickname: 'MailX', company: 'MailX', platformSlug: 'buygoods', grossUsd: 100 }),
+    row({ affiliateId: 'a3', externalId: '290', nickname: 'Recorvely', company: 'Recorvely', platformSlug: 'buygoods', grossUsd: 300 }),
+  ];
+
+  it('soma as contas da mesma empresa numa linha só', () => {
+    const r = reduceRecovery(rows, start, end);
+    const mailx = r.byCompany.find((c) => c.company === 'MailX')!;
+    expect(mailx.sales).toBe(2);
+    expect(mailx.grossUsd).toBe(300);
+    expect(mailx.accounts).toHaveLength(2);
+    expect(mailx.accounts.map((a) => a.platformSlug).sort()).toEqual(['buygoods', 'digistore24']);
+  });
+
+  it('ordena por faturamento e mantém as contas dentro', () => {
+    const r = reduceRecovery(rows, start, end);
+    expect(r.byCompany.map((c) => c.company)).toEqual(['Recorvely', 'MailX']);
+  });
+
+  it('taxa da empresa é a EFETIVA (comissão ÷ bruto), não uma média inventada', () => {
+    const mistas = [row({ affiliateId: 'a1', company: 'X', grossUsd: 100, commissionPct: 0.30, currentPct: 0.30 }), row({ affiliateId: 'a2', externalId: 'b', company: 'X', grossUsd: 100, commissionPct: 0.10, currentPct: 0.10 })];
+    const c = reduceRecovery(mistas, start, end).byCompany[0];
+    expect(c.commissionUsd).toBe(40);
+    expect(c.effectivePct).toBe(0.2);
+  });
+
+  it('conta sem empresa cadastrada não some — cai no próprio nome', () => {
+    const r = reduceRecovery([row({ affiliateId: 'z', externalId: '999', nickname: 'sozinho', grossUsd: 50 })], start, end);
+    expect(r.byCompany[0].company).toBe('sozinho');
+  });
+});
