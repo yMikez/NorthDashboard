@@ -2019,6 +2019,257 @@ input:focus, select:focus, textarea:focus {
 
 
 /* ============================================================
+   NORTHSCALE DESIGN SYSTEM 1.0 — OVERRIDE LAYER (2026-09-29)
+   Fonte: pasta "North Scale" no Drive (DS1 + Manual de Marca).
+   Por cima das camadas HUD e North Editorial; só o bloco de
+   acessibilidade abaixo vence esta. Princípios do DS1 aplicados:
+   - "leitura contínua": componentes não competem com o dado — sem
+     efeito decorativo, sem sombra como único limite, sem itálico;
+   - borda de 1 px separa, 2 px só no foco;
+   - raio 4 (compacto) · 6 (controle) · 8 (superfície);
+   - azul orienta atenção e seleção; semânticas só para estado;
+   - densidade compacta (decisão): controle 36 px, 44 px em toque.
+   ============================================================ */
+
+/* ---------- Efeitos decorativos: fora (DS1 "evitar efeitos") ---------- */
+.ns-bg, .ns-scan { display: none !important; }
+.side::after { display: none !important; }   /* cordilheira */
+.kpi .corner-tl, .kpi .corner-br { display: none !important; }
+.anim-in, .anim-in-soft { animation-duration: 180ms !important; }
+
+/* ---------- Casca ---------- */
+body { background: var(--bg); color: var(--fg3); }
+.app { background: var(--bg); }
+
+/* ---------- Sidebar: superfície, não mais "sempre escura" ---------- */
+.side {
+  background: var(--bg-raised);
+  border-right: 1px solid var(--border);
+  padding: 18px 12px 14px;
+}
+.side-logo { padding: 6px 10px 18px; gap: 10px; }
+.side-logo .ns-logotype { height: 18px; width: auto; display: block; }
+.side-logo .ns-appicon { width: 28px; height: 28px; display: none; border-radius: 6px; }
+[data-theme="light"] .side-logo .ns-logotype.for-dark,
+:root:not([data-theme="light"]) .side-logo .ns-logotype.for-light { display: none; }
+.side-group-label {
+  font-family: var(--f-body); font-size: 12px; font-weight: 500;
+  letter-spacing: 0; text-transform: none; color: var(--fg5);
+  padding: 16px 10px 6px;
+}
+.side-item {
+  min-height: 36px; padding: 8px 10px; border-radius: var(--r-md);
+  color: var(--fg3); font-family: var(--f-body); font-size: 14px; font-weight: 500;
+  letter-spacing: 0; position: relative;
+}
+.side-item svg { opacity: 1; color: var(--fg4); }
+.side-item:hover { background: var(--bg-hover); color: var(--fg1); }
+.side-item:hover svg { color: var(--fg1); }
+/* Seleção indicada ALÉM da cor (DS1 "indicar seleção além da cor"):
+   fundo, peso e barra à esquerda. */
+.side-item.is-active {
+  background: var(--bg-hover); color: var(--accent); font-weight: 600;
+  box-shadow: none;
+}
+.side-item.is-active svg { color: var(--accent); }
+.side-item.is-active::before {
+  content: ''; position: absolute; left: -12px; top: 6px; bottom: 6px;
+  width: 3px; border-radius: 0 3px 3px 0; background: var(--accent);
+}
+.side-item .cnt { font-family: var(--f-mono); font-size: 12px; color: var(--fg5); letter-spacing: 0; }
+.side-sub .side-item { font-size: 13px; color: var(--fg4); min-height: 32px; }
+.side-sub .side-item.is-active { background: transparent; color: var(--accent); }
+.side-sub .side-item.is-active::before { display: none; }
+.side-foot { border-top: 1px solid var(--border); }
+.user-chip .who .nm { color: var(--fg1); font-size: 13px; }
+.user-chip .who .rl { font-family: var(--f-body); font-size: 12px; letter-spacing: 0; color: var(--fg4); text-transform: none; }
+@media (min-width: 821px) {
+  .side-collapse {
+    background: var(--bg-raised); border: 1px solid var(--border);
+    color: var(--fg4); border-radius: var(--r-md);
+  }
+  .side-collapse:hover { color: var(--fg1); background: var(--bg-hover); border-color: var(--border-strong); }
+  .side.is-collapsed .ns-logotype { display: none !important; }
+  .side.is-collapsed .ns-appicon { display: block; }
+  .side.is-collapsed .side-group-label { border-top-color: var(--border); }
+  .side.is-collapsed .side-item.is-active::before { left: -8px; }
+}
+
+/* ---------- Barra do topo ---------- */
+.top { background: var(--bg); border-bottom: 1px solid var(--border); }
+.top-h1 { font-family: var(--f-display); font-weight: 700; color: var(--fg1); letter-spacing: -0.01em; }
+.top-h1 em { font-style: normal; color: var(--fg4); font-weight: 500; }
+.top-crumb { font-family: var(--f-body); font-size: 12px; letter-spacing: 0; text-transform: none; color: var(--fg4); }
+.top-crumb .cur { color: var(--fg2); }
+.icon-btn, .theme-toggle {
+  background: var(--bg-raised); border: 1px solid var(--border);
+  border-radius: var(--r-md); box-shadow: none; color: var(--fg3);
+}
+.icon-btn:hover { background: var(--bg-hover); color: var(--fg1); border-color: var(--border-strong); transform: none; }
+
+/* ---------- Cabeçalho de página (DS1: título estável + subtítulo) ---------- */
+.page-head .eyebrow {
+  font-family: var(--f-body); font-size: 12px; font-weight: 500;
+  letter-spacing: 0; text-transform: none; color: var(--fg4);
+}
+.page-head h2 {
+  font-family: var(--f-display); font-size: var(--t-page-title); line-height: 36px;
+  font-weight: 700; color: var(--fg1); letter-spacing: -0.01em; margin: 2px 0;
+}
+.page-head h2 em { font-style: normal; color: var(--fg4); font-weight: 700; }
+.page-head .sub {
+  font-family: var(--f-body); font-size: 14px; line-height: 22px;
+  letter-spacing: 0; color: var(--fg4);
+}
+
+/* ---------- Superfícies: borda como limite, sombra mínima ---------- */
+.kpi, .panel, .mini-kpi {
+  background: var(--bg-raised);
+  border: 1px solid var(--border);
+  border-radius: var(--r-lg);
+  box-shadow: none;
+}
+.kpi:hover { transform: none; box-shadow: none; border-color: var(--border-strong); }
+.kpi.is-clickable:hover { border-color: var(--accent); }
+.kpi.is-alert { border-color: color-mix(in oklab, var(--danger) 45%, var(--border)); }
+.panel-eyebrow, .kpi-label {
+  font-family: var(--f-body); font-size: 12px; font-weight: 500;
+  letter-spacing: 0; text-transform: none; color: var(--fg4);
+}
+.kpi-label::before { background: var(--accent); width: 6px; height: 6px; }
+.panel-h3 { font-family: var(--f-display); font-size: 16px; font-weight: 600; color: var(--fg1); letter-spacing: 0; }
+.panel-title { color: var(--fg1); }
+.panel-sub { font-family: var(--f-body); font-size: 12px; line-height: 18px; letter-spacing: 0; color: var(--fg4); }
+/* Métrica: Montserrat Semibold 32/38 (DS1) */
+.kpi-value, .panel-metric, .mini-kpi .v {
+  font-family: var(--f-mono); font-weight: 600;
+  font-size: var(--t-metric); line-height: 1.19; letter-spacing: 0;
+  color: var(--fg1);
+}
+.kpi-value .unit { font-family: var(--f-body); font-size: 12px; color: var(--fg4); letter-spacing: 0; }
+.kpi-value.is-money { color: var(--money); }
+.kpi-icon { background: var(--accent-soft); color: var(--accent); border: 0; border-radius: var(--r-md); }
+
+/* ---------- Botões: primário, secundário, texto (DS1) ---------- */
+.btn {
+  min-height: var(--ctl-h); padding: 0 var(--ctl-px);
+  display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+  font-family: var(--f-body); font-size: 14px; font-weight: 500; letter-spacing: 0;
+  border-radius: var(--r-md);
+  transition: background var(--dur-fast) var(--ease-smooth), border-color var(--dur-fast) var(--ease-smooth), color var(--dur-fast) var(--ease-smooth);
+}
+.btn-primary { background: var(--cta); color: var(--on-cta); border: 1px solid var(--cta); box-shadow: none; }
+.btn-primary:hover { background: var(--cta-hover); border-color: var(--cta-hover); opacity: 1; transform: none; }
+.btn-primary:active { background: var(--cta-hover); }
+.btn-ghost { background: var(--bg-raised); border: 1px solid var(--border); color: var(--fg1); }
+.btn-ghost:hover { background: var(--bg-hover); border-color: var(--accent); color: var(--accent); transform: none; }
+.btn svg { opacity: 1; }
+
+/* ---------- Chips de filtro: controle, não pílula decorativa ---------- */
+.chip, .date-chip {
+  min-height: 32px; border-radius: var(--r-md);
+  background: var(--bg-raised); border: 1px solid var(--border);
+  color: var(--fg3); font-family: var(--f-body); font-size: 13px; font-weight: 500; letter-spacing: 0;
+}
+.chip:hover, .date-chip:hover { border-color: var(--border-strong); color: var(--fg1); }
+.chip.is-active, .date-chip.is-active {
+  background: var(--bg-hover); border-color: var(--accent); color: var(--accent);
+}
+.chip .cnt { font-family: var(--f-mono); font-size: 12px; color: var(--fg5); }
+
+/* ---------- Campos (DS1: rótulo visível, borda de controle) ---------- */
+input:not([type="checkbox"]):not([type="radio"]):not([type="range"]), select, textarea {
+  font-family: var(--f-body); font-size: 14px; color: var(--fg1);
+  background: var(--bg-raised);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--r-md);
+}
+input:not([type="checkbox"]):not([type="radio"]):not([type="range"]), select { min-height: var(--ctl-h); }
+input::placeholder, textarea::placeholder { color: var(--fg5); opacity: 1; }
+input[type="checkbox"], input[type="radio"] { accent-color: var(--cta); width: 16px; height: 16px; }
+
+/* ---------- Tabelas de operação (DS1: cabeçalho estável, texto à
+   esquerda, valores à direita; linha ≥ 44 px nesta densidade) ---------- */
+.tbl { font-family: var(--f-body); }
+.tbl th {
+  font-family: var(--f-body); font-size: 12px; font-weight: 500;
+  letter-spacing: 0; text-transform: none; color: var(--fg4);
+  padding: 10px 12px; background: var(--bg-raised);
+  border-bottom: 1px solid var(--border);
+}
+.tbl td {
+  padding: 11px 12px; height: var(--row-h); font-size: 14px; line-height: 22px;
+  color: var(--fg2); border-bottom: 1px solid var(--border-soft);
+}
+.tbl td.num, .tbl td .cell-mono, .tbl td.cell-mono { font-family: var(--f-mono); font-weight: 500; }
+.tbl tbody tr:hover { background: var(--bg-hover); }
+.tbl tbody tr:hover td:first-child { box-shadow: none; }
+.cell-mono { color: inherit; }
+
+/* ---------- Drawers e modais ---------- */
+.drawer-backdrop, .modal-backdrop { background: rgba(13, 13, 13, 0.45) !important; }
+.drawer {
+  background: var(--bg-elev); border-left: 1px solid var(--border);
+  box-shadow: var(--shadow-lg);
+}
+.modal-card {
+  background: var(--bg-elev); border: 1px solid var(--border);
+  border-radius: var(--r-lg); box-shadow: var(--shadow-lg);
+}
+
+/* ---------- Paginação (componente Pager, utils.jsx) ---------- */
+.ns-pager {
+  display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between;
+  gap: 12px 20px; padding: 12px 14px; border-top: 1px solid var(--border);
+  font-family: var(--f-body); font-size: 13px; color: var(--fg4);
+}
+.ns-pager-summary { font-variant-numeric: tabular-nums; }
+.ns-pager-summary strong { color: var(--fg1); font-weight: 600; }
+.ns-pager-size { display: inline-flex; align-items: center; gap: 8px; }
+.ns-pager-size select { min-height: 32px; padding: 0 8px; font-size: 13px; }
+.ns-pager-nav { display: inline-flex; align-items: center; gap: 4px; }
+.ns-pager-btn {
+  min-width: 32px; height: 32px; padding: 0 8px;
+  display: inline-grid; place-items: center;
+  border-radius: var(--r-md); border: 1px solid transparent;
+  background: transparent; color: var(--fg3);
+  font-family: var(--f-mono); font-size: 13px; font-weight: 500; cursor: pointer;
+}
+.ns-pager-btn:hover:not(:disabled) { background: var(--bg-hover); color: var(--fg1); }
+.ns-pager-btn[aria-current="page"] {
+  background: var(--cta); color: var(--on-cta); border-color: var(--cta); font-weight: 600;
+}
+.ns-pager-gap { min-width: 20px; text-align: center; color: var(--fg5); }
+@media (pointer: coarse) {
+  .ns-pager-btn { min-width: 44px; height: 44px; }
+  .ns-pager-size select { min-height: 44px; }
+}
+
+/* ---------- Estados de leitura (DS1: vazio · carregando · parcial · falha) ---------- */
+.ns-readstate {
+  display: flex; gap: 10px; align-items: flex-start;
+  padding: 10px 12px; border-radius: var(--r-md); border: 1px solid;
+  font-family: var(--f-body); font-size: 13px; line-height: 20px;
+}
+.ns-readstate svg { flex-shrink: 0; margin-top: 2px; }
+.ns-readstate strong { font-weight: 600; }
+.ns-readstate.is-parcial { background: var(--warning-bg); border-color: color-mix(in oklab, var(--warning) 35%, transparent); color: var(--warning); }
+.ns-readstate.is-falha   { background: var(--danger-bg);  border-color: color-mix(in oklab, var(--danger) 35%, transparent);  color: var(--danger); }
+.ns-readstate.is-vazio, .ns-readstate.is-carregando { background: var(--bg-subtle); border-color: var(--border); color: var(--fg3); }
+.ns-readstate .ns-readstate-body { color: var(--fg2); }
+.ns-readstate button { margin-left: auto; }
+
+/* ---------- Visibilidade por tema (logos claro/escuro fora da sidebar) ---------- */
+[data-theme="light"] .ns-only-dark, :root:not([data-theme="light"]) .ns-only-light { display: none !important; }
+
+/* ---------- Toque: 44 px (DS1) ---------- */
+@media (pointer: coarse) {
+  :root { --ctl-h: 44px; }
+  .side-item { min-height: 44px; }
+  .chip, .date-chip { min-height: 44px; }
+}
+
+/* ============================================================
    ACESSIBILIDADE / ESTADOS — passe ui-ux-pro-max (2026-09-29)
    Só regras de UX; identidade (cores, fontes, raios) intocada.
    Fica no FIM do arquivo de propósito: vence o que veio antes.

@@ -9,9 +9,9 @@ function Sidebar({ active, onNav, user, open, onClose }) {
       label: 'Análise',
       items: [
         { id: 'overview', label: 'Visão geral', icon: 'layout-dashboard' },
-        { id: 'funnel',   label: 'Funil', icon: 'bar-chart-3' },
+        { id: 'funnel',   label: 'Funil', icon: 'ns-funil' },
         { id: 'refund-cohorts', label: 'Reembolsos', icon: 'percent' },
-        { id: 'custos',   label: 'Custos', icon: 'trending-down' },
+        { id: 'custos',   label: 'Custos', icon: 'ns-custos' },
       ]
     },
     {
@@ -19,7 +19,7 @@ function Sidebar({ active, onNav, user, open, onClose }) {
       items: [
         // Ranking + Diretório fundidos numa aba só (modelo planilha CPA).
         // 'all-affiliates' continua rota válida (redireciona pra mesma página).
-        { id: 'leaderboard', label: 'Afiliados', icon: 'trophy' },
+        { id: 'leaderboard', label: 'Afiliados', icon: 'ns-ranking' },
         { id: 'affiliate-analysis', label: 'Análise', icon: 'trending-up' },
         { id: 'affiliate-crm', label: 'CRM', icon: 'message-square' },
       ]
@@ -27,7 +27,7 @@ function Sidebar({ active, onNav, user, open, onClose }) {
     {
       label: 'Captação',
       items: [
-        { id: 'recovery', label: 'Recuperação', icon: 'refresh' },
+        { id: 'recovery', label: 'Recuperação', icon: 'ns-recuperacao' },
         { id: 'tauk', label: 'Call Center', icon: 'target' },
         { id: 'sms', label: 'SMS', icon: 'message-square' },
       ]
@@ -42,7 +42,7 @@ function Sidebar({ active, onNav, user, open, onClose }) {
     {
       label: 'Sistema',
       items: [
-        { id: 'platforms', label: 'Plataformas', icon: 'plug' },
+        { id: 'platforms', label: 'Plataformas', icon: 'ns-networks' },
         { id: 'costs', label: 'Fulfillment', icon: 'wallet' },
         { id: 'health', label: 'Saúde do dado', icon: 'alert-triangle' },
       ]
@@ -59,7 +59,7 @@ function Sidebar({ active, onNav, user, open, onClose }) {
   const iaGroup = {
     label: 'IA',
     items: [
-      { id: 'chat', label: 'Análise (IA)', icon: 'sparkles' },
+      { id: 'chat', label: 'Análise (IA)', icon: 'ns-insights' },
     ],
   };
   const adminOnly = {
@@ -100,20 +100,14 @@ function Sidebar({ active, onNav, user, open, onClose }) {
       >
         <Icon name="chevron-right" size={12} className="side-collapse-icon"/>
       </button>
+      {/* Manual de Marca: o logotipo é arquivo fixo — não se recompõe com
+          fonte. E abaixo de 128 px de globo usa-se o logotipo SEM símbolo:
+          por isso a sidebar leva só o nome, e o trilho recolhido leva o
+          ícone de app (desenhado para tamanho pequeno), nunca o globo. */}
       <div className="side-logo">
-        <img
-          src="/assets/logo-mark-dark.svg"
-          alt=""
-          className="logo-mark logo-dark"
-          style={{ width: 32, height: 32 }}
-        />
-        <img
-          src="/assets/logo-mark-light.svg"
-          alt=""
-          className="logo-mark logo-light"
-          style={{ width: 32, height: 32 }}
-        />
-        <div className="wm" style={{ width: 71, fontSize: 24 }}>north<em>scale</em></div>
+        <img src="/assets/brand/logotipo-preto.svg" alt="NorthScale" className="ns-logotype for-light"/>
+        <img src="/assets/brand/logotipo-branco.svg" alt="NorthScale" className="ns-logotype for-dark"/>
+        <img src="/assets/brand/app-icon-quadrado.svg" alt="NorthScale" className="ns-appicon"/>
       </div>
 
       {groups.map((g) => (

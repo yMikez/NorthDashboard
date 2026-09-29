@@ -192,7 +192,57 @@ function bucketByDay(orders, range) {
 }
 
 // ---------- icons (lucide paths) ----------
-function Icon({ name, size = 16, stroke = 1.5, className = '', label }) {
+// Biblioteca vetorial NorthScale (DS1: grade 24, traço 1,6, terminais
+// arredondados). Conteúdo interno de cada SVG oficial, sem cor fixa — herda
+// currentColor. Fonte: Drive "North Scale/Visual/Iconografia"; os arquivos
+// completos ficam em public/assets/icons/.
+const NS_ICON_MARKUP = {
+  'afiliados': "<circle cx=\"9\" cy=\"8.5\" r=\"3.5\"/><path d=\"M3.5 19.5c0-3 2.5-5 5.5-5s5.5 2 5.5 5\"/><circle cx=\"17\" cy=\"9.5\" r=\"2.6\"/><path d=\"M16.5 14.6c2.4.2 4 1.9 4 4.4\"/>",
+  'alerta': "<path d=\"M12 4 2.8 19.5h18.4z\"/><path d=\"M12 10v4.2M12 16.8v.2\"/>",
+  'busca': "<circle cx=\"11\" cy=\"11\" r=\"6.5\"/><path d=\"m20 20-4.4-4.4\"/>",
+  'calendario': "<rect x=\"3.5\" y=\"5\" width=\"17\" height=\"15.5\" rx=\"2.5\"/><path d=\"M3.5 9.5h17M8 3v4M16 3v4\"/>",
+  'chat': "<path d=\"M4 6.5A2.5 2.5 0 0 1 6.5 4h11A2.5 2.5 0 0 1 20 6.5v8a2.5 2.5 0 0 1-2.5 2.5H9l-5 4z\"/><path d=\"M8 9.5h8M8 12.8h5\"/>",
+  'check': "<circle cx=\"12\" cy=\"12\" r=\"8.5\"/><path d=\"m8.3 12.3 2.5 2.5 5-5.3\"/>",
+  'config': "<circle cx=\"12\" cy=\"12\" r=\"3.2\"/><path d=\"M19 12a7 7 0 0 0-.14-1.4l2-1.55-2-3.46-2.35.95A7 7 0 0 0 14 4.9L13.65 2.4h-4L9.3 4.9a7 7 0 0 0-2.5 1.44l-2.36-.95-2 3.46 2 1.55a7.1 7.1 0 0 0 0 2.8l-2 1.55 2 3.46 2.35-.95a7 7 0 0 0 2.51 1.44l.35 2.5h4l.35-2.5a7 7 0 0 0 2.5-1.44l2.36.95 2-3.46-2-1.55A7 7 0 0 0 19 12z\"/>",
+  'crescimento': "<path d=\"M3.5 20.5 9 12l4 4 7.5-10\"/><path d=\"M20.5 6v4.5M20.5 6H16\"/>",
+  'custos': "<circle cx=\"12\" cy=\"12\" r=\"8.5\"/><path d=\"M12 7.5v9M14.6 9.2c-.5-.9-1.5-1.4-2.6-1.4-1.6 0-2.8.9-2.8 2.2 0 2.9 5.6 1.5 5.6 4.3 0 1.3-1.2 2.2-2.8 2.2-1.1 0-2.1-.5-2.6-1.4\"/>",
+  'email': "<rect x=\"3.5\" y=\"5.5\" width=\"17\" height=\"13\" rx=\"2.5\"/><path d=\"m4.5 7.5 7.5 5.5 7.5-5.5\"/>",
+  'exportar': "<path d=\"M12 15V4M8 7.5 12 3.5l4 4\"/><path d=\"M4.5 14v4A2.5 2.5 0 0 0 7 20.5h10a2.5 2.5 0 0 0 2.5-2.5v-4\"/>",
+  'fechar': "<path d=\"m6 6 12 12M18 6 6 18\"/>",
+  'filtro': "<path d=\"M4.5 6.5h15M7.5 12h9M10.5 17.5h3\"/>",
+  'funil': "<path d=\"M4 5h16l-6.2 7v6.2L10.2 20v-8z\"/>",
+  'grafico-barra': "<path d=\"M3.5 3.5v17h17\"/><path d=\"M8 17v-5M12.5 17V8M17 17v-7\"/>",
+  'grafico-linha': "<path d=\"M3.5 3.5v17h17\"/><path d=\"m6.5 15 4-5 3.5 3 5.5-7\"/>",
+  'info': "<circle cx=\"12\" cy=\"12\" r=\"8.5\"/><path d=\"M12 11v5M12 8v.2\"/>",
+  'insights': "<path d=\"M12 3.5l1.8 4.6 4.7 1.9-4.7 1.9L12 16.5l-1.8-4.6-4.7-1.9 4.7-1.9z\"/><path d=\"M18.5 15.5l.9 2.1 2.1.9-2.1.9-.9 2.1-.9-2.1-2.1-.9 2.1-.9z\"/>",
+  'mais': "<path d=\"M12 5v14M5 12h14\"/>",
+  'networks': "<circle cx=\"5.5\" cy=\"12\" r=\"2.5\"/><circle cx=\"18.5\" cy=\"5.5\" r=\"2.5\"/><circle cx=\"18.5\" cy=\"18.5\" r=\"2.5\"/><path d=\"M7.8 10.8l8.4-4.2M7.8 13.2l8.4 4.2\"/>",
+  'norte': "<circle cx=\"12\" cy=\"12\" r=\"9\"/><path d=\"M12 3v2.5\"/><path d=\"M9.2 15.5 12 7.5l2.8 8-2.8-1.6z\" fill=\"currentColor\" stroke=\"none\"/>",
+  'ofertas': "<path d=\"M12.6 3.5H19a1.5 1.5 0 0 1 1.5 1.5v6.4a2 2 0 0 1-.6 1.4l-7.4 7.4a2 2 0 0 1-2.8 0l-5-5a2 2 0 0 1 0-2.8l7.4-7.4a2 2 0 0 1 1.5-.5z\"/><circle cx=\"15.5\" cy=\"8.5\" r=\"1.4\"/>",
+  'olho': "<path d=\"M2.5 12S6 5.5 12 5.5 21.5 12 21.5 12 18 18.5 12 18.5 2.5 12 2.5 12z\"/><circle cx=\"12\" cy=\"12\" r=\"3\"/>",
+  'produtos': "<path d=\"M12 3.5 20 8v8l-8 4.5L4 16V8z\"/><path d=\"M4.5 8.2 12 12.5l7.5-4.3M12 12.5v8\"/>",
+  'ranking': "<path d=\"M9 20.5V10h6v10.5M3.5 20.5v-6H9M15 20.5v-8h5.5v8M3 20.5h18\"/><path d=\"M12 3.5l.9 1.8 2 .3-1.4 1.4.3 2-1.8-1-1.8 1 .3-2-1.4-1.4 2-.3z\" fill=\"currentColor\" stroke=\"none\"/>",
+  'recuperacao': "<path d=\"M4 12a8 8 0 1 0 2.3-5.6M4 3.5V7h3.5\"/><path d=\"M12 8.5V12l2.5 1.5\"/>",
+  'seta-dir': "<path d=\"M4.5 12h15M13.5 6 19.5 12l-6 6\"/>",
+  'sino': "<path d=\"M6 10a6 6 0 1 1 12 0c0 4 1.5 5.5 1.5 5.5h-15S6 14 6 10\"/><path d=\"M10 19a2.2 2.2 0 0 0 4 0\"/>",
+  'solicitacoes': "<rect x=\"4.5\" y=\"3.5\" width=\"15\" height=\"17\" rx=\"2.5\"/><path d=\"M8.5 8.5h7M8.5 12h7M8.5 15.5h4\"/>",
+  'tema': "<circle cx=\"12\" cy=\"12\" r=\"4.5\"/><path d=\"M12 2.5V5M12 19v2.5M2.5 12H5M19 12h2.5M4.9 4.9 6.7 6.7M17.3 17.3l1.8 1.8M19.1 4.9l-1.8 1.8M6.7 17.3l-1.8 1.8\"/>",
+  'transacoes': "<path d=\"M4 8h13M14 4.5 17.5 8 14 11.5\"/><path d=\"M20 16H7M10 12.5 6.5 16l3.5 3.5\"/>",
+  'visao': "<rect x=\"3.5\" y=\"3.5\" width=\"7\" height=\"7\" rx=\"2\"/><rect x=\"13.5\" y=\"3.5\" width=\"7\" height=\"7\" rx=\"2\"/><rect x=\"3.5\" y=\"13.5\" width=\"7\" height=\"7\" rx=\"2\"/><path d=\"M17 13.5v7M13.5 17h7\"/>",
+};
+// Nomes da UI (Lucide) que têm equivalente EXATO na biblioteca NorthScale.
+// Os demais continuam no traço Lucide, que é da mesma família (24/round).
+// Ícones só-NorthScale são usados com prefixo: <Icon name="ns-funil"/>.
+const NS_ICON_ALIAS = {
+  'x': 'fechar', 'check': 'check', 'search': 'busca', 'info': 'info', 'filter': 'filtro',
+  'calendar': 'calendario', 'download': 'exportar', 'plus': 'mais', 'bell': 'sino',
+  'eye': 'olho', 'settings': 'config', 'mail': 'email', 'alert-triangle': 'alerta',
+  'message-square': 'chat', 'bar-chart-3': 'grafico-barra', 'trending-up': 'crescimento',
+  'users': 'afiliados', 'package': 'produtos', 'receipt': 'transacoes',
+  'layout-dashboard': 'visao', 'sun': 'tema',
+};
+
+function Icon({ name, size = 16, stroke = 1.6, className = '', label }) {
   const paths = {
     'layout-dashboard': ['M3 3h7v9H3z','M14 3h7v5h-7z','M14 12h7v9h-7z','M3 16h7v5H3z'],
     'bar-chart-3': ['M3 3v18h18','M7 16v-5','M12 16V8','M17 16v-8'],
@@ -252,6 +302,40 @@ function Icon({ name, size = 16, stroke = 1.5, className = '', label }) {
     // Usados na UI e ausentes do mapa — caíam em 'info' (ⓘ) sem ninguém
     // perceber: o botão de EXCLUIR mostrava um "i". O build agora falha
     // se um nome usado não existir aqui (scripts/build-spa.mjs).
+    'chevrons-left': ['m11 17-5-5 5-5','m18 17-5-5 5-5'],
+    'chevrons-right': ['m6 17 5-5-5-5','m13 17 5-5-5-5'],
+    'ns-afiliados': [],
+    'ns-alerta': [],
+    'ns-busca': [],
+    'ns-calendario': [],
+    'ns-chat': [],
+    'ns-check': [],
+    'ns-config': [],
+    'ns-crescimento': [],
+    'ns-custos': [],
+    'ns-email': [],
+    'ns-exportar': [],
+    'ns-fechar': [],
+    'ns-filtro': [],
+    'ns-funil': [],
+    'ns-grafico-barra': [],
+    'ns-grafico-linha': [],
+    'ns-info': [],
+    'ns-insights': [],
+    'ns-mais': [],
+    'ns-networks': [],
+    'ns-norte': [],
+    'ns-ofertas': [],
+    'ns-olho': [],
+    'ns-produtos': [],
+    'ns-ranking': [],
+    'ns-recuperacao': [],
+    'ns-seta-dir': [],
+    'ns-sino': [],
+    'ns-solicitacoes': [],
+    'ns-tema': [],
+    'ns-transacoes': [],
+    'ns-visao': [],
     'trash-2': ['M3 6h18','M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2','M10 11v6','M14 11v6'],
     'pencil': ['M21.174 6.812a1 1 0 0 0-3.986-3.987L3.842 16.174a2 2 0 0 0-.5.83l-1.321 4.352a.5.5 0 0 0 .623.622l4.353-1.32a2 2 0 0 0 .83-.497z','m15 5 4 4'],
     'chevron-left': ['m15 18-6-6 6-6'],
@@ -262,6 +346,8 @@ function Icon({ name, size = 16, stroke = 1.5, className = '', label }) {
     'loader': ['M12 2v4','m16.2 7.8 2.9-2.9','M18 12h4','m16.2 16.2 2.9 2.9','M12 18v4','m4.9 19.1 2.9-2.9','M2 12h4','m4.9 4.9 2.9 2.9'],
   };
   const ps = paths[name] || paths['info'];
+  const nsKey = NS_ICON_ALIAS[name] || (name && name.startsWith('ns-') ? name.slice(3) : null);
+  const nsMarkup = nsKey ? NS_ICON_MARKUP[nsKey] : null;
   return (
     <svg
       width={size} height={size} viewBox="0 0 24 24" fill="none"
@@ -270,7 +356,9 @@ function Icon({ name, size = 16, stroke = 1.5, className = '', label }) {
       focusable="false"
       {...(label ? { role: 'img', 'aria-label': label } : { 'aria-hidden': 'true' })}
     >
-      {ps.map((d, i) => <path key={i} d={d} />)}
+      {nsMarkup
+        ? <g dangerouslySetInnerHTML={{ __html: nsMarkup }}/>
+        : ps.map((d, i) => <path key={i} d={d} />)}
     </svg>
   );
 }
@@ -351,10 +439,140 @@ function FXLayers() {
 }
 
 // export to window
+// ============================================================
+// Paginação (pedido do dono do produto: "em tudo que for lista/tabela,
+// paginação com controle e seletor embaixo"). DS1: informar total e
+// página atual, preservar filtros e ordenação, alvo clicável adequado.
+//
+// Três formas, da mais segura para a mais flexível:
+//   <Paginated items={rows}>{(pageRows, pager) => (<>…tabela…{pager}</>)}</Paginated>
+//       — guarda o estado sozinho; pode ficar dentro de if/map. PADRÃO.
+//   const { pageItems, pager } = usePaged(rows)
+//       — hook: só no topo do componente, antes de qualquer return.
+//   <Pager page total pageSize onPageChange onPageSizeChange/>
+//       — controlado, para listas paginadas no servidor.
+// Totais, exportação CSV e contagens continuam sobre a lista INTEIRA; só
+// as linhas desenhadas são da página.
+// ============================================================
+const NS_PAGE_SIZES = [10, 25, 50, 100];
+const NS_PAGE_SIZE_KEY = 'ns-page-size';
+function nsReadPageSize(fallback) {
+  try {
+    const v = Number(localStorage.getItem(NS_PAGE_SIZE_KEY));
+    return NS_PAGE_SIZES.includes(v) ? v : fallback;
+  } catch (e) { return fallback; }
+}
+function nsSavePageSize(v) { try { localStorage.setItem(NS_PAGE_SIZE_KEY, String(v)); } catch (e) {} }
+
+/** Janela de páginas com reticências: 1 … 4 [5] 6 … 48 */
+function nsPageWindow(page, totalPages) {
+  if (totalPages <= 7) return Array.from({ length: totalPages }, (_, i) => i + 1);
+  const out = [1];
+  const lo = Math.max(2, page - 1), hi = Math.min(totalPages - 1, page + 1);
+  if (lo > 2) out.push('gap-l');
+  for (let p = lo; p <= hi; p++) out.push(p);
+  if (hi < totalPages - 1) out.push('gap-r');
+  out.push(totalPages);
+  return out;
+}
+
+function Pager({ page, pageSize, total, onPageChange, onPageSizeChange, hasMore, label = 'itens', pageSizes = NS_PAGE_SIZES }) {
+  const known = typeof total === 'number';
+  const totalPages = known ? Math.max(1, Math.ceil(total / pageSize)) : null;
+  const from = known && total === 0 ? 0 : (page - 1) * pageSize + 1;
+  const to = known ? Math.min(page * pageSize, total) : page * pageSize;
+  const canPrev = page > 1;
+  const canNext = known ? page < totalPages : !!hasMore;
+  const go = (p) => { if (p !== page) onPageChange(p); };
+  return (
+    <nav className="ns-pager" aria-label="Paginação">
+      <div className="ns-pager-summary" aria-live="polite">
+        {known
+          ? (total === 0 ? 'Nenhum resultado' : <>Mostrando <strong>{fmtInt(from)}–{fmtInt(to)}</strong> de <strong>{fmtInt(total)}</strong> {label}</>)
+          : <>Mostrando <strong>{fmtInt(from)}–{fmtInt(to)}</strong> {label}</>}
+      </div>
+      {onPageSizeChange && (
+        <label className="ns-pager-size">
+          <span>Por página</span>
+          <select value={pageSize} onChange={(e) => onPageSizeChange(Number(e.target.value))} aria-label="Itens por página">
+            {pageSizes.map((n) => <option key={n} value={n}>{n}</option>)}
+          </select>
+        </label>
+      )}
+      <div className="ns-pager-nav">
+        {known && <button type="button" className="ns-pager-btn" onClick={() => go(1)} disabled={!canPrev} aria-label="Primeira página" title="Primeira página"><Icon name="chevrons-left" size={16}/></button>}
+        <button type="button" className="ns-pager-btn" onClick={() => go(page - 1)} disabled={!canPrev} aria-label="Página anterior" title="Página anterior"><Icon name="chevron-left" size={16}/></button>
+        {known && nsPageWindow(page, totalPages).map((p) => (typeof p === 'number'
+          ? <button type="button" key={p} className="ns-pager-btn" onClick={() => go(p)} aria-current={p === page ? 'page' : undefined} aria-label={'Página ' + p}>{p}</button>
+          : <span key={p} className="ns-pager-gap" aria-hidden="true">…</span>))}
+        {!known && <span className="ns-pager-gap" aria-current="page">{page}</span>}
+        <button type="button" className="ns-pager-btn" onClick={() => go(page + 1)} disabled={!canNext} aria-label="Próxima página" title="Próxima página"><Icon name="chevron-right" size={16}/></button>
+        {known && <button type="button" className="ns-pager-btn" onClick={() => go(totalPages)} disabled={!canNext} aria-label="Última página" title="Última página"><Icon name="chevrons-right" size={16}/></button>}
+      </div>
+    </nav>
+  );
+}
+
+/**
+ * Hook de paginação no cliente. Volta à página 1 quando a lista muda de
+ * tamanho (filtro, busca) ou quando `resetKey` muda; nunca deixa a página
+ * cair além do fim. Abaixo de `minToShow` itens não pagina nem desenha o
+ * controle — uma tabela de 6 linhas não precisa dele.
+ */
+function usePaged(items, opts = {}) {
+  const { initialPageSize = 25, resetKey, minToShow = 10, label } = opts;
+  const list = Array.isArray(items) ? items : [];
+  const [pageSize, setPageSize] = React.useState(() => nsReadPageSize(initialPageSize));
+  const [page, setPage] = React.useState(1);
+  const total = list.length;
+  const sig = String(total) + '|' + String(resetKey === undefined ? '' : resetKey);
+  const lastSig = React.useRef(sig);
+  React.useEffect(() => {
+    if (lastSig.current !== sig) { lastSig.current = sig; setPage(1); }
+  }, [sig]);
+  const active = total > minToShow;
+  const totalPages = Math.max(1, Math.ceil(total / pageSize));
+  const safePage = Math.min(page, totalPages);
+  const start = active ? (safePage - 1) * pageSize : 0;
+  const pageItems = active ? list.slice(start, start + pageSize) : list;
+  const pager = active ? (
+    <Pager page={safePage} pageSize={pageSize} total={total} label={label}
+      onPageChange={setPage}
+      onPageSizeChange={(n) => { setPageSize(n); nsSavePageSize(n); setPage(1); }}/>
+  ) : null;
+  return { pageItems, pager, page: safePage, pageSize, total, start };
+}
+
+/** Versão componente do usePaged — pode ficar em qualquer lugar do JSX. */
+function Paginated({ items, children, initialPageSize, resetKey, minToShow, label }) {
+  const p = usePaged(items, { initialPageSize, resetKey, minToShow, label });
+  return children(p.pageItems, p.pager, p);
+}
+
+// ============================================================
+// Estados de leitura (DS1 "Dado com contexto"): vazio · carregando ·
+// parcial · falha. Parcial é o que importa na operação — ex.: BuyGoods sem
+// estorno registrado: o total PARECE certo e não está.
+// ============================================================
+const NS_READSTATE_ICON = { parcial: 'alert-triangle', falha: 'alert-triangle', vazio: 'info', carregando: 'loader' };
+function ReadState({ kind = 'parcial', title, children, action, onAction }) {
+  return (
+    <div className={'ns-readstate is-' + kind} role={kind === 'falha' ? 'alert' : 'status'}>
+      <Icon name={NS_READSTATE_ICON[kind] || 'info'} size={16}/>
+      <div>
+        {title && <strong>{title}</strong>}
+        {children && <div className="ns-readstate-body">{children}</div>}
+      </div>
+      {action && onAction && <button type="button" className="btn btn-ghost" onClick={onAction}>{action}</button>}
+    </div>
+  );
+}
+
 Object.assign(window, {
   fmtCurrency, fmtK, fmtInt, fmtPct, fmtDateShort, fmtDateLong, fmtDateTime,
   initials, avatarColor, rangeForPreset, previousRange, isoDateOnly, dayIndexFromDate,
   applyFilters, aggregateKPIs, bucketByDay,
   downloadCsv,
   Icon, Sparkline, FXLayers,
+  Pager, Paginated, usePaged, ReadState, NS_PAGE_SIZES,
 });

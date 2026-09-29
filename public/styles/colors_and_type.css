@@ -3,92 +3,118 @@
    Single source of truth. Import this FIRST.
    ============================================================ */
 
-/* v4 — North Editorial (DESIGN-SYSTEM.md)
-   Display = Clash Display (títulos com caráter, tracking negativo)
-   Body    = General Sans
-   Mono    = Roboto Mono (zero sem corte — JetBrains parecia valor riscado
-             em corpo pequeno; tabular-nums pra dados)
-   Paleta: papel quente + tinta petróleo (claro) / petróleo profundo (escuro),
-   acento teal. PROIBIDO: glassmorphism, azul-roxo genérico, neon. */
-@import url('https://api.fontshare.com/v2/css?f[]=clash-display@500,600,700&f[]=general-sans@400,500,600,700&display=swap');
-@import url('https://fonts.googleapis.com/css2?family=Roboto+Mono:wght@500;600;700&display=swap');
+/* NorthScale Design System 1.0 (setembro/2026) — fonte: pasta "North Scale"
+   no Drive (Manual de Marca + Design System + northscale.tokens.json).
+   Referência no repo: DESIGN-SYSTEM.md.
+
+   Decisões do dono do produto que DESVIAM do pacote, de propósito:
+   - tema escuro: o DS1 é só claro; este escuro é DERIVADO dos neutros e do
+     azul claro do DS1 ("apoio visual em fundo escuro"), com contraste medido;
+   - dinheiro SEMPRE verde (o DS1 reservaria verde só para estado);
+   - números no padrão americano (US$ 1,250.50);
+   - densidade compacta: controles 36 px (44 em toque), linhas de 44 px.
+
+   Fontes: Sequel Sans auto-hospedada (Body 400/500/600/700) com Inter de
+   reserva; Montserrat para dados, como o DS1 define. */
+@font-face { font-family: 'Sequel Sans'; font-weight: 400; font-style: normal; font-display: swap;
+  src: url('/fonts/sequel-sans-roman-body.ttf') format('truetype'); }
+@font-face { font-family: 'Sequel Sans'; font-weight: 500; font-style: normal; font-display: swap;
+  src: url('/fonts/sequel-sans-medium-body.ttf') format('truetype'); }
+@font-face { font-family: 'Sequel Sans'; font-weight: 600; font-style: normal; font-display: swap;
+  src: url('/fonts/sequel-sans-semibold-body.ttf') format('truetype'); }
+@font-face { font-family: 'Sequel Sans'; font-weight: 700; font-style: normal; font-display: swap;
+  src: url('/fonts/sequel-sans-bold-body.ttf') format('truetype'); }
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Montserrat:wght@500;600;700&display=swap');
 
 /* ============================================================
-   ROOT — DARK (default) tokens
+   ROOT — TEMA ESCURO (derivado do DS1)
+   Canvas quase-preto neutro, superfícies da escala neutra do DS1 e o azul
+   claro #8FA3F2 como acento de texto/seleção (o azul North #4260E6 dá 3,4:1
+   em fundo escuro — reprova como texto; continua como FUNDO de botão).
    ============================================================ */
 :root {
-  /* ---------- ESCALA "NAVY" → PETRÓLEO (nomes mantidos por compat:
-     todo componente referencia --navy-*; os VALORES agora são a escada
-     de tinta petróleo do North Editorial) ---------- */
-  --navy-50:  #F5F3EC;   /* papel quente */
-  --navy-100: #E9EDE7;
-  --navy-200: #C6CFCA;
-  --navy-300: #9DA9A7;
-  --navy-400: #7A8A8B;
-  --navy-500: #52646C;
-  --navy-600: #2E4450;
-  --navy-700: #22343D;
-  --navy-800: #182226;   /* tinta petróleo */
-  --navy-900: #10171B;
-  --navy-950: #0D1215;   /* petróleo profundo (bg escuro) */
+  /* Escala neutra do DS1. Nomes --navy-* mantidos por compatibilidade: a
+     ordem é a mesma (50 = mais claro, 950 = mais escuro). */
+  --navy-50:  #FAFAFA;
+  --navy-100: #E9EBEF;
+  --navy-200: #D8DBE2;
+  --navy-300: #B9BEC9;
+  --navy-400: #949AA8;
+  --navy-500: #6E7484;
+  --navy-600: #515766;
+  --navy-700: #3A3F4C;
+  --navy-800: #262A33;
+  --navy-900: #16181F;
+  --navy-950: #0D0D0D;
 
-  /* ---------- ACENTOS (nomes mantidos; --glow-cyan agora É o teal do
-     tema — o light sobrescreve pra #0E7C97. Ciano-gelo fixo
-     rgba(91,200,255,…) continua SÓ nas cenas noturnas/sidebar) ---------- */
-  --glow-cyan:     #3EB7D4;  /* accent (escuro) */
-  --glow-electric: #22D3EE;  /* accent2 */
-  --glow-violet:   #8B7FFF;  /* SEMÂNTICO (badge D24) — não é cor de tema */
+  /* Marca */
+  --ns-blue:       #4260E6;   /* azul North — ação principal e seleção */
+  --ns-blue-dark:  #1B22A7;   /* hover e pressionado */
+  --ns-blue-light: #8FA3F2;   /* apoio em fundo escuro (7,3:1 no card) */
+  --ns-black:      #0D0D0D;
+  --ns-white:      #FAFAFA;
 
-  /* ---------- NEUTRALS ---------- */
+  /* Acento: --glow-cyan é o nome histórico do acento de TEXTO/seleção. */
+  --glow-cyan:     #8FA3F2;
+  --glow-electric: #8FA3F2;
+  --glow-violet:   #8B7FFF;   /* SEMÂNTICO (badge D24) — não é cor de tema */
+
+  /* Botão primário: fundo azul North nos dois temas (branco 5,19:1) */
+  --cta:        #4260E6;
+  --cta-hover:  #1B22A7;
+  --on-cta:     #FFFFFF;
+
+  /* Neutros brutos (legado) */
   --white:    #FFFFFF;
-  --gray-50:  #FAFAFA;
-  --gray-100: #F2F2F3;
-  --gray-200: #E4E4E7;
-  --gray-300: #C8C9CF;
-  --gray-400: #8F919A;
-  --gray-500: #5E616B;
-  --gray-600: #3F424B;
-  --gray-700: #272933;
-  --gray-800: #15161D;
-  --gray-900: #0A0B12;
+  --gray-50:  #FAFAFA;  --gray-100: #E9EBEF; --gray-200: #D8DBE2;
+  --gray-300: #B9BEC9;  --gray-400: #949AA8; --gray-500: #6E7484;
+  --gray-600: #515766;  --gray-700: #3A3F4C; --gray-800: #262A33;
+  --gray-900: #16181F;
 
-  /* ---------- SEMANTIC ---------- */
-  --success: #4FB58F;
-  --warning: #D3A855;
-  --danger:  #E65156;   /* AA 4,6 sobre card (era #E5484D, 4,36) */
-  --money:   #37D695;   /* verde-dinheiro: valores monetários, SEMPRE */
-  --hot:     #FF7A33;   /* laranja "escalando" */
-  --gold:    #C29B3C;   /* dourado do topo/conquista */
+  /* Semânticas — tons de TEXTO que passam 4,5:1 no card escuro */
+  --success: #2FBF71;
+  --warning: #F5A623;
+  --danger:  #F26170;   /* error.base clareado: 5,2:1 até no elevado */
+  --money:   #2FBF71;   /* dinheiro SEMPRE verde (decisão do produto) */
+  --hot:     #F5A623;
+  --gold:    #C29B3C;   /* medalha/topo */
+  --success-bg: rgba(47, 191, 113, 0.14);
+  --warning-bg: rgba(245, 166, 35, 0.14);
+  --danger-bg:  rgba(239, 74, 90, 0.14);
+  --success-base: #2FBF71;
+  --warning-base: #F5A623;
+  --danger-base:  #EF4A5A;
 
-  /* ---------- THEME-AWARE: dark defaults (petróleo profundo) ---------- */
-  --bg:         var(--navy-950);
-  --bg-deep:    #0A0F12;
-  /* Superfícies SÓLIDAS (proibido vidro/transparência leitosa) */
-  --bg-raised:  #161D21;
-  --bg-elev:    #1A2428;
+  /* Superfícies */
+  --bg:         #101217;
+  --bg-deep:    #0D0D0D;
+  --bg-raised:  #16181F;
+  --bg-elev:    #1D2029;
+  --bg-hover:   rgba(143, 163, 242, 0.09);
+  --bg-subtle:  #13151B;
 
-  --fg1:        #ECEFEA;
-  --fg2:        #D9DED7;
-  --fg3:        #B9C4C0;
-  --fg4:        #92A1A1;
-  --fg5:        #788887;   /* AA 4,6 sobre card (era #71807F, 4,14) */
+  /* Texto (todos ≥ 4,5:1 no card #16181F) */
+  --fg1: #F4F5F7;
+  --fg2: #D8DBE2;
+  --fg3: #B9BEC9;
+  --fg4: #949AA8;
+  --fg5: #868C9B;
 
-  /* Bordas nítidas neutras (tinta), não ciano */
-  --border-soft:    rgba(236, 239, 234, 0.08);
-  --border:         rgba(236, 239, 234, 0.15);
-  --border-strong:  rgba(62, 183, 212, 0.45);
-  --accent:         var(--glow-cyan);
+  /* Bordas: 1 px para divisor e campo; 2 px só no foco (DS1) */
+  --border-soft:   #1F222B;
+  --border:        #2C303B;
+  --border-strong: #6E7484;   /* limite de campo — 3,8:1 (não-texto ≥ 3:1) */
+  --accent:        var(--glow-cyan);
+  --accent-soft:   rgba(143, 163, 242, 0.14);
 
-  /* ---------- SHADOWS (discretas — nada de neon) ---------- */
-  --shadow-sm: 0 1px 2px rgba(0,0,0,0.30);
-  --shadow-md: 0 1px 2px rgba(0,0,0,0.30), 0 12px 32px rgba(0,0,0,0.35);
-  --shadow-lg: 0 20px 48px -20px rgba(0,0,0,0.45);
-  --shadow-glow:        0 12px 32px rgba(0,0,0,0.35);
-  --shadow-glow-strong: 0 12px 32px rgba(0,0,0,0.45);
+  /* Sombras: nunca o único limite de um componente (DS1) */
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.40);
+  --shadow-md: 0 1px 2px rgba(0, 0, 0, 0.35), 0 4px 12px rgba(0, 0, 0, 0.30);
+  --shadow-lg: 0 16px 40px rgba(0, 0, 0, 0.50);
+  --shadow-glow:        var(--shadow-md);
+  --shadow-glow-strong: var(--shadow-lg);
 
-  /* ---------- "LIQUID GLASS" NEUTRALIZADO (North Editorial §1: NADA de
-     glassmorphism). API --glass-* mantida por compat, mas resolve pra
-     superfície sólida com borda nítida — blur 0, sheen/rim transparentes. */
+  /* Glass neutralizado (API mantida por compat; resolve em superfície sólida) */
   --glass-tint:       var(--bg-raised);
   --glass-tint-warm:  var(--bg-raised);
   --glass-tint-elev:  var(--bg-elev);
@@ -98,114 +124,115 @@
   --glass-blur-sm:    0px;
   --glass-blur-lg:    0px;
   --glass-saturate:   100%;
-  --glass-sheen-top:    transparent;
-  --glass-sheen-mid:    transparent;
-  --glass-rim-cyan:     transparent;
-  --glass-rim-violet:   transparent;
-  --glass-spec:         transparent;
-  --glass-inset-top:    transparent;
-  --glass-inset-bot:    transparent;
-  --glass-inset-rim:    transparent;
-  --glass-shadow:       var(--shadow-md);
+  --glass-sheen-top:  transparent;
+  --glass-sheen-mid:  transparent;
+  --glass-rim-cyan:   transparent;
+  --glass-rim-violet: transparent;
+  --glass-spec:       transparent;
+  --glass-inset-top:  transparent;
+  --glass-inset-bot:  transparent;
+  --glass-inset-rim:  transparent;
+  --glass-shadow:     var(--shadow-md);
 
-  /* ---------- SPACING (4px grid) ---------- */
+  /* Espaçamento (DS1: base 8, ajuste 4) */
   --s-1: 4px;   --s-2: 8px;   --s-3: 12px;
   --s-4: 16px;  --s-5: 24px;  --s-6: 32px;
   --s-7: 48px;  --s-8: 64px;  --s-9: 96px;
   --s-10: 128px;
 
-  /* ---------- RADIUS (North: 14–18 cartões, 9–10 inputs, pills 99) ---------- */
-  --r-sm: 6px;  --r-md: 10px;  --r-lg: 14px;
-  --r-xl: 18px; --r-full: 999px;
+  /* Raios (DS1): 4 compacto · 6 controle · 8 superfície · círculo só avatar */
+  --r-sm: 4px;  --r-md: 6px;  --r-lg: 8px;
+  --r-xl: 8px;  --r-full: 999px;
 
-  /* ---------- FONTS (North Editorial) ---------- */
-  --f-display: 'Clash Display', system-ui, -apple-system, sans-serif;
-  --f-body:    'General Sans', system-ui, -apple-system, sans-serif;
-  --f-mono:    'Roboto Mono', 'SF Mono', Menlo, monospace;
+  /* Densidade (decisão: compacta, ajustada ao dashboard) */
+  --ctl-h:  36px;
+  --row-h:  44px;
+  --ctl-px: 14px;
 
-  /* Clash Display expõe wght 500-700. API --fvs-* mantida por compat. */
-  --fvs-hero:    'wght' 600;
-  --fvs-hero-em: 'wght' 500;
-  --fvs-display: 'wght' 600;
-  --fvs-h3:      'wght' 600;
+  /* Fontes */
+  --f-display: 'Sequel Sans', 'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --f-body:    'Sequel Sans', 'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  /* "Dados" no DS1 = Montserrat com algarismos tabulares. O nome --f-mono
+     fica por compat (é o token que todo número da UI já usa). */
+  --f-mono:    'Montserrat', 'Inter', system-ui, sans-serif;
+  --f-code:    ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
 
-  /* ---------- MOTION ---------- */
-  --ease-smooth: cubic-bezier(0.22, 1, 0.36, 1);
-  --ease-out:    cubic-bezier(0.33, 1, 0.68, 1);
-  --dur-fast: 150ms;
-  --dur-base: 250ms;
-  --dur-slow: 400ms;
+  --fvs-hero:    normal;
+  --fvs-hero-em: normal;
+  --fvs-display: normal;
+  --fvs-h3:      normal;
 
-  /* ---------- TYPE TOKENS ---------- */
-  --t-hero-size:       clamp(48px, 8vw, 88px);
-  --t-hero-lh:         0.95;
-  --t-hero-tracking:   -0.04em;
+  /* Movimento: curto e funcional (DS1: evitar animação decorativa) */
+  --ease-smooth: cubic-bezier(0.2, 0, 0, 1);
+  --ease-out:    cubic-bezier(0.2, 0, 0, 1);
+  --dur-fast: 120ms;
+  --dur-base: 180ms;
+  --dur-slow: 260ms;
 
+  /* Tipografia (DS1) */
+  --t-hero-size:       clamp(40px, 6vw, 72px);
+  --t-hero-lh:         1.06;
+  --t-hero-tracking:   -0.025em;
   --t-display-xl-size: 72px;
-  --t-display-lg-size: 48px;
-  --t-display-md-size: 36px;
-  --t-display-sm-size: 24px;
-
-  --t-body-lg-size: 18px;
-  --t-body-md-size: 15px;
-  --t-body-sm-size: 13px;
-
-  --t-label-size:    13px;
+  --t-display-lg-size: 56px;
+  --t-display-md-size: 40px;
+  --t-display-sm-size: 28px;
+  --t-page-title:      28px;     /* H4 28/36 — título de página compacto */
+  --t-metric:          clamp(24px, 1.4vw + 12px, 32px);  /* Métrica 32/38 */
+  --t-body-lg-size: 16px;
+  --t-body-md-size: 14px;        /* Corpo 14/22 */
+  --t-body-sm-size: 12px;        /* Auxiliar 12/18 */
+  --t-label-size:    14px;
   --t-mono-tag-size: 12px;
 }
 
 /* ============================================================
-   LIGHT THEME — opt-in via [data-theme="light"]
-   Brand identity preserved: cyan stays as accent, navy becomes ink.
+   TEMA CLARO — padrão do produto; valores exatos do DS1
    ============================================================ */
 [data-theme="light"] {
-  --bg:         #F5F3EC;                   /* papel quente (não branco puro) */
-  --bg-deep:    #EDEAE0;
-  --bg-raised:  #FCFBF6;                   /* branco QUENTE — cartões no tom do papel */
-  --bg-elev:    #FFFFFF;                   /* popovers/modais pipocam um degrau acima */
+  --glow-cyan:     #4260E6;   /* azul North como texto: 4,76:1 no canvas */
+  --glow-electric: #8FA3F2;
 
-  --fg1:        #182226;                   /* tinta petróleo (não preto) */
-  --fg2:        #2B3A3F;
-  --fg3:        #43535A;
-  --fg4:        #5E6D71;
-  --fg5:        #647074;   /* AA 4,6 sobre papel (era #7E8C90, 3,13) */
+  --bg:         #F4F5F7;      /* bg.canvas */
+  --bg-deep:    #E9EBEF;
+  --bg-raised:  #FFFFFF;      /* bg.surface */
+  --bg-elev:    #FFFFFF;
+  --bg-hover:   #EEF1FD;      /* bg.hover */
+  --bg-subtle:  #FAFAFA;      /* bg.subtle */
 
-  /* Acento teal petróleo no claro */
-  --glow-cyan:     #0D7791;   /* accent · AA 4,65 sobre papel (era #0E7C97, 4,35) */
-  --glow-electric: #22D3EE;
+  --fg1: #0D0D0D;             /* text.primary */
+  --fg2: #262A33;
+  --fg3: #3A3F4C;
+  --fg4: #515766;             /* text.secondary — 7,23:1 */
+  --fg5: #5F6890;             /* subtext.100 — o neutral.50 reprova no canvas (4,28) */
 
-  --success: #2E7D5B;
-  --warning: #91650F;   /* AA 4,6 sobre papel (era #A97612, 3,58) */
-  /* O claro herdava o vermelho do escuro (3,52 no papel) — justo a cor de prejuízo. */
-  --danger:  #D71F24;   /* AA 4,6 sobre papel */
-  --money:   #0A7D54;   /* AA 4,6 sobre papel (era #0B8F60, 3,70) */
-  --hot:     #E8590C;
+  /* feedback: tons de TEXTO do DS1 (AA sobre superfície clara) */
+  --success: #167447;
+  --warning: #87520B;
+  --danger:  #B42338;
+  --money:   #167447;         /* dinheiro SEMPRE verde — success.text, 5,3:1 */
+  --hot:     #87520B;
+  --success-bg: #EAF7EF;
+  --warning-bg: #FFF5E5;
+  --danger-bg:  #FDECEF;
 
-  --border-soft:    rgba(24, 34, 38, 0.08);
-  --border:         rgba(24, 34, 38, 0.14);
-  --border-strong:  rgba(14, 124, 151, 0.45);
+  --border-soft:   #E9EBEF;
+  --border:        #D8DBE2;   /* border.subtle */
+  --border-strong: #6E7484;   /* border.control */
+  --accent-soft:   #EEF1FD;
 
-  --shadow-sm: 0 1px 2px rgba(24,34,38,.04);
-  --shadow-md: 0 1px 2px rgba(24,34,38,.04), 0 10px 28px rgba(24,34,38,.06);
-  --shadow-lg: 0 20px 44px -18px rgba(24,34,38,.14);
-  --shadow-glow:        0 10px 28px rgba(24,34,38,.06);
-  --shadow-glow-strong: 0 10px 28px rgba(24,34,38,.10);
+  --shadow-sm: 0 1px 2px rgba(13, 13, 13, 0.05);
+  --shadow-md: 0 1px 2px rgba(13, 13, 13, 0.04), 0 4px 12px rgba(13, 13, 13, 0.06);
+  --shadow-lg: 0 12px 32px rgba(13, 13, 13, 0.12);
+  --shadow-glow:        var(--shadow-md);
+  --shadow-glow-strong: var(--shadow-lg);
 
-  /* Glass neutralizado também no claro — superfície sólida branca. */
   --glass-tint:       var(--bg-raised);
   --glass-tint-warm:  var(--bg-raised);
   --glass-tint-elev:  var(--bg-elev);
   --glass-border:     var(--border);
   --glass-border-top: var(--border);
-  --glass-sheen-top:    transparent;
-  --glass-sheen-mid:    transparent;
-  --glass-rim-cyan:     transparent;
-  --glass-rim-violet:   transparent;
-  --glass-spec:         transparent;
-  --glass-inset-top:    transparent;
-  --glass-inset-bot:    transparent;
-  --glass-inset-rim:    transparent;
-  --glass-shadow:       var(--shadow-md);
+  --glass-shadow:     var(--shadow-md);
 }
 
 /* ============================================================
@@ -216,7 +243,7 @@ html { -webkit-text-size-adjust: 100%; }
 body {
   font-family: var(--f-body);
   font-size: var(--t-body-md-size);
-  line-height: 1.6;
+  line-height: 1.5714;   /* 14/22 */
   color: var(--fg3);
   background: var(--bg);
   -webkit-font-smoothing: antialiased;
@@ -226,15 +253,15 @@ body {
      entrega isso via OpenType `tnum`. Cells .cell-mono já usam JetBrains
      Mono (todas tabulares por design). */
   font-variant-numeric: tabular-nums;
-  font-feature-settings: 'tnum' 1, 'cv11' 1;
+  font-feature-settings: 'tnum' 1;
 }
 
 h1, h2, h3, h4, h5, h6 {
   font-family: var(--f-display);
   color: var(--fg1);
-  font-weight: 500;
-  line-height: 1.1;
-  letter-spacing: -0.03em;
+  font-weight: 700;
+  line-height: 1.2;
+  letter-spacing: -0.01em;
   margin: 0;
 }
 
@@ -244,11 +271,11 @@ h1 {
   letter-spacing: var(--t-hero-tracking);
   font-variation-settings: var(--fvs-hero);
 }
+/* DS1: sem itálico decorativo — o complemento do título vira tom secundário */
 h1 em, h2 em, h3 em {
-  font-style: italic;
-  color: var(--glow-cyan);
-  font-weight: 500;
-  font-variation-settings: var(--fvs-hero-em);
+  font-style: normal;
+  color: var(--fg4);
+  font-weight: inherit;
 }
 
 h2 {
@@ -273,11 +300,11 @@ strong, b { font-weight: 600; color: var(--fg1); }
 small { font-size: var(--t-body-sm-size); color: var(--fg4); }
 
 code, pre, kbd, samp {
-  font-family: var(--f-mono);
+  font-family: var(--f-code);
   font-size: var(--t-mono-tag-size);
 }
 code {
-  background: rgba(91, 200, 255, 0.10);
+  background: var(--accent-soft);
   color: var(--glow-cyan);
   padding: 2px 6px;
   border-radius: var(--r-sm);
@@ -297,7 +324,7 @@ hr {
 }
 
 ::selection {
-  background: rgba(91, 200, 255, 0.35);
+  background: color-mix(in oklab, var(--accent) 30%, transparent);
   color: var(--fg1);
 }
 
@@ -599,8 +626,10 @@ hr {
   -webkit-backdrop-filter: none !important;
 }
 
-/* Números de negócio: tracking apertado do Roboto Mono (§3). */
+/* Números de negócio: Montserrat com algarismos tabulares (DS1 "dados"),
+   sem o tracking apertado que servia ao Roboto Mono. */
 .cell-mono, .mono, .num {
-  letter-spacing: -0.04em;
+  letter-spacing: 0;
   font-variant-numeric: tabular-nums;
+  font-feature-settings: 'tnum' 1;
 }
