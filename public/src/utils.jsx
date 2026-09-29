@@ -192,7 +192,7 @@ function bucketByDay(orders, range) {
 }
 
 // ---------- icons (lucide paths) ----------
-function Icon({ name, size = 16, stroke = 1.5, className = '' }) {
+function Icon({ name, size = 16, stroke = 1.5, className = '', label }) {
   const paths = {
     'layout-dashboard': ['M3 3h7v9H3z','M14 3h7v5h-7z','M14 12h7v9h-7z','M3 16h7v5H3z'],
     'bar-chart-3': ['M3 3v18h18','M7 16v-5','M12 16V8','M17 16v-8'],
@@ -249,6 +249,17 @@ function Icon({ name, size = 16, stroke = 1.5, className = '' }) {
     'edit': ['M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7','M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5Z'],
     'key': ['M21 2l-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.778 7.778 5.5 5.5 0 0 1 7.777-7.777Zm0 0L15.5 7.5m0 0 3 3L22 7l-3-3m-3.5 3.5 5-5'],
     'trash': ['M3 6h18','M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2','M10 11v6','M14 11v6'],
+    // Usados na UI e ausentes do mapa — caíam em 'info' (ⓘ) sem ninguém
+    // perceber: o botão de EXCLUIR mostrava um "i". O build agora falha
+    // se um nome usado não existir aqui (scripts/build-spa.mjs).
+    'trash-2': ['M3 6h18','M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2','M10 11v6','M14 11v6'],
+    'pencil': ['M21.174 6.812a1 1 0 0 0-3.986-3.987L3.842 16.174a2 2 0 0 0-.5.83l-1.321 4.352a.5.5 0 0 0 .623.622l4.353-1.32a2 2 0 0 0 .83-.497z','m15 5 4 4'],
+    'chevron-left': ['m15 18-6-6 6-6'],
+    'external-link': ['M15 3h6v6','M10 14 21 3','M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6'],
+    // Estrela de 4 pontas: a metáfora "topo" do DESIGN-SYSTEM §7.
+    'sparkles': ['M9.937 15.5A2 2 0 0 0 8.5 14.063l-6.135-1.582a.5.5 0 0 1 0-.962L8.5 9.936A2 2 0 0 0 9.937 8.5l1.582-6.135a.5.5 0 0 1 .963 0L14.063 8.5A2 2 0 0 0 15.5 9.937l6.135 1.581a.5.5 0 0 1 0 .964L15.5 14.063a2 2 0 0 0-1.437 1.437l-1.582 6.135a.5.5 0 0 1-.963 0z','M20 3v4','M22 5h-4'],
+    'send': ['M14.536 21.686a.5.5 0 0 0 .937-.024l6.5-19a.496.496 0 0 0-.635-.635l-19 6.5a.5.5 0 0 0-.024.937l7.93 3.18a2 2 0 0 1 1.112 1.11z','m21.854 2.147-10.94 10.939'],
+    'loader': ['M12 2v4','m16.2 7.8 2.9-2.9','M18 12h4','m16.2 16.2 2.9 2.9','M12 18v4','m4.9 19.1 2.9-2.9','M2 12h4','m4.9 4.9 2.9 2.9'],
   };
   const ps = paths[name] || paths['info'];
   return (
@@ -256,6 +267,8 @@ function Icon({ name, size = 16, stroke = 1.5, className = '' }) {
       width={size} height={size} viewBox="0 0 24 24" fill="none"
       stroke="currentColor" strokeWidth={stroke} strokeLinecap="round" strokeLinejoin="round"
       className={className}
+      focusable="false"
+      {...(label ? { role: 'img', 'aria-label': label } : { 'aria-hidden': 'true' })}
     >
       {ps.map((d, i) => <path key={i} d={d} />)}
     </svg>

@@ -71,7 +71,7 @@ const npTone = (v) => (v >= 0 ? 'var(--money)' : 'var(--danger)');
 function NpSourceChip({ source }) {
   const s = NP_SOURCE[source] || NP_SOURCE.default;
   return (
-    <span title={s.hint} style={{ fontFamily: 'var(--f-mono)', fontSize: 9, fontWeight: 600, padding: '1px 6px', borderRadius: 'var(--r-full)', color: s.color, background: `color-mix(in oklab, ${s.color} 12%, transparent)`, border: `1px solid color-mix(in oklab, ${s.color} 35%, transparent)`, whiteSpace: 'nowrap' }}>{s.label}</span>
+    <span title={s.hint} style={{ fontFamily: 'var(--f-mono)', fontSize: 10, fontWeight: 600, padding: '1px 6px', borderRadius: 'var(--r-full)', color: s.color, background: `color-mix(in oklab, ${s.color} 12%, transparent)`, border: `1px solid color-mix(in oklab, ${s.color} 35%, transparent)`, whiteSpace: 'nowrap' }}>{s.label}</span>
   );
 }
 
@@ -404,7 +404,7 @@ function NpChannelDetail({ ch, cur, salesbound, onClose }) {
                   const on = open === b.key;
                   return (
                     <React.Fragment key={b.key}>
-                      <tr onClick={() => setOpen(on ? null : b.key)} style={{ cursor: 'pointer' }}>
+                      <tr tabIndex={0} onClick={() => setOpen(on ? null : b.key)} style={{ cursor: 'pointer' }}>
                         <td style={{ fontWeight: 600 }}>{b.label}<span style={{ color: 'var(--fg5)', marginLeft: 6, fontSize: 10 }}>{fmtInt(b.orders)} vendas</span></td>
                         <td className="num cell-mono">{npMoney(b.gross, cur)}</td>
                         {backend && <td className="num cell-mono" style={{ color: 'var(--money)' }}>{npMoney(b.revenue, cur)}</td>}
@@ -532,7 +532,7 @@ function NpParamsDrawer({ params, setParam, setParams, obs, platforms, salesboun
             <h3 style={{ margin: '4px 0 2px' }}>Premissas do cálculo</h3>
             <div style={{ fontSize: 11.5, color: 'var(--fg4)' }}>Tudo recalcula ao digitar. Campo vazio = usa o valor observado/cadastrado. Salvar registra a data de cada mudança.</div>
           </div>
-          <button className="icon-btn" onClick={onClose}><Icon name="x" size={14}/></button>
+          <button className="icon-btn" onClick={onClose} aria-label="Fechar" title="Fechar"><Icon name="x" size={14}/></button>
         </div>
 
         <div style={{ padding: '0 24px', overflowY: 'auto', flex: 1 }}>

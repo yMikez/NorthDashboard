@@ -47,7 +47,7 @@ function AaBars({ values, labels, height = 56, format = 'money' }) {
         return (
           <div key={i} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3, flex: 1, minWidth: 0 }} title={`${labels[i]}: ${present ? (format === 'money' ? fmtCurrency(values[i], 'USD', 0) : fmtInt(values[i])) : 'ausente'}`}>
             <div style={{ width: '100%', height: h, borderRadius: '3px 3px 0 0', background: present ? 'linear-gradient(180deg, var(--accent), color-mix(in oklab, var(--accent) 60%, var(--bg)))' : 'var(--border)' }}/>
-            <div style={{ fontFamily: 'var(--f-mono)', fontSize: 9, color: 'var(--fg5)', whiteSpace: 'nowrap' }}>{labels[i]}</div>
+            <div style={{ fontFamily: 'var(--f-mono)', fontSize: 10, color: 'var(--fg5)', whiteSpace: 'nowrap' }}>{labels[i]}</div>
           </div>
         );
       })}
@@ -129,11 +129,11 @@ function AaSequenceView({ seq, onOpen, cur = 'USD' }) {
                 const pr = prevRank ? prevRank.get(r.key) : undefined;
                 const d = pr != null ? pr - r.rank : null;
                 return (
-                  <tr key={r.key} onClick={() => onOpen?.(r.key, w.end)} style={{ cursor: 'pointer' }}>
+                  <tr tabIndex={0} key={r.key} onClick={() => onOpen?.(r.key, w.end)} style={{ cursor: 'pointer' }}>
                     <td className="cell-mono" style={{ whiteSpace: 'nowrap' }}>
                       #{r.rank}
-                      {d != null && d !== 0 && <span style={{ marginLeft: 4, fontSize: 9, color: d > 0 ? 'var(--success)' : 'var(--danger)' }}>{d > 0 ? '▲' : '▼'}{Math.abs(d)}</span>}
-                      {prevRank && pr == null && <span style={{ marginLeft: 4, fontSize: 9, color: 'var(--accent)' }}>novo</span>}
+                      {d != null && d !== 0 && <span style={{ marginLeft: 4, fontSize: 10, color: d > 0 ? 'var(--success)' : 'var(--danger)' }}>{d > 0 ? '▲' : '▼'}{Math.abs(d)}</span>}
+                      {prevRank && pr == null && <span style={{ marginLeft: 4, fontSize: 10, color: 'var(--accent)' }}>novo</span>}
                     </td>
                     <td style={{ maxWidth: 220 }}>
                       <div style={{ fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.kind === 'partner' && <span style={{ color: 'var(--accent)', marginRight: 4 }}><Icon name="link" size={10}/></span>}{r.name}</div>
@@ -267,12 +267,12 @@ function AaNewAffiliatesPanel({ seq, onOpen, cur = 'USD' }) {
             <thead><tr><th>Afiliado</th><th>Plat.</th><th>1ª venda</th><th className="num">Vendas (7d)</th><th className="num">Receita (7d)</th></tr></thead>
             <tbody>
               {list.map((r) => (
-                <tr key={r.key} onClick={() => onOpen?.(r.key)} style={{ cursor: 'pointer' }}>
+                <tr tabIndex={0} key={r.key} onClick={() => onOpen?.(r.key)} style={{ cursor: 'pointer' }}>
                   <td style={{ fontWeight: 600 }}>
                     {r.kind === 'partner' && <span style={{ color: 'var(--accent)', marginRight: 4 }}><Icon name="link" size={10}/></span>}
                     {r.name}
                     {daysAgo(r.firstSaleDay) <= 1 && (
-                      <span style={{ fontFamily: 'var(--f-mono)', fontSize: 9, fontWeight: 700, marginLeft: 6, padding: '1px 6px', borderRadius: 'var(--r-full)', color: 'var(--success)', background: 'color-mix(in oklab, var(--success) 14%, transparent)' }}>NOVO</span>
+                      <span style={{ fontFamily: 'var(--f-mono)', fontSize: 10, fontWeight: 700, marginLeft: 6, padding: '1px 6px', borderRadius: 'var(--r-full)', color: 'var(--success)', background: 'color-mix(in oklab, var(--success) 14%, transparent)' }}>NOVO</span>
                     )}
                   </td>
                   <td style={{ whiteSpace: 'nowrap' }}>{r.platforms.map((p) => <span key={p} style={{ marginRight: 3 }}><AaPlat slug={p}/></span>)}</td>
@@ -328,7 +328,7 @@ function AaSlowingPanel({ seq, onOpen, cur = 'USD' }) {
             <thead><tr><th>Afiliado</th><th>Plat.</th><th>Estado</th><th className="num">Pico</th><th className="num">Última janela</th><th className="num">vs pico</th><th>Receita por janela</th></tr></thead>
             <tbody>
               {list.map((r) => (
-                <tr key={r.key} onClick={() => onOpen?.(r.key, seq.windows[r.state === 'parou' ? r.lastActiveIndex : seq.windows.length - 1]?.end)} style={{ cursor: 'pointer' }}>
+                <tr tabIndex={0} key={r.key} onClick={() => onOpen?.(r.key, seq.windows[r.state === 'parou' ? r.lastActiveIndex : seq.windows.length - 1]?.end)} style={{ cursor: 'pointer' }}>
                   <td style={{ fontWeight: 600 }}>{r.kind === 'partner' && <span style={{ color: 'var(--accent)', marginRight: 4 }}><Icon name="link" size={10}/></span>}{r.name}</td>
                   <td style={{ whiteSpace: 'nowrap' }}>{r.platforms.map((p) => <span key={p} style={{ marginRight: 3 }}><AaPlat slug={p}/></span>)}</td>
                   <td>
@@ -503,7 +503,7 @@ function AaHealthView({ seq, onOpen, cur = 'USD' }) {
               <thead><tr><th>Afiliado</th><th>Plat.</th><th>Parou</th><th className="num">Pico · pedidos</th><th className="num">Pico · receita</th><th>Receita por janela</th></tr></thead>
               <tbody>
                 {[...warm, ...cold].map((r) => (
-                  <tr key={r.key} onClick={() => onOpen?.(r.key, seq.windows[r.lastActiveIndex]?.end)} style={{ cursor: 'pointer' }}>
+                  <tr tabIndex={0} key={r.key} onClick={() => onOpen?.(r.key, seq.windows[r.lastActiveIndex]?.end)} style={{ cursor: 'pointer' }}>
                     <td style={{ fontWeight: 600 }}>{r.name}</td>
                     <td style={{ whiteSpace: 'nowrap' }}>{r.platforms.map((p) => <span key={p} style={{ marginRight: 3 }}><AaPlat slug={p}/></span>)}</td>
                     <td>

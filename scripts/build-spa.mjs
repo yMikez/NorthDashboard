@@ -78,7 +78,7 @@ const vendorOptions = {
 //   3. algum arquivo usa window.NSApi.<fn> que não existe no export.
 // É análise por regex, não parser — cobre exatamente o padrão de código
 // que esses arquivos usam (declarações top-level function/const).
-import { readFileSync } from 'node:fs';
+import {readFileSync, readdirSync } from 'node:fs';
 
 function checkGlobals() {
   const read = (f) => readFileSync(f, 'utf8');
@@ -134,6 +134,23 @@ function checkGlobals() {
     const id = m[1];
     if (!SEM_ITEM_NO_MENU.has(id) && !shell.includes(`id: '${id}'`)) errors.push(`tab '${id}' está em lib/auth/tabs.ts mas não na sidebar (shell.jsx)`);
     if (!app.includes(`'${id}'`)) errors.push(`tab '${id}' está em lib/auth/tabs.ts mas não tem rota em app.jsx`);
+  }
+
+  // Ícone usado precisa existir no mapa do <Icon>: nome desconhecido cai em
+  // 'info' (ⓘ) SEM erro — foi assim que o botão de excluir virou um "i".
+  const utilsSrc = read('public/src/utils.jsx');
+  const iconBlock = utilsSrc.slice(utilsSrc.indexOf('function Icon('), utilsSrc.indexOf('const ps = paths[name]'));
+  const iconNames = new Set([...iconBlock.matchAll(/^\s*'([a-z0-9-]+)':/gm)].map((m) => m[1]));
+  const iconFiles = ['public/src/app.jsx', 'public/src/shell.jsx', 'public/src/utils.jsx', 'public/src/skeletons.jsx',
+    ...readdirSync('public/src/pages').filter((f) => f.endsWith('.jsx')).map((f) => 'public/src/pages/' + f)];
+  for (const f of iconFiles) {
+    const src = read(f);
+    const used = [
+      ...[...src.matchAll(/<Icon\s+name="([a-z0-9-]+)"/g)].map((m) => m[1]),
+      ...[...src.matchAll(/<Icon\s+name=\{[^}]*\?\s*'([a-z0-9-]+)'\s*:\s*'([a-z0-9-]+)'/g)].flatMap((m) => [m[1], m[2]]),
+      ...[...src.matchAll(/\bicon:\s*'([a-z0-9-]+)'/g)].map((m) => m[1]),
+    ];
+    for (const n of new Set(used)) if (!iconNames.has(n)) errors.push(`${f} usa o ícone '${n}', que não existe em utils.jsx (cairia em 'info')`);
   }
 
   if (errors.length) {

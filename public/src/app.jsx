@@ -237,8 +237,50 @@ function App({ user }) {
 
   const r = ROUTES[hashState.route];
 
+  // Troca de aba → foco na região principal (§9 focus-on-route-change): o
+  // leitor de tela anuncia a página nova em vez de ficar parado no menu.
+  // Pula o primeiro render (entrar no dash não deve roubar o foco).
+  const firstRouteRef = React.useRef(true);
+  useEffectApp(() => {
+    if (firstRouteRef.current) { firstRouteRef.current = false; return; }
+    const main = document.getElementById('conteudo');
+    if (main) main.focus({ preventScroll: true });
+  }, [hashState.route]);
+
+  // Teclado global — um handler só, que vale pra todas as abas:
+  //  · Esc fecha o drawer/modal do topo (§1 escape-routes, §9 modal-escape).
+  //    Nenhum dos 12 drawers fechava por teclado. Todos seguem a convenção
+  //    de fundo clicável (.drawer-backdrop / .modal-backdrop) — o Esc usa
+  //    exatamente esse caminho, então cobre também os que vierem depois.
+  //    Dentro de um campo, o primeiro Esc só sai do campo; o segundo fecha.
+  //  · Enter/Espaço numa linha clicável (tr[tabindex]) = clique (§1 keyboard-nav).
+  useEffectApp(() => {
+    function onKey(e) {
+      if (e.defaultPrevented) return;
+      const t = e.target;
+      const editing = t && (t.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName));
+      if (e.key === 'Escape') {
+        if (editing) { t.blur(); return; }
+        const layers = document.querySelectorAll('.drawer-backdrop, .modal-backdrop');
+        const top = layers[layers.length - 1];
+        if (top) { e.preventDefault(); top.click(); }
+        return;
+      }
+      if ((e.key === 'Enter' || e.key === ' ') && !editing && t && t.tagName === 'TR' && t.hasAttribute('tabindex')) {
+        e.preventDefault();
+        t.click();
+      }
+    }
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, []);
+
   return (
     <div className="app">
+      <a className="skip-link" href="#conteudo"
+        onClick={(e) => { e.preventDefault(); const m = document.getElementById('conteudo'); if (m) m.focus(); }}>
+        Pular para o conteúdo
+      </a>
       <FXLayers/>
       <Sidebar active={hashState.route} onNav={onNav} user={user} open={navOpen} onClose={() => setNavOpen(false)}/>
       <div className="main">
@@ -249,7 +291,7 @@ function App({ user }) {
           onMenu={() => setNavOpen(true)}
         />
         <FilterBar filters={filters} setFilters={setFilters} options={filterOptions} route={hashState.route}/>
-        <div className="page">
+        <div className="page" id="conteudo" role="main" tabIndex={-1} aria-label={r.title + (r.em ? ' ' + r.em : '')}>
           {hashState.route === 'overview'       && <OverviewPage filters={filters} setFilters={setFilters}/>}
           {hashState.route === 'funnel'         && <FunnelPage filters={filters}/>}
           {hashState.route === 'refund-cohorts' && <RefundCohortsPage filters={filters}/>}

@@ -345,7 +345,7 @@ function AffiliateMappingDrawer({ onClose, isAdmin, onChanged }) {
               O NorthScale Afiliados é a fonte de verdade da identidade (affiliate_id + IDs em cada plataforma). Cada venda de BuyGoods, Digistore24 e JVZoo é resolvida contra esse espelho; o que não casa entra na fila abaixo até o ID ser cadastrado lá.
             </div>
           </div>
-          <button className="icon-btn" onClick={onClose}><Icon name="x" size={14}/></button>
+          <button className="icon-btn" onClick={onClose} aria-label="Fechar" title="Fechar"><Icon name="x" size={14}/></button>
         </div>
         <div className="drawer-body">
           <AffiliateMappingPanel isAdmin={isAdmin} onChanged={onChanged}/>

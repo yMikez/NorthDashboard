@@ -55,7 +55,7 @@
   /* ---------- SEMANTIC ---------- */
   --success: #4FB58F;
   --warning: #D3A855;
-  --danger:  #E5484D;
+  --danger:  #E65156;   /* AA 4,6 sobre card (era #E5484D, 4,36) */
   --money:   #37D695;   /* verde-dinheiro: valores monetários, SEMPRE */
   --hot:     #FF7A33;   /* laranja "escalando" */
   --gold:    #C29B3C;   /* dourado do topo/conquista */
@@ -71,7 +71,7 @@
   --fg2:        #D9DED7;
   --fg3:        #B9C4C0;
   --fg4:        #92A1A1;
-  --fg5:        #71807F;
+  --fg5:        #788887;   /* AA 4,6 sobre card (era #71807F, 4,14) */
 
   /* Bordas nítidas neutras (tinta), não ciano */
   --border-soft:    rgba(236, 239, 234, 0.08);
@@ -168,15 +168,17 @@
   --fg2:        #2B3A3F;
   --fg3:        #43535A;
   --fg4:        #5E6D71;
-  --fg5:        #7E8C90;
+  --fg5:        #647074;   /* AA 4,6 sobre papel (era #7E8C90, 3,13) */
 
   /* Acento teal petróleo no claro */
-  --glow-cyan:     #0E7C97;
+  --glow-cyan:     #0D7791;   /* accent · AA 4,65 sobre papel (era #0E7C97, 4,35) */
   --glow-electric: #22D3EE;
 
   --success: #2E7D5B;
-  --warning: #A97612;
-  --money:   #0B8F60;
+  --warning: #91650F;   /* AA 4,6 sobre papel (era #A97612, 3,58) */
+  /* O claro herdava o vermelho do escuro (3,52 no papel) — justo a cor de prejuízo. */
+  --danger:  #D71F24;   /* AA 4,6 sobre papel */
+  --money:   #0A7D54;   /* AA 4,6 sobre papel (era #0B8F60, 3,70) */
   --hot:     #E8590C;
 
   --border-soft:    rgba(24, 34, 38, 0.08);

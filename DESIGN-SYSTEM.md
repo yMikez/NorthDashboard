@@ -27,14 +27,15 @@ Tudo via CSS custom properties no `body`, tema trocado com `body[data-theme="dar
 --ink: #182226;         /* texto principal: tinta petróleo (não preto) */
 --sub: #5E6D71;         /* texto secundário */
 --line: rgba(24,34,38,.14);      /* bordas */
---accent: #0E7C97;      /* acento: teal petróleo */
+--accent: #0D7791;      /* acento: teal petróleo (AA 4,65 no papel) */
 --accent-soft: rgba(14,124,151,.10); /* fundo de chips/ícones do acento */
 --accent2: #22D3EE;     /* acento claro (detalhes, brilhos) */
---money: #0B8F60;       /* verde-dinheiro: valores monetários, SEMPRE */
+--money: #0A7D54;       /* verde-dinheiro: valores monetários, SEMPRE (AA 4,64) */
 --hot: #E8590C;         /* laranja "escalando"/quente */
 --cta: #182226;         /* botão primário = tinta sólida */
 --ok: #2E7D5B;          /* sucesso */
---warn: #A97612;        /* atenção */
+--warn: #91650F;        /* atenção (AA 4,64) */
+--danger: #D71F24;      /* prejuízo/negativo — o claro herdava o do escuro (3,52) */
 --shadow: 0 1px 2px rgba(24,34,38,.04), 0 10px 28px rgba(24,34,38,.06);
 ```
 
@@ -48,6 +49,25 @@ Tudo via CSS custom properties no `body`, tema trocado com `body[data-theme="dar
 --ok: #4FB58F;      --warn: #D3A855;
 --shadow: 0 1px 2px rgba(0,0,0,.30), 0 12px 32px rgba(0,0,0,.35);
 ```
+
+### Contraste mínimo (regra, não sugestão)
+
+Todo token usado como **texto** passa **4,5:1** (WCAG AA) sobre o pior fundo
+do tema em que aparece — no claro é o papel `--bg` (`#F5F3EC`), no escuro é o
+card (`#161D21`). Ajuste de 2026-09-29: mesmo matiz e saturação, só a
+luminosidade andou o mínimo necessário. Os valores anteriores reprovavam:
+
+| Token | Tema | Antes | Contraste | Agora |
+| --- | --- | --- | --- | --- |
+| `--fg5` | claro | `#7E8C90` | 3,13 | `#647074` |
+| `--money` | claro | `#0B8F60` | 3,70 | `#0A7D54` |
+| `--warning` | claro | `#A97612` | 3,58 | `#91650F` |
+| `--accent` | claro | `#0E7C97` | 4,35 | `#0D7791` |
+| `--danger` | claro | herdava `#E5484D` | 3,52 | `#D71F24` |
+| `--fg5` | escuro | `#71807F` | 4,14 | `#788887` |
+| `--danger` | escuro | `#E5484D` | 4,36 | `#E65156` |
+
+Cor nova de texto só entra depois de medida contra esses fundos.
 
 ### Cores fixas (não mudam com o tema)
 

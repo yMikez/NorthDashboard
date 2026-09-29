@@ -358,7 +358,7 @@ function CpaStatusChip({ status }) {
   }[status] || { label: String(status).toUpperCase(), fg: 'var(--fg4)', bg: 'color-mix(in oklab, var(--fg4) 12%, transparent)', border: 'var(--border-soft)' };
   return (
     <span style={{
-      fontFamily: 'var(--f-mono)', fontSize: 9, fontWeight: 700, letterSpacing: '0.06em',
+      fontFamily: 'var(--f-mono)', fontSize: 10, fontWeight: 700, letterSpacing: '0.06em',
       padding: '2px 8px', borderRadius: 'var(--r-full)', whiteSpace: 'nowrap',
       background: meta.bg, color: meta.fg, border: `1px solid ${meta.border}`,
     }}>
@@ -767,7 +767,7 @@ function LeaderboardPage({ filters, onOpenAffiliate, user }) {
                 const { cls: platClass, short: platShort } = platBadge(r.platformSlug);
                 const displayName = r.nickname || r.externalId;
                 return (
-                  <tr key={r.key || `${r.platformSlug}:${r.externalId}`} onClick={() => (r.accounts && r.accounts.length > 1 ? setPartnerRow(r) : onOpenAffiliate({ externalId: r.externalId, platformSlug: r.platformSlug }))}>
+                  <tr tabIndex={0} key={r.key || `${r.platformSlug}:${r.externalId}`} onClick={() => (r.accounts && r.accounts.length > 1 ? setPartnerRow(r) : onOpenAffiliate({ externalId: r.externalId, platformSlug: r.platformSlug }))}>
                     <td className="rank">{String(i+1).padStart(2, '0')}</td>
                     <td>
                       <span className="cell-aff">
@@ -787,7 +787,7 @@ function LeaderboardPage({ filters, onOpenAffiliate, user }) {
                     <td className="num cell-mono" style={{ color: 'var(--money)' }}>
                       {aovOf(r) > 0 ? fmtCurrency(aovOf(r), cur, 0) : '—'}
                       {aovOf(r) > 0 && (
-                        <span style={{ display: 'block', fontSize: 9, color: 'var(--fg5)', fontWeight: 400, marginTop: 1 }}>
+                        <span style={{ display: 'block', fontSize: 10, color: 'var(--fg5)', fontWeight: 400, marginTop: 1 }}>
                           {fmtInt(r.feApprovedCount)} FEs
                         </span>
                       )}
@@ -802,7 +802,7 @@ function LeaderboardPage({ filters, onOpenAffiliate, user }) {
                       title={`Taxa do MODELO CPA usada no NET AOV: ${r.refundCbPctUsed}% (${r.accounts && r.accounts.length > 1 ? 'média ponderada das contas — override é por conta' : r.refundCbPctOverride != null ? 'override deste afiliado' : 'default da plataforma'}).\nObservada no período: ${(r.refundRate * 100).toFixed(1)}% = ${fmtInt(r.refunds)} estornos ÷ ${fmtInt(r.realOrders)} pedidos reais.${r.realOrders !== r.allOrders ? `\n(${fmtInt(r.allOrders - r.realOrders)} linhas de estorno da Digistore fora do denominador.)` : ''}\nCoorte por data da VENDA: período recente ainda vai receber reembolsos.`}>
                       {r.refundCbPctUsed}%
                       {r.refundCbPctOverride != null && <span style={{ fontSize: 8, color: 'var(--glow-cyan)', marginLeft: 3 }}>ovr</span>}
-                      <span className={rfClass} style={{ fontSize: 9, marginLeft: 5, opacity: 0.75 }}>obs {(r.refundRate * 100).toFixed(1)}%</span>
+                      <span className={rfClass} style={{ fontSize: 10, marginLeft: 5, opacity: 0.75 }}>obs {(r.refundRate * 100).toFixed(1)}%</span>
                     </td>
                     <td className={`num cell-mono ${cbClass}`}>{(r.cbRate * 100).toFixed(2)}%</td>
                     <td className="num cell-mono">{fmtCurrency(r.cpa, cur, 0)}</td>
@@ -816,7 +816,7 @@ function LeaderboardPage({ filters, onOpenAffiliate, user }) {
                       <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
                         <CpaStatusChip status={r.cpaStatus}/>
                         {!(r.accounts && r.accounts.length > 1) && (<button
-                          className="btn btn-ghost" style={{ padding: '1px 6px', fontSize: 9 }}
+                          className="btn btn-ghost" style={{ padding: '1px 6px', fontSize: 10 }}
                           title={`Refund&CB usado: ${r.refundCbPctUsed}% ${r.refundCbPctOverride != null ? '(override deste afiliado)' : '(default da plataforma)'} — clique pra editar só deste afiliado`}
                           onClick={(e) => { e.stopPropagation(); setRefundModal(r); }}
                         >%</button>)}
@@ -876,7 +876,7 @@ function AffiliateDrawer({ affiliateId, filters, onClose }) {
                 </div>
               </div>
             </div>
-            <button className="icon-btn" onClick={onClose}><Icon name="x" size={14}/></button>
+            <button className="icon-btn" onClick={onClose} aria-label="Fechar" title="Fechar"><Icon name="x" size={14}/></button>
           </div>
         </div>
       </>
@@ -909,7 +909,7 @@ function AffiliateDrawer({ affiliateId, filters, onClose }) {
               </div>
             </div>
           </div>
-          <button className="icon-btn" onClick={onClose}><Icon name="x" size={14}/></button>
+          <button className="icon-btn" onClick={onClose} aria-label="Fechar" title="Fechar"><Icon name="x" size={14}/></button>
         </div>
         <div className="drawer-body">
           <div className="mini-kpis">
@@ -1828,7 +1828,7 @@ function AllAffiliatesPage({ filters, onOpenAffiliate }) {
                 const aov = aovOf(r);
                 const tier = aovTier(aov);
                 return (
-                  <tr key={`${r.platformSlug}:${r.externalId}`} onClick={() => onOpenAffiliate(r.externalId)}>
+                  <tr tabIndex={0} key={`${r.platformSlug}:${r.externalId}`} onClick={() => onOpenAffiliate(r.externalId)}>
                     <td>
                       <span className="cell-aff">
                         <span className="av" style={{ background: avatarColor(r.externalId) }}>{initials(displayName)}</span>
@@ -2064,7 +2064,7 @@ function CallCenterMonitor({ cc }) {
                         <td className="num">{fmtInt(r.peak7d)}</td>
                         <td>
                           <span style={{
-                            fontFamily: 'var(--f-mono)', fontSize: 9, fontWeight: 600, letterSpacing: '0.06em',
+                            fontFamily: 'var(--f-mono)', fontSize: 10, fontWeight: 600, letterSpacing: '0.06em',
                             padding: '2px 8px', borderRadius: 'var(--r-full)', whiteSpace: 'nowrap',
                             background: meta.bg, color: meta.fg, border: `1px solid ${meta.border}`,
                           }}>
@@ -2442,7 +2442,7 @@ function FamilyGrid({ state, cur, onPick, pageStates, callCenter }) {
                 </div>
                 <div style={{ display: 'flex', gap: 6 }}>
                   {f.niches.map((n) => (
-                    <span key={n} className="badge" style={{ background: `${accent}22`, color: accent, borderColor: `${accent}55`, fontSize: 9 }}>{n}</span>
+                    <span key={n} className="badge" style={{ background: `${accent}22`, color: accent, borderColor: `${accent}55`, fontSize: 10 }}>{n}</span>
                   ))}
                 </div>
               </div>
@@ -2985,7 +2985,7 @@ function _LegacyProductsPage({ filters }) {
       {/* Resumo por tipo no rodapé — contexto, não headline */}
       {byType.some((b) => b.orders > 0) && (
         <div style={{ marginTop: 18 }}>
-          <div style={{ fontFamily: 'var(--f-mono)', fontSize: 9, letterSpacing: '0.18em', color: 'var(--fg5)', textTransform: 'uppercase', marginBottom: 10 }}>
+          <div style={{ fontFamily: 'var(--f-mono)', fontSize: 10, letterSpacing: '0.18em', color: 'var(--fg5)', textTransform: 'uppercase', marginBottom: 10 }}>
             Resumo por tipo · período
           </div>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 10 }}>
@@ -3288,7 +3288,7 @@ function TransactionDrawer({ externalId, platformSlug, cur, onClose, onPickOrder
         <div className="drawer" style={{ width: 540 }}>
           <div className="drawer-head">
             <span style={{ color: 'var(--fg4)' }}>Carregando pedido {externalId}...</span>
-            <button className="icon-btn" onClick={onClose}><Icon name="x" size={14}/></button>
+            <button className="icon-btn" onClick={onClose} aria-label="Fechar" title="Fechar"><Icon name="x" size={14}/></button>
           </div>
         </div>
       </>
@@ -3301,7 +3301,7 @@ function TransactionDrawer({ externalId, platformSlug, cur, onClose, onPickOrder
         <div className="drawer" style={{ width: 540 }}>
           <div className="drawer-head">
             <span style={{ color: 'var(--danger)' }}>Erro: {state.error || 'pedido não encontrado'}</span>
-            <button className="icon-btn" onClick={onClose}><Icon name="x" size={14}/></button>
+            <button className="icon-btn" onClick={onClose} aria-label="Fechar" title="Fechar"><Icon name="x" size={14}/></button>
           </div>
         </div>
       </>
@@ -3336,7 +3336,7 @@ function TransactionDrawer({ externalId, platformSlug, cur, onClose, onPickOrder
               )}
             </div>
           </div>
-          <button className="icon-btn" onClick={onClose}><Icon name="x" size={14}/></button>
+          <button className="icon-btn" onClick={onClose} aria-label="Fechar" title="Fechar"><Icon name="x" size={14}/></button>
         </div>
 
         <div style={{ padding: '16px 18px 32px', display: 'grid', gap: 16 }}>
@@ -3482,14 +3482,14 @@ function TransactionDrawer({ externalId, platformSlug, cur, onClose, onPickOrder
                         display: 'grid', gridTemplateColumns: '64px 1fr auto auto', gap: 8, alignItems: 'center',
                       }}
                     >
-                      <span className="badge" style={{ background: `color-mix(in oklab, ${sColor} 12%, transparent)`, color: sColor, borderColor: `color-mix(in oklab, ${sColor} 35%, transparent)`, fontSize: 9, justifySelf: 'start' }}>
+                      <span className="badge" style={{ background: `color-mix(in oklab, ${sColor} 12%, transparent)`, color: sColor, borderColor: `color-mix(in oklab, ${sColor} 35%, transparent)`, fontSize: 10, justifySelf: 'start' }}>
                         {sType}
                       </span>
                       <span style={{ fontSize: 12, color: 'var(--fg2)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                         {s.productName}
                         {s.isCrossSell && <span style={{ color: 'var(--warning)', marginLeft: 6, fontSize: 10 }}>cross</span>}
                       </span>
-                      <span className={`st st-${sStatusLc}`} style={{ fontSize: 9 }}>{sStatusLc}</span>
+                      <span className={`st st-${sStatusLc}`} style={{ fontSize: 10 }}>{sStatusLc}</span>
                       <span style={{ fontFamily: 'var(--f-mono)', fontSize: 11, color: 'var(--fg1)' }}>
                         {fmtCurrency(s.grossAmountUsd, cur, 2)}
                       </span>
@@ -3790,7 +3790,7 @@ function IntegrationsPage({ filters }) {
                     )}
                   </div>
                   {p.feesUpdatedAt && (
-                    <div style={{ fontSize: 9, color: 'var(--fg5)', marginTop: 8, fontFamily: 'var(--f-mono)' }}>
+                    <div style={{ fontSize: 10, color: 'var(--fg5)', marginTop: 8, fontFamily: 'var(--f-mono)' }}>
                       % atualizados {fmtSyncAgo(p.feesUpdatedAt)}
                     </div>
                   )}
@@ -4163,7 +4163,7 @@ function UsersPage({ currentUser }) {
                 const isSelf = currentUser && u.id === currentUser.id;
                 const display = u.name || u.email;
                 return (
-                  <tr key={u.id} onClick={() => setEditing(u)} style={{ cursor: 'pointer' }}>
+                  <tr tabIndex={0} key={u.id} onClick={() => setEditing(u)} style={{ cursor: 'pointer' }}>
                     <td>
                       <span className="cell-aff">
                         <span className="av" style={{ background: avatarColor(u.email) }}>{initials(display)}</span>
@@ -4171,7 +4171,7 @@ function UsersPage({ currentUser }) {
                           <span className="nm">
                             {display}
                             {isSelf && (
-                              <span style={{ marginLeft: 6, fontFamily: 'var(--f-mono)', fontSize: 9, color: 'var(--glow-cyan)', letterSpacing: '0.1em' }}>
+                              <span style={{ marginLeft: 6, fontFamily: 'var(--f-mono)', fontSize: 10, color: 'var(--glow-cyan)', letterSpacing: '0.1em' }}>
                                 VOCÊ
                               </span>
                             )}
@@ -4448,12 +4448,12 @@ function UserFormDrawer({ mode, initial, isSelf, onClose, onSaved }) {
                         <button
                           onClick={() => selectAllInGroup(group)}
                           style={{ background: 'transparent', border: 0, color: 'var(--glow-cyan)',
-                                   fontFamily: 'var(--f-mono)', fontSize: 9, letterSpacing: '0.08em', cursor: 'pointer' }}
+                                   fontFamily: 'var(--f-mono)', fontSize: 10, letterSpacing: '0.08em', cursor: 'pointer' }}
                         >TODOS</button>
                         <button
                           onClick={() => clearGroup(group)}
                           style={{ background: 'transparent', border: 0, color: 'var(--fg5)',
-                                   fontFamily: 'var(--f-mono)', fontSize: 9, letterSpacing: '0.08em', cursor: 'pointer' }}
+                                   fontFamily: 'var(--f-mono)', fontSize: 10, letterSpacing: '0.08em', cursor: 'pointer' }}
                         >NENHUM</button>
                       </span>
                     </div>
@@ -5706,7 +5706,7 @@ function CostsPage({ filters }) {
                         {f.isCataloged === false && (
                           <span title="Família ainda não catalogada — usando custo médio como placeholder. Atualize o valor real e salve."
                             style={{
-                              fontFamily: 'var(--f-mono)', fontSize: 9, letterSpacing: '0.06em',
+                              fontFamily: 'var(--f-mono)', fontSize: 10, letterSpacing: '0.06em',
                               color: 'var(--warning)', background: 'rgba(255,180,0,0.12)',
                               border: '1px solid rgba(255,180,0,0.35)', borderRadius: 4,
                               padding: '1px 6px',
@@ -6424,7 +6424,7 @@ function ChatPage({ user }) {
                 <div style={{ fontSize: 12, color: 'var(--fg1)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                   {c.title || '(sem título)'}
                 </div>
-                <div style={{ fontFamily: 'var(--f-mono)', fontSize: 9, color: 'var(--fg5)' }}>
+                <div style={{ fontFamily: 'var(--f-mono)', fontSize: 10, color: 'var(--fg5)' }}>
                   {c.messageCount} msg · {fmtRelativeShort(c.updatedAt)}
                 </div>
               </div>
@@ -6715,6 +6715,8 @@ function ChatBody({ conversationId, onConversationCreated, onMessageSent, compac
           disabled={streaming || !input.trim()}
           className="btn btn-primary"
           style={{ alignSelf: 'flex-end', opacity: streaming || !input.trim() ? 0.5 : 1 }}
+          aria-label={streaming ? 'Gerando resposta…' : 'Enviar pergunta'}
+          title={streaming ? 'Gerando resposta…' : 'Enviar (Enter)'}
         >
           <Icon name={streaming ? 'loader' : 'send'} size={12}/>
         </button>
@@ -6770,7 +6772,7 @@ function ChatMessage({ message, compact, streaming }) {
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginTop: 4 }}>
           {message.toolUses.map((t, i) => (
             <span key={i} style={{
-              fontFamily: 'var(--f-mono)', fontSize: 9,
+              fontFamily: 'var(--f-mono)', fontSize: 10,
               padding: '1px 6px', borderRadius: 3,
               background: 'rgba(40,200,120,0.08)', color: 'var(--success)',
               border: '1px solid rgba(40,200,120,0.2)',
@@ -6897,7 +6899,7 @@ function CopyRuleCreateForm({ onClose, onSaved }) {
     <div className="panel" style={{ marginBottom: 12 }}>
       <div className="panel-head">
         <div className="panel-title">Nova regra</div>
-        <button className="btn btn-ghost" onClick={onClose} style={{ padding: '4px 8px' }}><Icon name="x" size={12}/></button>
+        <button className="btn btn-ghost" onClick={onClose} style={{ padding: '4px 8px' }} aria-label="Fechar" title="Fechar"><Icon name="x" size={12}/></button>
       </div>
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: 10, alignItems: 'end', marginTop: 10 }}>
         <label style={coFieldLabel}>
@@ -6929,7 +6931,7 @@ function CopyKpi({ label, value, sub, tone }) {
   const color = tone === 'danger' ? 'var(--danger)' : tone === 'ok' ? 'var(--success)' : 'var(--fg1)';
   return (
     <div className="panel" style={{ padding: '12px 14px' }}>
-      <div className="eyebrow" style={{ fontSize: 9 }}>{label}</div>
+      <div className="eyebrow" style={{ fontSize: 10 }}>{label}</div>
       <div style={{ fontFamily: 'var(--f-display)', fontSize: 24, fontWeight: 600, color, marginTop: 4 }}>{value}</div>
       {sub && <div style={{ fontSize: 10, color: 'var(--fg5)', marginTop: 2 }}>{sub}</div>}
     </div>
@@ -6976,10 +6978,10 @@ function CopyForecastCard({ forecast }) {
     <div className="panel" style={{ marginBottom: 12, borderColor: color, display: 'flex', gap: 12, alignItems: 'flex-start' }}>
       <Icon name={icon} size={18}/>
       <div>
-        <div className="eyebrow" style={{ fontSize: 9 }}>PREVISÃO ATÉ A META</div>
+        <div className="eyebrow" style={{ fontSize: 10 }}>PREVISÃO ATÉ A META</div>
         <div style={{ fontWeight: 600, fontSize: 15, color, marginTop: 2 }}>{title}</div>
         <div style={{ fontSize: 11, color: 'var(--fg4)', marginTop: 3, lineHeight: 1.5 }}>{detail}</div>
-        <div style={{ fontSize: 9, color: 'var(--fg5)', marginTop: 5, fontFamily: 'var(--f-mono)' }}>Extrapolação linear "no ritmo atual" sobre o período selecionado — estimativa, não garantia.</div>
+        <div style={{ fontSize: 10, color: 'var(--fg5)', marginTop: 5, fontFamily: 'var(--f-mono)' }}>Extrapolação linear "no ritmo atual" sobre o período selecionado — estimativa, não garantia.</div>
       </div>
     </div>
   );
@@ -7007,7 +7009,7 @@ function CopyApplyAllForm({ onClose, onApplied }) {
     <div className="panel" style={{ marginBottom: 12 }}>
       <div className="panel-head">
         <div className="panel-title">Aplicar a todos os afiliados</div>
-        <button className="btn btn-ghost" onClick={onClose} style={{ padding: '4px 8px' }}><Icon name="x" size={12}/></button>
+        <button className="btn btn-ghost" onClick={onClose} style={{ padding: '4px 8px' }} aria-label="Fechar" title="Fechar"><Icon name="x" size={12}/></button>
       </div>
       <div style={{ display: 'flex', gap: 14, alignItems: 'end', marginTop: 10, flexWrap: 'wrap' }}>
         <label style={coFieldLabel}><span>% Black 2 inicial</span>
@@ -7262,7 +7264,7 @@ function CopyCalculatorPanel() {
               <div key={sc.label} className="panel" style={{ opacity: sc.status === 'over' ? 0.5 : 1, borderColor: sc.label === res.easiestScenario ? 'var(--glow-cyan)' : undefined }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                   <span style={{ fontWeight: 600, fontSize: 13 }}>{sc.label === res.easiestScenario ? '★ ' : ''}{sc.label}</span>
-                  <span className="badge" style={{ background: sc.status === 'ok' ? 'color-mix(in oklab, var(--success) 12%, transparent)' : sc.status === 'below' ? 'color-mix(in oklab, var(--accent) 12%, transparent)' : 'color-mix(in oklab, var(--danger) 12%, transparent)', fontSize: 9 }}>{sc.status}</span>
+                  <span className="badge" style={{ background: sc.status === 'ok' ? 'color-mix(in oklab, var(--success) 12%, transparent)' : sc.status === 'below' ? 'color-mix(in oklab, var(--accent) 12%, transparent)' : 'color-mix(in oklab, var(--danger) 12%, transparent)', fontSize: 10 }}>{sc.status}</span>
                 </div>
                 <div style={{ fontFamily: 'var(--f-display)', fontSize: 18, marginTop: 4 }}>{fmtCurrency(sc.aov, 'USD', 0)}</div>
                 <div style={{ fontSize: 10, color: 'var(--fg5)', marginTop: 4 }}>convs: {sc.convs.map((c) => fmtPct(c)).join(' · ')}</div>
@@ -7346,7 +7348,7 @@ function CopyAutotunePanel() {
                   <td className="cell-mono" style={{ fontSize: 10 }}>{fmtDateTime(l.decidedAt)}</td>
                   <td className="cell-mono">{l.ruleKey || '—'}</td>
                   <td className="num cell-mono">{l.pctBefore}% → {l.pctAfter}%</td>
-                  <td><span className="badge neutral" style={{ fontSize: 9 }}>{l.reason}</span></td>
+                  <td><span className="badge neutral" style={{ fontSize: 10 }}>{l.reason}</span></td>
                 </tr>
               ))}
             </tbody>
@@ -7596,6 +7598,8 @@ function RecoveryPage({ filters }) {
                     return (
                       <React.Fragment key={c.company}>
                         <tr
+                          tabIndex={temDetalhe ? 0 : undefined}
+                          aria-expanded={temDetalhe ? aberta : undefined}
                           onClick={() => temDetalhe && setOpenCo((prev) => { const n = new Set(prev); if (n.has(c.company)) n.delete(c.company); else n.add(c.company); return n; })}
                           style={{ cursor: temDetalhe ? 'pointer' : 'default' }}
                         >
@@ -7897,7 +7901,7 @@ function CallCenterPage({ filters, user }) {
                       <tr key={a.agent}>
                         <td className="cell-mono" style={{ fontSize: 11 }}>
                           {a.agent}
-                          {a.isAi && <span style={{ marginLeft: 6, fontSize: 9, fontWeight: 700, color: 'var(--accent)', letterSpacing: '0.08em' }}>IA</span>}
+                          {a.isAi && <span style={{ marginLeft: 6, fontSize: 10, fontWeight: 700, color: 'var(--accent)', letterSpacing: '0.08em' }}>IA</span>}
                         </td>
                         <td className="num">{fmtInt(a.sales)}</td>
                         <td className="num" style={{ color: 'var(--money)' }}>{fmtCurrency(a.grossUsd, 'USD', 0)}</td>
@@ -8211,7 +8215,7 @@ function SmsTypeChip({ type }) {
   const meta = SMS_TYPE_META[type] || { label: String(type || '—').toUpperCase(), fg: 'var(--fg4)', bg: 'rgba(255,255,255,0.05)', border: 'var(--border-soft)' };
   return (
     <span style={{
-      fontFamily: 'var(--f-mono)', fontSize: 9, fontWeight: 600, letterSpacing: '0.06em',
+      fontFamily: 'var(--f-mono)', fontSize: 10, fontWeight: 600, letterSpacing: '0.06em',
       padding: '2px 8px', borderRadius: 'var(--r-full)', whiteSpace: 'nowrap',
       background: meta.bg, color: meta.fg, border: `1px solid ${meta.border}`,
     }}>
@@ -8222,7 +8226,7 @@ function SmsTypeChip({ type }) {
 
 function SmsCampaignStatusBadge({ row }) {
   if (row.orphan) {
-    return <span style={{ fontFamily: 'var(--f-mono)', fontSize: 9, color: 'var(--warning)', border: '1px solid color-mix(in oklab, var(--warning) 35%, transparent)', background: 'color-mix(in oklab, var(--warning) 12%, transparent)', padding: '2px 8px', borderRadius: 'var(--r-full)', whiteSpace: 'nowrap' }}>NÃO ENCONTRADA NO MAUTIC</span>;
+    return <span style={{ fontFamily: 'var(--f-mono)', fontSize: 10, color: 'var(--warning)', border: '1px solid color-mix(in oklab, var(--warning) 35%, transparent)', background: 'color-mix(in oklab, var(--warning) 12%, transparent)', padding: '2px 8px', borderRadius: 'var(--r-full)', whiteSpace: 'nowrap' }}>NÃO ENCONTRADA NO MAUTIC</span>;
   }
   const map = {
     active:   { label: 'ATIVA',     fg: 'var(--success)', bg: 'rgba(58,214,140,0.14)', border: 'rgba(58,214,140,0.4)' },
@@ -8231,7 +8235,7 @@ function SmsCampaignStatusBadge({ row }) {
   };
   const meta = map[row.status] || map.archived;
   return (
-    <span style={{ fontFamily: 'var(--f-mono)', fontSize: 9, fontWeight: 600, color: meta.fg, background: meta.bg, border: `1px solid ${meta.border}`, padding: '2px 8px', borderRadius: 'var(--r-full)', whiteSpace: 'nowrap' }}>
+    <span style={{ fontFamily: 'var(--f-mono)', fontSize: 10, fontWeight: 600, color: meta.fg, background: meta.bg, border: `1px solid ${meta.border}`, padding: '2px 8px', borderRadius: 'var(--r-full)', whiteSpace: 'nowrap' }}>
       {meta.label}
     </span>
   );
@@ -8540,7 +8544,7 @@ function SmsPage({ filters }) {
                     const isOpen = expanded === key;
                     return (
                       <React.Fragment key={key}>
-                        <tr onClick={() => setExpanded(isOpen ? null : key)} style={{ cursor: 'pointer' }}>
+                        <tr tabIndex={0} onClick={() => setExpanded(isOpen ? null : key)} style={{ cursor: 'pointer' }}>
                           <td>
                             <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                               <span style={{ color: 'var(--fg2)' }}>{c.name || c.slug}</span>
@@ -8550,7 +8554,7 @@ function SmsPage({ filters }) {
                                 </span>
                               )}
                             </div>
-                            {c.slug && <div style={{ fontFamily: 'var(--f-mono)', fontSize: 9, color: 'var(--fg5)', marginTop: 1 }}>{c.slug}</div>}
+                            {c.slug && <div style={{ fontFamily: 'var(--f-mono)', fontSize: 10, color: 'var(--fg5)', marginTop: 1 }}>{c.slug}</div>}
                           </td>
                           <td><SmsCampaignStatusBadge row={c}/></td>
                           <td style={{ fontSize: 11, color: 'var(--fg3)' }}>{c.brand || '—'}</td>

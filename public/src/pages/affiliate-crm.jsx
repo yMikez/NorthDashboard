@@ -66,7 +66,7 @@ function CrmRow({ r, checked, onCheck, onOpen, onTouch }) {
   const tone = CRM_TIER_COLOR[r.tier] || 'var(--fg4)';
   const prio = CRM_PRIORITY[r.priority] || CRM_PRIORITY.baixa;
   return (
-    <tr style={{ cursor: 'pointer' }} onClick={() => onOpen(r)}>
+    <tr tabIndex={0} style={{ cursor: 'pointer' }} onClick={() => onOpen(r)}>
       <td onClick={(e) => e.stopPropagation()} style={{ width: 28 }}>
         <input type="checkbox" checked={checked} disabled={!r.pending} onChange={(e) => onCheck(r.key, e.target.checked)}/>
       </td>
@@ -121,7 +121,7 @@ function CrmDrawer({ row, onClose, onSave, onTouch, onUntouch, busy }) {
   }, [row.key]);
 
   return (
-    <div style={{
+    <div role="dialog" aria-modal="true" aria-label={`CRM · ${row.name}`} style={{
       position: 'fixed', top: 0, right: 0, bottom: 0, width: 'min(440px, 100vw)', background: 'var(--card)',
       borderLeft: '1px solid var(--line)', boxShadow: 'var(--shadow)', padding: 20, overflowY: 'auto', zIndex: 60,
     }}>
@@ -130,7 +130,7 @@ function CrmDrawer({ row, onClose, onSave, onTouch, onUntouch, busy }) {
           <div style={{ fontSize: 17, fontWeight: 700 }}>{row.name}</div>
           <div className="panel-sub" style={{ fontSize: 12 }}>{row.reason}</div>
         </div>
-        <button className="btn btn-ghost" onClick={onClose}><Icon name="x" size={14}/></button>
+        <button className="btn btn-ghost" onClick={onClose} aria-label="Fechar" title="Fechar"><Icon name="x" size={14}/></button>
       </div>
 
       <div style={{ display: 'flex', gap: 14, flexWrap: 'wrap', margin: '14px 0', fontSize: 12 }}>
@@ -229,7 +229,7 @@ function CrmParams({ config, onSave, onClose, busy }) {
     minValueUsd: config.minValueUsd,
   });
   const set = (k) => (e) => setF({ ...f, [k]: Number(e.target.value) });
-  const Field = ({ k, label, hint }) => (
+  const field = (k, label, hint) => (
     <div style={{ marginBottom: 10 }}>
       <label style={{ display: 'block', fontSize: 11, color: 'var(--fg4)' }}>{label}</label>
       <input type="number" value={f[k]} onChange={set(k)} style={{ width: '100%' }}/>
@@ -237,30 +237,30 @@ function CrmParams({ config, onSave, onClose, busy }) {
     </div>
   );
   return (
-    <div style={{
+    <div role="dialog" aria-modal="true" aria-label="Parâmetros da régua" style={{
       position: 'fixed', top: 0, right: 0, bottom: 0, width: 'min(420px, 100vw)', background: 'var(--card)',
       borderLeft: '1px solid var(--line)', boxShadow: 'var(--shadow)', padding: 20, overflowY: 'auto', zIndex: 60,
     }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 12 }}>
         <div style={{ fontSize: 16, fontWeight: 700 }}>Parâmetros da régua</div>
-        <button className="btn btn-ghost" onClick={onClose}><Icon name="x" size={14}/></button>
+        <button className="btn btn-ghost" onClick={onClose} aria-label="Fechar" title="Fechar"><Icon name="x" size={14}/></button>
       </div>
       <div className="panel-sub" style={{ fontSize: 11, marginBottom: 14 }}>
         Estes são os números que o playbook deixou "a confirmar". Mudar aqui muda a classificação de todo mundo na hora.
       </div>
-      <Field k="dormantDaysBase" label="Dormência — Base (dias)"/>
-      <Field k="dormantDaysAscendente" label="Dormência — Ascendente (dias)"/>
-      <Field k="dormantDaysNorth" label="Dormência — North (dias)" hint="North some antes: perder um dele custa mais."/>
-      <Field k="coldDays" label="Vira frio em (dias)"/>
-      <Field k="onboardingDays" label="Janela de onboarding (dias)"/>
-      <Field k="atRiskDropPct" label="Em risco: queda de (%)" hint="Frente à média semanal dele mesmo."/>
-      <Field k="atRiskWeeks" label="Em risco: semanas da média"/>
-      <Field k="upgradeWeeks" label="Upgrade: semanas seguidas"/>
-      <Field k="upgradeSalesAscendente" label="Vendas/semana p/ Ascendente" hint="Chute inicial — ajuste com a régua real do programa."/>
-      <Field k="upgradeSalesNorth" label="Vendas/semana p/ North" hint="Idem."/>
-      <Field k="tierCpaAscendenteMin" label="CPA mínimo p/ inferir Ascendente (US$)"/>
-      <Field k="tierCpaNorthMin" label="CPA mínimo p/ inferir North (US$)"/>
-      <Field k="minValueUsd" label="Piso de relevância (US$)" hint="Abaixo disso a reativação entra como baixa prioridade."/>
+      {field('dormantDaysBase', 'Dormência — Base (dias)')}
+      {field('dormantDaysAscendente', 'Dormência — Ascendente (dias)')}
+      {field('dormantDaysNorth', 'Dormência — North (dias)', 'North some antes: perder um dele custa mais.')}
+      {field('coldDays', 'Vira frio em (dias)')}
+      {field('onboardingDays', 'Janela de onboarding (dias)')}
+      {field('atRiskDropPct', 'Em risco: queda de (%)', 'Frente à média semanal dele mesmo.')}
+      {field('atRiskWeeks', 'Em risco: semanas da média')}
+      {field('upgradeWeeks', 'Upgrade: semanas seguidas')}
+      {field('upgradeSalesAscendente', 'Vendas/semana p/ Ascendente', 'Chute inicial — ajuste com a régua real do programa.')}
+      {field('upgradeSalesNorth', 'Vendas/semana p/ North', 'Idem.')}
+      {field('tierCpaAscendenteMin', 'CPA mínimo p/ inferir Ascendente (US$)')}
+      {field('tierCpaNorthMin', 'CPA mínimo p/ inferir North (US$)')}
+      {field('minValueUsd', 'Piso de relevância (US$)', 'Abaixo disso a reativação entra como baixa prioridade.')}
       <button className="btn btn-primary" disabled={busy} onClick={() => onSave(f)}>Salvar parâmetros</button>
     </div>
   );
@@ -422,15 +422,17 @@ function AffiliateCrmPage({ user }) {
         </div>
       )}
 
+      {open && <div className="drawer-backdrop" onClick={() => setOpen(null)}/>}
       {open && (
         <CrmDrawer row={rows.find((r) => r.key === open.key) || open} busy={busy}
           onClose={() => setOpen(null)} onSave={doSaveProfile} onTouch={doTouch} onUntouch={doUntouch}/>
       )}
+      {params && data && <div className="drawer-backdrop" onClick={() => setParams(false)}/>}
       {params && data && (
         <CrmParams config={data.config} busy={busy} onSave={doSaveParams} onClose={() => setParams(false)}/>
       )}
       {toast && (
-        <div style={{
+        <div role="status" aria-live="polite" style={{
           position: 'fixed', bottom: 22, left: '50%', transform: 'translateX(-50%)', zIndex: 80,
           background: 'var(--card)', border: '1px solid var(--line)', borderRadius: 12, padding: '10px 18px',
           boxShadow: 'var(--shadow)', fontSize: 13,

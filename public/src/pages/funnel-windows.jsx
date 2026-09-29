@@ -36,7 +36,7 @@ function FwFunnel({ stages, currency }) {
         return (
           <div key={st.id || i} style={{ display: 'grid', gridTemplateColumns: '92px 1fr 118px', gap: 10, alignItems: 'center' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: 'var(--fg1)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-              <span style={{ fontFamily: 'var(--f-mono)', fontSize: 9, color: 'var(--fg5)' }}>{String(i + 1).padStart(2, '0')}</span>
+              <span style={{ fontFamily: 'var(--f-mono)', fontSize: 10, color: 'var(--fg5)' }}>{String(i + 1).padStart(2, '0')}</span>
               <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>{st.label}</span>
             </div>
             <div style={{ position: 'relative', height: 22, borderRadius: 4, background: 'color-mix(in oklab, var(--fg4) 10%, transparent)', overflow: 'hidden' }}>
@@ -252,7 +252,7 @@ function FunnelWindowsView({ filters, family }) {
               <table className="tbl">
                 <thead><tr>
                   <th>Etapa</th>
-                  {seq.windows.map((w) => <th key={w.index} className="num">{w.label}<div style={{ fontSize: 9, color: 'var(--fg5)', fontWeight: 400 }}>{fwShort(w)}</div></th>)}
+                  {seq.windows.map((w) => <th key={w.index} className="num">{w.label}<div style={{ fontSize: 10, color: 'var(--fg5)', fontWeight: 400 }}>{fwShort(w)}</div></th>)}
                 </tr></thead>
                 <tbody>
                   {(() => {

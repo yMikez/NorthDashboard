@@ -386,7 +386,7 @@ function CustosPage({ filters }) {
                       {!f.isCataloged && (
                         <span title="Família sem custo unitário cadastrado — COGS pode estar zerado ou usando placeholder. Vá em /costs pra atualizar."
                           style={{
-                            fontFamily: 'var(--f-mono)', fontSize: 9, letterSpacing: '0.06em',
+                            fontFamily: 'var(--f-mono)', fontSize: 10, letterSpacing: '0.06em',
                             color: 'var(--warning)', background: 'color-mix(in oklab, var(--warning) 12%, transparent)',
                             border: '1px solid color-mix(in oklab, var(--warning) 35%, transparent)', borderRadius: 4,
                             padding: '1px 6px',

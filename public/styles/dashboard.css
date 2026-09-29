@@ -2016,3 +2016,72 @@ input:focus, select:focus, textarea:focus {
   .page-head h2 { font-size: clamp(22px, 6.5vw, 30px); }
   .page-head .sub { font-size: 11px; }
 }
+
+
+/* ============================================================
+   ACESSIBILIDADE / ESTADOS — passe ui-ux-pro-max (2026-09-29)
+   Só regras de UX; identidade (cores, fontes, raios) intocada.
+   Fica no FIM do arquivo de propósito: vence o que veio antes.
+   ============================================================ */
+
+/* Foco por teclado visível em tudo que é interativo (§1 focus-states).
+   DESIGN-SYSTEM §4: "foco com outline: 2px solid var(--accent)".
+   :focus-visible = só teclado; clique de mouse continua sem anel. */
+:where(a, button, [role="button"], [tabindex]:not([tabindex="-1"]), summary, .chip):focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: 6px;
+}
+/* Campos: 13 inputs têm outline:'none' INLINE (busca, chat, filtros) — e
+   estilo inline vence CSS. !important aqui é a exceção justificada: sem
+   ele, quem navega por teclado não sabe em qual campo está. */
+input:focus-visible, textarea:focus-visible, select:focus-visible {
+  outline: 2px solid var(--accent) !important;
+  outline-offset: 1px !important;
+}
+
+/* Linha de tabela clicável (§1 keyboard-nav): alcançável por Tab, Enter/
+   Espaço abrem (handler em app.jsx). Anel por dentro pra não vazar da
+   tabela; cursor em todas, inclusive as que não tinham. */
+tr[tabindex] { cursor: pointer; }
+tr[tabindex]:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+  border-radius: 0;
+}
+
+/* Desabilitado (§8 disabled-states, §4 state-clarity). Não havia NENHUMA
+   regra: botão desabilitado parecia clicável e ainda subia no hover. */
+button:disabled, .btn:disabled, .btn[aria-disabled="true"],
+input:disabled, select:disabled, textarea:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+button:disabled:hover, .btn:disabled:hover { transform: none; filter: none; }
+
+/* Movimento reduzido em TODA transição/animação (§1 reduced-motion).
+   A regra antiga cobria só skeleton e fades; hover que sobe, drawer que
+   desliza e chevron que gira continuavam. */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* "Pular para o conteúdo" (§1 skip-links): invisível até receber foco por
+   Tab. Sem ele, cada troca de aba obriga a passar por ~15 itens do menu. */
+.skip-link {
+  position: fixed; top: 8px; left: 8px; z-index: 2000;
+  padding: 8px 14px; border-radius: 9px;
+  background: var(--cta, var(--fg1)); color: #fff;
+  font-weight: 600; font-size: 13px; text-decoration: none;
+  transform: translateY(-160%);
+}
+.skip-link:focus, .skip-link:focus-visible { transform: none; }
+
+/* A região principal recebe foco programático na troca de rota (leitor de
+   tela anuncia a página nova); não mostra anel por isso. */
+.page:focus { outline: none; }

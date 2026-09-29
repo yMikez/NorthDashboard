@@ -62,7 +62,7 @@ function AiPlat({ slug, title }) {
   if (pb) return <span className={`plat ${pb.cls}`} title={title || slug}>{pb.short}</span>;
   return (
     <span title={title || slug} style={{
-      fontFamily: 'var(--f-mono)', fontSize: 9, fontWeight: 700, padding: '1px 6px', borderRadius: 6,
+      fontFamily: 'var(--f-mono)', fontSize: 10, fontWeight: 700, padding: '1px 6px', borderRadius: 6,
       color: 'var(--fg3)', background: 'color-mix(in oklab, var(--fg4) 12%, transparent)', border: '1px solid var(--border-soft)',
     }}>{AI_PLAT[slug] || slug}</span>
   );
@@ -79,12 +79,12 @@ function AiAccount({ a, extra, onRemove, dense }) {
   const name = a.nickname || a.externalId;
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0, padding: dense ? '2px 0' : '4px 0' }}>
-      <span style={{ ...AI_AV, background: avatarColor(a.externalId), width: 24, height: 24, fontSize: 9 }}>{initials(name)}</span>
+      <span style={{ ...AI_AV, background: avatarColor(a.externalId), width: 24, height: 24, fontSize: 10 }}>{initials(name)}</span>
       <div style={{ minWidth: 0, flex: 1 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0 }}>
           <AiPlat slug={a.platformSlug}/>
           <span style={{ fontWeight: 600, fontSize: 12, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{name}</span>
-          {a.internal && <span style={{ fontSize: 9, color: 'var(--fg5)', border: '1px dashed var(--border)', borderRadius: 6, padding: '0 5px' }}>interno</span>}
+          {a.internal && <span style={{ fontSize: 10, color: 'var(--fg5)', border: '1px dashed var(--border)', borderRadius: 6, padding: '0 5px' }}>interno</span>}
         </div>
         <div style={{ fontSize: 10, color: 'var(--fg5)', fontFamily: 'var(--f-mono)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
           ID {a.externalId}{a.email ? ` · ${a.email}` : ''}{a.revenue30d != null ? ` · ${fmtCurrency(a.revenue30d, 'USD', 0)} 30d` : ''}{a.lastOrderAt ? ` · última venda ${aiDaysAgo(a.lastOrderAt)}` : ''}
@@ -247,7 +247,7 @@ function AffiliateIdentityDrawer({ onClose, onChanged, initialTab = 'sugestoes' 
               onClick={() => act(() => window.NSApi.adminAffiliateIdentity('backfill', {}), (r) => `✓ ${r.updated} e-mails importados · ${r.linked} contas vinculadas · ${r.partnersCreated} parceiros novos`)}>
               <Icon name="refresh" size={12}/> Importar e-mails
             </button>
-            <button className="icon-btn" onClick={onClose}><Icon name="x" size={14}/></button>
+            <button className="icon-btn" onClick={onClose} aria-label="Fechar" title="Fechar"><Icon name="x" size={14}/></button>
           </div>
         </div>
         <div className="drawer-body">
@@ -301,7 +301,7 @@ function AiSuggestions({ d, busy, act }) {
         <div key={g.c} style={{ marginBottom: 16 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
             <span style={{
-              fontFamily: 'var(--f-mono)', fontSize: 9, fontWeight: 700, letterSpacing: '0.06em', padding: '2px 8px', borderRadius: 'var(--r-full)',
+              fontFamily: 'var(--f-mono)', fontSize: 10, fontWeight: 700, letterSpacing: '0.06em', padding: '2px 8px', borderRadius: 'var(--r-full)',
               color: AI_CONF[g.c].tone, background: `color-mix(in oklab, ${AI_CONF[g.c].tone} 12%, transparent)`, border: `1px solid color-mix(in oklab, ${AI_CONF[g.c].tone} 35%, transparent)`,
             }}>{AI_CONF[g.c].label}</span>
             <span style={{ fontSize: 11, color: 'var(--fg5)' }}>{AI_CONF[g.c].hint}</span>
@@ -548,7 +548,7 @@ function AffiliatePartnerDrawer({ row, filters, isAdmin, onClose, onOpenAccount,
               </div>
             </div>
           </div>
-          <button className="icon-btn" onClick={onClose}><Icon name="x" size={14}/></button>
+          <button className="icon-btn" onClick={onClose} aria-label="Fechar" title="Fechar"><Icon name="x" size={14}/></button>
         </div>
         <div className="drawer-body">
           <AiToast msg={msg}/>
@@ -583,7 +583,7 @@ function AffiliatePartnerDrawer({ row, filters, isAdmin, onClose, onOpenAccount,
                 </tr></thead>
                 <tbody>
                   {accounts.map((a) => (
-                    <tr key={`${a.platformSlug}:${a.externalId}`} onClick={() => onOpenAccount?.(a)} style={{ cursor: 'pointer' }}>
+                    <tr tabIndex={0} key={`${a.platformSlug}:${a.externalId}`} onClick={() => onOpenAccount?.(a)} style={{ cursor: 'pointer' }}>
                       <td><AiPlat slug={a.platformSlug}/></td>
                       <td>
                         <div style={{ fontWeight: 600 }}>{a.nickname || a.externalId}</div>

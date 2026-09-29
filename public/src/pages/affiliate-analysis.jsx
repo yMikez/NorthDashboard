@@ -56,7 +56,7 @@ function AaTrend({ tag }) {
   const t = AA_TREND[tag] || { label: tag || '—', tone: 'var(--fg4)' };
   return (
     <span style={{
-      fontFamily: 'var(--f-mono)', fontSize: 9, fontWeight: 700, letterSpacing: '0.05em', textTransform: 'uppercase',
+      fontFamily: 'var(--f-mono)', fontSize: 10, fontWeight: 700, letterSpacing: '0.05em', textTransform: 'uppercase',
       padding: '2px 7px', borderRadius: 'var(--r-full)', whiteSpace: 'nowrap',
       color: t.tone, background: `color-mix(in oklab, ${t.tone} 12%, transparent)`, border: `1px solid color-mix(in oklab, ${t.tone} 35%, transparent)`,
     }}>{t.label}</span>
@@ -66,7 +66,7 @@ function AaTrend({ tag }) {
 function AaPlat({ slug }) {
   return (
     <span title={slug} style={{
-      fontFamily: 'var(--f-mono)', fontSize: 9, fontWeight: 700, padding: '1px 6px', borderRadius: 6,
+      fontFamily: 'var(--f-mono)', fontSize: 10, fontWeight: 700, padding: '1px 6px', borderRadius: 6,
       color: 'var(--fg3)', background: 'color-mix(in oklab, var(--fg4) 12%, transparent)', border: '1px solid var(--border-soft)',
     }}>{AA_PLAT[slug] || slug}</span>
   );
@@ -298,7 +298,7 @@ function AffiliateAnalysisPage({ filters, user }) {
                 </tr></thead>
                 <tbody>
                   {data.windows.map((w) => (
-                    <tr key={w.days} onClick={() => setWin(w.days)} style={{ cursor: 'pointer', background: w.days === win ? 'color-mix(in oklab, var(--accent) 8%, transparent)' : undefined }}>
+                    <tr tabIndex={0} key={w.days} onClick={() => setWin(w.days)} style={{ cursor: 'pointer', background: w.days === win ? 'color-mix(in oklab, var(--accent) 8%, transparent)' : undefined }}>
                       <td className="cell-mono" style={{ fontWeight: 700 }}>{w.days} dias</td>
                       <td style={{ fontSize: 11, color: 'var(--fg4)' }}>{w.start} → {w.end} <span style={{ color: 'var(--fg5)' }}>vs {w.prevStart} → {w.prevEnd}</span></td>
                       <td className="num cell-mono" style={{ color: 'var(--money)' }}>{fmtCurrency(w.cur.revenue, 'USD', 0)}</td>
@@ -417,19 +417,19 @@ function AffiliateAnalysisPage({ filters, user }) {
                   {ranked.map((r) => {
                     const rankDelta = r.rank && r.prevRank ? r.prevRank - r.rank : null;
                     return (
-                      <tr key={r.key} onClick={() => openEntity(r.key)} style={{ cursor: 'pointer' }}>
+                      <tr tabIndex={0} key={r.key} onClick={() => openEntity(r.key)} style={{ cursor: 'pointer' }}>
                         <td className="cell-mono" style={{ whiteSpace: 'nowrap' }}>
                           {r.rank ? `#${r.rank}` : '—'}
                           {rankDelta != null && rankDelta !== 0 && (
-                            <span style={{ marginLeft: 4, fontSize: 9, color: rankDelta > 0 ? 'var(--success)' : 'var(--danger)' }}>{rankDelta > 0 ? '▲' : '▼'}{Math.abs(rankDelta)}</span>
+                            <span style={{ marginLeft: 4, fontSize: 10, color: rankDelta > 0 ? 'var(--success)' : 'var(--danger)' }}>{rankDelta > 0 ? '▲' : '▼'}{Math.abs(rankDelta)}</span>
                           )}
-                          {r.rank && !r.prevRank && <span style={{ marginLeft: 4, fontSize: 9, color: 'var(--accent)' }}>novo</span>}
+                          {r.rank && !r.prevRank && <span style={{ marginLeft: 4, fontSize: 10, color: 'var(--accent)' }}>novo</span>}
                         </td>
                         <td style={{ maxWidth: 220 }}>
                           <div style={{ fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                             {r.kind === 'partner' && <span title="contas unificadas" style={{ marginRight: 4, color: 'var(--accent)' }}><Icon name="link" size={11}/></span>}
                             {r.name}
-                            {r.internal && <span style={{ marginLeft: 6, fontSize: 9, color: 'var(--fg5)' }}>interno</span>}
+                            {r.internal && <span style={{ marginLeft: 6, fontSize: 10, color: 'var(--fg5)' }}>interno</span>}
                             {r.origin && <span style={{ marginLeft: 6 }}><AiOriginChip origin={r.origin} size={9}/></span>}
                           </div>
                           <div style={{ fontSize: 10, color: 'var(--fg5)', fontFamily: 'var(--f-mono)' }}>
@@ -559,7 +559,7 @@ function AaExplainDrawer({ entityKey, win, filters, internal, today, anchor, isA
           </div>
           <div style={{ display: 'flex', gap: 6 }}>
             {isAdmin && d && !editing && <button className="btn btn-ghost" onClick={() => setEditing(true)}><Icon name="edit" size={12}/> Contato</button>}
-            <button className="btn btn-ghost" onClick={onClose}><Icon name="x" size={14}/></button>
+            <button className="btn btn-ghost" onClick={onClose} aria-label="Fechar" title="Fechar"><Icon name="x" size={14}/></button>
           </div>
         </div>
         <div className="drawer-body">
@@ -692,7 +692,7 @@ function AaExplainDrawer({ entityKey, win, filters, internal, today, anchor, isA
                               <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
                                 <AaPlat slug={a.account.platformSlug}/>
                                 <span style={{ fontWeight: 600 }}>{a.account.nickname || a.account.externalId}</span>
-                                {a.account.internal && <span style={{ fontSize: 9, color: 'var(--fg5)' }}>interno</span>}
+                                {a.account.internal && <span style={{ fontSize: 10, color: 'var(--fg5)' }}>interno</span>}
                               </div>
                               <div style={{ fontSize: 10, color: 'var(--fg5)', fontFamily: 'var(--f-mono)' }}>ID {a.account.externalId}{a.account.email ? ` · ${a.account.email}` : ''}</div>
                             </td>
