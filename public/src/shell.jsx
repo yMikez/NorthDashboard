@@ -131,13 +131,13 @@ function Sidebar({ active, onNav, user, open, onClose }) {
       ))}
 
       <div className="side-foot">
-        {/* Cores fixas: o rodapé vive na sidebar (cena escura nos 2 temas) —
-            tokens theme-aware ficariam ilegíveis no claro. */}
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 6px', fontFamily: 'var(--f-mono)', fontSize: 10, color: '#8E9BA0', letterSpacing: '0.1em' }}>
+        {/* DS1: a sidebar é superfície theme-aware (--bg-raised) — o rodapé
+            usa tokens; o ponto verde é estado, sem brilho. */}
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 6px', fontFamily: 'var(--f-mono)', fontSize: 10, color: 'var(--fg5)' }}>
           <span>v2.4.1 · prod</span>
-          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, color: '#37D695' }}>
-            <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#37D695', boxShadow: '0 0 6px #37D695' }}/>
-            LIVE
+          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, color: 'var(--success)' }}>
+            <span style={{ width: 6, height: 6, borderRadius: '50%', background: 'var(--success)' }}/>
+            Ao vivo
           </span>
         </div>
         <UserChip user={user}/>
@@ -169,12 +169,12 @@ function UserChip({ user }) {
       <button
         className="user-chip"
         onClick={() => setOpen((v) => !v)}
-        style={{ width: '100%', textAlign: 'left', cursor: 'pointer', background: open ? 'rgba(91,200,255,0.06)' : 'transparent', border: 0, font: 'inherit' }}
+        style={{ width: '100%', textAlign: 'left', cursor: 'pointer', background: open ? 'var(--bg-hover)' : 'transparent', border: 0, font: 'inherit' }}
       >
         <div className="av">{initials}</div>
         <div className="who">
           <span className="nm">{display}</span>
-          <span className="rl">{user.role === 'ADMIN' ? 'ADMIN · acesso total' : `MEMBER · ${user.allowedTabs.length} ${user.allowedTabs.length === 1 ? 'aba' : 'abas'}`}</span>
+          <span className="rl">{user.role === 'ADMIN' ? 'Admin · acesso total' : `Member · ${user.allowedTabs.length} ${user.allowedTabs.length === 1 ? 'aba' : 'abas'}`}</span>
         </div>
       </button>
       {open && (
@@ -192,7 +192,7 @@ function UserChip({ user }) {
               fontFamily: 'var(--f-mono)', fontSize: 11, color: 'var(--fg1)',
               display: 'flex', alignItems: 'center', gap: 8,
             }}
-            onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(239,68,68,0.1)'; e.currentTarget.style.color = 'var(--danger)'; }}
+            onMouseEnter={(e) => { e.currentTarget.style.background = 'var(--danger-bg)'; e.currentTarget.style.color = 'var(--danger)'; }}
             onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = 'var(--fg1)'; }}
           >
             <Icon name="log-out" size={12}/> Sair
@@ -308,10 +308,10 @@ function MultiSelect({ label, options, selected, onChange, icon }) {
           borderRadius: 8, padding: 6, zIndex: 20, boxShadow: 'var(--shadow-lg)',
         }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', padding: '4px 8px', marginBottom: 4 }}>
-            <button className="dh-link" style={{ background: 'none', border: 0, color: 'var(--glow-cyan)', fontFamily: 'var(--f-mono)', fontSize: 10, letterSpacing: '0.08em', cursor: 'pointer' }}
-              onClick={() => onChange(new Set())}>TODOS</button>
-            <button className="dh-link" style={{ background: 'none', border: 0, color: 'var(--fg4)', fontFamily: 'var(--f-mono)', fontSize: 10, letterSpacing: '0.08em', cursor: 'pointer' }}
-              onClick={() => onChange(new Set([NONE_TOKEN]))}>NENHUM</button>
+            <button className="dh-link" style={{ background: 'none', border: 0, color: 'var(--glow-cyan)', fontFamily: 'var(--f-mono)', fontSize: 10, cursor: 'pointer' }}
+              onClick={() => onChange(new Set())}>Todos</button>
+            <button className="dh-link" style={{ background: 'none', border: 0, color: 'var(--fg4)', fontFamily: 'var(--f-mono)', fontSize: 10, cursor: 'pointer' }}
+              onClick={() => onChange(new Set([NONE_TOKEN]))}>Nenhum</button>
           </div>
           <div style={{ maxHeight: 280, overflowY: 'auto' }}>
             {options.map(opt => {
@@ -417,8 +417,8 @@ function DateRangeChip({ range, onChange }) {
           boxShadow: 'var(--shadow-lg)',
           display: 'grid', gap: 10,
         }}>
-          <div style={{ fontFamily: 'var(--f-mono)', fontSize: 10, color: 'var(--fg4)', letterSpacing: '0.08em' }}>
-            INTERVALO CUSTOMIZADO
+          <div style={{ fontFamily: 'var(--f-mono)', fontSize: 10, color: 'var(--fg4)' }}>
+            Intervalo customizado
           </div>
           <label style={{ display: 'grid', gap: 4, fontSize: 11, color: 'var(--fg3)' }}>
             <span>De</span>
@@ -565,11 +565,11 @@ function FilterBar({ filters, setFilters, options, route }) {
     ? options.platforms.map((p) => ({
         id: p.id,
         label: p.label,
-        swatch: p.id === 'digistore24' ? '#8B7FFF' : '#5BC8FF',
+        swatch: p.id === 'digistore24' ? 'var(--glow-violet)' : 'var(--glow-cyan)',
       }))
     : window.MOCK.PLATFORMS.map((p) => ({
         id: p.id, label: p.name,
-        swatch: p.id === 'digistore24' ? '#8B7FFF' : '#5BC8FF',
+        swatch: p.id === 'digistore24' ? 'var(--glow-violet)' : 'var(--glow-cyan)',
       }));
 
   // "Oferta" agora é a família do produto (NeuroMindPro, GlycoPulse, etc.).
@@ -612,7 +612,7 @@ function FilterBar({ filters, setFilters, options, route }) {
   return (
     <div className="filters">
       <Icon name="filter" size={12} className="f-icon" />
-      <span className="f-label">PERÍODO</span>
+      <span className="f-label">Período</span>
       <PeriodDropdown filters={filters} setFilters={setFilters}/>
       <DateRangeChip
         range={filters.dateRange}
@@ -624,7 +624,7 @@ function FilterBar({ filters, setFilters, options, route }) {
         <>
           {/* hide-mobile nos dois: COMPARAR/chip somem ≤820px pra reduzir
               o custo vertical da barra. */}
-          <span className="f-label hide-mobile" style={{ marginLeft: 8 }}>COMPARAR</span>
+          <span className="f-label hide-mobile" style={{ marginLeft: 8 }}>Comparar</span>
           <button className={`chip hide-mobile ${filters.compare ? 'is-active' : ''}`}
             onClick={() => setFilters(f => ({ ...f, compare: !f.compare }))}
           >
@@ -652,4 +652,4 @@ function FilterBar({ filters, setFilters, options, route }) {
   );
 }
 
-Object.assign(window, { Sidebar, Topbar, FilterBar });
+Object.assign(window, { Sidebar, Topbar, FilterBar, PRESET_LABEL });

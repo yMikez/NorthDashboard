@@ -1,4 +1,4 @@
-/* global React, Icon, fmtCurrency, fmtInt, platBadge, fmtDateTime, SkelTableRows */
+/* global React, Icon, fmtCurrency, fmtInt, platBadge, fmtDateTime, SkelTableRows, Paginated */
 /* Integração NorthScale Afiliados — espelho do mapeamento de identidade.
      AffiliateMappingPanel   status da integração + fila de NÃO mapeados +
                              afiliados mapeados + ações (admin)
@@ -93,9 +93,9 @@ function AmKeysForm({ onChanged }) {
     finally { setBusy(null); }
   }
   const rows = [
-    ['affiliates.dashboardApiKey', 'CHAVE QUE ACEITAMOS', 'DASHBOARD_API_KEY deles — X-Api-Key do webhook e do metrics', 'password'],
-    ['affiliates.integrationApiKey', 'CHAVE QUE ENVIAMOS', 'INTEGRATION_API_KEY deles — X-Api-Key ao ler o mapping', 'password'],
-    ['affiliates.apiUrl', 'URL DA API', 'padrão https://api.thenorthscales.com', 'text'],
+    ['affiliates.dashboardApiKey', 'Chave que aceitamos', 'DASHBOARD_API_KEY deles — X-Api-Key do webhook e do metrics', 'password'],
+    ['affiliates.integrationApiKey', 'Chave que enviamos', 'INTEGRATION_API_KEY deles — X-Api-Key ao ler o mapping', 'password'],
+    ['affiliates.apiUrl', 'URL da API', 'padrão https://api.thenorthscales.com', 'text'],
   ];
   const rowStyle = { display: 'grid', gridTemplateColumns: 'minmax(140px, 180px) 1fr auto', gap: 8, alignItems: 'center' };
   return (
@@ -161,7 +161,7 @@ function AffiliateMappingPanel({ isAdmin, compact = false, onChanged }) {
     <div className="panel" style={{ marginBottom: 12 }}>
       <div className="panel-head" style={{ flexWrap: 'wrap' }}>
         <div className="panel-title" style={{ minWidth: 0 }}>
-          <span className="panel-eyebrow">SISTEMA DE AFILIADOS · NORTHSCALE AFILIADOS</span>
+          <span className="panel-eyebrow">Sistema de afiliados · NorthScale Afiliados</span>
           <div className="panel-sub" style={{ whiteSpace: 'normal', lineHeight: 1.5 }}>{state.status === 'error' ? `Erro: ${state.error}` : sub}</div>
         </div>
         {canAct && (
@@ -228,105 +228,121 @@ function AffiliateMappingPanel({ isAdmin, compact = false, onChanged }) {
       </div>
 
       {tab === 'unmapped' && (
-        <div className="tbl-wrap" style={{ margin: 0, padding: 0, maxHeight: compact ? 360 : 560, overflowY: 'auto' }}>
-          <table className="tbl">
-            <thead>
-              <tr>
-                <th>Plataforma</th>
-                <th title="Identificador que chegou no webhook de venda e não existe no mapeamento (normalizado: minúsculas). É o que precisa ser cadastrado no NorthScale Afiliados.">ID na plataforma</th>
-                <th title="Outro identificador do mesmo payload (username/ID numérico)">Alternativo</th>
-                <th>Nome no IPN</th>
-                <th className="num" title="Eventos de venda que caíram aqui (ou nº de pedidos da conta, no backfill)">Eventos</th>
-                <th className="num">Receita 90d</th>
-                <th>Primeiro</th>
-                <th>Último</th>
-                <th>Último pedido</th>
-                <th/>
-              </tr>
-            </thead>
-            <tbody>
-              {state.status === 'loading' && <SkelTableRows rows={5} cols={10}/>}
-              {state.status === 'ready' && unmappedRows.length === 0 && (
-                <tr><td colSpan={10} style={{ textAlign: 'center', padding: 20, opacity: 0.6 }}>
-                  {qn ? 'Nada com esse termo.' : 'Fila vazia — toda venda das 3 plataformas resolveu pra um affiliate_id.'}
-                </td></tr>
-              )}
-              {unmappedRows.map((r) => {
-                const pb = platBadge(r.platform);
-                return (
-                  <tr key={r.id}>
-                    <td><span className={`plat ${pb.cls}`}>{pb.short}</span></td>
-                    <td className="cell-mono" style={{ fontWeight: 600 }}>{r.externalId}</td>
-                    <td className="cell-mono" style={{ color: 'var(--fg4)' }}>{r.altExternalId || '—'}</td>
-                    <td>{r.nickname || '—'}</td>
-                    <td className="num cell-mono">{fmtInt(r.count)}</td>
-                    <td className="num cell-mono" style={{ color: 'var(--money)' }}>{r.revenue90d ? fmtCurrency(r.revenue90d, 'USD', 0) : '—'}</td>
-                    <td className="cell-mono" style={{ fontSize: 11 }}>{fmtDateTime(r.firstSeen)}</td>
-                    <td className="cell-mono" style={{ fontSize: 11 }}>{fmtDateTime(r.lastSeen)}</td>
-                    <td className="cell-mono" style={{ fontSize: 11, color: 'var(--fg4)' }}>{r.eventId || '—'}</td>
-                    <td>
-                      <button className="btn btn-ghost" style={{ fontSize: 10, padding: '2px 6px' }} title="Abrir as transações desta conta"
-                        onClick={() => amGo('transactions', { search: r.altExternalId || r.externalId })}>
-                        <Icon name="receipt" size={10}/> ver
-                      </button>
-                    </td>
+        <Paginated items={unmappedRows} label="contas" resetKey={qn}>
+          {(pageRows, pager) => (<>
+            <div className="tbl-wrap" style={{ margin: 0, padding: 0, maxHeight: compact ? 360 : 560, overflowY: 'auto' }}>
+              <table className="tbl">
+                <thead>
+                  <tr>
+                    <th>Plataforma</th>
+                    <th title="Identificador que chegou no webhook de venda e não existe no mapeamento (normalizado: minúsculas). É o que precisa ser cadastrado no NorthScale Afiliados.">ID na plataforma</th>
+                    <th title="Outro identificador do mesmo payload (username/ID numérico)">Alternativo</th>
+                    <th>Nome no IPN</th>
+                    <th className="num" title="Eventos de venda que caíram aqui (ou nº de pedidos da conta, no backfill)">Eventos</th>
+                    <th className="num">Receita 90d</th>
+                    <th>Primeiro</th>
+                    <th>Último</th>
+                    <th>Último pedido</th>
+                    <th/>
                   </tr>
-                );
-              })}
-            </tbody>
-          </table>
+                </thead>
+                <tbody>
+                  {state.status === 'loading' && <SkelTableRows rows={5} cols={10}/>}
+                  {state.status === 'ready' && unmappedRows.length === 0 && (
+                    <tr><td colSpan={10} style={{ textAlign: 'center', padding: 20, opacity: 0.6 }}>
+                      {qn ? 'Nada com esse termo.' : 'Fila vazia — toda venda das 3 plataformas resolveu pra um affiliate_id.'}
+                    </td></tr>
+                  )}
+                  {pageRows.map((r) => {
+                    const pb = platBadge(r.platform);
+                    return (
+                      <tr key={r.id}>
+                        <td><span className={`plat ${pb.cls}`}>{pb.short}</span></td>
+                        <td className="cell-mono" style={{ fontWeight: 600 }}>{r.externalId}</td>
+                        <td className="cell-mono" style={{ color: 'var(--fg4)' }}>{r.altExternalId || '—'}</td>
+                        <td>{r.nickname || '—'}</td>
+                        <td className="num cell-mono">{fmtInt(r.count)}</td>
+                        <td className="num cell-mono" style={{ color: 'var(--money)' }}>{r.revenue90d ? fmtCurrency(r.revenue90d, 'USD', 0) : '—'}</td>
+                        <td className="cell-mono" style={{ fontSize: 11 }}>{fmtDateTime(r.firstSeen)}</td>
+                        <td className="cell-mono" style={{ fontSize: 11 }}>{fmtDateTime(r.lastSeen)}</td>
+                        <td className="cell-mono" style={{ fontSize: 11, color: 'var(--fg4)' }}>{r.eventId || '—'}</td>
+                        <td>
+                          <button className="btn btn-ghost" style={{ fontSize: 10, padding: '2px 6px' }} title="Abrir as transações desta conta"
+                            onClick={() => amGo('transactions', { search: r.altExternalId || r.externalId })}>
+                            <Icon name="receipt" size={10}/> ver
+                          </button>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+            {pager}
+          </>)}
+        </Paginated>
+      )}
+
+      {tab === 'unmapped' && d?.unmapped && d.unmapped.total > (d.unmapped.rows || []).length && (
+        <div style={{ fontSize: 11, color: 'var(--fg4)', fontFamily: 'var(--f-mono)', padding: '6px 2px 0', lineHeight: 1.5 }}>
+          A lista traz só as {fmtInt((d.unmapped.rows || []).length)} contas com mais eventos, de {fmtInt(d.unmapped.total)} na fila{qn ? ' — a busca procura só nelas' : ''}.
         </div>
       )}
 
       {tab === 'mapped' && (
-        <div className="tbl-wrap" style={{ margin: 0, padding: 0, maxHeight: compact ? 360 : 560, overflowY: 'auto' }}>
-          <table className="tbl">
-            <thead>
-              <tr>
-                <th>Afiliado (sistema)</th>
-                <th>affiliate_id</th>
-                <th>Status</th>
-                <th>IDs por plataforma</th>
-                <th>Atualizado</th>
-                <th/>
-              </tr>
-            </thead>
-            <tbody>
-              {state.status === 'loading' && <SkelTableRows rows={5} cols={6}/>}
-              {state.status === 'ready' && mappedRows.length === 0 && (
-                <tr><td colSpan={6} style={{ textAlign: 'center', padding: 20, opacity: 0.6 }}>
-                  {qn ? 'Nada com esse termo.' : 'Nenhum afiliado recebido ainda — rode a carga completa ou aguarde o webhook.'}
-                </td></tr>
-              )}
-              {mappedRows.map((r) => (
-                <tr key={r.affiliateId} style={r.removed ? { opacity: 0.5 } : undefined}>
-                  <td style={{ fontWeight: 600 }}>{r.name}</td>
-                  <td className="cell-mono" style={{ fontSize: 11, color: 'var(--fg4)' }}>{r.affiliateId}</td>
-                  <td>
-                    {r.removed
-                      ? <span className="badge neutral">REMOVIDO</span>
-                      : r.status === 'active' ? <span className="badge ok">ATIVO</span> : <span className="badge warn">INATIVO</span>}
-                  </td>
-                  <td style={{ whiteSpace: 'normal' }}>
-                    {r.platforms.length === 0 && <span style={{ color: 'var(--fg5)' }}>— nenhum</span>}
-                    {r.platforms.map((p) => { const pb = platBadge(p.platform); return (
-                      <span key={`${p.platform}:${p.externalId}`} style={{ display: 'inline-flex', alignItems: 'center', gap: 4, marginRight: 8, marginBottom: 2 }}>
-                        <span className={`plat ${pb.cls}`}>{pb.short}</span><span className="cell-mono" style={{ fontSize: 11 }}>{p.externalId}</span>
-                      </span>
-                    ); })}
-                  </td>
-                  <td className="cell-mono" style={{ fontSize: 11 }}>{fmtDateTime(r.occurredAt)}</td>
-                  <td>
-                    <button className="btn btn-ghost" style={{ fontSize: 10, padding: '2px 6px' }} title="Filtrar o dashboard por este afiliado"
-                      onClick={() => amGo('leaderboard', { aff: r.affiliateId })}>
-                      <Icon name="filter" size={10}/> filtrar
-                    </button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+        <Paginated items={mappedRows} label="afiliados" resetKey={qn}>
+          {(pageRows, pager) => (<>
+            <div className="tbl-wrap" style={{ margin: 0, padding: 0, maxHeight: compact ? 360 : 560, overflowY: 'auto' }}>
+              <table className="tbl">
+                <thead>
+                  <tr>
+                    <th>Afiliado (sistema)</th>
+                    <th>affiliate_id</th>
+                    <th>Status</th>
+                    <th>IDs por plataforma</th>
+                    <th>Atualizado</th>
+                    <th/>
+                  </tr>
+                </thead>
+                <tbody>
+                  {state.status === 'loading' && <SkelTableRows rows={5} cols={6}/>}
+                  {state.status === 'ready' && mappedRows.length === 0 && (
+                    <tr><td colSpan={6} style={{ textAlign: 'center', padding: 20, opacity: 0.6 }}>
+                      {qn ? 'Nada com esse termo.' : 'Nenhum afiliado recebido ainda — rode a carga completa ou aguarde o webhook.'}
+                    </td></tr>
+                  )}
+                  {pageRows.map((r) => (
+                    <tr key={r.affiliateId} style={r.removed ? { opacity: 0.5 } : undefined}>
+                      <td style={{ fontWeight: 600 }}>{r.name}</td>
+                      <td className="cell-mono" style={{ fontSize: 11, color: 'var(--fg4)' }}>{r.affiliateId}</td>
+                      <td>
+                        {r.removed
+                          ? <span className="badge neutral">Removido</span>
+                          : r.status === 'active' ? <span className="badge ok">Ativo</span> : <span className="badge warn">Inativo</span>}
+                      </td>
+                      <td style={{ whiteSpace: 'normal' }}>
+                        {r.platforms.length === 0 && <span style={{ color: 'var(--fg5)' }}>— nenhum</span>}
+                        {r.platforms.map((p) => { const pb = platBadge(p.platform); return (
+                          <span key={`${p.platform}:${p.externalId}`} style={{ display: 'inline-flex', alignItems: 'center', gap: 4, marginRight: 8, marginBottom: 2 }}>
+                            <span className={`plat ${pb.cls}`}>{pb.short}</span><span className="cell-mono" style={{ fontSize: 11 }}>{p.externalId}</span>
+                          </span>
+                        ); })}
+                      </td>
+                      <td className="cell-mono" style={{ fontSize: 11 }}>{fmtDateTime(r.occurredAt)}</td>
+                      <td>
+                        <button className="btn btn-ghost" style={{ fontSize: 10, padding: '2px 6px' }} title="Filtrar o dashboard por este afiliado"
+                          onClick={() => amGo('leaderboard', { aff: r.affiliateId })}>
+                          <Icon name="filter" size={10}/> filtrar
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            {pager}
+          </>)}
+        </Paginated>
       )}
     </div>
   );
@@ -339,7 +355,7 @@ function AffiliateMappingDrawer({ onClose, isAdmin, onChanged }) {
       <div className="drawer" style={{ width: 960, maxWidth: '100vw' }}>
         <div className="drawer-head" style={{ alignItems: 'flex-start' }}>
           <div style={{ minWidth: 0 }}>
-            <div className="eyebrow" style={{ fontSize: 10 }}>AFILIADOS · MAPEAMENTO</div>
+            <div className="eyebrow" style={{ fontSize: 10 }}>Afiliados · Mapeamento</div>
             <h3 style={{ margin: '4px 0 6px' }}>Quem é quem no sistema de afiliados</h3>
             <div style={{ fontSize: 12, color: 'var(--fg4)', maxWidth: 640, lineHeight: 1.45 }}>
               O NorthScale Afiliados é a fonte de verdade da identidade (affiliate_id + IDs em cada plataforma). Cada venda de BuyGoods, Digistore24 e JVZoo é resolvida contra esse espelho; o que não casa entra na fila abaixo até o ID ser cadastrado lá.

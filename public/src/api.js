@@ -915,6 +915,9 @@ function fetchCopyAutotuneLogs(params = {}) {
   return coGet(`/api/admin/copy-autotune/logs${qs.toString() ? `?${qs}` : ''}`);
 }
 
+// ---------- Cobertura do dado (aviso de leitura parcial, DS1) ----------
+function fetchDataCoverage() { return coGet('/api/metrics/data-coverage'); }
+
 // ---------- CRM de afiliados ----------
 function _crmQs(params = {}) {
   const qs = new URLSearchParams();
@@ -1032,5 +1035,6 @@ window.NSApi = _wrapMutations({
   aiSendMessage,
   fetchAffiliateCrm,
   adminAffiliateCrm,
+  fetchDataCoverage,
   affiliateCrmExportUrl,
 });

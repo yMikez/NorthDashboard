@@ -117,10 +117,8 @@ export function DashboardNav({ user, activeId = 'chat' }: { user: ChatUser; acti
             alignItems: 'center',
             justifyContent: 'space-between',
             padding: '0 6px',
-            fontFamily: 'var(--f-mono)',
-            fontSize: 10,
+            fontSize: 11,
             color: 'var(--fg5)',
-            letterSpacing: '0.1em',
           }}
         >
           <span>v2.4.1 · prod</span>
@@ -131,10 +129,9 @@ export function DashboardNav({ user, activeId = 'chat' }: { user: ChatUser; acti
                 height: 6,
                 borderRadius: '50%',
                 background: 'var(--success)',
-                boxShadow: '0 0 6px var(--success)',
               }}
             />
-            LIVE
+            Live
           </span>
         </div>
         <UserChip user={user} />
@@ -182,7 +179,7 @@ function UserChip({ user }: { user: ChatUser }) {
           width: '100%',
           textAlign: 'left',
           cursor: 'pointer',
-          background: open ? 'rgba(91,200,255,0.06)' : 'transparent',
+          background: open ? 'var(--bg-hover)' : 'transparent',
           border: 0,
           font: 'inherit',
         }}
@@ -205,9 +202,7 @@ function UserChip({ user }: { user: ChatUser }) {
             borderRadius: 8,
             padding: 4,
             zIndex: 30,
-            boxShadow: '0 -10px 40px -10px rgba(91,200,255,0.25)',
-            backdropFilter: 'blur(20px)',
-            WebkitBackdropFilter: 'blur(20px)',
+            boxShadow: 'var(--shadow-md)',
           }}
         >
           <button

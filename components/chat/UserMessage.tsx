@@ -41,7 +41,7 @@ export function UserMessage({ content, onEdit }: UserMessageProps) {
     <div className="group flex justify-end px-6 py-3">
       <div className="max-w-[80%] relative">
         {editing ? (
-          <div className="bg-card border border-border rounded-2xl rounded-tr-sm px-4 py-3">
+          <div className="bg-card border border-border rounded-lg rounded-tr-sm px-4 py-3">
             <textarea
               autoFocus
               value={draft}
@@ -69,7 +69,7 @@ export function UserMessage({ content, onEdit }: UserMessageProps) {
             </div>
           </div>
         ) : (
-          <div className="nx-bubble-user rounded-2xl rounded-tr-sm px-4 py-2.5 text-sm leading-relaxed whitespace-pre-wrap">
+          <div className="nx-bubble-user rounded-lg rounded-tr-sm px-4 py-2.5 text-sm leading-relaxed whitespace-pre-wrap">
             {content}
           </div>
         )}

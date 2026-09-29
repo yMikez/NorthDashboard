@@ -110,11 +110,13 @@ const PRODUCT_TYPE_LABELS = {
   DOWNSELL: 'Downsell',
 };
 
+// DS1: série categórica em --chart-1..4 (antes BUMP=--warning e
+// DOWNSELL=--hot, que são a MESMA cor no DS1 — as fatias se confundiam).
 const PRODUCT_TYPE_COLORS = {
-  FRONTEND: 'var(--accent)',
-  UPSELL: 'var(--money)',
-  BUMP: 'var(--warning)',
-  DOWNSELL: 'var(--hot)',
+  FRONTEND: 'var(--chart-1)',
+  UPSELL: 'var(--chart-2)',
+  BUMP: 'var(--chart-3)',
+  DOWNSELL: 'var(--chart-5)', // não --chart-4: o Donut pinta o rótulo central com a cor da fatia e #4260E6 dá 3,4:1 como texto no card escuro
 };
 
 const COUNTRY_NAMES = {
@@ -155,7 +157,7 @@ function ProfitSplitPanel({ filters, cur, onData }) {
     <div className="panel" style={{ marginBottom: 14 }}>
       <div className="panel-head">
         <div className="panel-title">
-          <span className="panel-eyebrow">LUCRO · FRONT × BACK (MODELO CPA)</span>
+          <span className="panel-eyebrow">Lucro · Front × back (modelo CPA)</span>
           <div className="panel-metric">
             {fmtCurrency(d.totalUsd, cur, 0)}
             <span className="panel-sub" style={{ marginLeft: 8 }}>total = front + back · opex {d.opexPct}% · refund&cb/taxa por plataforma</span>
@@ -164,12 +166,12 @@ function ProfitSplitPanel({ filters, cur, onData }) {
       </div>
       <div className="mini-kpis">
         <div className="mini-kpi">
-          <div className="l">Lucro FRONT (funil)</div>
+          <div className="l">Lucro front (funil)</div>
           <div className="v" style={{ color: d.front.profitUsd >= 0 ? 'var(--money)' : 'var(--danger)' }}>{fmtCurrency(d.front.profitUsd, cur, 0)}</div>
           <div className="s">{fmtCurrency(d.front.grossUsd, cur, 0)} gross × modelo − {fmtCurrency(d.front.cpaUsd, cur, 0)} CPA · {fmtInt(d.front.orders)} pedidos</div>
         </div>
         <div className="mini-kpi">
-          <div className="l">Lucro BACK (retenção)</div>
+          <div className="l">Lucro back (retenção)</div>
           <div className="v" style={{ color: 'var(--money)' }}>{fmtCurrency(d.back.profitUsd, cur, 0)}</div>
           <div className="s">recuperação + call center (Tauk/Logicall) + SMS · líquido de comissões</div>
         </div>
@@ -309,7 +311,7 @@ function OverviewPage({ filters, setFilters }) {
         <div className="lead">
           {/* whiteSpace normal: em telas estreitas o ribbon quebra limpo em
               vez de estourar/truncar. */}
-          <span className="eyebrow" style={{ whiteSpace: 'normal' }}>{filters.preset.toUpperCase()} · TIER 1 GLOBAL · USD</span>
+          <span className="eyebrow" style={{ whiteSpace: 'normal' }}>{(typeof PRESET_LABEL !== 'undefined' && PRESET_LABEL[filters.preset]) || filters.preset} · Tier 1 global · USD</span>
           <h2>Operação <em>em tempo real</em></h2>
           <span className="sub">{fmtRange(filters.dateRange)}<span className="hide-mobile"> · dados unificados ClickBank + Digistore24</span></span>
         </div>
@@ -321,12 +323,12 @@ function OverviewPage({ filters, setFilters }) {
               className={grossMode === 'active' ? 'is-active' : ''}
               onClick={() => setGrossMode('active')}
               aria-label="Receita ativa: só vendas aprovadas"
-            >ATIVO</button>
+            >Ativo</button>
             <button
               className={grossMode === 'event' ? 'is-active' : ''}
               onClick={() => setGrossMode('event')}
               aria-label="Data do evento: inclui valor original de vendas refundadas (alinha com ClickBank)"
-            >EVENTO</button>
+            >Evento</button>
           </div>
           <button className="btn btn-ghost" style={{ flexShrink: 0 }} title="Agendar relatório">
             <Icon name="calendar" size={12}/> <span className="hide-mobile">Agendar relatório</span>
@@ -336,19 +338,21 @@ function OverviewPage({ filters, setFilters }) {
           </button>
         </div>
       </div>
+      {/* DS1 "dado com contexto": fonte que não reporta estorno = leitura parcial */}
+      <RefundCoverageNotice platforms={Array.from(filters.platforms || [])}/>
 
       <div className="kpi-grid">
-        <KpiCard label="RECEITA BRUTA" icon="dollar" index={0} money
+        <KpiCard label="Receita bruta" icon="dollar" index={0} money
           countValue={kpis.gross} countFormat={(n) => fmtCurrency(n, cur, 0)}
           cur={kpis.gross} prev={prev.gross}
           sparkData={sparkGross} hideSparkline={hideSpark}
           onClick={() => window.NSNavigate('transactions')}/>
-        <KpiCard label="RECEITA LÍQUIDA" icon="wallet" index={1} money
+        <KpiCard label="Receita líquida" icon="wallet" index={1} money
           countValue={kpis.net} countFormat={(n) => fmtCurrency(n, cur, 0)}
           cur={kpis.net} prev={prev.net}
           sparkData={sparkNet} hideSparkline={hideSpark}
           onClick={() => window.NSNavigate('transactions')}/>
-        <KpiCard label="PEDIDOS APROVADOS" icon="shopping-cart" index={2}
+        <KpiCard label="Pedidos aprovados" icon="shopping-cart" index={2}
           countValue={kpis.approvedCount} countFormat={(n) => fmtInt(n)}
           cur={kpis.approvedCount} prev={prev.approvedCount}
           sparkData={sparkOrders} hideSparkline={hideSpark}
@@ -357,7 +361,7 @@ function OverviewPage({ filters, setFilters }) {
           countValue={kpis.aov} countFormat={(n) => fmtCurrency(n, cur, 2)}
           cur={kpis.aov} prev={prev.aov}
           sparkData={sparkAov} hideSparkline={hideSpark}/>
-        <KpiCard label="TAXA DE APROVAÇÃO" icon="check" index={4}
+        <KpiCard label="Taxa de aprovação" icon="check" index={4}
           countValue={kpis.approvalRate * 100} countFormat={(n) => n.toFixed(1)} unit="%"
           cur={kpis.approvalRate} prev={prev.approvalRate}
           sparkData={approvalSpark} hideSparkline={hideSpark}
@@ -372,7 +376,7 @@ function OverviewPage({ filters, setFilters }) {
             DO ESTORNO (refundedAt), igual ao painel da plataforma: estorno
             de hoje aparece hoje mesmo que a venda seja de semanas atrás. A
             lente por PEDIDOS vive no card seguinte. */}
-        <KpiCard label="TAXA DE REEMBOLSO" icon="refresh" index={5}
+        <KpiCard label="Taxa de reembolso" icon="refresh" index={5}
           countValue={split?.refunds ? split.refunds.valuePct : 0}
           countFormat={(n) => split?.refunds ? n.toFixed(2) : '…'} unit="%"
           cur={kpis.refundRate} prev={prev.refundRate}
@@ -386,7 +390,7 @@ function OverviewPage({ filters, setFilters }) {
             honesto (linhas sintéticas da D24 fora). Carrega o ALERTA do
             usuário: monitor ROLANTE dos últimos 7 dias — limite 10% dos
             pedidos; acima acende (warn ≥8%). */}
-        <KpiCard label="REEMBOLSO POR PEDIDOS" icon="refresh" index={6}
+        <KpiCard label="Reembolso por pedidos" icon="refresh" index={6}
           countValue={split?.refunds ? split.refunds.pct : 0}
           countFormat={(n) => split?.refunds ? n.toFixed(2) : '…'} unit="%"
           cur={null} prev={null}
@@ -400,7 +404,7 @@ function OverviewPage({ filters, setFilters }) {
             ? `${fmtInt(split.refunds.refundedCount)} estornos · ${fmtInt(split.refunds.salesCount)} pedidos no período`
             : 'carregando…'}
           onClick={() => window.NSNavigate('transactions', { status: 'refunded' })}/>
-        <KpiCard label="CHARGEBACK" icon="alert-triangle" index={7}
+        <KpiCard label="Chargeback" icon="alert-triangle" index={7}
           alert={kpis.cbRate >= 0.02}
           countValue={kpis.cbRate * 100} countFormat={(n) => n.toFixed(2)} unit="%"
           cur={kpis.cbRate} prev={prev.cbRate}
@@ -413,7 +417,7 @@ function OverviewPage({ filters, setFilters }) {
         {/* Substitui o antigo "Lucro estimado" (net−cogs−frete) pelo NET
             AFTER CPA do modelo CPA (front do profit-split), a pedido do
             usuário — mesma régua da aba Afiliados/planilha. */}
-        <KpiCard label="NET AFTER CPA (MODELO)" icon="target" index={8} money
+        <KpiCard label="Net after CPA (modelo)" icon="target" index={8} money
           alert={(split?.front?.profitUsd ?? 0) < 0}
           countValue={split ? split.front.profitUsd : 0} countFormat={(n) => split ? fmtCurrency(n, cur, 0) : '…'}
           cur={split ? split.front.profitUsd : 0}
@@ -429,7 +433,7 @@ function OverviewPage({ filters, setFilters }) {
       <div className="panel" style={{ marginBottom: 14 }}>
         <div className="panel-head">
           <div className="panel-title">
-            <span className="panel-eyebrow">SÉRIE TEMPORAL · DIÁRIA</span>
+            <span className="panel-eyebrow">Série temporal · Diária</span>
             <div className="panel-metric">
               {metric === 'gross' && <>{fmtCurrency(kpis.gross, cur, 0)}
                 <span className={`delta ${deltaFor(kpis.gross, prev.gross).trend}`}>{deltaFor(kpis.gross, prev.gross).delta}</span></>}
@@ -450,7 +454,7 @@ function OverviewPage({ filters, setFilters }) {
               ))}
             </div>
             <div className="panel-legend">
-              <span className="legend-dot cyan"><span/>{filters.preset.toUpperCase()}</span>
+              <span className="legend-dot cyan"><span/>{(typeof PRESET_LABEL !== 'undefined' && PRESET_LABEL[filters.preset]) || filters.preset}</span>
             </div>
           </div>
         </div>
@@ -492,7 +496,7 @@ function OverviewPage({ filters, setFilters }) {
         <div className="panel">
           <div className="panel-head">
             <div className="panel-title">
-              <span className="panel-eyebrow">RECEITA POR TIPO DE PRODUTO</span>
+              <span className="panel-eyebrow">Receita por tipo de produto</span>
               <div className="panel-sub">Apenas pedidos aprovados · receita bruta</div>
             </div>
           </div>
@@ -510,7 +514,7 @@ function OverviewPage({ filters, setFilters }) {
         <div className="panel">
           <div className="panel-head">
             <div className="panel-title">
-              <span className="panel-eyebrow">RECEITA POR PAÍS</span>
+              <span className="panel-eyebrow">Receita por país</span>
               <div className="panel-sub">Top 10 · click filtra · receita bruta aprovada</div>
             </div>
           </div>
@@ -532,7 +536,7 @@ function OverviewPage({ filters, setFilters }) {
         <div className="panel">
           <div className="panel-head">
             <div className="panel-title">
-              <span className="panel-eyebrow">TOP 5 AFILIADOS</span>
+              <span className="panel-eyebrow">Top 5 afiliados</span>
               <div className="panel-sub">Ordenados por receita bruta</div>
             </div>
           </div>
@@ -598,7 +602,7 @@ function OverviewPage({ filters, setFilters }) {
         <div className="panel">
           <div className="panel-head">
             <div className="panel-title">
-              <span className="panel-eyebrow">SAÚDE DAS PLATAFORMAS</span>
+              <span className="panel-eyebrow">Saúde das plataformas</span>
               <div className="panel-sub">Status dos connectors em tempo real</div>
             </div>
           </div>
@@ -627,7 +631,7 @@ function OverviewPage({ filters, setFilters }) {
       <div className="panel" style={{ marginTop: 14 }}>
         <div className="panel-head">
           <div className="panel-title">
-            <span className="panel-eyebrow">PADRÃO DE COMPRA · HORA × DIA DA SEMANA</span>
+            <span className="panel-eyebrow">Padrão de compra · Hora × dia da semana</span>
             <div className="panel-sub">Pedidos aprovados · horário de Brasília · hover pra ver detalhe</div>
           </div>
           <div className="panel-legend">
@@ -651,7 +655,7 @@ function PlatformHealth({ name, short, ok, revenue, orders, lastSync, currency }
             <span className="sync">Synced {lastSync}</span>
           </div>
         </div>
-        <span className={`ph-status ${ok ? 'ok' : 'warn'}`}><span className="led"/>{ok ? 'HEALTHY' : 'DEGRADED'}</span>
+        <span className={`ph-status ${ok ? 'ok' : 'warn'}`}><span className="led"/>{ok ? 'Healthy' : 'Degraded'}</span>
       </div>
       <div className="ph-stats">
         <div className="ph-stat">

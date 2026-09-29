@@ -95,7 +95,7 @@ export function ChatInput({
   const activeModel = modelOptions.find((m) => m.value === model) ?? modelOptions[0];
 
   return (
-    <div className="nx-strip-input backdrop-blur-md p-3 relative">
+    <div className="nx-strip-input p-3 relative">
       {slashOpen && (
         <SlashMenu
           query={value}
@@ -109,7 +109,7 @@ export function ChatInput({
       <div className="max-w-3xl mx-auto">
         <div
           className={cn(
-            'nx-input-field flex items-end gap-2 rounded-2xl px-3 py-2 transition-colors',
+            'nx-input-field flex items-end gap-2 rounded-md px-3 py-2 transition-colors',
             disabled && 'opacity-60',
           )}
         >
@@ -134,7 +134,7 @@ export function ChatInput({
               variant="outline"
               onClick={onStop}
               aria-label="Parar geração"
-              className="text-rose-500 hover:text-rose-500"
+              className="text-danger hover:text-danger"
             >
               <Square className="w-3.5 h-3.5 fill-current" />
             </Button>
@@ -144,7 +144,7 @@ export function ChatInput({
               onClick={maybeSubmit}
               disabled={!value.trim() || disabled}
               aria-label="Enviar (Enter)"
-              className="nx-send-btn h-7 w-7 rounded-md inline-flex items-center justify-center transition-shadow"
+              className="nx-send-btn h-7 w-7 rounded-md inline-flex items-center justify-center transition-colors"
             >
               <Send className="w-3.5 h-3.5" />
             </button>
@@ -194,7 +194,7 @@ function SlashMenu({ query, onPick }: { query: string; onPick: (cmd: string) => 
   if (items.length === 0) return null;
   return (
     <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-[420px] rounded-md border border-border bg-popover shadow-lg overflow-hidden">
-      <div className="text-[10px] uppercase tracking-wider text-muted-foreground font-mono px-3 pt-2 pb-1">
+      <div className="text-xs font-medium text-muted-foreground px-3 pt-2 pb-1">
         Comandos
       </div>
       {items.map((c) => (

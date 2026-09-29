@@ -1,4 +1,4 @@
-/* global React, Icon, NSTimeSeries, NSBarRank, Sparkline, CpaStatusChip, fmtCurrency, fmtInt, fmtPct, SkelMiniKpis, SkelChartPanel, SkelTablePanel, SkelDrawerLoading, downloadCsv, AaContactForm, AffiliateIdentityDrawer, AaSequenceView, AaEvolutionView, AaHealthView, AaTopsByWindow, AaNewAffiliatesPanel, AiOriginChip */
+/* global React, Icon, NSTimeSeries, NSBarRank, Sparkline, CpaStatusChip, fmtCurrency, fmtInt, fmtPct, SkelMiniKpis, SkelChartPanel, SkelTablePanel, SkelDrawerLoading, downloadCsv, AaContactForm, AffiliateIdentityDrawer, AaSequenceView, AaEvolutionView, AaHealthView, AaTopsByWindow, AaNewAffiliatesPanel, AiOriginChip, Paginated */
 /* Análise de afiliados — quem sobe, quem cai e por quê.
    Ranking por métrica (receita/vendas/AOV/reembolso/Net após CPA), janelas
    de 3/7/15/30/60 dias (cada uma vs a anterior), identidade unificada entre
@@ -56,7 +56,7 @@ function AaTrend({ tag }) {
   const t = AA_TREND[tag] || { label: tag || '—', tone: 'var(--fg4)' };
   return (
     <span style={{
-      fontFamily: 'var(--f-mono)', fontSize: 10, fontWeight: 700, letterSpacing: '0.05em', textTransform: 'uppercase',
+      fontFamily: 'var(--f-mono)', fontSize: 10, fontWeight: 700,
       padding: '2px 7px', borderRadius: 'var(--r-full)', whiteSpace: 'nowrap',
       color: t.tone, background: `color-mix(in oklab, ${t.tone} 12%, transparent)`, border: `1px solid color-mix(in oklab, ${t.tone} 35%, transparent)`,
     }}>{t.label}</span>
@@ -73,7 +73,7 @@ function AaPlat({ slug }) {
 }
 
 function AaEmpty({ children }) {
-  return <div style={{ padding: '22px 12px', textAlign: 'center', color: 'var(--fg5)', fontSize: 12, border: '1px dashed var(--border)', borderRadius: 12 }}>{children}</div>;
+  return <div style={{ padding: '22px 12px', textAlign: 'center', color: 'var(--fg5)', fontSize: 12, border: '1px dashed var(--border)', borderRadius: 'var(--r-lg)' }}>{children}</div>;
 }
 
 // ── Página ──────────────────────────────────────────────────────────────
@@ -176,7 +176,7 @@ function AffiliateAnalysisPage({ filters, user }) {
     <div className="page-in">
       <div className="page-head">
         <div className="lead">
-          <span className="eyebrow">AFILIADOS · ANÁLISE</span>
+          <span className="eyebrow">Afiliados · Análise</span>
           <h2>Quem sobe, quem cai — <em>e por quê</em>.</h2>
           <span className="sub">
             janelas de N dias (presets ou personalizada) fechando no dia escolhido — por padrão ONTEM, último dia completo em BRT — cada uma comparada com a anterior de mesmo tamanho · o período global não se aplica aqui · plataforma/família do filtro global valem
@@ -205,7 +205,7 @@ function AffiliateAnalysisPage({ filters, user }) {
           ['saude', 'Saúde da empresa', 'linha do tempo · dinâmica da base · risco · reativação'],
         ].map(([k, l, d]) => (
           <button key={k} onClick={() => setMode(k)} style={{
-            flex: '1 1 200px', textAlign: 'left', cursor: 'pointer', padding: '10px 14px', borderRadius: 12,
+            flex: '1 1 200px', textAlign: 'left', cursor: 'pointer', padding: '10px 14px', borderRadius: 'var(--r-lg)',
             border: `1px solid ${mode === k ? 'var(--accent)' : 'var(--border)'}`,
             background: mode === k ? 'color-mix(in oklab, var(--accent) 10%, transparent)' : 'var(--bg-raised)', color: 'var(--fg1)',
           }}>
@@ -215,7 +215,7 @@ function AffiliateAnalysisPage({ filters, user }) {
         ))}
       </div>
       <div className="panel" style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 10, padding: '10px 14px', marginBottom: 14 }}>
-        <span className="f-label">JANELA</span>
+        <span className="f-label">Janela</span>
         <div className="seg">
           {AA_WINDOWS.map((w) => (
             <button key={w} className={win === w ? 'is-active' : ''} onClick={() => { setWin(w); setCustomWin(''); }}>{w}d</button>
@@ -230,7 +230,7 @@ function AffiliateAnalysisPage({ filters, user }) {
           {!AA_WINDOWS.includes(win) && <span className="mono" style={{ color: 'var(--accent)' }}>{win}d ativa</span>}
           {customWin !== '' && !(parseInt(customWin, 10) >= 1 && parseInt(customWin, 10) <= 90) && <span style={{ color: 'var(--warning)' }}>use 1 a 90</span>}
         </label>
-        <span className="f-label" style={{ marginLeft: 6 }}>ATÉ O DIA</span>
+        <span className="f-label" style={{ marginLeft: 6 }}>Até o dia</span>
         <input type="date" value={anchorInput} min="2024-01-01" max={data?.todayBrt || undefined} style={{ ...AA_INPUT, width: 150 }} title="Último dia da janela: a análise olha N dias pra trás a partir daqui (e compara com os N dias anteriores)"
           onChange={(e) => {
             const v = e.target.value;
@@ -254,7 +254,7 @@ function AffiliateAnalysisPage({ filters, user }) {
         <button className="btn btn-ghost" onClick={() => setTick((t) => t + 1)} title="Recarregar"><Icon name="refresh" size={13}/></button>
         {true && (
           <>
-            <span className="f-label" style={{ marginLeft: 6 }}>QUANTAS JANELAS</span>
+            <span className="f-label" style={{ marginLeft: 6 }}>Quantas janelas</span>
             <div className="seg">
               {[2, 3, 4, 6, 8].map((k) => <button key={k} className={count === k ? 'is-active' : ''} onClick={() => setCount(k)}>{k}</button>)}
             </div>
@@ -281,7 +281,7 @@ function AffiliateAnalysisPage({ filters, user }) {
           <div className="panel" style={{ padding: 0, marginBottom: 14 }}>
             <div className="panel-head" style={{ padding: '12px 16px 6px' }}>
               <div className="panel-title">
-                <span className="panel-eyebrow">COMPARATIVO POR JANELA</span>
+                <span className="panel-eyebrow">Comparativo por janela</span>
                 <span className="panel-sub">cada linha = últimos N dias vs os N dias anteriores · clique pra trocar a janela do ranking</span>
               </div>
             </div>
@@ -355,7 +355,7 @@ function AffiliateAnalysisPage({ filters, user }) {
             <div className="panel">
               <div className="panel-head">
                 <div className="panel-title">
-                  <span className="panel-eyebrow">RECEITA DIÁRIA · TOP 8 DA JANELA</span>
+                  <span className="panel-eyebrow">Receita diária · Top 8 da janela</span>
                   <span className="panel-sub">clique na legenda pra esconder/mostrar</span>
                 </div>
               </div>
@@ -368,7 +368,7 @@ function AffiliateAnalysisPage({ filters, user }) {
             <div className="panel">
               <div className="panel-head">
                 <div className="panel-title">
-                  <span className="panel-eyebrow">TOP 15 · {mLabel.toUpperCase()}</span>
+                  <span className="panel-eyebrow">Top 15 · {mLabel}</span>
                   <span className="panel-sub">{mAsc ? 'menor é melhor' : 'maior é melhor'} · janela de {win} dias</span>
                 </div>
               </div>
@@ -380,7 +380,7 @@ function AffiliateAnalysisPage({ filters, user }) {
           <div className="panel" style={{ padding: 0 }}>
             <div className="panel-head" style={{ padding: '12px 16px 6px', flexWrap: 'wrap', gap: 8 }}>
               <div className="panel-title">
-                <span className="panel-eyebrow">RANKING · {win} DIAS · {view === 'partner' ? 'CONTAS UNIFICADAS' : 'POR PLATAFORMA'}</span>
+                <span className="panel-eyebrow">Ranking · {win} dias · {view === 'partner' ? 'Contas unificadas' : 'Por plataforma'}</span>
                 <span className="panel-sub">
                   {fmtInt(ranked.length)} {view === 'partner' ? 'parceiros' : 'contas'} com atividade ·
                   {data.summary.internalExcluded > 0 && !internal ? ` ${data.summary.internalExcluded} internos excluídos (${fmtCurrency(data.summary.internalRevenueExcluded, 'USD', 0)}) · ` : ' '}
@@ -397,73 +397,78 @@ function AffiliateAnalysisPage({ filters, user }) {
                 <button className="btn btn-ghost" onClick={exportCsv} title="Exportar CSV"><Icon name="download" size={13}/></button>
               </div>
             </div>
-            <div className="tbl-wrap" style={{ maxHeight: 720 }}>
-              <table className="tbl tbl--sticky-first">
-                <thead><tr>
-                  <th>#</th><th>{view === 'partner' ? 'Parceiro' : 'Conta'}</th><th>Plat.</th><th>Tendência</th>
-                  <th className="num">Vendas</th><th className="num">Δ</th>
-                  <th className="num">Receita</th><th className="num">Δ</th>
-                  <th className="num">AOV</th><th className="num">Δ</th>
-                  <th className="num">Aprov.</th>
-                  <th className="num">Reemb.</th><th className="num">Δ</th>
-                  <th className="num">CPA/venda</th>
-                  <th className="num">Net após CPA</th><th className="num">Δ</th>
-                  <th>Status</th><th>Por quê</th><th>{win}d</th>
-                </tr></thead>
-                <tbody>
-                  {ranked.length === 0 && (
-                    <tr><td colSpan={19}><AaEmpty>Nenhum afiliado com atividade nesta janela{query ? ' pra essa busca' : ''}.</AaEmpty></td></tr>
-                  )}
-                  {ranked.map((r) => {
-                    const rankDelta = r.rank && r.prevRank ? r.prevRank - r.rank : null;
-                    return (
-                      <tr tabIndex={0} key={r.key} onClick={() => openEntity(r.key)} style={{ cursor: 'pointer' }}>
-                        <td className="cell-mono" style={{ whiteSpace: 'nowrap' }}>
-                          {r.rank ? `#${r.rank}` : '—'}
-                          {rankDelta != null && rankDelta !== 0 && (
-                            <span style={{ marginLeft: 4, fontSize: 10, color: rankDelta > 0 ? 'var(--success)' : 'var(--danger)' }}>{rankDelta > 0 ? '▲' : '▼'}{Math.abs(rankDelta)}</span>
-                          )}
-                          {r.rank && !r.prevRank && <span style={{ marginLeft: 4, fontSize: 10, color: 'var(--accent)' }}>novo</span>}
-                        </td>
-                        <td style={{ maxWidth: 220 }}>
-                          <div style={{ fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                            {r.kind === 'partner' && <span title="contas unificadas" style={{ marginRight: 4, color: 'var(--accent)' }}><Icon name="link" size={11}/></span>}
-                            {r.name}
-                            {r.internal && <span style={{ marginLeft: 6, fontSize: 10, color: 'var(--fg5)' }}>interno</span>}
-                            {r.origin && <span style={{ marginLeft: 6 }}><AiOriginChip origin={r.origin} size={9}/></span>}
-                          </div>
-                          <div style={{ fontSize: 10, color: 'var(--fg5)', fontFamily: 'var(--f-mono)' }}>
-                            {r.accounts.length > 1 ? `${r.accounts.length} contas` : r.accounts[0]?.externalId}
-                            {r.contact?.email ? ` · ${r.contact.email}` : ''}
-                          </div>
-                        </td>
-                        <td style={{ whiteSpace: 'nowrap' }}>{r.platforms.map((p) => <span key={p} style={{ marginRight: 3 }}><AaPlat slug={p}/></span>)}</td>
-                        <td><AaTrend tag={r.trend}/></td>
-                        <td className="num cell-mono">{fmtInt(r.cur.sales)}</td>
-                        <td className="num"><AaDelta value={r.delta.sales}/></td>
-                        <td className="num cell-mono" style={{ color: 'var(--money)', fontWeight: 600 }}>{fmtCurrency(r.cur.revenue, 'USD', 0)}</td>
-                        <td className="num"><AaDelta value={r.delta.revenue}/></td>
-                        <td className="num cell-mono">{fmtCurrency(r.cur.aov, 'USD', 2)}</td>
-                        <td className="num"><AaDelta value={r.delta.aov}/></td>
-                        <td className="num cell-mono">{fmtPct(r.cur.approvalRate, 0)}</td>
-                        <td className="num cell-mono" style={{ color: r.cur.refundRate > 0.15 ? 'var(--danger)' : undefined }}>{fmtPct(r.cur.refundRate, 1)}</td>
-                        <td className="num"><AaDelta value={r.delta.refundRate} kind="pp" invert/></td>
-                        <td className="num cell-mono">{r.cur.cpaPerFe > 0 ? fmtCurrency(r.cur.cpaPerFe, 'USD', 0) : '—'}</td>
-                        <td className="num cell-mono" style={{ color: r.cur.netAfterCpa == null ? 'var(--fg5)' : r.cur.netAfterCpa >= 0 ? 'var(--money)' : 'var(--danger)' }}>
-                          {r.cur.netAfterCpa == null ? '—' : fmtCurrency(r.cur.netAfterCpa, 'USD', 2)}
-                        </td>
-                        <td className="num"><AaDelta value={r.delta.netAfterCpa} kind="money2"/></td>
-                        <td><CpaStatusChip status={r.cur.cpaStatus}/></td>
-                        <td style={{ maxWidth: 260, fontSize: 11, color: 'var(--fg3)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={r.topDriver ? r.topDriver.detail : ''}>
-                          {r.topDriver ? <><b style={{ color: r.topDriver.tone === 'up' ? 'var(--success)' : r.topDriver.tone === 'down' ? 'var(--danger)' : 'var(--fg3)' }}>{r.topDriver.title}</b> · {r.topDriver.detail}</> : <span style={{ color: 'var(--fg5)' }}>sem variação relevante</span>}
-                        </td>
-                        <td><Sparkline data={r.sparkline} width={70} height={20}/></td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
+            <Paginated items={ranked} label={view === 'partner' ? 'parceiros' : 'contas'} resetKey={`${metric}|${query}|${win}|${view}|${anchor}|${internal}|${today}|${platformsKey}|${familiesKey}`}>
+              {(pageRows, pager, pg) => (<>
+                <div className="tbl-wrap" key={pg.page} style={{ maxHeight: 720 }}>
+                  <table className="tbl tbl--sticky-first">
+                    <thead><tr>
+                      <th>#</th><th>{view === 'partner' ? 'Parceiro' : 'Conta'}</th><th>Plat.</th><th>Tendência</th>
+                      <th className="num">Vendas</th><th className="num">Δ</th>
+                      <th className="num">Receita</th><th className="num">Δ</th>
+                      <th className="num">AOV</th><th className="num">Δ</th>
+                      <th className="num">Aprov.</th>
+                      <th className="num">Reemb.</th><th className="num">Δ</th>
+                      <th className="num">CPA/venda</th>
+                      <th className="num">Net após CPA</th><th className="num">Δ</th>
+                      <th>Status</th><th>Por quê</th><th>{win}d</th>
+                    </tr></thead>
+                    <tbody>
+                      {ranked.length === 0 && (
+                        <tr><td colSpan={19}><AaEmpty>Nenhum afiliado com atividade nesta janela{query ? ' pra essa busca' : ''}.</AaEmpty></td></tr>
+                      )}
+                      {pageRows.map((r) => {
+                        const rankDelta = r.rank && r.prevRank ? r.prevRank - r.rank : null;
+                        return (
+                          <tr tabIndex={0} key={r.key} onClick={() => openEntity(r.key)} style={{ cursor: 'pointer' }}>
+                            <td className="cell-mono" style={{ whiteSpace: 'nowrap' }}>
+                              {r.rank ? `#${r.rank}` : '—'}
+                              {rankDelta != null && rankDelta !== 0 && (
+                                <span style={{ marginLeft: 4, fontSize: 10, color: rankDelta > 0 ? 'var(--success)' : 'var(--danger)' }}>{rankDelta > 0 ? '▲' : '▼'}{Math.abs(rankDelta)}</span>
+                              )}
+                              {r.rank && !r.prevRank && <span style={{ marginLeft: 4, fontSize: 10, color: 'var(--accent)' }}>novo</span>}
+                            </td>
+                            <td style={{ maxWidth: 220 }}>
+                              <div style={{ fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                {r.kind === 'partner' && <span title="contas unificadas" style={{ marginRight: 4, color: 'var(--accent)' }}><Icon name="link" size={11}/></span>}
+                                {r.name}
+                                {r.internal && <span style={{ marginLeft: 6, fontSize: 10, color: 'var(--fg5)' }}>interno</span>}
+                                {r.origin && <span style={{ marginLeft: 6 }}><AiOriginChip origin={r.origin} size={9}/></span>}
+                              </div>
+                              <div style={{ fontSize: 10, color: 'var(--fg5)', fontFamily: 'var(--f-mono)' }}>
+                                {r.accounts.length > 1 ? `${r.accounts.length} contas` : r.accounts[0]?.externalId}
+                                {r.contact?.email ? ` · ${r.contact.email}` : ''}
+                              </div>
+                            </td>
+                            <td style={{ whiteSpace: 'nowrap' }}>{r.platforms.map((p) => <span key={p} style={{ marginRight: 3 }}><AaPlat slug={p}/></span>)}</td>
+                            <td><AaTrend tag={r.trend}/></td>
+                            <td className="num cell-mono">{fmtInt(r.cur.sales)}</td>
+                            <td className="num"><AaDelta value={r.delta.sales}/></td>
+                            <td className="num cell-mono" style={{ color: 'var(--money)', fontWeight: 600 }}>{fmtCurrency(r.cur.revenue, 'USD', 0)}</td>
+                            <td className="num"><AaDelta value={r.delta.revenue}/></td>
+                            <td className="num cell-mono">{fmtCurrency(r.cur.aov, 'USD', 2)}</td>
+                            <td className="num"><AaDelta value={r.delta.aov}/></td>
+                            <td className="num cell-mono">{fmtPct(r.cur.approvalRate, 0)}</td>
+                            <td className="num cell-mono" style={{ color: r.cur.refundRate > 0.15 ? 'var(--danger)' : undefined }}>{fmtPct(r.cur.refundRate, 1)}</td>
+                            <td className="num"><AaDelta value={r.delta.refundRate} kind="pp" invert/></td>
+                            <td className="num cell-mono">{r.cur.cpaPerFe > 0 ? fmtCurrency(r.cur.cpaPerFe, 'USD', 0) : '—'}</td>
+                            <td className="num cell-mono" style={{ color: r.cur.netAfterCpa == null ? 'var(--fg5)' : r.cur.netAfterCpa >= 0 ? 'var(--money)' : 'var(--danger)' }}>
+                              {r.cur.netAfterCpa == null ? '—' : fmtCurrency(r.cur.netAfterCpa, 'USD', 2)}
+                            </td>
+                            <td className="num"><AaDelta value={r.delta.netAfterCpa} kind="money2"/></td>
+                            <td><CpaStatusChip status={r.cur.cpaStatus}/></td>
+                            <td style={{ maxWidth: 260, fontSize: 11, color: 'var(--fg3)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={r.topDriver ? r.topDriver.detail : ''}>
+                              {r.topDriver ? <><b style={{ color: r.topDriver.tone === 'up' ? 'var(--success)' : r.topDriver.tone === 'down' ? 'var(--danger)' : 'var(--fg3)' }}>{r.topDriver.title}</b> · {r.topDriver.detail}</> : <span style={{ color: 'var(--fg5)' }}>sem variação relevante</span>}
+                            </td>
+                            <td><Sparkline data={r.sparkline} width={70} height={20}/></td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+                {pager}
+              </>)}
+            </Paginated>
           </div>
 
           {/* Tops por janela (sequência J1..JK) logo abaixo do ranking */}
@@ -485,7 +490,7 @@ function AffiliateAnalysisPage({ filters, user }) {
 function AaKpi({ label, value, sub, money, delta, deltaKind = 'rel', invert = false }) {
   return (
     <div className="panel" style={{ padding: '12px 14px' }}>
-      <div style={{ fontSize: 10, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--fg5)', fontWeight: 600, marginBottom: 4 }}>{label}</div>
+      <div style={{ fontSize: 10, color: 'var(--fg5)', fontWeight: 600, marginBottom: 4 }}>{label}</div>
       <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, flexWrap: 'wrap' }}>
         <div className="mono" style={{ fontFamily: 'var(--f-display)', fontSize: 22, fontWeight: 700, color: money ? 'var(--money)' : 'var(--fg1)' }}>{value}</div>
         <AaDelta value={delta} kind={deltaKind} invert={invert} size={11}/>
@@ -543,7 +548,7 @@ function AaExplainDrawer({ entityKey, win, filters, internal, today, anchor, isA
       <div className="drawer" style={{ width: 820, maxWidth: '100vw' }}>
         <div className="drawer-head">
           <div style={{ minWidth: 0 }}>
-            <div className="eyebrow" style={{ fontSize: 10 }}>POR QUÊ · {win} DIAS{d ? ` · ${d.range.start} → ${d.range.end}` : ''}</div>
+            <div className="eyebrow" style={{ fontSize: 10 }}>Por quê · {win} dias{d ? ` · ${d.range.start} → ${d.range.end}` : ''}</div>
             <h3 style={{ margin: '4px 0 0', display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
               {d ? d.entity.name : '…'}
               {d && d.entity.platforms.map((p) => <AaPlat key={p} slug={p}/>)}
@@ -569,7 +574,7 @@ function AaExplainDrawer({ entityKey, win, filters, internal, today, anchor, isA
 
           {isAdmin && d && editing && (
             <AaContactForm
-              title="CONTATO DO PARCEIRO (opcional)"
+              title="Contato do parceiro (opcional)"
               initial={{ displayName: d.entity.name || '', email: d.entity.contact?.email || '', phone: d.entity.contact?.phone || '', notes: d.entity.notes || '', originType: d.entity.origin?.type || '', originRef: d.entity.origin?.ref || '' }}
               busy={busy}
               onCancel={() => setEditing(false)}
@@ -591,7 +596,7 @@ function AaExplainDrawer({ entityKey, win, filters, internal, today, anchor, isA
               <div className="panel" style={{ marginBottom: 12 }}>
                 <div className="panel-head">
                   <div className="panel-title">
-                    <span className="panel-eyebrow">POR QUÊ</span>
+                    <span className="panel-eyebrow">Por quê</span>
                     <span className="panel-sub">o que explica a variação vs a janela anterior, do maior efeito pro menor · Δreceita = volume × AOV (decomposição exata)</span>
                   </div>
                 </div>
@@ -613,7 +618,7 @@ function AaExplainDrawer({ entityKey, win, filters, internal, today, anchor, isA
               <div className="panel" style={{ marginBottom: 12 }}>
                 <div className="panel-head">
                   <div className="panel-title">
-                    <span className="panel-eyebrow">JANELA ATUAL × ANTERIOR</span>
+                    <span className="panel-eyebrow">Janela atual × anterior</span>
                     <span className="panel-sub">receita por dia, as duas janelas sobrepostas (dia 1 = primeiro dia de cada janela)</span>
                   </div>
                 </div>
@@ -626,7 +631,7 @@ function AaExplainDrawer({ entityKey, win, filters, internal, today, anchor, isA
 
               <div className="panel" style={{ padding: 0, marginBottom: 12 }}>
                 <div className="panel-head" style={{ padding: '12px 16px 6px' }}>
-                  <div className="panel-title"><span className="panel-eyebrow">POR JANELA</span><span className="panel-sub">3 · 7 · 15 · 30 · 60 dias, cada uma vs a anterior</span></div>
+                  <div className="panel-title"><span className="panel-eyebrow">Por janela</span><span className="panel-sub">3 · 7 · 15 · 30 · 60 dias, cada uma vs a anterior</span></div>
                 </div>
                 <div className="tbl-wrap">
                   <table className="tbl">
@@ -658,29 +663,34 @@ function AaExplainDrawer({ entityKey, win, filters, internal, today, anchor, isA
               <div className="grid-2" style={{ gap: 12 }}>
                 <div className="panel" style={{ padding: 0 }}>
                   <div className="panel-head" style={{ padding: '12px 16px 6px' }}>
-                    <div className="panel-title"><span className="panel-eyebrow">POR FAMÍLIA</span><span className="panel-sub">receita e share, atual vs anterior</span></div>
+                    <div className="panel-title"><span className="panel-eyebrow">Por família</span><span className="panel-sub">receita e share, atual vs anterior</span></div>
                   </div>
-                  <div className="tbl-wrap">
-                    <table className="tbl">
-                      <thead><tr><th>Família</th><th className="num">Receita</th><th className="num">Δ</th><th className="num">Share</th><th className="num">antes</th></tr></thead>
-                      <tbody>
-                        {d.byFamily.length === 0 && <tr><td colSpan={5} style={{ color: 'var(--fg5)', fontSize: 12 }}>—</td></tr>}
-                        {d.byFamily.map((f) => (
-                          <tr key={f.family}>
-                            <td>{f.family}</td>
-                            <td className="num cell-mono" style={{ color: 'var(--money)' }}>{fmtCurrency(f.revenue, 'USD', 0)}</td>
-                            <td className="num"><AaDelta value={f.prevRevenue ? (f.revenue - f.prevRevenue) / f.prevRevenue : null}/></td>
-                            <td className="num cell-mono">{fmtPct(f.share, 0)}</td>
-                            <td className="num cell-mono" style={{ color: 'var(--fg5)' }}>{fmtPct(f.prevShare, 0)}</td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
+                  <Paginated items={d.byFamily} label="famílias" resetKey={entityKey}>
+                    {(pageRows, pager) => (<>
+                      <div className="tbl-wrap">
+                        <table className="tbl">
+                          <thead><tr><th>Família</th><th className="num">Receita</th><th className="num">Δ</th><th className="num">Share</th><th className="num">antes</th></tr></thead>
+                          <tbody>
+                            {d.byFamily.length === 0 && <tr><td colSpan={5} style={{ color: 'var(--fg5)', fontSize: 12 }}>—</td></tr>}
+                            {pageRows.map((f) => (
+                              <tr key={f.family}>
+                                <td>{f.family}</td>
+                                <td className="num cell-mono" style={{ color: 'var(--money)' }}>{fmtCurrency(f.revenue, 'USD', 0)}</td>
+                                <td className="num"><AaDelta value={f.prevRevenue ? (f.revenue - f.prevRevenue) / f.prevRevenue : null}/></td>
+                                <td className="num cell-mono">{fmtPct(f.share, 0)}</td>
+                                <td className="num cell-mono" style={{ color: 'var(--fg5)' }}>{fmtPct(f.prevShare, 0)}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                      {pager}
+                    </>)}
+                  </Paginated>
                 </div>
                 <div className="panel" style={{ padding: 0 }}>
                   <div className="panel-head" style={{ padding: '12px 16px 6px' }}>
-                    <div className="panel-title"><span className="panel-eyebrow">CONTAS</span><span className="panel-sub">{d.entity.accounts.length > 1 ? 'uma linha por plataforma' : 'conta única'}</span></div>
+                    <div className="panel-title"><span className="panel-eyebrow">Contas</span><span className="panel-sub">{d.entity.accounts.length > 1 ? 'uma linha por plataforma' : 'conta única'}</span></div>
                   </div>
                   <div className="tbl-wrap">
                     <table className="tbl">

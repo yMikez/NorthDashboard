@@ -75,7 +75,9 @@ function avatarColor(id) {
   // Cor sólida editorial determinística a partir do id (sem gradiente).
   let h = 0;
   for (let i = 0; i < id.length; i++) h = (h * 31 + id.charCodeAt(i)) >>> 0;
-  const palette = ['#0E7C97', '#37D695', '#C29B3C', '#E0653A', '#3EB7D4'];
+  // DS1: tokens escuros nos DOIS temas (iniciais brancas ≥ 4,5:1) — os
+  // --chart-* clareiam no escuro e reprovariam com texto branco.
+  const palette = ['var(--ns-blue)', 'var(--navy-600)', 'var(--ns-blue-dark)', 'var(--navy-500)', 'var(--navy-700)'];
   return palette[h % palette.length];
 }
 
@@ -364,7 +366,7 @@ function Icon({ name, size = 16, stroke = 1.6, className = '', label }) {
 }
 
 // ---------- sparkline ----------
-function Sparkline({ data, width = 80, height = 26, color = '#5BC8FF', fill = true }) {
+function Sparkline({ data, width = 80, height = 26, color = 'var(--accent)', fill = true }) {
   if (!data || data.length < 2) return <svg width={width} height={height} viewBox={`0 0 ${width} ${height}`}/>;
   const min = Math.min(...data);
   const max = Math.max(...data);
@@ -376,22 +378,12 @@ function Sparkline({ data, width = 80, height = 26, color = '#5BC8FF', fill = tr
   });
   const path = 'M' + pts.map(p => p.join(' ')).join(' L ');
   const area = path + ` L ${width - 1} ${height} L 1 ${height} Z`;
-  const gid = 'spg' + Math.random().toString(36).slice(2, 7);
   return (
     // viewBox: quando o CSS mobile encolhe o svg (max-width), o traço
     // escala em vez de clipar à direita.
     <svg width={width} height={height} viewBox={`0 0 ${width} ${height}`} className="spark">
-      {fill && (
-        <>
-          <defs>
-            <linearGradient id={gid} x1="0" x2="0" y1="0" y2="1">
-              <stop offset="0%" stopColor={color} stopOpacity="0.35"/>
-              <stop offset="100%" stopColor={color} stopOpacity="0"/>
-            </linearGradient>
-          </defs>
-          <path d={area} fill={`url(#${gid})`}/>
-        </>
-      )}
+      {/* DS1: área em preenchimento chapado — sem gradiente decorativo. */}
+      {fill && <path d={area} fill={color} fillOpacity="0.12"/>}
       <path d={path} fill="none" stroke={color} strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round"/>
     </svg>
   );
@@ -513,11 +505,21 @@ function Pager({ page, pageSize, total, onPageChange, onPageSizeChange, hasMore,
   );
 }
 
+/** Identidade de um item para comparar a lista antes/depois (id quando há). */
+function nsItemKey(it) {
+  if (it == null || typeof it !== 'object') return String(it);
+  const k = it.id ?? it.key ?? it.externalId ?? it.slug ?? it.code;
+  if (k != null) return String(k) + (it.platformSlug ? '@' + it.platformSlug : '');
+  try { return JSON.stringify(it); } catch (e) { return String(it); }
+}
+
 /**
- * Hook de paginação no cliente. Volta à página 1 quando a lista muda de
- * tamanho (filtro, busca) ou quando `resetKey` muda; nunca deixa a página
- * cair além do fim. Abaixo de `minToShow` itens não pagina nem desenha o
- * controle — uma tabela de 6 linhas não precisa dele.
+ * Hook de paginação no cliente. Volta à página 1 quando `resetKey` muda ou
+ * quando a lista vira OUTRA lista (filtro, busca); fica na página quando só
+ * sai ou muda um punhado de itens — fila que encolhe a cada ação ("enviei",
+ * "confirmar") não pode jogar o usuário de volta pra página 1. Nunca deixa a
+ * página cair além do fim. Abaixo de `minToShow` itens não pagina nem desenha
+ * o controle — uma tabela de 6 linhas não precisa dele.
  */
 function usePaged(items, opts = {}) {
   const { initialPageSize = 25, resetKey, minToShow = 10, label } = opts;
@@ -525,14 +527,33 @@ function usePaged(items, opts = {}) {
   const [pageSize, setPageSize] = React.useState(() => nsReadPageSize(initialPageSize));
   const [page, setPage] = React.useState(1);
   const total = list.length;
-  const sig = String(total) + '|' + String(resetKey === undefined ? '' : resetKey);
-  const lastSig = React.useRef(sig);
+  const keys = React.useMemo(() => list.map(nsItemKey), [list]);
+  const prev = React.useRef({ keys, resetKey });
   React.useEffect(() => {
-    if (lastSig.current !== sig) { lastSig.current = sig; setPage(1); }
-  }, [sig]);
+    const p = prev.current;
+    if (p.keys === keys && p.resetKey === resetKey) return;
+    let reset = p.resetKey !== resetKey;
+    // Lista vazia no meio de um recarregamento não conta: compara a lista de
+    // antes do "carregando" com a de depois.
+    if (!reset && keys.length === 0) return;
+    if (!reset) {
+      const before = new Set(p.keys), after = new Set(keys);
+      let changed = 0;
+      for (const k of after) if (!before.has(k)) changed++;
+      for (const k of before) if (!after.has(k)) changed++;
+      reset = changed > 5 || changed > p.keys.length * 0.2;
+    }
+    prev.current = { keys, resetKey };
+    if (reset) setPage(1);
+  }, [keys, resetKey]);
   const active = total > minToShow;
   const totalPages = Math.max(1, Math.ceil(total / pageSize));
   const safePage = Math.min(page, totalPages);
+  // Encolheu além do fim (última linha da última página saiu): assenta na
+  // nova última página em vez de ficar num número que não existe mais.
+  React.useEffect(() => {
+    if (total > 0 && page > totalPages) setPage(totalPages);
+  }, [total, page, totalPages]);
   const start = active ? (safePage - 1) * pageSize : 0;
   const pageItems = active ? list.slice(start, start + pageSize) : list;
   const pager = active ? (
@@ -568,11 +589,54 @@ function ReadState({ kind = 'parcial', title, children, action, onAction }) {
   );
 }
 
+// ============================================================
+// Aviso de leitura PARCIAL de reembolso (DS1 "Dado com contexto").
+// Plataforma com volume real e nenhum estorno em 30 dias = o evento não está
+// chegando (caso BuyGoods). O sinal vem de /api/metrics/data-coverage e some
+// sozinho quando a ingestão voltar. `platforms` = filtro atual ([] = todas).
+// ============================================================
+let _nsCoverageCache = null; // { at, promise }
+function nsLoadCoverage() {
+  const fresh = _nsCoverageCache && Date.now() - _nsCoverageCache.at < 5 * 60_000;
+  if (!fresh) {
+    _nsCoverageCache = {
+      at: Date.now(),
+      promise: (window.NSApi && window.NSApi.fetchDataCoverage ? window.NSApi.fetchDataCoverage() : Promise.resolve(null))
+        .catch(() => null),
+    };
+  }
+  return _nsCoverageCache.promise;
+}
+function RefundCoverageNotice({ platforms }) {
+  const [cov, setCov] = React.useState(null);
+  React.useEffect(() => {
+    let alive = true;
+    nsLoadCoverage().then((c) => { if (alive) setCov(c); });
+    return () => { alive = false; };
+  }, []);
+  if (!cov || !Array.isArray(cov.platforms)) return null;
+  const scope = Array.isArray(platforms) && platforms.length ? new Set(platforms) : null;
+  const silent = cov.platforms.filter((p) => p.silent && (!scope || scope.has(p.platform)));
+  if (!silent.length) return null;
+  const names = silent.map((p) => p.displayName).join(', ');
+  const sales = silent.reduce((n, p) => n + p.sales, 0);
+  return (
+    <div style={{ marginBottom: 12 }}>
+      <ReadState kind="parcial" title="Leitura parcial de reembolso">
+        {silent.length === 1 ? 'A ' : 'As plataformas '}{names} não {silent.length === 1 ? 'registrou' : 'registraram'} nenhum estorno nos últimos {cov.windowDays} dias,
+        apesar de {fmtInt(sales)} vendas aprovadas — o evento de estorno não está chegando. O reembolso
+        {silent.length === 1 ? ' dela' : ' delas'} aparece como zero e o total da operação pode mudar.
+      </ReadState>
+    </div>
+  );
+}
+
 Object.assign(window, {
   fmtCurrency, fmtK, fmtInt, fmtPct, fmtDateShort, fmtDateLong, fmtDateTime,
   initials, avatarColor, rangeForPreset, previousRange, isoDateOnly, dayIndexFromDate,
   applyFilters, aggregateKPIs, bucketByDay,
   downloadCsv,
   Icon, Sparkline, FXLayers,
-  Pager, Paginated, usePaged, ReadState, NS_PAGE_SIZES,
+  Pager, Paginated, usePaged, ReadState, NS_PAGE_SIZES, RefundCoverageNotice,
+  nsReadPageSize, nsSavePageSize,
 });

@@ -17,14 +17,17 @@ import {
 } from 'recharts';
 import type { ChartBlock as ChartData } from '@/types/chat';
 
-const PALETTE = ['#7C3AED', '#06B6D4', '#F59E0B', '#10B981', '#F43F5E', '#3B82F6'];
+// Séries do DS1: --chart-1..5 de /styles/colors_and_type.css (a layout do
+// chat carrega), que trocam de valor com o tema. Referência direta, sem
+// hsl(): lá os tokens são hex.
+const PALETTE = ['var(--chart-1)', 'var(--chart-2)', 'var(--chart-3)', 'var(--chart-4)', 'var(--chart-5)'];
 
 export function ChartBlock({ block }: { block: ChartData }) {
   const merged = React.useMemo(() => mergeSeries(block.series), [block.series]);
   const seriesNames = block.series.map((s) => s.name);
 
   return (
-    <section className="nx-glass-card rounded-xl">
+    <section className="nx-glass-card rounded-lg">
       {block.title && (
         <header className="px-4 py-2 border-b border-[color:var(--glass-border)]">
           <h3 className="text-sm font-semibold">{block.title}</h3>
@@ -46,13 +49,13 @@ function renderChart(
 ): React.ReactElement {
   const common = (
     <>
-      <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+      <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--cx-border))" />
       <XAxis dataKey="x" tick={{ fontSize: 10, fill: 'hsl(var(--muted-foreground))' }} />
       <YAxis tick={{ fontSize: 10, fill: 'hsl(var(--muted-foreground))' }} />
       <Tooltip
         contentStyle={{
           background: 'hsl(var(--popover))',
-          border: '1px solid hsl(var(--border))',
+          border: '1px solid hsl(var(--cx-border))',
           borderRadius: 6,
           fontSize: 11,
         }}

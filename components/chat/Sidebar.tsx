@@ -326,7 +326,7 @@ export function Sidebar({
             )}
             {searchGroups.map((g) => (
               <div key={g.label} className="mb-3">
-                <div className="px-3 py-1.5 text-[10px] uppercase tracking-wider text-muted-foreground font-mono">
+                <div className="px-3 py-1.5 text-xs font-medium text-muted-foreground">
                   {g.label}
                 </div>
                 <div className="space-y-0.5">
@@ -476,7 +476,7 @@ export function Sidebar({
                 'flex items-center gap-1.5 px-3 min-h-9 mt-1 rounded-md cursor-pointer select-none transition-colors hover:bg-accent/30',
               )}
             >
-              <span className="text-[10px] uppercase tracking-wider text-muted-foreground font-mono">
+              <span className="text-xs font-medium text-muted-foreground">
                 Conversas
               </span>
             </div>
@@ -487,7 +487,7 @@ export function Sidebar({
             )}
             {rootGroups.map((g) => (
               <div key={g.label} className="mb-3">
-                <div className="px-3 py-1.5 text-[10px] uppercase tracking-wider text-muted-foreground/80 font-mono">
+                <div className="px-3 py-1.5 text-xs font-medium text-muted-foreground">
                   {g.label}
                 </div>
                 <div className="space-y-0.5">

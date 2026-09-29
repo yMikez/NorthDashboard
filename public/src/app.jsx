@@ -373,15 +373,15 @@ function FeesReviewPrompt({ user, setHashState }) {
 
   return (
     <div style={{
-      position: 'fixed', inset: 0, zIndex: 90, background: 'rgba(3,6,23,0.6)',
-      backdropFilter: 'blur(6px)', display: 'grid', placeItems: 'center',
+      position: 'fixed', inset: 0, zIndex: 90, background: 'color-mix(in srgb, var(--ns-black) 60%, transparent)',
+      display: 'grid', placeItems: 'center',
     }}>
       <div className="panel" style={{ width: 420, padding: 22 }}>
         <div className="eyebrow" style={{ fontSize: 10, color: 'var(--warning)', marginBottom: 4 }}>
-          REVISÃO PERIÓDICA · 7 DIAS
+          Revisão periódica · 7 dias
         </div>
         <h3 style={{ margin: '0 0 4px', fontSize: 18 }}>
-          Atualizar taxas <em style={{ color: 'var(--glow-cyan)' }}>e allowance</em>
+          Atualizar taxas <em>e allowance</em>
         </h3>
         <p style={{ fontSize: 12, color: 'var(--fg3)', lineHeight: 1.55, marginBottom: 16 }}>
           As taxas e allowance percentuais não são atualizadas há mais de 7 dias em{' '}

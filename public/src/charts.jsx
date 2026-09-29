@@ -28,18 +28,18 @@ function Donut({ items, totalLabel = 'Total', format = (v) => fmtCurrency(v), on
   let offset = 0;
   // Paleta tokenizada resolvida no render (segue troca de tema).
   const colors = [
-    chTok('--accent', '#3EB7D4'),
-    chTok('--money', '#37D695'),
-    chTok('--hot', '#E0653A'),
-    chTok('--warning', '#ffd166'),
-    chTok('--gold', '#C29B3C'),
+    chTok('--chart-1', '#4260E6'),
+    chTok('--chart-2', '#167447'),
+    chTok('--chart-3', '#87520B'),
+    chTok('--chart-4', '#1B22A7'),
+    chTok('--chart-5', '#515766'),
   ];
   const act = active != null ? items[active] : null;
   const clickable = (it) => !!onItemClick && it.clickable !== false;
   return (
     <div className="donut-wrap">
       <svg className="donut" viewBox="0 0 150 150">
-        <circle cx={cx} cy={cy} r={r} fill="none" stroke={chAlpha(chTok('--fg1', '#182226'), 0.08)} strokeWidth={stroke}/>
+        <circle cx={cx} cy={cy} r={r} fill="none" stroke={chAlpha(chTok('--fg1', '#0D0D0D'), 0.08)} strokeWidth={stroke}/>
         {items.map((it, i) => {
           const frac = it.value / total;
           const dash = C * frac;
@@ -69,7 +69,7 @@ function Donut({ items, totalLabel = 'Total', format = (v) => fmtCurrency(v), on
           {format(act ? act.value : total)}
         </text>
         <text x={cx} y={cy + 14} textAnchor="middle" fill={act ? (act.color || colors[active % colors.length]) : 'var(--fg5)'}
-          style={{ pointerEvents: 'none', fontFamily: 'var(--f-mono)', fontSize: 9, letterSpacing: '0.18em', textTransform: 'uppercase' }}>
+          style={{ pointerEvents: 'none', fontFamily: 'var(--f-mono)', fontSize: 9 }}>
           {act ? `${act.label} · ${((act.value / total) * 100).toFixed(0)}%` : totalLabel}
         </text>
       </svg>
@@ -213,7 +213,6 @@ function FunnelChart({ stages, currency }) {
                 <span style={{
                   fontFamily: 'var(--f-mono)', fontSize: 11,
                   color: s.revenue > 0 ? 'var(--money)' : 'var(--fg5)',
-                  letterSpacing: '0.02em',
                 }}>
                   {fmtCurrency(s.revenue, cur, 0)}
                 </span>
@@ -265,7 +264,7 @@ function HourHeatmap({ data, metric = 'orders', currency = 'USD' }) {
 
   // Rampa monocromática em cima do token de acento, resolvida no render
   // (segue o tema). Célula zero fica quase invisível (~4%).
-  const heatBase = chTok('--accent', '#3EB7D4');
+  const heatBase = chTok('--accent', '#4260E6');
   function cellColor(v) {
     if (v <= 0) return chAlpha(heatBase, 0.04);
     const t = Math.min(1, v / max);
@@ -288,7 +287,7 @@ function HourHeatmap({ data, metric = 'orders', currency = 'USD' }) {
 
       {ROWS.map((label, r) => (
         <React.Fragment key={r}>
-          <div style={{ fontFamily: 'var(--f-mono)', fontSize: 10, color: 'var(--fg4)', letterSpacing: '0.04em', alignSelf: 'center', paddingRight: 6, textAlign: 'right' }}>
+          <div style={{ fontFamily: 'var(--f-mono)', fontSize: 10, color: 'var(--fg4)', alignSelf: 'center', paddingRight: 6, textAlign: 'right' }}>
             {label}
           </div>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(24, 1fr)', gap: 2 }}>

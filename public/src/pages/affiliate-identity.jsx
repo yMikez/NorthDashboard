@@ -9,7 +9,7 @@
 const { useState: useStateAI, useEffect: useEffectAI, useMemo: useMemoAI } = React;
 
 const AI_INPUT = { background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: 8, padding: '7px 10px', color: 'var(--fg1)', fontFamily: 'var(--f-body)', fontSize: 12, width: '100%' };
-const AI_AV = { display: 'inline-grid', placeItems: 'center', borderRadius: '50%', color: '#fff', fontWeight: 700, fontFamily: 'var(--f-mono)', flex: 'none' };
+const AI_AV = { display: 'inline-grid', placeItems: 'center', borderRadius: '50%', color: 'var(--white)', fontWeight: 700, fontFamily: 'var(--f-mono)', flex: 'none' };
 const AI_PLAT = { clickbank: 'CB', digistore24: 'D24', buygoods: 'BG', cartpanda: 'CP', jvzoo: 'JVZ' };
 const AI_PLAT_NAMES = { clickbank: 'ClickBank', digistore24: 'Digistore24', buygoods: 'BuyGoods', cartpanda: 'Cartpanda', jvzoo: 'JVZoo' };
 // Origem do afiliado (de onde ele veio) — vive no parceiro.
@@ -52,9 +52,9 @@ function useAiPlatformOptions() {
   return opts;
 }
 const AI_CONF = {
-  alta:  { label: 'ALTA · mesmo e-mail',        tone: 'var(--success)', hint: 'O e-mail do afiliado é igual nas duas contas. Quase certeza de ser a mesma pessoa.' },
-  media: { label: 'MÉDIA · mesmo nome',         tone: 'var(--warning)', hint: 'Nome/nick idêntico em plataformas diferentes. Confira antes de unificar.' },
-  baixa: { label: 'BAIXA · sobrenome em comum', tone: 'var(--fg4)',     hint: 'Só um pedaço do nome coincide (ex.: "Godoy" dentro de "edugodoy…"). Pode ser coincidência.' },
+  alta:  { label: 'Alta · mesmo e-mail',        tone: 'var(--success)', hint: 'O e-mail do afiliado é igual nas duas contas. Quase certeza de ser a mesma pessoa.' },
+  media: { label: 'Média · mesmo nome',         tone: 'var(--warning)', hint: 'Nome/nick idêntico em plataformas diferentes. Confira antes de unificar.' },
+  baixa: { label: 'Baixa · sobrenome em comum', tone: 'var(--fg4)',     hint: 'Só um pedaço do nome coincide (ex.: "Godoy" dentro de "edugodoy…"). Pode ser coincidência.' },
 };
 
 function AiPlat({ slug, title }) {
@@ -105,7 +105,7 @@ function AiAccount({ a, extra, onRemove, dense }) {
 // um tipo novo a cada tecla e remontava o <input> (perdia o foco).
 function AiField({ label, k, placeholder, type = 'text', f, setF, onEnter }) {
   return (
-    <label style={{ display: 'flex', flexDirection: 'column', gap: 4, fontSize: 10, color: 'var(--fg5)', letterSpacing: '0.06em', textTransform: 'uppercase', fontWeight: 600 }}>
+    <label style={{ display: 'flex', flexDirection: 'column', gap: 4, fontSize: 10, color: 'var(--fg5)', fontWeight: 600 }}>
       {label}
       <input type={type} style={AI_INPUT} placeholder={placeholder} value={f[k]} onChange={(e) => setF({ ...f, [k]: e.target.value })}
         onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); onEnter?.(); } }}/>
@@ -113,14 +113,14 @@ function AiField({ label, k, placeholder, type = 'text', f, setF, onEnter }) {
   );
 }
 
-function AaContactForm({ title = 'CONTATO', initial, onSave, onCancel, busy, submitLabel = 'Salvar', showName = true, compact = false }) {
+function AaContactForm({ title = 'Contato', initial, onSave, onCancel, busy, submitLabel = 'Salvar', showName = true, compact = false }) {
   const blank = { displayName: '', email: '', phone: '', notes: '', originType: '', originRef: '' };
   const [f, setF] = useStateAI({ ...blank, ...(initial || {}) });
   useEffectAI(() => { setF({ ...blank, ...(initial || {}) }); }, [initial?.displayName, initial?.email, initial?.phone, initial?.notes, initial?.originType, initial?.originRef]);
   const common = { f, setF, onEnter: () => onSave?.(f) };
   const platforms = useAiPlatformOptions();
   const originMeta = f.originType ? AI_ORIGIN[f.originType] : null;
-  const labelStyle = { display: 'flex', flexDirection: 'column', gap: 4, fontSize: 10, color: 'var(--fg5)', letterSpacing: '0.06em', textTransform: 'uppercase', fontWeight: 600 };
+  const labelStyle = { display: 'flex', flexDirection: 'column', gap: 4, fontSize: 10, color: 'var(--fg5)', fontWeight: 600 };
   return (
     <div className={compact ? '' : 'panel'} style={compact ? {} : { marginBottom: 12 }}>
       {title && <div className="panel-eyebrow" style={{ marginBottom: 8 }}>{title}</div>}
@@ -162,7 +162,7 @@ function AiToast({ msg }) {
   if (!msg) return null;
   return (
     <div style={{
-      position: 'sticky', top: 0, zIndex: 2, marginBottom: 10, padding: '8px 12px', borderRadius: 10, fontSize: 12,
+      position: 'sticky', top: 0, zIndex: 2, marginBottom: 10, padding: '8px 12px', borderRadius: 'var(--r-lg)', fontSize: 12,
       color: msg.ok ? 'var(--success)' : 'var(--danger)',
       background: `color-mix(in oklab, ${msg.ok ? 'var(--success)' : 'var(--danger)'} 10%, var(--bg-elev))`,
       border: `1px solid color-mix(in oklab, ${msg.ok ? 'var(--success)' : 'var(--danger)'} 35%, transparent)`,
@@ -171,7 +171,7 @@ function AiToast({ msg }) {
 }
 
 function AiEmpty({ children }) {
-  return <div style={{ padding: '22px 12px', textAlign: 'center', color: 'var(--fg5)', fontSize: 12, border: '1px dashed var(--border)', borderRadius: 12 }}>{children}</div>;
+  return <div style={{ padding: '22px 12px', textAlign: 'center', color: 'var(--fg5)', fontSize: 12, border: '1px dashed var(--border)', borderRadius: 'var(--r-lg)' }}>{children}</div>;
 }
 
 function useIdentityActions(onChanged, reload) {
@@ -226,7 +226,7 @@ function AffiliateIdentityDrawer({ onClose, onChanged, initialTab = 'sugestoes' 
       <div className="drawer" style={{ width: 880, maxWidth: '100vw' }}>
         <div className="drawer-head" style={{ alignItems: 'flex-start' }}>
           <div style={{ minWidth: 0 }}>
-            <div className="eyebrow" style={{ fontSize: 10 }}>AFILIADOS · IDENTIDADES</div>
+            <div className="eyebrow" style={{ fontSize: 10 }}>Afiliados · Identidades</div>
             <h3 style={{ margin: '4px 0 6px' }}>Uma pessoa, várias contas</h3>
             <div style={{ fontSize: 12, color: 'var(--fg4)', maxWidth: 560, lineHeight: 1.45 }}>
               Cada plataforma cria uma conta própria pro mesmo afiliado. Unifique aqui e as abas Afiliados e Análise passam a somar as contas — e você guarda o contato num lugar só.
@@ -301,27 +301,32 @@ function AiSuggestions({ d, busy, act }) {
         <div key={g.c} style={{ marginBottom: 16 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
             <span style={{
-              fontFamily: 'var(--f-mono)', fontSize: 10, fontWeight: 700, letterSpacing: '0.06em', padding: '2px 8px', borderRadius: 'var(--r-full)',
+              fontFamily: 'var(--f-mono)', fontSize: 10, fontWeight: 700, padding: '2px 8px', borderRadius: 'var(--r-full)',
               color: AI_CONF[g.c].tone, background: `color-mix(in oklab, ${AI_CONF[g.c].tone} 12%, transparent)`, border: `1px solid color-mix(in oklab, ${AI_CONF[g.c].tone} 35%, transparent)`,
             }}>{AI_CONF[g.c].label}</span>
             <span style={{ fontSize: 11, color: 'var(--fg5)' }}>{AI_CONF[g.c].hint}</span>
           </div>
-          <div style={{ display: 'grid', gap: 8 }}>
-            {g.items.map((s, i) => (
-              <div key={i} className="panel" style={{ padding: '10px 12px', display: 'grid', gridTemplateColumns: 'minmax(0,1fr) 28px minmax(0,1fr) auto', gap: 10, alignItems: 'center' }}>
-                <AiAccount a={s.a} extra={s.a.partnerId ? 'já em parceiro' : null} dense/>
-                <div style={{ textAlign: 'center', color: 'var(--fg5)' }}><Icon name="link" size={14}/></div>
-                <AiAccount a={s.b} extra={s.b.partnerId ? 'já em parceiro' : null} dense/>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 4, alignItems: 'stretch' }}>
-                  <button className="btn" disabled={busy} onClick={() => link(s)}>Unificar</button>
-                  <button className="btn btn-ghost" disabled={busy} style={{ fontSize: 11 }} onClick={() => dismiss(s)}>Ignorar</button>
-                </div>
-                <div style={{ gridColumn: '1 / -1', fontSize: 11, color: 'var(--fg4)', borderTop: '1px solid var(--border-soft)', paddingTop: 6 }}>
-                  <Icon name="info" size={11}/> {s.evidence}
-                </div>
+          <Paginated items={g.items} label="sugestões">
+            {(pageRows, pager) => (<>
+              <div style={{ display: 'grid', gap: 8 }}>
+                {pageRows.map((s) => (
+                  <div key={`${s.a.id}|${s.b.id}`} className="panel" style={{ padding: '10px 12px', display: 'grid', gridTemplateColumns: 'minmax(0,1fr) 28px minmax(0,1fr) auto', gap: 10, alignItems: 'center' }}>
+                    <AiAccount a={s.a} extra={s.a.partnerId ? 'já em parceiro' : null} dense/>
+                    <div style={{ textAlign: 'center', color: 'var(--fg5)' }}><Icon name="link" size={14}/></div>
+                    <AiAccount a={s.b} extra={s.b.partnerId ? 'já em parceiro' : null} dense/>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 4, alignItems: 'stretch' }}>
+                      <button className="btn" disabled={busy} onClick={() => link(s)}>Unificar</button>
+                      <button className="btn btn-ghost" disabled={busy} style={{ fontSize: 11 }} onClick={() => dismiss(s)}>Ignorar</button>
+                    </div>
+                    <div style={{ gridColumn: '1 / -1', fontSize: 11, color: 'var(--fg4)', borderTop: '1px solid var(--border-soft)', paddingTop: 6 }}>
+                      <Icon name="info" size={11}/> {s.evidence}
+                    </div>
+                  </div>
+                ))}
               </div>
-            ))}
-          </div>
+              {pager}
+            </>)}
+          </Paginated>
         </div>
       ))}
       {groups.length > 0 && d.dismissedCount > 0 && (
@@ -362,8 +367,8 @@ function AiAccountSearch({ allAccounts, exclude = [], onPick, placeholder = 'bus
         <div style={{ marginTop: 6, fontSize: 11, color: 'var(--fg5)' }}>digite pelo menos 2 caracteres</div>
       )}
       {term.length >= 2 && (
-        <div style={{ marginTop: 6, border: '1px solid var(--border-soft)', borderRadius: 12, overflow: 'hidden', background: 'var(--bg-raised)' }}>
-          <div style={{ padding: '6px 12px', fontSize: 10, color: 'var(--fg5)', letterSpacing: '0.06em', textTransform: 'uppercase', borderBottom: '1px solid var(--border-soft)' }}>
+        <div style={{ marginTop: 6, border: '1px solid var(--border-soft)', borderRadius: 'var(--r-lg)', overflow: 'hidden', background: 'var(--bg-raised)' }}>
+          <div style={{ padding: '6px 12px', fontSize: 10, color: 'var(--fg5)', borderBottom: '1px solid var(--border-soft)' }}>
             {hits.length === 0 ? 'nada encontrado' : `${hits.length} resultado${hits.length > 1 ? 's' : ''} — clique pra selecionar`}
           </div>
           {hits.map((a) => (
@@ -401,52 +406,57 @@ function AiPartners({ d, allAccounts, busy, act }) {
         <span style={{ fontSize: 11, color: 'var(--fg5)' }}>{list.length} de {d.partners.length} · ordenados por receita 30d</span>
       </div>
       {d.partners.length === 0 && <AiEmpty>Nenhum parceiro ainda. Unifique contas nas <b>Sugestões</b> ou em <b>Vincular manualmente</b>.</AiEmpty>}
-      <div style={{ display: 'grid', gap: 10 }}>
-        {list.map((p) => (
-          <div key={p.id} className="panel" style={{ padding: '12px 14px' }}>
-            <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10 }}>
-              <span style={{ ...AI_AV, background: avatarColor(p.id), width: 34, height: 34, fontSize: 12 }}>{initials(p.displayName)}</span>
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-                  <span style={{ fontWeight: 700, fontSize: 14 }}>{p.displayName}</span>
-                  {p.accounts.map((a) => <AiPlat key={a.id} slug={a.platformSlug} title={a.nickname || a.externalId}/>)}
-                  <AiOriginChip origin={p.origin}/>
-                  <span className="mono" style={{ fontSize: 11, color: 'var(--money)', marginLeft: 'auto' }}>{fmtCurrency(p.revenue30d, 'USD', 0)} <span style={{ color: 'var(--fg5)' }}>30d</span></span>
+      <Paginated items={list} label="parceiros" resetKey={q.trim()}>
+        {(pageRows, pager) => (<>
+          <div style={{ display: 'grid', gap: 10 }}>
+            {pageRows.map((p) => (
+              <div key={p.id} className="panel" style={{ padding: '12px 14px' }}>
+                <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10 }}>
+                  <span style={{ ...AI_AV, background: avatarColor(p.id), width: 34, height: 34, fontSize: 12 }}>{initials(p.displayName)}</span>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                      <span style={{ fontWeight: 700, fontSize: 14 }}>{p.displayName}</span>
+                      {p.accounts.map((a) => <AiPlat key={a.id} slug={a.platformSlug} title={a.nickname || a.externalId}/>)}
+                      <AiOriginChip origin={p.origin}/>
+                      <span className="mono" style={{ fontSize: 11, color: 'var(--money)', marginLeft: 'auto' }}>{fmtCurrency(p.revenue30d, 'USD', 0)} <span style={{ color: 'var(--fg5)' }}>30d</span></span>
+                    </div>
+                    {editing !== p.id && (
+                      <div style={{ fontSize: 11, color: 'var(--fg4)', fontFamily: 'var(--f-mono)', marginTop: 2, display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center' }}>
+                        {p.email ? <span><Icon name="mail" size={11}/> {p.email}</span> : <span style={{ color: 'var(--fg5)' }}>sem e-mail</span>}
+                        {p.phone && <span><Icon name="user" size={11}/> {p.phone}</span>}
+                        {p.notes && <span style={{ color: 'var(--fg5)' }}>· {p.notes}</span>}
+                        <button className="btn btn-ghost" style={{ fontSize: 10, padding: '1px 6px' }} onClick={() => setEditing(p.id)}><Icon name="edit" size={10}/> {p.email || p.phone ? 'editar' : 'adicionar contato'}</button>
+                      </div>
+                    )}
+                  </div>
                 </div>
-                {editing !== p.id && (
-                  <div style={{ fontSize: 11, color: 'var(--fg4)', fontFamily: 'var(--f-mono)', marginTop: 2, display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center' }}>
-                    {p.email ? <span><Icon name="mail" size={11}/> {p.email}</span> : <span style={{ color: 'var(--fg5)' }}>sem e-mail</span>}
-                    {p.phone && <span><Icon name="user" size={11}/> {p.phone}</span>}
-                    {p.notes && <span style={{ color: 'var(--fg5)' }}>· {p.notes}</span>}
-                    <button className="btn btn-ghost" style={{ fontSize: 10, padding: '1px 6px' }} onClick={() => setEditing(p.id)}><Icon name="edit" size={10}/> {p.email || p.phone ? 'editar' : 'adicionar contato'}</button>
+                {editing === p.id && (
+                  <div style={{ marginTop: 10 }}>
+                    <AaContactForm compact title={null} initial={{ displayName: p.displayName, email: p.email || '', phone: p.phone || '', notes: p.notes || '', originType: p.origin?.type || '', originRef: p.origin?.ref || '' }} busy={busy}
+                      onCancel={() => setEditing(null)}
+                      onSave={(f) => act(async () => { await window.NSApi.adminAffiliateIdentity('update', { partnerId: p.id, displayName: f.displayName, email: f.email || null, phone: f.phone || null, notes: f.notes || null, originType: f.originType || null, originRef: f.originRef || null }); setEditing(null); }, '✓ contato salvo')}/>
                   </div>
                 )}
-              </div>
-            </div>
-            {editing === p.id && (
-              <div style={{ marginTop: 10 }}>
-                <AaContactForm compact title={null} initial={{ displayName: p.displayName, email: p.email || '', phone: p.phone || '', notes: p.notes || '', originType: p.origin?.type || '', originRef: p.origin?.ref || '' }} busy={busy}
-                  onCancel={() => setEditing(null)}
-                  onSave={(f) => act(async () => { await window.NSApi.adminAffiliateIdentity('update', { partnerId: p.id, displayName: f.displayName, email: f.email || null, phone: f.phone || null, notes: f.notes || null, originType: f.originType || null, originRef: f.originRef || null }); setEditing(null); }, '✓ contato salvo')}/>
-              </div>
-            )}
-            <div style={{ marginTop: 8, borderTop: '1px solid var(--border-soft)', paddingTop: 6 }}>
-              {p.accounts.map((a) => (
-                <AiAccount key={a.id} a={a} dense onRemove={p.accounts.length > 1 ? () => act(() => window.NSApi.adminAffiliateIdentity('unlink', { affiliateId: a.id }), `✓ "${a.nickname || a.externalId}" desvinculada`) : null}/>
-              ))}
-              {adding === p.id ? (
-                <div style={{ marginTop: 6 }}>
-                  <AiAccountSearch autoFocus allAccounts={allAccounts} exclude={p.accounts.map((a) => a.id)} placeholder="adicionar conta a este parceiro…"
-                    onPick={(a) => act(async () => { await window.NSApi.adminAffiliateIdentity('link', { affiliateIds: [a.id], partnerId: p.id }); setAdding(null); }, `✓ "${a.nickname || a.externalId}" adicionada a ${p.displayName}`)}/>
-                  <button className="btn btn-ghost" style={{ fontSize: 11, marginTop: 4 }} onClick={() => setAdding(null)}>cancelar</button>
+                <div style={{ marginTop: 8, borderTop: '1px solid var(--border-soft)', paddingTop: 6 }}>
+                  {p.accounts.map((a) => (
+                    <AiAccount key={a.id} a={a} dense onRemove={p.accounts.length > 1 ? () => act(() => window.NSApi.adminAffiliateIdentity('unlink', { affiliateId: a.id }), `✓ "${a.nickname || a.externalId}" desvinculada`) : null}/>
+                  ))}
+                  {adding === p.id ? (
+                    <div style={{ marginTop: 6 }}>
+                      <AiAccountSearch autoFocus allAccounts={allAccounts} exclude={p.accounts.map((a) => a.id)} placeholder="adicionar conta a este parceiro…"
+                        onPick={(a) => act(async () => { await window.NSApi.adminAffiliateIdentity('link', { affiliateIds: [a.id], partnerId: p.id }); setAdding(null); }, `✓ "${a.nickname || a.externalId}" adicionada a ${p.displayName}`)}/>
+                      <button className="btn btn-ghost" style={{ fontSize: 11, marginTop: 4 }} onClick={() => setAdding(null)}>cancelar</button>
+                    </div>
+                  ) : (
+                    <button className="btn btn-ghost" style={{ fontSize: 11, marginTop: 4 }} onClick={() => setAdding(p.id)}><Icon name="plus" size={11}/> adicionar conta</button>
+                  )}
                 </div>
-              ) : (
-                <button className="btn btn-ghost" style={{ fontSize: 11, marginTop: 4 }} onClick={() => setAdding(p.id)}><Icon name="plus" size={11}/> adicionar conta</button>
-              )}
-            </div>
+              </div>
+            ))}
           </div>
-        ))}
-      </div>
+          {pager}
+        </>)}
+      </Paginated>
     </>
   );
 }
@@ -475,14 +485,14 @@ function AiManualLink({ allAccounts, busy, act }) {
   }, target ? `✓ contas adicionadas a ${target.partnerName}` : merging ? `✓ parceiros fundidos em ${partnersInPick[0][1]}` : '✓ parceiro criado');
   return (
     <div className="panel">
-      <div className="panel-eyebrow">VÍNCULO MANUAL</div>
+      <div className="panel-eyebrow">Vínculo manual</div>
       <ol style={{ fontSize: 12, color: 'var(--fg4)', margin: '6px 0 12px', paddingLeft: 18, lineHeight: 1.6 }}>
         <li>Busque e selecione as contas (qualquer plataforma) que são a mesma pessoa.</li>
         <li>Opcional: dê um nome e contato. Se alguma conta já tiver parceiro, as outras entram nele.</li>
         <li>Clique em <b>Vincular</b>.</li>
       </ol>
-      <div style={{ border: '1px dashed var(--border)', borderRadius: 12, padding: '10px 12px', marginBottom: 10, minHeight: 52 }}>
-        <div style={{ fontSize: 10, color: 'var(--fg5)', letterSpacing: '0.06em', textTransform: 'uppercase', marginBottom: 6 }}>
+      <div style={{ border: '1px dashed var(--border)', borderRadius: 'var(--r-lg)', padding: '10px 12px', marginBottom: 10, minHeight: 52 }}>
+        <div style={{ fontSize: 10, color: 'var(--fg5)', marginBottom: 6 }}>
           Selecionadas · {pick.length}{pick.length === 1 ? ' (falta pelo menos mais uma, ou um contato)' : ''}
         </div>
         {pick.length === 0 && <span style={{ fontSize: 12, color: 'var(--fg5)' }}>nenhuma conta selecionada — busque abaixo</span>}
@@ -495,7 +505,7 @@ function AiManualLink({ allAccounts, busy, act }) {
       <AiAccountSearch allAccounts={allAccounts} exclude={pick.map((a) => a.id)} onPick={(a) => setPick((p) => [...p, a])} autoFocus/>
       <div style={{ height: 10 }}/>
       {merging && (
-        <div style={{ fontSize: 12, color: 'var(--warning)', marginBottom: 10, padding: '8px 10px', border: '1px solid color-mix(in oklab, var(--warning) 35%, transparent)', borderRadius: 10 }}>
+        <div style={{ fontSize: 12, color: 'var(--warning)', marginBottom: 10, padding: '8px 10px', border: '1px solid color-mix(in oklab, var(--warning) 35%, transparent)', borderRadius: 'var(--r-lg)' }}>
           <Icon name="alert-triangle" size={12}/> Isso vai <b>fundir</b> os parceiros {partnersInPick.map(([, n]) => `"${n}"`).join(' e ')}: todas as contas ficam em <b>{partnersInPick[0][1]}</b> (o primeiro selecionado) e os outros parceiros somem. Contato/notas dos outros se perdem.
         </div>
       )}
@@ -553,7 +563,7 @@ function AffiliatePartnerDrawer({ row, filters, isAdmin, onClose, onOpenAccount,
         <div className="drawer-body">
           <AiToast msg={msg}/>
           {isAdmin && editing && row.partnerId && (
-            <AaContactForm title="CONTATO DO PARCEIRO (opcional)" busy={busy}
+            <AaContactForm title="Contato do parceiro (opcional)" busy={busy}
               initial={{ displayName: name, email: row.contact?.email || '', phone: row.contact?.phone || '', notes: row.contact?.notes || '', originType: row.origin?.type || '', originRef: row.origin?.ref || '' }}
               onCancel={() => setEditing(false)}
               onSave={(f) => act(async () => { await window.NSApi.adminAffiliateIdentity('update', { partnerId: row.partnerId, displayName: f.displayName, email: f.email || null, phone: f.phone || null, notes: f.notes || null, originType: f.originType || null, originRef: f.originRef || null }); setEditing(false); }, '✓ contato salvo')}/>
@@ -569,50 +579,55 @@ function AffiliatePartnerDrawer({ row, filters, isAdmin, onClose, onOpenAccount,
           <div className="panel" style={{ padding: 0, marginTop: 12 }}>
             <div className="panel-head" style={{ padding: '12px 16px 6px' }}>
               <div className="panel-title">
-                <span className="panel-eyebrow">DESEMPENHO POR PLATAFORMA</span>
+                <span className="panel-eyebrow">Desempenho por plataforma</span>
                 <span className="panel-sub">cada conta com os próprios números no período · "Detalhe" abre o drill-down completo da conta (série diária, ofertas, países)</span>
               </div>
             </div>
-            <div className="tbl-wrap">
-              <table className="tbl">
-                <thead><tr>
-                  <th>Plataforma</th><th>Conta</th>
-                  <th className="num">Pedidos</th><th className="num">Receita</th><th style={{ minWidth: 90 }}>Share</th>
-                  <th className="num">AOV</th><th className="num">Aprov.</th><th className="num">Reemb. obs</th>
-                  <th className="num">CPA/venda</th><th className="num">NET AOV</th><th className="num">Net after CPA</th><th>Status</th><th>30d</th><th></th>
-                </tr></thead>
-                <tbody>
-                  {accounts.map((a) => (
-                    <tr tabIndex={0} key={`${a.platformSlug}:${a.externalId}`} onClick={() => onOpenAccount?.(a)} style={{ cursor: 'pointer' }}>
-                      <td><AiPlat slug={a.platformSlug}/></td>
-                      <td>
-                        <div style={{ fontWeight: 600 }}>{a.nickname || a.externalId}</div>
-                        <div style={{ fontSize: 10, color: 'var(--fg5)', fontFamily: 'var(--f-mono)' }}>ID {a.externalId}</div>
-                      </td>
-                      <td className="num cell-mono">{fmtInt(a.orders)}</td>
-                      <td className="num cell-mono" style={{ color: 'var(--money)', fontWeight: 600 }}>{fmtCurrency(a.revenue, cur, 0)}</td>
-                      <td>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                          <div style={{ flex: 1, height: 6, borderRadius: 4, background: 'color-mix(in oklab, var(--fg4) 15%, transparent)', overflow: 'hidden' }}>
-                            <div style={{ width: `${Math.max(2, a.revenue / total * 100)}%`, height: '100%', background: 'var(--accent)' }}/>
-                          </div>
-                          <span className="mono" style={{ fontSize: 10, color: 'var(--fg4)', minWidth: 32, textAlign: 'right' }}>{fmtPct(a.revenue / total, 0)}</span>
-                        </div>
-                      </td>
-                      <td className="num cell-mono">{aov(a) > 0 ? fmtCurrency(aov(a), cur, 0) : '—'}</td>
-                      <td className="num cell-mono">{fmtPct(a.approvalRate, 1)}</td>
-                      <td className="num cell-mono" style={{ color: a.refundRate > 0.12 ? 'var(--danger)' : undefined }}>{fmtPct(a.refundRate, 1)}</td>
-                      <td className="num cell-mono">{a.cpaPerFe > 0 ? fmtCurrency(a.cpaPerFe, cur, 0) : '—'}</td>
-                      <td className="num cell-mono">{a.netAovUsd > 0 ? fmtCurrency(a.netAovUsd, cur, 0) : '—'}</td>
-                      <td className="num cell-mono" style={{ fontWeight: 700, color: a.netAfterCpaUsd == null ? 'var(--fg5)' : a.netAfterCpaUsd < 0 ? 'var(--danger)' : 'var(--money)' }}>{a.netAfterCpaUsd != null ? fmtCurrency(a.netAfterCpaUsd, cur, 0) : '—'}</td>
-                      <td><CpaStatusChip status={a.cpaStatus}/></td>
-                      <td><Sparkline data={a.sparkline || []} width={64} height={18}/></td>
-                      <td><button className="btn btn-ghost" style={{ fontSize: 11, whiteSpace: 'nowrap' }} onClick={(e) => { e.stopPropagation(); onOpenAccount?.(a); }}>Detalhe →</button></td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+            <Paginated items={accounts} label="contas">
+              {(pageRows, pager) => (<>
+                <div className="tbl-wrap">
+                  <table className="tbl">
+                    <thead><tr>
+                      <th>Plataforma</th><th>Conta</th>
+                      <th className="num">Pedidos</th><th className="num">Receita</th><th className="num" style={{ minWidth: 90 }}>Share</th>
+                      <th className="num">AOV</th><th className="num">Aprov.</th><th className="num">Reemb. obs</th>
+                      <th className="num">CPA/venda</th><th className="num">NET AOV</th><th className="num">Net after CPA</th><th>Status</th><th>30d</th><th></th>
+                    </tr></thead>
+                    <tbody>
+                      {pageRows.map((a) => (
+                        <tr tabIndex={0} key={`${a.platformSlug}:${a.externalId}`} onClick={() => onOpenAccount?.(a)} style={{ cursor: 'pointer' }}>
+                          <td><AiPlat slug={a.platformSlug}/></td>
+                          <td>
+                            <div style={{ fontWeight: 600 }}>{a.nickname || a.externalId}</div>
+                            <div style={{ fontSize: 10, color: 'var(--fg5)', fontFamily: 'var(--f-mono)' }}>ID {a.externalId}</div>
+                          </td>
+                          <td className="num cell-mono">{fmtInt(a.orders)}</td>
+                          <td className="num cell-mono" style={{ color: 'var(--money)', fontWeight: 600 }}>{fmtCurrency(a.revenue, cur, 0)}</td>
+                          <td className="num">
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                              <div style={{ flex: 1, height: 6, borderRadius: 4, background: 'color-mix(in oklab, var(--fg4) 15%, transparent)', overflow: 'hidden' }}>
+                                <div style={{ width: `${Math.max(2, a.revenue / total * 100)}%`, height: '100%', background: 'var(--accent)' }}/>
+                              </div>
+                              <span className="mono" style={{ fontSize: 10, color: 'var(--fg4)', minWidth: 32, textAlign: 'right' }}>{fmtPct(a.revenue / total, 0)}</span>
+                            </div>
+                          </td>
+                          <td className="num cell-mono">{aov(a) > 0 ? fmtCurrency(aov(a), cur, 0) : '—'}</td>
+                          <td className="num cell-mono">{fmtPct(a.approvalRate, 1)}</td>
+                          <td className="num cell-mono" style={{ color: a.refundRate > 0.12 ? 'var(--danger)' : undefined }}>{fmtPct(a.refundRate, 1)}</td>
+                          <td className="num cell-mono">{a.cpaPerFe > 0 ? fmtCurrency(a.cpaPerFe, cur, 0) : '—'}</td>
+                          <td className="num cell-mono">{a.netAovUsd > 0 ? fmtCurrency(a.netAovUsd, cur, 0) : '—'}</td>
+                          <td className="num cell-mono" style={{ fontWeight: 700, color: a.netAfterCpaUsd == null ? 'var(--fg5)' : a.netAfterCpaUsd < 0 ? 'var(--danger)' : 'var(--money)' }}>{a.netAfterCpaUsd != null ? fmtCurrency(a.netAfterCpaUsd, cur, 0) : '—'}</td>
+                          <td><CpaStatusChip status={a.cpaStatus}/></td>
+                          <td><Sparkline data={a.sparkline || []} width={64} height={18}/></td>
+                          <td><button className="btn btn-ghost" style={{ fontSize: 11, whiteSpace: 'nowrap' }} onClick={(e) => { e.stopPropagation(); onOpenAccount?.(a); }}>Detalhe →</button></td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+                {pager}
+              </>)}
+            </Paginated>
           </div>
           <div style={{ fontSize: 11, color: 'var(--fg5)', marginTop: 10 }}>
             Os números do parceiro são as contas somadas: taxas re-derivadas dos totais; NET AOV, CPA/venda e Net after CPA calculados sobre as contas com CPA conhecido (total = por FE × FEs dessas contas); o refund&CB% é a média ponderada — o override é por conta (abra "Detalhe" ou desligue "contas unificadas"). Gerencie as contas em <b>Identidades</b> (botão no topo da aba).

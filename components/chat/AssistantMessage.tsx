@@ -58,7 +58,7 @@ export function AssistantMessage({
 
   return (
     <div className="group px-6 py-4 flex gap-3">
-      <div className="w-7 h-7 rounded-md bg-gradient-to-br from-primary to-primary/60 flex items-center justify-center shrink-0">
+      <div className="w-7 h-7 rounded-md bg-primary flex items-center justify-center shrink-0">
         <Sparkles className="w-4 h-4 text-primary-foreground" />
       </div>
 
@@ -68,7 +68,7 @@ export function AssistantMessage({
         )}
 
         {content && (
-          <div className="nx-bubble-assistant rounded-2xl rounded-tl-sm px-4 py-2.5">
+          <div className="nx-bubble-assistant rounded-lg rounded-tl-sm px-4 py-2.5">
             <MarkdownBlock
               block={{ content }}
               streaming={streaming && !hasBlocks}
@@ -83,7 +83,7 @@ export function AssistantMessage({
         )}
 
         {truncated && !streaming && (
-          <div className="font-mono text-[11px] leading-snug" style={{ color: 'hsl(var(--warning))' }}>
+          <div className="font-mono text-[11px] leading-snug" style={{ color: 'hsl(var(--cx-warning))' }}>
             ⚠ Resposta truncada por limite de tamanho — peça pra continuar.
           </div>
         )}
@@ -91,7 +91,7 @@ export function AssistantMessage({
         {!streaming && (
           <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
             <Button variant="ghost" size="icon-sm" onClick={() => void copy()} aria-label="Copiar">
-              {copied ? <Check className="w-3.5 h-3.5 text-emerald-500" /> : <Copy className="w-3.5 h-3.5" />}
+              {copied ? <Check className="w-3.5 h-3.5 text-success" /> : <Copy className="w-3.5 h-3.5" />}
             </Button>
             {onRegenerate && (
               <Button variant="ghost" size="icon-sm" onClick={onRegenerate} aria-label="Regenerar">
@@ -103,7 +103,7 @@ export function AssistantMessage({
               size="icon-sm"
               onClick={() => vote('up')}
               aria-label="Resposta útil"
-              className={cn(feedback === 'up' && 'text-emerald-500')}
+              className={cn(feedback === 'up' && 'text-success')}
             >
               <ThumbsUp className="w-3.5 h-3.5" />
             </Button>
@@ -112,7 +112,7 @@ export function AssistantMessage({
               size="icon-sm"
               onClick={() => vote('down')}
               aria-label="Resposta ruim"
-              className={cn(feedback === 'down' && 'text-rose-500')}
+              className={cn(feedback === 'down' && 'text-danger')}
             >
               <ThumbsDown className="w-3.5 h-3.5" />
             </Button>

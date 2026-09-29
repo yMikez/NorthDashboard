@@ -412,7 +412,6 @@ export function ChatShell({ user }: { user: ChatUser }) {
   // (como .side sticky) inflem a row.
   return (
     <div className="grid grid-cols-[232px_auto_1fr] grid-rows-[100%] h-full overflow-hidden nx-chat-bg text-foreground relative">
-      <div className="nx-fx-blobs" aria-hidden />
       <DashboardNav user={user} activeId="chat" />
 
       <Sidebar

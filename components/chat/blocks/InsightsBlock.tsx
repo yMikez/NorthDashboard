@@ -8,21 +8,21 @@ import type { InsightsBlock as InsightsBlockData } from '@/types/chat';
 const SEVERITY_CFG = {
   positive: {
     icon: TrendingUp,
-    border: 'border-emerald-500/30',
-    bg: 'bg-emerald-500/5',
-    text: 'text-emerald-500',
+    border: 'border-success/30',
+    bg: 'bg-success/5',
+    text: 'text-success',
   },
   negative: {
     icon: TrendingDown,
-    border: 'border-rose-500/30',
-    bg: 'bg-rose-500/5',
-    text: 'text-rose-500',
+    border: 'border-destructive/30',
+    bg: 'bg-destructive/5',
+    text: 'text-destructive',
   },
   warning: {
     icon: AlertTriangle,
-    border: 'border-amber-500/30',
-    bg: 'bg-amber-500/5',
-    text: 'text-amber-500',
+    border: 'border-warning/30',
+    bg: 'bg-warning/5',
+    text: 'text-warning',
   },
   neutral: {
     icon: Info,
@@ -42,7 +42,7 @@ export function InsightsBlock({ block }: { block: InsightsBlockData }) {
           <div
             key={ins.id ?? i}
             className={cn(
-              'nx-glass-card rounded-lg border p-3 flex items-start gap-3 backdrop-blur-md',
+              'nx-glass-card rounded-lg border p-3 flex items-start gap-3',
               cfg.border,
               cfg.bg,
             )}

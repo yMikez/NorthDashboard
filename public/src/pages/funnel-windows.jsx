@@ -7,7 +7,7 @@
 const { useState: useStateFW, useEffect: useEffectFW } = React;
 
 const FW_WINDOWS = [3, 7, 15, 30, 60];
-const FW_INPUT = { background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: 8, padding: '6px 9px', color: 'var(--fg1)', fontFamily: 'var(--f-body)', fontSize: 12 };
+const FW_INPUT = { background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: 'var(--r-md)', padding: '6px 9px', color: 'var(--fg1)', fontFamily: 'var(--f-body)', fontSize: 12 };
 
 function fwShort(w) { const d = (s) => s.slice(8, 10) + '/' + s.slice(5, 7); return `${d(w.start)}–${d(w.end)}`; }
 function fwPp(f) { return (f >= 0 ? '+' : '−') + (Math.abs(f) * 100).toFixed(1).replace('.', ',') + ' pp'; }
@@ -41,7 +41,7 @@ function FwFunnel({ stages, currency }) {
             </div>
             <div style={{ position: 'relative', height: 22, borderRadius: 4, background: 'color-mix(in oklab, var(--fg4) 10%, transparent)', overflow: 'hidden' }}>
               <div style={{ position: 'absolute', inset: '0 auto 0 0', width: `${w}%`, background: fill, borderRadius: 4, transition: 'width 300ms var(--ease-smooth)' }}/>
-              <span className="mono" style={{ position: 'absolute', top: 0, bottom: 0, display: 'flex', alignItems: 'center', fontSize: 10, letterSpacing: '0.04em', whiteSpace: 'nowrap', left: inside ? 8 : `calc(${w}% + 8px)`, color: inside ? (i === 0 ? 'var(--bg)' : 'var(--fg1)') : 'var(--fg3)' }}>
+              <span className="mono" style={{ position: 'absolute', top: 0, bottom: 0, display: 'flex', alignItems: 'center', fontSize: 10, whiteSpace: 'nowrap', left: inside ? 8 : `calc(${w}% + 8px)`, color: inside ? (i === 0 ? 'var(--bg)' : 'var(--fg1)') : 'var(--fg3)' }}>
                 {i === 0 ? '100%' : fmtPct(share, 1) + ' do FE'}
               </span>
             </div>
@@ -91,7 +91,7 @@ function FunnelWindowsView({ filters, family }) {
   return (
     <>
       <div className="panel" style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 10, padding: '10px 14px', marginBottom: 14 }}>
-        <span className="f-label">JANELA</span>
+        <span className="f-label">Janela</span>
         <div className="seg">
           {FW_WINDOWS.map((w) => <button key={w} className={win === w ? 'is-active' : ''} onClick={() => { setWin(w); setCustomWin(''); }}>{w}d</button>)}
         </div>
@@ -104,7 +104,7 @@ function FunnelWindowsView({ filters, family }) {
           {!FW_WINDOWS.includes(win) && <span className="mono" style={{ color: 'var(--accent)' }}>{win}d ativa</span>}
           {customWin !== '' && !(parseInt(customWin, 10) >= 1 && parseInt(customWin, 10) <= 90) && <span style={{ color: 'var(--warning)' }}>use 1 a 90</span>}
         </label>
-        <span className="f-label" style={{ marginLeft: 6 }}>ATÉ O DIA</span>
+        <span className="f-label" style={{ marginLeft: 6 }}>Até o dia</span>
         <input type="date" value={anchorInput} min="2024-01-01" max={todayBrt} style={{ ...FW_INPUT, width: 150 }}
           onChange={(e) => { const v = e.target.value; setAnchorInput(v); if (!v) { setAnchor(''); return; } if (/^\d{4}-\d{2}-\d{2}$/.test(v) && parseInt(v.slice(0, 4), 10) >= 2024 && v <= todayBrt) setAnchor(v); }}/>
         {anchor
@@ -115,7 +115,7 @@ function FunnelWindowsView({ filters, family }) {
             <input type="checkbox" checked={today} onChange={(e) => setToday(e.target.checked)}/> incluir hoje (parcial)
           </label>
         )}
-        <span className="f-label" style={{ marginLeft: 6 }}>QUANTAS JANELAS</span>
+        <span className="f-label" style={{ marginLeft: 6 }}>Quantas janelas</span>
         <div className="seg">{[2, 3, 4, 6, 8].map((k) => <button key={k} className={count === k ? 'is-active' : ''} onClick={() => setCount(k)}>{k}</button>)}</div>
         <span style={{ fontSize: 11, color: 'var(--fg5)' }}>= {count} × {win} dias, a última terminando {seq?.anchor || anchor || (today ? 'hoje' : 'ontem')}{scopeKey !== 'all' ? ` · funil ${scopeKey}` : ''}</span>
       </div>
@@ -125,17 +125,17 @@ function FunnelWindowsView({ filters, family }) {
 
       {seq && scope && (
         <div style={{ opacity: state.status === 'loading' ? 0.45 : 1, transition: 'opacity .2s' }}>
-          {sectionTitle(`COMO CADA JANELA SE COMPORTOU (${seq.count} × ${seq.window} DIAS)`)}
+          {sectionTitle(`Como cada janela se comportou (${seq.count} × ${seq.window} dias)`)}
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: 12 }}>
             {seq.windows.map((w) => {
               const s = scopeOf(w); const n = scope.notes[w.index];
               return (
                 <div key={w.index} className="panel" style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                  <div style={{ fontFamily: 'var(--f-mono)', fontSize: 10, color: 'var(--fg5)', letterSpacing: '0.08em' }}>{w.label.toUpperCase()} · {w.start} → {w.end}</div>
+                  <div style={{ fontFamily: 'var(--f-mono)', fontSize: 10, color: 'var(--fg5)' }}>{w.label} · {w.start} → {w.end}</div>
                   {n && <div style={{ fontWeight: 700, fontSize: 13, color: toneColor[n.tone] }}>{n.title}</div>}
                   <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
                     {[[fmtInt(s.summary.feGroups), 'FEs (topo)'], [fmtCurrency(s.summary.totalRevenue, cur, 0), 'Receita'], [fmtCurrency(s.summary.aov, cur, 0), 'AOV de sessão'], [s.summary.aovFEOnly > 0 ? `+${(s.summary.revenueLiftFromUpsells * 100).toFixed(0)}%` : '—', 'Lift de upsells']].map(([v, l]) => (
-                      <div key={l}><div className="mono" style={{ fontSize: 16, fontWeight: 700 }}>{v}</div><div style={{ fontSize: 10, color: 'var(--fg5)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>{l}</div></div>
+                      <div key={l}><div className="mono" style={{ fontSize: 16, fontWeight: 700 }}>{v}</div><div style={{ fontSize: 10, color: 'var(--fg5)' }}>{l}</div></div>
                     ))}
                   </div>
                   <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
@@ -151,7 +151,7 @@ function FunnelWindowsView({ filters, family }) {
             })}
           </div>
 
-          {sectionTitle('FUNIL EM BARRAS · UMA JANELA AO LADO DA OUTRA')}
+          {sectionTitle('Funil em barras · Uma janela ao lado da outra')}
           <div style={{ display: 'grid', gridTemplateColumns: `repeat(auto-fit, minmax(${seq.windows.length > 3 ? 330 : 380}px, 1fr))`, gap: 12 }}>
             {seq.windows.map((w) => {
               const sc = scopeOf(w);
@@ -175,7 +175,7 @@ function FunnelWindowsView({ filters, family }) {
 
           {scope.transitions.length > 0 && (
             <>
-              {sectionTitle('COMPARATIVO JANELA A JANELA — DE ONDE VEIO A VARIAÇÃO')}
+              {sectionTitle('Comparativo janela a janela — de onde veio a variação')}
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: 12 }}>
                 {scope.transitions.map((t) => {
                   const Row = ({ l, v, color }) => <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, fontSize: 12, padding: '4px 0', borderBottom: '1px solid var(--border-soft)' }}><span style={{ color: 'var(--fg4)' }}>{l}</span><b className="mono" style={{ color }}>{v}</b></div>;
@@ -190,7 +190,7 @@ function FunnelWindowsView({ filters, family }) {
                       <Row l="Lift de upsells" v={<>{(t.prevLift * 100).toFixed(0)}% → {(t.lift * 100).toFixed(0)}% <FwDelta value={t.lift - t.prevLift} kind="pp"/></>}/>
                       {t.stages.length > 0 && (
                         <div style={{ marginTop: 8 }}>
-                          <div style={{ fontSize: 10, color: 'var(--fg5)', letterSpacing: '0.06em', textTransform: 'uppercase', marginBottom: 4 }}>Take rate por estágio</div>
+                          <div style={{ fontSize: 10, color: 'var(--fg5)', marginBottom: 4 }}>Take rate por estágio</div>
                           {t.stages.map((s) => (
                             <div key={s.id} style={{ display: 'grid', gridTemplateColumns: '60px 1fr auto auto', gap: 8, fontSize: 12, padding: '2px 0', color: t.topStage && t.topStage.id === s.id ? 'var(--fg1)' : 'var(--fg3)', fontWeight: t.topStage && t.topStage.id === s.id ? 700 : 400 }}>
                               <span>{s.label}</span>
@@ -209,7 +209,7 @@ function FunnelWindowsView({ filters, family }) {
             </>
           )}
 
-          {sectionTitle('TAKE RATE POR ETAPA · JANELA A JANELA')}
+          {sectionTitle('Take rate por etapa · Janela a janela')}
           <div className="panel">
             <div style={{ fontSize: 11, color: 'var(--fg4)', marginBottom: 10 }}>Uma barra por janela em cada etapa (J1 = mais antiga, última em destaque). Comprimento = take rate relativa às FEs da própria janela.</div>
             {(() => {
@@ -246,7 +246,7 @@ function FunnelWindowsView({ filters, family }) {
             })()}
           </div>
 
-          {sectionTitle('ETAPA × JANELA')}
+          {sectionTitle('Etapa × janela')}
           <div className="panel" style={{ padding: 0 }}>
             <div className="tbl-wrap">
               <table className="tbl">

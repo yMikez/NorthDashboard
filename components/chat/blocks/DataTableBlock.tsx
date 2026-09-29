@@ -50,7 +50,7 @@ export function DataTableBlock({ block }: { block: TableData }) {
   }
 
   return (
-    <section className="nx-glass-card rounded-xl">
+    <section className="nx-glass-card rounded-lg">
       {(block.title || block.exportable) && (
         <header className="px-4 py-2 border-b border-[color:var(--glass-border)] flex items-center justify-between">
           {block.title && <h3 className="text-sm font-semibold">{block.title}</h3>}
@@ -64,7 +64,7 @@ export function DataTableBlock({ block }: { block: TableData }) {
       <div className="overflow-x-auto">
         <table className="w-full text-xs">
           <thead>
-            <tr className="text-[10px] uppercase tracking-wider text-muted-foreground font-mono border-b border-border">
+            <tr className="text-[10px] text-muted-foreground font-mono border-b border-border">
               {block.columns.map((c) => (
                 <th
                   key={c.key}
@@ -95,9 +95,9 @@ export function DataTableBlock({ block }: { block: TableData }) {
                 key={i}
                 className={cn(
                   'border-b border-border last:border-0 hover:bg-accent/30 transition-colors',
-                  r._highlight === 'success' && 'bg-emerald-500/5',
-                  r._highlight === 'warning' && 'bg-amber-500/5',
-                  r._highlight === 'danger' && 'bg-rose-500/5',
+                  r._highlight === 'success' && 'bg-success/5',
+                  r._highlight === 'warning' && 'bg-warning/5',
+                  r._highlight === 'danger' && 'bg-destructive/5',
                 )}
               >
                 {block.columns.map((c) => (

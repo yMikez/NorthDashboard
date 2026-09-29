@@ -3,98 +3,115 @@
 @tailwind utilities;
 
 /* ============================================================
-   NorthScale design system × shadcn aliases.
+   NorthScale Design System 1.0 × aliases do shadcn.
 
-   shadcn components usam `hsl(var(--background))` etc. Aqui mapeamos
-   esses tokens HSL triplets pra cores da paleta NorthScale (já
-   carregadas via /styles/colors_and_type.css na layout). Cobre
-   light/dark via [data-theme] no <html> — mesmo gatilho usado pela
-   SPA legada, então toggle aqui propaga pro resto do app.
+   Os componentes shadcn usam `hsl(var(--background))` etc. Aqui esses
+   tokens (triplets HSL "H S% L%") recebem os valores do DS1 (ver
+   DESIGN-SYSTEM.md e /styles/colors_and_type.css). Claro/escuro via
+   [data-theme] no <html>, o mesmo gatilho da SPA legada, então o toggle
+   daqui propaga pro resto do app.
 
-   Fontes (Inter + JetBrains Mono) já vêm pelo colors_and_type.css.
-   Não importa font aqui — chat herda as fontes do design system.
+   - CLARO: valores exatos do DS1.
+   - ESCURO: DERIVADO dos neutros e do azul claro do DS1 (o DS1 é só
+     claro); contraste medido. Azul North #4260E6 segue como FUNDO de
+     botão nos dois temas; em fundo escuro o acento de texto/foco é o
+     azul claro #8FA3F2 (o #4260E6 dá 3,4:1 ali e reprova como texto).
+
+   Fontes: Sequel Sans (corpo/títulos, com Inter de reserva) e Montserrat
+   (dados) já chegam por /styles/colors_and_type.css, que a layout carrega
+   — lá estão os @font-face e os tokens --f-body/--f-display/--f-mono.
+   Não importar fonte aqui.
+
+   Efeitos: o DS1 pede "evitar efeitos decorativos". Nada de blur, brilho,
+   gradiente ou cor teal fixa — superfície é fundo sólido + borda 1 px, e
+   as classes utilitárias abaixo só leem tokens (trocam de tema sozinhas).
    ============================================================ */
 
 @layer base {
   :root,
   [data-theme='dark'] {
-    /* petróleo profundo (#0D1215) base background */
-    --background: 203 24% 7%;
-    /* white foreground */
-    --foreground: 0 0% 100%;
-    /* superfície raised (#161D21) elevated card */
-    --card: 202 20% 11%;
-    --card-foreground: 0 0% 100%;
-    /* popovers na mesma superfície raised (#161D21) */
-    --popover: 202 20% 11%;
-    --popover-foreground: 0 0% 100%;
-    /* teal North (#3EB7D4) — accent primário do brand */
-    --primary: 192 64% 54%;
-    --primary-foreground: 203 24% 7%;
-    /* tinta petróleo (#182226) — bg de elementos secundários */
-    --secondary: 197 23% 12%;
-    --secondary-foreground: 0 0% 98%;
-    /* muted = raised com leve lift */
-    --muted: 202 20% 14%;
-    --muted-foreground: 180 7% 60%;
-    /* accent hover — tint petróleo sutil, destaque sem competir
-       com o conteúdo. */
-    --accent: 197 20% 14%;
-    --accent-foreground: 0 0% 100%;
-    /* danger (#EF4444) */
-    --destructive: 0 84% 60%;
-    --destructive-foreground: 0 0% 100%;
-    /* border — linha de divisão discreta em petróleo (≈ tinta clara
-       a 15% sobre o fundo). */
-    --border: 197 8% 20%;
-    --input: 202 18% 15%;
-    --ring: 192 64% 54%;
-    /* semânticas — espelham --success/warning/danger do brand */
-    --success: 158 80% 40%;
-    --warning: 35 95% 50%;
-    --danger: 0 84% 60%;
+    /* canvas quase-preto neutro (#101217) */
+    --background: 222.9 17.9% 7.6%;
+    /* texto primário (#F4F5F7) */
+    --foreground: 220 15.8% 96.3%;
+    /* superfície raised (#16181F) */
+    --card: 226.7 17% 10.4%;
+    --card-foreground: 220 15.8% 96.3%;
+    --popover: 226.7 17% 10.4%;
+    --popover-foreground: 220 15.8% 96.3%;
+    /* azul North (#4260E6) como fundo de ação; branco em cima = 5,19:1 */
+    --primary: 229 76.6% 58%;
+    --primary-foreground: 0 0% 100%;
+    /* superfície elevada (#1D2029) — secundário e hover */
+    --secondary: 225 17.1% 13.7%;
+    --secondary-foreground: 220 15.8% 96.3%;
+    /* muted = raised (#16181F); texto secundário #949AA8 */
+    --muted: 226.7 17% 10.4%;
+    --muted-foreground: 222 10.3% 62%;
+    --cx-accent: 225 17.1% 13.7%;
+    --accent-foreground: 220 15.8% 96.3%;
+    /* erro clareado (#F26170); texto escuro em cima (#101217, ~6:1 —
+       branco daria só ~3:1) */
+    --destructive: 353.8 84.8% 66.5%;
+    --destructive-foreground: 222.9 17.9% 7.6%;
+    /* divisor (#2C303B) e limite de campo (#6E7484, 3,8:1 não-texto) */
+    --cx-border: 224 14.6% 20.2%;
+    --input: 223.6 9.1% 47.5%;
+    /* foco/seleção em azul claro (#8FA3F2) */
+    --ring: 227.9 79.2% 75.5%;
+    /* semânticas — tons de TEXTO que passam 4,5:1 no card escuro */
+    --cx-success: 147.5 60.5% 46.7%;
+    --cx-warning: 37.4 91.3% 54.9%;
+    --cx-danger: 353.8 84.8% 66.5%;
+    /* 8 px = raio de superfície do DS1 */
     --radius: 0.5rem;
   }
 
   [data-theme='light'] {
-    /* papel quente (#F5F3EC), tinta petróleo (#182226) */
-    --background: 47 31% 94%;
-    --foreground: 197 23% 12%;
+    /* bg.canvas (#F4F5F7), text.primary (#0D0D0D) */
+    --background: 220 15.8% 96.3%;
+    --foreground: 0 0% 5.1%;
+    /* bg.surface (#FFFFFF) */
     --card: 0 0% 100%;
-    --card-foreground: 197 23% 12%;
+    --card-foreground: 0 0% 5.1%;
     --popover: 0 0% 100%;
-    --popover-foreground: 197 23% 12%;
-    /* teal petróleo (#0E7C97) */
-    --primary: 192 83% 32%;
+    --popover-foreground: 0 0% 5.1%;
+    /* azul North (#4260E6) */
+    --primary: 229 76.6% 58%;
     --primary-foreground: 0 0% 100%;
-    --secondary: 49 26% 92%;
-    --secondary-foreground: 197 23% 12%;
-    --muted: 47 25% 94%;
-    --muted-foreground: 193 9% 41%;
-    --accent: 49 26% 92%;
-    --accent-foreground: 197 23% 12%;
-    --destructive: 0 84% 50%;
+    /* bg.hover / seleção (#EEF1FD) */
+    --secondary: 228 78.9% 96.3%;
+    --secondary-foreground: 0 0% 5.1%;
+    /* muted = canvas (#F4F5F7); text.secondary (#515766, 7,23:1) */
+    --muted: 220 15.8% 96.3%;
+    --muted-foreground: 222.9 11.5% 35.9%;
+    --cx-accent: 228 78.9% 96.3%;
+    --accent-foreground: 0 0% 5.1%;
+    /* error.text (#B42338); branco em cima = 6,5:1 */
+    --destructive: 351.3 67.4% 42.2%;
     --destructive-foreground: 0 0% 100%;
-    --border: 50 7% 83%;
-    --input: 49 15% 90%;
-    --ring: 192 83% 32%;
-    --success: 158 80% 35%;
-    --warning: 35 90% 45%;
-    --danger: 0 84% 50%;
+    /* border.subtle (#D8DBE2) e border.control (#6E7484) */
+    --cx-border: 222 14.7% 86.7%;
+    --input: 223.6 9.1% 47.5%;
+    --ring: 229 76.6% 58%;
+    /* feedback: tons de texto do DS1 (AA sobre superfície clara) */
+    --cx-success: 151.3 68.1% 27.1%;
+    --cx-warning: 34.4 84.9% 28.6%;
+    --cx-danger: 351.3 67.4% 42.2%;
   }
 
   /* Escopo: aplica color/background/font no wrapper do chat pra não
      vazar pra outras rotas Next (login, etc). Fontes vindas do
-     colors_and_type.css. */
+     colors_and_type.css (fallback local só por segurança). */
   [data-app-scope='chat'] {
     color: hsl(var(--foreground));
     background: hsl(var(--background));
-    font-family: var(--f-body);
-    font-feature-settings: 'ss01', 'cv11';
+    font-family: var(--f-body, 'Sequel Sans', 'Inter', system-ui, sans-serif);
   }
   [data-app-scope='chat'] .font-mono,
   [data-app-scope='chat'] [class*='font-mono'] {
-    font-family: var(--f-mono);
+    font-family: var(--f-mono, 'Montserrat', 'Inter', system-ui, sans-serif);
+    font-variant-numeric: tabular-nums;
   }
 }
 
@@ -110,7 +127,7 @@
     display: block !important;
   }
 
-  /* Scrollbar discreto pro modo dark. */
+  /* Scrollbar discreto, neutro, nos dois temas. */
   [data-app-scope='chat'] *::-webkit-scrollbar {
     width: 8px;
     height: 8px;
@@ -119,41 +136,28 @@
     background: transparent;
   }
   [data-app-scope='chat'] *::-webkit-scrollbar-thumb {
-    background: rgba(62, 183, 212, 0.18);
+    background: hsl(var(--muted-foreground) / 0.35);
     border-radius: 4px;
   }
   [data-app-scope='chat'] *::-webkit-scrollbar-thumb:hover {
-    background: rgba(62, 183, 212, 0.35);
+    background: hsl(var(--muted-foreground) / 0.6);
   }
 
-  /* Panel sólido (ex-glass) — usado em cards do chat (sidebar, topbar,
-     blocks). Sem backdrop-filter: North Editorial proíbe glassmorphism. */
+  /* Panel sólido (ex-glass) — cards do chat (sidebar, topbar, blocos). */
   .glass {
-    background: #161D21;
-    border: 1px solid rgba(236, 239, 234, 0.12);
-  }
-  [data-theme='light'] .glass {
-    background: #FFFFFF;
-    border-color: rgba(24, 34, 38, 0.14);
+    background: hsl(var(--card));
+    border: 1px solid hsl(var(--cx-border));
   }
 
-  /* ============================================================
-     Identidade visual igual ao ChatWidget flutuante (canto da SPA).
-     Gradiente navy 3-stops, bordas cyan-soft, bubbles tonais.
-     ============================================================ */
-
-  /* Container — petróleo profundo chapado (North Editorial, sem glow). */
+  /* Container — canvas chapado, sem glow. */
   .nx-chat-bg {
     position: relative;
-    background: #0D1215;
+    background: hsl(var(--background));
     overflow: hidden;
   }
-  [data-theme='light'] .nx-chat-bg {
-    background: #F5F3EC;
-  }
 
-  /* Blobs decorativos REMOVIDOS (North Editorial: nada de glow/aurora
-     em tela de trabalho). Classe mantida como no-op pros usos no JSX. */
+  /* Blobs decorativos REMOVIDOS. Classe mantida como no-op pros usos no
+     JSX. */
   .nx-fx-blobs {
     display: none;
   }
@@ -161,155 +165,119 @@
   /* Strip sólida pra cabeçalhos (TopBar, sidebar header). */
   .nx-strip-eyebrow {
     position: relative;
-    background: #161D21;
-    border-bottom: 1px solid rgba(236, 239, 234, 0.12);
-  }
-  [data-theme='light'] .nx-strip-eyebrow {
-    background: #EFEDE4;
-    border-bottom-color: rgba(24, 34, 38, 0.14);
+    background: hsl(var(--card));
+    border-bottom: 1px solid hsl(var(--cx-border));
   }
 
-  /* Strip sólida pra rodapé do widget (input area). */
+  /* Strip sólida pra área de input. */
   .nx-strip-input {
     position: relative;
-    background: #161D21;
-    border-top: 1px solid rgba(236, 239, 234, 0.12);
-  }
-  [data-theme='light'] .nx-strip-input {
-    background: #EFEDE4;
-    border-top-color: rgba(24, 34, 38, 0.14);
+    background: hsl(var(--card));
+    border-top: 1px solid hsl(var(--cx-border));
   }
 
   /* Panel de conversas — superfície sólida com borda nítida. */
   .nx-glass-panel {
     position: relative;
-    background: #161D21;
-    border-right: 1px solid rgba(236, 239, 234, 0.12);
-  }
-  [data-theme='light'] .nx-glass-panel {
-    background: #FFFFFF;
-    border-right-color: rgba(24, 34, 38, 0.14);
+    background: hsl(var(--card));
+    border-right: 1px solid hsl(var(--cx-border));
   }
 
-  /* Card sólido — pra blocos (Summary, Table, Chart, Insights). */
+  /* Card sólido — blocos (Summary, Table, Chart, Insights) e sugestões. */
   .nx-glass-card {
     position: relative;
-    background: #161D21;
-    border: 1px solid rgba(236, 239, 234, 0.12);
-    border-radius: var(--r-md);
-    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.25);
+    background: hsl(var(--card));
+    border: 1px solid hsl(var(--cx-border));
+    border-radius: var(--radius);
     overflow: hidden;
   }
-  [data-theme='light'] .nx-glass-card {
-    background: #FFFFFF;
-    border-color: rgba(24, 34, 38, 0.14);
-    box-shadow: 0 1px 2px rgba(24, 34, 38, 0.06);
-  }
 
-  /* Bolha user (alinhada à direita) — tint teal chapado, sem glow. */
+  /* Bolha do usuário — superfície de seleção + borda no acento. */
   .nx-bubble-user {
     position: relative;
-    background: color-mix(in oklab, #3EB7D4 14%, transparent);
-    border: 1px solid rgba(62, 183, 212, 0.35);
-    color: var(--fg1);
+    background: hsl(var(--cx-accent));
+    border: 1px solid hsl(var(--ring) / 0.35);
+    color: hsl(var(--foreground));
   }
 
-  /* Bolha assistant — superfície sólida discreta, pra texto respirar. */
+  /* Bolha do assistente — superfície sólida, pro texto respirar. */
   .nx-bubble-assistant {
     position: relative;
-    background: #161D21;
-    border: 1px solid rgba(236, 239, 234, 0.12);
-    color: var(--fg1);
-  }
-  [data-theme='light'] .nx-bubble-assistant {
-    background: #FFFFFF;
-    border-color: rgba(24, 34, 38, 0.14);
+    background: hsl(var(--card));
+    border: 1px solid hsl(var(--cx-border));
+    color: hsl(var(--foreground));
   }
 
-  /* Textarea — fundo sólido, borda de tinta, foco teal. */
+  /* Campo — fundo sólido, limite de campo (3:1 não-texto), foco de 2 px
+     no acento (1 px de borda + 1 px de anel, sem deslocar o layout). */
   .nx-input-field {
     position: relative;
-    background: #161D21;
-    border: 1px solid rgba(236, 239, 234, 0.15);
-    color: var(--fg1);
-    font-family: var(--f-body);
-    transition: border-color var(--dur-base) var(--ease-smooth),
-      box-shadow var(--dur-base) var(--ease-smooth);
+    background: hsl(var(--card));
+    border: 1px solid hsl(var(--input));
+    color: hsl(var(--foreground));
+    font-family: var(--f-body, 'Sequel Sans', 'Inter', system-ui, sans-serif);
+    transition: border-color var(--dur-base, 180ms) var(--ease-smooth, ease),
+      box-shadow var(--dur-base, 180ms) var(--ease-smooth, ease);
   }
   .nx-input-field:focus,
   .nx-input-field:focus-within {
-    border-color: #3EB7D4;
+    border-color: hsl(var(--ring));
     outline: none;
-    box-shadow: 0 0 0 2px rgba(62, 183, 212, 0.22);
-  }
-  [data-theme='light'] .nx-input-field {
-    background: #FFFFFF;
-    border-color: rgba(24, 34, 38, 0.16);
-  }
-  [data-theme='light'] .nx-input-field:focus,
-  [data-theme='light'] .nx-input-field:focus-within {
-    border-color: #0E7C97;
-    box-shadow: 0 0 0 2px rgba(14, 124, 151, 0.18);
+    box-shadow: 0 0 0 1px hsl(var(--ring));
   }
 
-  /* Tool chip — pill chapada teal enquanto roda, verde quando done. */
+  /* Tool chip — acento enquanto roda, verde de sucesso quando termina. */
   .nx-tool-chip {
     position: relative;
-    font-family: var(--f-mono);
+    font-family: var(--f-mono, 'Montserrat', 'Inter', system-ui, sans-serif);
     font-size: 10px;
     padding: 2px 10px;
-    border-radius: var(--r-full);
-    background: color-mix(in oklab, #3EB7D4 12%, transparent);
-    color: var(--glow-cyan);
-    border: 1px solid rgba(62, 183, 212, 0.35);
+    border-radius: var(--r-full, 999px);
+    background: hsl(var(--cx-accent));
+    color: hsl(var(--ring));
+    border: 1px solid hsl(var(--ring) / 0.35);
     display: inline-flex;
     align-items: center;
     gap: 6px;
   }
   .nx-tool-chip.is-done {
-    background: color-mix(in oklab, #37D695 12%, transparent);
-    color: var(--success);
-    border-color: rgba(55, 214, 149, 0.35);
+    background: hsl(var(--cx-success) / 0.12);
+    color: hsl(var(--cx-success));
+    border-color: hsl(var(--cx-success) / 0.35);
   }
 
-  /* Eyebrow mono uppercase com tracking — o "ANÁLISE COM IA" do widget. */
+  /* Eyebrow: rótulo de seção em caixa normal, tom secundário (DS1: sem
+     caixa-alta nem tracking decorativo). */
   .nx-eyebrow {
-    font-family: var(--f-mono);
+    font-family: var(--f-mono, 'Montserrat', 'Inter', system-ui, sans-serif);
     font-size: 10px;
-    letter-spacing: 0.12em;
-    text-transform: uppercase;
-    color: var(--fg4);
+    color: hsl(var(--muted-foreground));
   }
+  /* Nome histórico ("cyan"); hoje é o acento azul do DS1. */
   .nx-eyebrow-cyan {
-    color: var(--glow-cyan);
+    color: hsl(var(--ring));
   }
 
-  /* Subtitle abaixo do eyebrow — "Especialista em analytics nutra DR". */
+  /* Subtitle abaixo do eyebrow. */
   .nx-subtitle {
     font-size: 11px;
-    color: var(--fg5);
+    color: hsl(var(--muted-foreground));
   }
 
-  /* Send button — teal petróleo sólido, sombra discreta. */
+  /* Botão enviar — azul North sólido; hover escurece (DS1), sem sombra
+     nem deslocamento. */
   .nx-send-btn {
     position: relative;
-    background: #0E7C97;
-    color: #fff;
-    border: 1px solid rgba(255, 255, 255, 0.12);
-    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.25);
-    transition: all var(--dur-fast) var(--ease-smooth);
+    background: hsl(var(--primary));
+    color: hsl(var(--primary-foreground));
+    border: 1px solid transparent;
+    transition: background-color var(--dur-fast, 120ms) var(--ease-smooth, ease);
   }
   .nx-send-btn:hover:not(:disabled) {
-    transform: translateY(-1px);
-    background: #3EB7D4;
-    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.30);
-  }
-  .nx-send-btn:active:not(:disabled) {
-    transform: translateY(0);
+    background: var(--cta-hover, #1B22A7);
   }
   .nx-send-btn:disabled {
     opacity: 0.4;
-    box-shadow: none;
     cursor: not-allowed;
   }
 
@@ -319,22 +287,44 @@
     align-items: center;
     gap: 0.25rem;
     padding: 0.125rem 0.375rem;
-    border-radius: var(--r-sm);
-    font-family: var(--f-mono);
+    border-radius: var(--r-sm, 4px);
+    font-family: var(--f-mono, 'Montserrat', 'Inter', system-ui, sans-serif);
     font-size: 0.85em;
-    background: rgba(62, 183, 212, 0.10);
-    color: var(--glow-cyan);
+    background: hsl(var(--cx-accent));
+    color: hsl(var(--ring));
     cursor: pointer;
-    transition: background var(--dur-fast) var(--ease-smooth);
-    border: 1px solid rgba(62, 183, 212, 0.25);
+    transition: border-color var(--dur-fast, 120ms) var(--ease-smooth, ease);
+    border: 1px solid hsl(var(--ring) / 0.3);
   }
   .entity-token:hover {
-    background: rgba(62, 183, 212, 0.20);
+    border-color: hsl(var(--ring));
   }
 
-  /* Foco teal pros itens primários do chat (sem glow). */
+  /* Foco visível no acento pros itens primários do chat (sem glow). */
   [data-app-scope='chat'] .nx-focus-glow:focus-visible {
-    outline: 2px solid var(--glow-cyan);
+    outline: 2px solid hsl(var(--ring));
     outline-offset: 2px;
+  }
+
+  /* ------------------------------------------------------------
+     Neutralização de efeitos que ainda vêm como utilitário no JSX
+     (backdrop-blur-md, hover com borda teal e "lift"). Especificidade
+     de escopo (0,2,0+) vence o utilitário (0,1,0 / 0,2,0) sem precisar
+     tocar nos componentes. Quando o TSX for migrado, isto vira no-op.
+     ------------------------------------------------------------ */
+  [data-app-scope='chat'] [class*='backdrop-blur'] {
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+  }
+  /* Card de superfície: raio de 8 px do DS1 mesmo com rounded-xl no JSX.
+     (Só raio — o fundo fica livre pro bg-* dos insights.) */
+  [data-app-scope='chat'] .nx-glass-card {
+    border-radius: var(--radius);
+  }
+  /* Card clicável (sugestões): hover = borda no acento, sem deslocar. */
+  [data-app-scope='chat'] button.nx-glass-card:hover,
+  [data-app-scope='chat'] a.nx-glass-card:hover {
+    border-color: hsl(var(--ring));
+    transform: none;
   }
 }

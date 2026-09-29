@@ -80,9 +80,9 @@ export function TopBar({
     <header className="nx-strip-eyebrow px-4 py-2.5 flex flex-col gap-2">
       <div className="flex items-center justify-between gap-3">
         <div className="flex items-center gap-2.5 min-w-0 flex-1">
-          <Sparkles className="w-4 h-4 text-[color:var(--glow-cyan)] shrink-0" />
+          <Sparkles className="w-4 h-4 text-ring shrink-0" />
           <div className="min-w-0 flex flex-col -my-0.5">
-            <span className="nx-eyebrow">ANÁLISE COM IA</span>
+            <span className="text-[11px] text-muted-foreground">Análise com IA</span>
             {renaming ? (
             <input
               ref={inputRef}
@@ -105,7 +105,7 @@ export function TopBar({
             <button
               type="button"
               onClick={() => setRenaming(true)}
-              className="group flex items-center gap-1.5 text-sm font-medium text-foreground hover:text-[color:var(--glow-cyan)] min-w-0 truncate transition-colors text-left"
+              className="group flex items-center gap-1.5 text-sm font-medium text-foreground hover:text-ring min-w-0 truncate transition-colors text-left"
               title="Clique pra renomear"
             >
               <span className="truncate">{title || 'Nova conversa'}</span>
@@ -163,10 +163,10 @@ function SyncIndicator({
   onRefresh: () => void;
 }) {
   const cfg: Record<SyncStatus, { dot: string; text: string; default: string }> = {
-    live: { dot: 'bg-emerald-500', text: 'text-emerald-500', default: 'Ao vivo' },
-    stale: { dot: 'bg-amber-500', text: 'text-amber-500', default: 'Dados defasados' },
-    syncing: { dot: 'bg-sky-500 animate-pulse', text: 'text-sky-500', default: 'Sincronizando…' },
-    error: { dot: 'bg-rose-500', text: 'text-rose-500', default: 'Erro de sync' },
+    live: { dot: 'bg-success', text: 'text-success', default: 'Ao vivo' },
+    stale: { dot: 'bg-warning', text: 'text-warning', default: 'Dados defasados' },
+    syncing: { dot: 'bg-ring animate-pulse', text: 'text-ring', default: 'Sincronizando…' },
+    error: { dot: 'bg-danger', text: 'text-danger', default: 'Erro de sync' },
   };
   const c = cfg[status];
   return (

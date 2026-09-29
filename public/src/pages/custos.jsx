@@ -1,17 +1,20 @@
-/* global React, Icon, NSTimeSeries, fmtCurrency, fmtInt, fmtPct, encodeSet */
+/* global React, Icon, NSTimeSeries, fmtCurrency, fmtInt, fmtPct, encodeSet, Paginated */
 /* Custos page: fetches /api/metrics/costs-overview, renders KPIs +
    daily chart com lente de custos + tabelas por plataforma e família +
    card de allowance rolling 60d. */
 
 const { useState: useStateCu, useEffect: useEffectCu } = React;
 
+// DS1: série categórica só com --chart-1..5. Os 10 slots do hash reusam os
+// 5 tokens na mesma ordem (slot N e N+5 = mesma cor) — o nome ao lado da
+// bolinha é quem identifica a família.
 const FAMILY_PALETTE_CU = [
-  '#5BC8FF', '#8B7FFF', '#FFB14E', '#28C878', '#FF6B6B',
-  '#4A90FF', '#FF8FCF', '#6BD9A8', '#FFD15B', '#A084FF',
+  'var(--chart-1)', 'var(--chart-2)', 'var(--chart-3)', 'var(--chart-4)', 'var(--chart-5)',
+  'var(--chart-1)', 'var(--chart-2)', 'var(--chart-3)', 'var(--chart-4)', 'var(--chart-5)',
 ];
 
 function familyAccentCu(family) {
-  if (!family) return '#6b84b8';
+  if (!family) return 'var(--fg5)';
   let h = 0;
   for (let i = 0; i < family.length; i++) h = (h * 31 + family.charCodeAt(i)) | 0;
   return FAMILY_PALETTE_CU[Math.abs(h) % FAMILY_PALETTE_CU.length];
@@ -104,8 +107,8 @@ function CustosPage({ filters }) {
   }));
   const costSeries = [
     { key: 'platformFees', label: 'Plataforma', color: 'var(--hot)', stackId: 'cost' },
-    { key: 'cpa', label: 'CPA', color: '#FFB14E', stackId: 'cost' },
-    { key: 'cogs', label: 'Produção', color: '#FF8FCF', stackId: 'cost' },
+    { key: 'cpa', label: 'CPA', color: 'var(--chart-4)', stackId: 'cost' },
+    { key: 'cogs', label: 'Produção', color: 'var(--chart-5)', stackId: 'cost' },
     { key: 'fulfillment', label: 'Frete', color: 'var(--gold)', stackId: 'cost' },
     { key: 'gross', label: 'Bruto', color: 'var(--accent)', kind: 'line' },
     { key: 'profit', label: 'Lucro', color: 'var(--money)', kind: 'line' },
@@ -117,7 +120,7 @@ function CustosPage({ filters }) {
         <div className="lead">
           {/* whiteSpace normal: quebra limpa em telas estreitas (mesmo fix do
               ribbon do overview). */}
-          <span className="eyebrow" style={{ whiteSpace: 'normal' }}>{filters.preset.toUpperCase()} · MARGEM & CUSTOS</span>
+          <span className="eyebrow" style={{ whiteSpace: 'normal' }}>{(typeof PRESET_LABEL !== 'undefined' && PRESET_LABEL[filters.preset]) || filters.preset} · Margem & custos</span>
           <h2>Custos <em>e lucro real</em></h2>
           <span className="sub hide-mobile">
             Gross aprovado − taxa plataforma − CPA − COGS − frete · estimativa de allowance rolling 60d
@@ -135,7 +138,7 @@ function CustosPage({ filters }) {
 
       <div className="kpi-grid">
         <CostKpi
-          label="RECEITA BRUTA"
+          label="Receita bruta"
           icon="dollar"
           index={0}
           money
@@ -145,7 +148,7 @@ function CustosPage({ filters }) {
             : 'sem reembolsos no período'}
         />
         <CostKpi
-          label="LUCRO ESTIMADO"
+          label="Lucro estimado"
           icon="target"
           index={1}
           money
@@ -154,7 +157,7 @@ function CustosPage({ filters }) {
           hint={`margem ${kpis.marginPct.toFixed(1)}%`}
         />
         <CostKpi
-          label="TAXA PLATAFORMA"
+          label="Taxa plataforma"
           icon="plug"
           index={2}
           money
@@ -164,7 +167,7 @@ function CustosPage({ filters }) {
             : 'sem vendas'}
         />
         <CostKpi
-          label="CPA AFILIADO"
+          label="CPA afiliado"
           icon="users"
           index={3}
           money
@@ -174,7 +177,7 @@ function CustosPage({ filters }) {
             : 'sem vendas'}
         />
         <CostKpi
-          label="PRODUÇÃO · POTES"
+          label="Produção · Potes"
           icon="package"
           index={4}
           money
@@ -184,7 +187,7 @@ function CustosPage({ filters }) {
             : 'custo pago ao fornecedor por pote'}
         />
         <CostKpi
-          label="FRETE · ENVIO"
+          label="Frete · Envio"
           icon="map"
           index={5}
           money
@@ -194,7 +197,7 @@ function CustosPage({ filters }) {
             : 'envio do pacote ao cliente'}
         />
         <CostKpi
-          label="ALLOWANCE RESERVADO"
+          label="Allowance reservado"
           icon="clock"
           index={6}
           money
@@ -202,12 +205,12 @@ function CustosPage({ filters }) {
           hint="estimativa rolling 60d"
         />
         <CostKpi
-          label="MARGEM"
+          label="Margem"
           icon="trending-up"
           index={7}
           accent={kpis.marginPct >= 10 ? 'var(--success)' : kpis.marginPct >= 5 ? 'var(--warning)' : 'var(--danger)'}
           countValue={kpis.marginPct} countFormat={(n) => n.toFixed(1) + '%'}
-          hint={kpis.profitUsd >= 0 ? 'lucro / receita bruta' : 'NEGATIVA — revise custos'}
+          hint={kpis.profitUsd >= 0 ? 'lucro / receita bruta' : 'negativa — revise custos'}
         />
       </div>
 
@@ -215,7 +218,7 @@ function CustosPage({ filters }) {
       <div className="panel" style={{ marginBottom: 14 }}>
         <div className="panel-head">
           <div className="panel-title">
-            <span className="panel-eyebrow">COMPOSIÇÃO DIÁRIA · CUSTOS EMPILHADOS vs BRUTO E LUCRO</span>
+            <span className="panel-eyebrow">Composição diária · Custos empilhados vs bruto e lucro</span>
             <div className="panel-metric">
               {fmtCurrency(kpis.profitUsd, cur, 0)}
               <span className={`delta ${kpis.profitUsd >= 0 ? 'up' : 'down'}`}>
@@ -232,7 +235,7 @@ function CustosPage({ filters }) {
       <div className="panel" style={{ marginBottom: 14 }}>
         <div className="panel-head">
           <div className="panel-title">
-            <span className="panel-eyebrow">ALLOWANCE · RESERVADO PELAS PLATAFORMAS</span>
+            <span className="panel-eyebrow">Allowance · Reservado pelas plataformas</span>
             <div className="panel-sub">
               Estimativa rolling 60 dias. Independente do filtro de período — sempre "agora".
               Plataformas que liberam reserva após 60d (ex: Digistore) tem o valor calculado a partir do
@@ -285,7 +288,7 @@ function CustosPage({ filters }) {
       <div className="panel" style={{ marginBottom: 14 }}>
         <div className="panel-head">
           <div className="panel-title">
-            <span className="panel-eyebrow">POR PLATAFORMA</span>
+            <span className="panel-eyebrow">Por plataforma</span>
             <div className="panel-sub">
               Taxa efetiva = (fees + tax do IPN) ÷ gross. Para plataformas sem breakdown no IPN
               (ClickBank), usa o feeRatePct cadastrado.
@@ -344,10 +347,10 @@ function CustosPage({ filters }) {
       <div className="panel">
         <div className="panel-head">
           <div className="panel-title">
-            <span className="panel-eyebrow">POR FAMÍLIA DE PRODUTO</span>
+            <span className="panel-eyebrow">Por família de produto</span>
             <div className="panel-sub">
               Margem só conta COGS + frete (taxa plataforma e CPA não são atribuídos por família).
-              Famílias marcadas PLACEHOLDER ainda não têm custo unitário cadastrado.
+              Famílias marcadas Placeholder ainda não têm custo unitário cadastrado.
             </div>
           </div>
           <div className="page-head-actions">
@@ -356,62 +359,67 @@ function CustosPage({ filters }) {
             </button>
           </div>
         </div>
-        <div className="tbl-wrap">
-          <table className="tbl">
-            <thead>
-              <tr>
-                <th>Família</th>
-                <th className="num">Bruto</th>
-                <th className="num">COGS</th>
-                <th className="num">Frete</th>
-                <th className="num">Lucro op.</th>
-                <th className="num">Margem op.</th>
-              </tr>
-            </thead>
-            <tbody>
-              {byFamily.length === 0 && (
-                <tr><td colSpan={6} style={{ textAlign: 'center', opacity: 0.6, padding: 24 }}>
-                  Sem vendas no período
-                </td></tr>
-              )}
-              {byFamily.map((f) => (
-                <tr key={f.family}>
-                  <td>
-                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-                      <span style={{
-                        width: 8, height: 8, borderRadius: '50%',
-                        background: familyAccentCu(f.family),
-                      }}/>
-                      {f.family === '_unknown' ? 'Sem classificação' : f.family}
-                      {!f.isCataloged && (
-                        <span title="Família sem custo unitário cadastrado — COGS pode estar zerado ou usando placeholder. Vá em /costs pra atualizar."
-                          style={{
-                            fontFamily: 'var(--f-mono)', fontSize: 10, letterSpacing: '0.06em',
-                            color: 'var(--warning)', background: 'color-mix(in oklab, var(--warning) 12%, transparent)',
-                            border: '1px solid color-mix(in oklab, var(--warning) 35%, transparent)', borderRadius: 4,
-                            padding: '1px 6px',
-                          }}>
-                          PLACEHOLDER
+        <Paginated items={byFamily} label="famílias">
+          {(pageRows, pager) => (<>
+            <div className="tbl-wrap">
+              <table className="tbl">
+                <thead>
+                  <tr>
+                    <th>Família</th>
+                    <th className="num">Bruto</th>
+                    <th className="num">COGS</th>
+                    <th className="num">Frete</th>
+                    <th className="num">Lucro op.</th>
+                    <th className="num">Margem op.</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {byFamily.length === 0 && (
+                    <tr><td colSpan={6} style={{ textAlign: 'center', opacity: 0.6, padding: 24 }}>
+                      Sem vendas no período
+                    </td></tr>
+                  )}
+                  {pageRows.map((f) => (
+                    <tr key={f.family}>
+                      <td>
+                        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                          <span style={{
+                            width: 8, height: 8, borderRadius: '50%',
+                            background: familyAccentCu(f.family),
+                          }}/>
+                          {f.family === '_unknown' ? 'Sem classificação' : f.family}
+                          {!f.isCataloged && (
+                            <span title="Família sem custo unitário cadastrado — COGS pode estar zerado ou usando placeholder. Vá em /costs pra atualizar."
+                              style={{
+                                fontFamily: 'var(--f-mono)', fontSize: 10,
+                                color: 'var(--warning)', background: 'var(--warning-bg)',
+                                border: '1px solid color-mix(in oklab, var(--warning) 35%, transparent)', borderRadius: 4,
+                                padding: '1px 6px',
+                              }}>
+                              Placeholder
+                            </span>
+                          )}
                         </span>
-                      )}
-                    </span>
-                  </td>
-                  <td className="num cell-mono">{fmtCurrency(f.grossUsd, cur, 0)}</td>
-                  <td className="num cell-mono">{fmtCurrency(f.cogsUsd, cur, 0)}</td>
-                  <td className="num cell-mono">{fmtCurrency(f.fulfillmentUsd, cur, 0)}</td>
-                  <td className="num cell-mono"
-                    style={{ color: f.profitUsd >= 0 ? 'var(--success)' : 'var(--danger)' }}>
-                    {fmtCurrency(f.profitUsd, cur, 0)}
-                  </td>
-                  <td className="num cell-mono"
-                    style={{ color: f.marginPct >= 50 ? 'var(--success)' : f.marginPct >= 30 ? 'var(--warning)' : 'var(--danger)' }}>
-                    {f.marginPct.toFixed(1)}%
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+                      </td>
+                      <td className="num cell-mono">{fmtCurrency(f.grossUsd, cur, 0)}</td>
+                      <td className="num cell-mono">{fmtCurrency(f.cogsUsd, cur, 0)}</td>
+                      <td className="num cell-mono">{fmtCurrency(f.fulfillmentUsd, cur, 0)}</td>
+                      <td className="num cell-mono"
+                        style={{ color: f.profitUsd >= 0 ? 'var(--success)' : 'var(--danger)' }}>
+                        {fmtCurrency(f.profitUsd, cur, 0)}
+                      </td>
+                      <td className="num cell-mono"
+                        style={{ color: f.marginPct >= 50 ? 'var(--success)' : f.marginPct >= 30 ? 'var(--warning)' : 'var(--danger)' }}>
+                        {f.marginPct.toFixed(1)}%
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            {pager}
+          </>)}
+        </Paginated>
       </div>
     </div>
   );

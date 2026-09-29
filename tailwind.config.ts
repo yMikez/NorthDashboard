@@ -20,7 +20,7 @@ const config: Config = {
       colors: {
         // Tokens NorthScale (espelham o que o SPA usa via CSS vars,
         // mas aqui em Tailwind classes prontas). Dark é o default.
-        border: 'hsl(var(--border))',
+        border: 'hsl(var(--cx-border))',
         input: 'hsl(var(--input))',
         ring: 'hsl(var(--ring))',
         background: 'hsl(var(--background))',
@@ -42,7 +42,7 @@ const config: Config = {
           foreground: 'hsl(var(--muted-foreground))',
         },
         accent: {
-          DEFAULT: 'hsl(var(--accent))',
+          DEFAULT: 'hsl(var(--cx-accent))',
           foreground: 'hsl(var(--accent-foreground))',
         },
         popover: {
@@ -54,9 +54,9 @@ const config: Config = {
           foreground: 'hsl(var(--card-foreground))',
         },
         // Semânticas NorthScale (insights e KPIs)
-        success: 'hsl(var(--success))',
-        warning: 'hsl(var(--warning))',
-        danger: 'hsl(var(--danger))',
+        success: 'hsl(var(--cx-success))',
+        warning: 'hsl(var(--cx-warning))',
+        danger: 'hsl(var(--cx-danger))',
       },
       fontFamily: {
         sans: ['Inter', 'system-ui', '-apple-system', 'sans-serif'],

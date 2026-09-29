@@ -85,6 +85,12 @@
   --warning-base: #F5A623;
   --danger-base:  #EF4A5A;
 
+  /* Séries de gráfico: distintas entre si e ≥ 3:1 no card (DS1 pede 3:1
+     para elementos essenciais de gráfico). --hot e --warning coincidem no
+     DS1, então a paleta NÃO pode mais sair dos tokens semânticos. */
+  --chart-1: #8FA3F2;  --chart-2: #2FBF71;  --chart-3: #F5A623;
+  --chart-4: #4260E6;  --chart-5: #B9BEC9;
+
   /* Superfícies */
   --bg:         #101217;
   --bg-deep:    #0D0D0D;
@@ -215,6 +221,10 @@
   --success-bg: #EAF7EF;
   --warning-bg: #FFF5E5;
   --danger-bg:  #FDECEF;
+  /* azul claro (#8FA3F2, 2,4:1) e âmbar base (#F5A623, 1,9:1) reprovam no
+     branco — no claro as séries usam os tons escuros do próprio DS1 */
+  --chart-1: #4260E6;  --chart-2: #167447;  --chart-3: #87520B;
+  --chart-4: #1B22A7;  --chart-5: #515766;
 
   --border-soft:   #E9EBEF;
   --border:        #D8DBE2;   /* border.subtle */

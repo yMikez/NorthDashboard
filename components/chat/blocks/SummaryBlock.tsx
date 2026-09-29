@@ -7,7 +7,7 @@ import type { SummaryBlock as SummaryBlockData } from '@/types/chat';
 
 export function SummaryBlock({ block }: { block: SummaryBlockData }) {
   return (
-    <section className="nx-glass-card rounded-xl">
+    <section className="nx-glass-card rounded-lg">
       <header className="px-4 py-2 border-b border-[color:var(--glass-border)]">
         <h3 className="text-sm font-semibold">{block.title}</h3>
       </header>
@@ -28,7 +28,7 @@ function Kpi({
 }: SummaryBlockData['kpis'][number]) {
   return (
     <div className="p-4">
-      <div className="text-[10px] uppercase tracking-wider text-muted-foreground font-mono">
+      <div className="text-[10px] text-muted-foreground font-mono">
         {label}
       </div>
       <div className="text-xl font-semibold mt-1 tabular-nums">{value}</div>
@@ -36,8 +36,8 @@ function Kpi({
         <div
           className={cn(
             'inline-flex items-center gap-0.5 text-[11px] font-mono mt-1.5',
-            delta.trend === 'up' && 'text-emerald-500',
-            delta.trend === 'down' && 'text-rose-500',
+            delta.trend === 'up' && 'text-success',
+            delta.trend === 'down' && 'text-destructive',
             delta.trend === 'neutral' && 'text-muted-foreground',
           )}
         >

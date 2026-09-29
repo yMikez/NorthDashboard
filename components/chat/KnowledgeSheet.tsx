@@ -269,7 +269,7 @@ export function KnowledgeSheet({
                           <span className="truncate">{entry.title}</span>
                           {entry.source === 'auto' && (
                             <span
-                              className="shrink-0 text-[9px] uppercase tracking-wider px-1.5 py-0.5 rounded bg-primary/15 text-primary border border-primary/30"
+                              className="shrink-0 text-[11px] font-medium px-1.5 py-0.5 rounded-sm bg-accent text-ring border border-ring/30"
                               title="Memória extraída automaticamente de uma conversa"
                             >
                               memória IA

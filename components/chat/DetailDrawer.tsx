@@ -15,11 +15,11 @@ interface DetailDrawerProps {
 export function DetailDrawer({ entity, open, onClose }: DetailDrawerProps) {
   return (
     <Sheet open={open && entity != null} onOpenChange={(o) => { if (!o) onClose(); }}>
-      <SheetContent side="right" className="lg-deep flex flex-col gap-0 p-0">
+      <SheetContent side="right" className="flex flex-col gap-0 p-0">
         {entity && (
           <>
             <SheetHeader className="p-5 border-b border-border">
-              <div className="flex items-center gap-2 text-[10px] uppercase tracking-wider text-muted-foreground font-mono">
+              <div className="flex items-center gap-2 text-xs font-medium text-muted-foreground capitalize">
                 {entity.kind}
               </div>
               <SheetTitle className="text-lg">{entity.label}</SheetTitle>
@@ -33,7 +33,7 @@ export function DetailDrawer({ entity, open, onClose }: DetailDrawerProps) {
                 <dl className="grid grid-cols-2 gap-3">
                   {Object.entries(entity.meta).map(([k, v]) => (
                     <div key={k} className="rounded-md border border-border p-3 bg-card">
-                      <dt className="text-[10px] uppercase tracking-wider text-muted-foreground font-mono">
+                      <dt className="text-xs font-medium text-muted-foreground first-letter:uppercase">
                         {k}
                       </dt>
                       <dd className="text-sm font-medium mt-1">{String(v)}</dd>

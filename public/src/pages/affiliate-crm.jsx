@@ -22,7 +22,7 @@ const CRM_TIERS = [
   { id: 'ASCENDENTE', label: 'Ascendente' },
   { id: 'NORTH', label: 'North' },
 ];
-const CRM_TIER_COLOR = { BASE: 'var(--fg4)', ASCENDENTE: 'var(--accent)', NORTH: '#C29B3C' };
+const CRM_TIER_COLOR = { BASE: 'var(--fg4)', ASCENDENTE: 'var(--accent)', NORTH: 'var(--gold)' };
 const CRM_PRIORITY = {
   alta:  { label: 'Alta',  color: 'var(--danger)' },
   media: { label: 'Média', color: 'var(--warning)' },
@@ -122,8 +122,8 @@ function CrmDrawer({ row, onClose, onSave, onTouch, onUntouch, busy }) {
 
   return (
     <div role="dialog" aria-modal="true" aria-label={`CRM · ${row.name}`} style={{
-      position: 'fixed', top: 0, right: 0, bottom: 0, width: 'min(440px, 100vw)', background: 'var(--card)',
-      borderLeft: '1px solid var(--line)', boxShadow: 'var(--shadow)', padding: 20, overflowY: 'auto', zIndex: 60,
+      position: 'fixed', top: 0, right: 0, bottom: 0, width: 'min(440px, 100vw)', background: 'var(--bg-raised)',
+      borderLeft: '1px solid var(--border)', boxShadow: 'var(--shadow-lg)', padding: 20, overflowY: 'auto', zIndex: 60,
     }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 8 }}>
         <div>
@@ -134,10 +134,10 @@ function CrmDrawer({ row, onClose, onSave, onTouch, onUntouch, busy }) {
       </div>
 
       <div style={{ display: 'flex', gap: 14, flexWrap: 'wrap', margin: '14px 0', fontSize: 12 }}>
-        <div><div className="panel-eyebrow" style={{ fontSize: 10 }}>ÚLTIMA VENDA</div>{row.lastSaleDay ? fmtDateShort(row.lastSaleDay) : 'nunca'}</div>
-        <div><div className="panel-eyebrow" style={{ fontSize: 10 }}>7 DIAS</div>{fmtInt(row.sales7)} vendas</div>
-        <div><div className="panel-eyebrow" style={{ fontSize: 10 }}>30 DIAS</div>{fmtInt(row.sales30)} vendas · {fmtCurrency(row.revenue30, 'USD', 0)}</div>
-        <div><div className="panel-eyebrow" style={{ fontSize: 10 }}>NET APÓS CPA (30D)</div>
+        <div><div className="panel-eyebrow" style={{ fontSize: 10 }}>Última venda</div>{row.lastSaleDay ? fmtDateShort(row.lastSaleDay) : 'nunca'}</div>
+        <div><div className="panel-eyebrow" style={{ fontSize: 10 }}>7 dias</div>{fmtInt(row.sales7)} vendas</div>
+        <div><div className="panel-eyebrow" style={{ fontSize: 10 }}>30 dias</div>{fmtInt(row.sales30)} vendas · {fmtCurrency(row.revenue30, 'USD', 0)}</div>
+        <div><div className="panel-eyebrow" style={{ fontSize: 10 }}>Net após CPA (30d)</div>
           <span style={{ color: row.netAfterCpa30 == null ? 'var(--fg5)' : row.netAfterCpa30 < 0 ? 'var(--danger)' : 'var(--money)' }}>
             {row.netAfterCpa30 == null ? '—' : fmtCurrency(row.netAfterCpa30, 'USD', 0)}
           </span>
@@ -158,7 +158,7 @@ function CrmDrawer({ row, onClose, onSave, onTouch, onUntouch, busy }) {
         </div>
       )}
 
-      <div className="panel-eyebrow" style={{ fontSize: 10, marginBottom: 6 }}>CONTATO E TIER</div>
+      <div className="panel-eyebrow" style={{ fontSize: 10, marginBottom: 6 }}>Contato e tier</div>
       <label style={{ display: 'block', fontSize: 11, color: 'var(--fg4)' }}>WhatsApp (só números, com DDI)</label>
       <input value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="5511988887777"
         style={{ width: '100%', marginBottom: 8 }}/>
@@ -184,13 +184,13 @@ function CrmDrawer({ row, onClose, onSave, onTouch, onUntouch, busy }) {
         Salvar contato
       </button>
 
-      <div className="panel-eyebrow" style={{ fontSize: 10, margin: '18px 0 6px' }}>TOQUES DESTE CICLO</div>
+      <div className="panel-eyebrow" style={{ fontSize: 10, margin: '18px 0 6px' }}>Toques deste ciclo</div>
       <div style={{ fontSize: 11, color: 'var(--fg5)', marginBottom: 8 }}>
         Ciclo <code>{row.cycleKey}</code> — reinicia sozinho quando ele vender de novo.
       </div>
       {row.touchesInCycle.length === 0 && <div style={{ fontSize: 12, color: 'var(--fg5)' }}>Nenhum toque registrado ainda.</div>}
       {row.touchesInCycle.map((t) => (
-        <div key={t.touchpoint} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: 12, padding: '4px 0', borderBottom: '1px dashed var(--line)' }}>
+        <div key={t.touchpoint} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: 12, padding: '4px 0', borderBottom: '1px dashed var(--border-soft)' }}>
           <span><strong>{t.touchpoint}</strong> {t.tag ? <code style={{ fontSize: 11 }}>{t.tag}</code> : null}</span>
           <span style={{ color: 'var(--fg5)', fontSize: 11 }}>{fmtDateTime(t.sentAt)}</span>
           <button className="btn btn-ghost" disabled={busy} title="desfazer" onClick={() => onUntouch(row, t.touchpoint)}><Icon name="x" size={12}/></button>
@@ -238,8 +238,8 @@ function CrmParams({ config, onSave, onClose, busy }) {
   );
   return (
     <div role="dialog" aria-modal="true" aria-label="Parâmetros da régua" style={{
-      position: 'fixed', top: 0, right: 0, bottom: 0, width: 'min(420px, 100vw)', background: 'var(--card)',
-      borderLeft: '1px solid var(--line)', boxShadow: 'var(--shadow)', padding: 20, overflowY: 'auto', zIndex: 60,
+      position: 'fixed', top: 0, right: 0, bottom: 0, width: 'min(420px, 100vw)', background: 'var(--bg-raised)',
+      borderLeft: '1px solid var(--border)', boxShadow: 'var(--shadow-lg)', padding: 20, overflowY: 'auto', zIndex: 60,
     }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 12 }}>
         <div style={{ fontSize: 16, fontWeight: 700 }}>Parâmetros da régua</div>
@@ -341,13 +341,13 @@ function AffiliateCrmPage({ user }) {
   return (
     <div>
       <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginBottom: 14 }}>
-        <CrmKpi label="FILA DE HOJE" value={fmtInt(sum?.pending || 0)} sub="afiliados devendo toque" tone="var(--accent)"/>
-        <CrmKpi label="VALOR NA FILA" value={fmtCurrency(sum?.valuePendingUsd || 0, 'USD', 0)} sub="melhor mês de quem está parado" tone="var(--money)"/>
-        <CrmKpi label="SEM WHATSAPP" value={fmtInt(sum?.pendingWithoutPhone || 0)}
+        <CrmKpi label="Fila de hoje" value={fmtInt(sum?.pending || 0)} sub="afiliados devendo toque" tone="var(--accent)"/>
+        <CrmKpi label="Valor na fila" value={fmtCurrency(sum?.valuePendingUsd || 0, 'USD', 0)} sub="melhor mês de quem está parado" tone="var(--money)"/>
+        <CrmKpi label="Sem WhatsApp" value={fmtInt(sum?.pendingWithoutPhone || 0)}
           sub={`de ${fmtInt(sum?.pending || 0)} na fila · ${fmtInt(sum?.withoutPhone || 0)} na base`}
           tone={(sum?.pendingWithoutPhone || 0) > 0 ? 'var(--warning)' : 'var(--fg1)'}/>
-        <CrmKpi label="DORMENTES" value={fmtInt(counts.dormente || 0)} sub={`${fmtInt(counts.em_risco || 0)} em risco · ${fmtInt(counts.frio || 0)} frios`}/>
-        <CrmKpi label="TOQUE → VENDA (30D)" value={sum?.conversionPct != null ? `${sum.conversionPct}%` : '—'}
+        <CrmKpi label="Dormentes" value={fmtInt(counts.dormente || 0)} sub={`${fmtInt(counts.em_risco || 0)} em risco · ${fmtInt(counts.frio || 0)} frios`}/>
+        <CrmKpi label="Toque → venda (30d)" value={sum?.conversionPct != null ? `${sum.conversionPct}%` : '—'}
           sub={`${fmtInt(sum?.converted30 || 0)} de ${fmtInt(sum?.touches30 || 0)} toques em até 7 dias`}/>
       </div>
 
@@ -390,29 +390,36 @@ function AffiliateCrmPage({ user }) {
 
       {err && <div className="panel" style={{ padding: 14, color: 'var(--danger)', marginBottom: 12 }}>{err}</div>}
 
-      <div className="panel" style={{ padding: 0, overflowX: 'auto' }}>
-        <table className="tbl" style={{ fontSize: 12.5, minWidth: 900 }}>
-          <thead>
-            <tr>
-              <th style={{ width: 28 }}/>
-              <th>Afiliado</th><th>Tier</th><th className="num">Sem vender</th><th className="num">CPA</th>
-              <th className="num">Valor</th><th>WhatsApp</th><th>Próximo toque</th><th>Prioridade</th><th>Alertas</th><th/>
-            </tr>
-          </thead>
-          <tbody>
-            {loading && <SkelTableRows rows={8} cols={11}/>}
-            {!loading && rows.length === 0 && (
-              <tr><td colSpan={11} style={{ padding: 22, textAlign: 'center', color: 'var(--fg5)' }}>
-                Ninguém neste filtro. {pendingOnly ? 'A fila deste segmento está zerada — bom sinal.' : ''}
-              </td></tr>
-            )}
-            {!loading && rows.map((r) => (
-              <CrmRow key={r.key} r={r} checked={sel.has(r.key)} onOpen={setOpen} onTouch={doTouch}
-                onCheck={(k, on) => { const n = new Set(sel); if (on) n.add(k); else n.delete(k); setSel(n); }}/>
-            ))}
-          </tbody>
-        </table>
-      </div>
+      <Paginated items={rows} label={data?.truncated ? 'afiliados (lista cortada no servidor)' : 'afiliados'} resetKey={`${segment}|${tier}|${pendingOnly}|${noPhone}|${q.trim()}`}>
+        {(pageRows, pager) => (<>
+          <div className="panel" style={{ padding: 0, overflow: 'hidden' }}>
+            <div style={{ overflowX: 'auto' }}>
+              <table className="tbl" style={{ fontSize: 12.5, minWidth: 900 }}>
+                <thead>
+                  <tr>
+                    <th style={{ width: 28 }}/>
+                    <th>Afiliado</th><th>Tier</th><th className="num">Sem vender</th><th className="num">CPA</th>
+                    <th className="num">Valor</th><th>WhatsApp</th><th>Próximo toque</th><th>Prioridade</th><th>Alertas</th><th/>
+                  </tr>
+                </thead>
+                <tbody>
+                  {loading && <SkelTableRows rows={8} cols={11}/>}
+                  {!loading && rows.length === 0 && (
+                    <tr><td colSpan={11} style={{ padding: 22, textAlign: 'center', color: 'var(--fg5)' }}>
+                      Ninguém neste filtro. {pendingOnly ? 'A fila deste segmento está zerada — bom sinal.' : ''}
+                    </td></tr>
+                  )}
+                  {!loading && pageRows.map((r) => (
+                    <CrmRow key={r.key} r={r} checked={sel.has(r.key)} onOpen={setOpen} onTouch={doTouch}
+                      onCheck={(k, on) => { const n = new Set(sel); if (on) n.add(k); else n.delete(k); setSel(n); }}/>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            {!loading && pager}
+          </div>
+        </>)}
+      </Paginated>
 
       {data && (
         <div className="panel-sub" style={{ fontSize: 11, marginTop: 8 }}>
@@ -434,8 +441,8 @@ function AffiliateCrmPage({ user }) {
       {toast && (
         <div role="status" aria-live="polite" style={{
           position: 'fixed', bottom: 22, left: '50%', transform: 'translateX(-50%)', zIndex: 80,
-          background: 'var(--card)', border: '1px solid var(--line)', borderRadius: 12, padding: '10px 18px',
-          boxShadow: 'var(--shadow)', fontSize: 13,
+          background: 'var(--bg-raised)', border: '1px solid var(--border)', borderRadius: 'var(--r-lg)', padding: '10px 18px',
+          boxShadow: 'var(--shadow-md)', fontSize: 13,
         }}>{toast}</div>
       )}
     </div>

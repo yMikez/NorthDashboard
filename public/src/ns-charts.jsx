@@ -1,8 +1,8 @@
 /* global React, Recharts, fmtCurrency, fmtInt, fmtK, fmtDateShort, fmtDateLong */
 /* NSChart — wrapper temático sobre o Recharts (window.Recharts, bundlado em
    /dist/vendor-recharts.js). Aplica o design system NorthScale em TODOS os
-   gráficos de série temporal: grid dasheado discreto, gradientes de área,
-   tooltip sólido tokenizado (North Editorial), eixos em fonte mono,
+   gráficos de série temporal: grid dasheado discreto, área chapada (sem
+   gradiente), tooltip sólido tokenizado (DS1), eixos em fonte mono,
    brush de zoom e legenda clicável.
 
    Substitui o LineChart hand-rolled (charts.jsx), o SupplierDailyChart e o
@@ -25,11 +25,11 @@ function nsAlpha(hex, a) {
 // Paleta de séries tokenizada (função, não constante: acompanha troca de tema).
 function nsSeriesPalette() {
   return [
-    nsTok('--accent', '#3EB7D4'),
-    nsTok('--money', '#37D695'),
-    nsTok('--hot', '#E0653A'),
-    nsTok('--warning', '#ffd166'),
-    nsTok('--gold', '#C29B3C'),
+    nsTok('--chart-1', '#4260E6'),
+    nsTok('--chart-2', '#167447'),
+    nsTok('--chart-3', '#87520B'),
+    nsTok('--chart-4', '#1B22A7'),
+    nsTok('--chart-5', '#515766'),
   ];
 }
 
@@ -74,10 +74,10 @@ function NSTooltipContent({ active, payload, label, currency, formatFor }) {
     <div style={{
       background: 'var(--bg-elev)', border: '1px solid var(--border)',
       borderRadius: 6, padding: '8px 12px', minWidth: 150,
-      fontFamily: 'var(--f-mono)', fontSize: 11, color: 'var(--fg2)', letterSpacing: '0.02em',
+      fontFamily: 'var(--f-mono)', fontSize: 11, color: 'var(--fg2)',
       boxShadow: 'var(--shadow-lg)',
     }}>
-      <div style={{ fontSize: 10, color: 'var(--fg5)', letterSpacing: '0.1em', textTransform: 'uppercase', marginBottom: 6 }}>
+      <div style={{ fontSize: 10, color: 'var(--fg5)', marginBottom: 6 }}>
         {fmtDateLong(label)}
       </div>
       {payload.map((p) => (
@@ -171,9 +171,8 @@ function NSTimeSeries({
                 style={{
                   display: 'inline-flex', alignItems: 'center', gap: 6,
                   background: 'none', border: 'none', padding: 0,
-                  fontFamily: 'var(--f-mono)', fontSize: tightLegend ? 9 : 10, letterSpacing: '0.08em',
-                  textTransform: 'uppercase',
-                  color: off ? 'var(--fg6)' : isFocus ? 'var(--fg1)' : 'var(--fg4)',
+                  fontFamily: 'var(--f-mono)', fontSize: tightLegend ? 9 : 10,
+                  color: off ? 'var(--fg5)' : isFocus ? 'var(--fg1)' : 'var(--fg4)',
                   cursor: toggles ? 'pointer' : 'default',
                   textDecoration: off ? 'line-through' : 'none',
                   opacity: off ? 0.55 : 1,
@@ -188,15 +187,7 @@ function NSTimeSeries({
       )}
       <ResponsiveContainer width="100%" height={height}>
         <ComposedChart data={rows} margin={{ top: 8, right: narrow ? 6 : 12, bottom: 0, left: 0 }}>
-          <defs>
-            {visible.map((s) => (
-              <linearGradient key={s.key} id={`nsgrad-${s.key}`} x1="0" x2="0" y1="0" y2="1">
-                <stop offset="0%" stopColor={s.color} stopOpacity={0.32}/>
-                <stop offset="100%" stopColor={s.color} stopOpacity={0}/>
-              </linearGradient>
-            ))}
-          </defs>
-          <CartesianGrid vertical={false} stroke={nsAlpha(nsTok('--fg1', '#182226'), 0.1)} strokeDasharray="3 6"/>
+          <CartesianGrid vertical={false} stroke={nsAlpha(nsTok('--fg1', '#0D0D0D'), 0.1)} strokeDasharray="3 6"/>
           <XAxis dataKey="date" tickFormatter={fmtDateShort} minTickGap={28}
             interval={narrow ? 'preserveStartEnd' : undefined}
             axisLine={false} tickLine={false}
@@ -205,7 +196,7 @@ function NSTimeSeries({
             tickFormatter={(v) => (narrow ? nsFmtAxisNarrow : nsFmtAxis)(axisFormat, v, currency)}
             axisLine={false} tickLine={false}
             tick={{ fontSize: 10, fill: 'var(--fg5)', fontFamily: 'var(--f-mono)' }}/>
-          {hasNegative && <ReferenceLine y={0} stroke={nsAlpha(nsTok('--danger', '#FF6B6B'), 0.45)} strokeDasharray="4 4"/>}
+          {hasNegative && <ReferenceLine y={0} stroke={nsAlpha(nsTok('--danger', '#B42338'), 0.45)} strokeDasharray="4 4"/>}
           {refLines.map((rl, i) => (
             <ReferenceLine key={`ref${i}`} y={rl.y}
               stroke={rl.color || 'var(--warning)'} strokeDasharray="4 4" strokeOpacity={0.7}
@@ -217,7 +208,7 @@ function NSTimeSeries({
           ))}
           <Tooltip
             content={<NSTooltipContent currency={currency} formatFor={formatFor}/>}
-            cursor={{ stroke: nsAlpha(nsTok('--accent', '#3EB7D4'), 0.35), strokeDasharray: '3 3' }}
+            cursor={{ stroke: nsAlpha(nsTok('--accent', '#4260E6'), 0.35), strokeDasharray: '3 3' }}
           />
           {visible.map((s) => {
             const dimmed = focusKey != null && s.key !== focusKey;
@@ -232,7 +223,7 @@ function NSTimeSeries({
             }
             return (
               <Area key={s.key} dataKey={s.key} name={s.label} type="monotone"
-                stroke={s.color} strokeWidth={2} fill={`url(#nsgrad-${s.key})`}
+                stroke={s.color} strokeWidth={2} fill={s.color} fillOpacity={0.12}
                 stackId={s.stackId}
                 activeDot={{ r: 4, fill: s.color, stroke: 'var(--bg)', strokeWidth: 2 }}
                 animationDuration={350} animationEasing="ease-out"/>
@@ -241,7 +232,7 @@ function NSTimeSeries({
           {showBrush && (
             <Brush dataKey="date" height={24} travellerWidth={8}
               tickFormatter={fmtDateShort}
-              stroke={nsTok('--accent', '#3EB7D4')} fill={nsAlpha(nsTok('--fg1', '#182226'), 0.08)}
+              stroke={nsTok('--accent', '#4260E6')} fill={nsAlpha(nsTok('--fg1', '#0D0D0D'), 0.08)}
               traveller={undefined}/>
           )}
         </ComposedChart>
@@ -266,16 +257,16 @@ function NSBarRank({ items, format = 'money', currency = 'USD', height }) {
   }
   const { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, Cell, CartesianGrid, LabelList } = R;
   const h = height || Math.max(140, rows.length * 26 + 28);
-  const accent = nsTok('--accent', '#3EB7D4');
-  const hot = nsTok('--hot', '#E0653A');
-  const fg = nsTok('--fg4', '#8a8f98');
+  const accent = nsTok('--accent', '#4260E6');
+  const hot = nsTok('--hot', '#87520B');
+  const fg = nsTok('--fg4', '#515766');
   const line = nsTok('--border-soft', '#333');
   const tooltip = ({ active, payload }) => {
     if (!active || !payload || !payload.length) return null;
     const p = payload[0].payload;
     return (
       <div style={{
-        background: 'var(--bg-elev)', border: '1px solid var(--border)', borderRadius: 10, padding: '8px 10px',
+        background: 'var(--bg-elev)', border: '1px solid var(--border)', borderRadius: 'var(--r-lg)', padding: '8px 10px',
         boxShadow: 'var(--shadow-md)', fontSize: 12, color: 'var(--fg1)',
       }}>
         <div style={{ fontWeight: 600, marginBottom: 2 }}>{p.label}</div>

@@ -84,11 +84,11 @@ export function EmptyState({ onPickPrompt }: { onPickPrompt?: (q: string) => voi
     // min-h-0 garante que o flex-1 respeita o limite do main flex column.
     <div className="flex-1 min-h-0 overflow-y-auto">
       <div className="max-w-2xl mx-auto px-6 pt-20 pb-8 text-center">
-        <div className="w-14 h-14 mx-auto rounded-xl flex items-center justify-center mb-5 relative bg-muted/60 border border-border">
+        <div className="w-14 h-14 mx-auto rounded-lg flex items-center justify-center mb-5 relative bg-muted/60 border border-border">
           <Sparkles className="w-7 h-7 text-primary/80" />
         </div>
         <h1 className="text-3xl font-semibold mb-2 tracking-tight">
-          Análise <em className="not-italic text-[color:var(--glow-cyan)] italic font-medium">com IA</em>
+          Análise <em className="not-italic text-muted-foreground font-medium">com IA</em>
         </h1>
         <p className="text-sm text-muted-foreground mb-8 max-w-md mx-auto leading-relaxed">
           Pergunte qualquer coisa sobre seus dados de afiliados, vendas, funil e
@@ -101,14 +101,14 @@ export function EmptyState({ onPickPrompt }: { onPickPrompt?: (q: string) => voi
             <button
               key={p}
               onClick={() => onPickPrompt?.(p)}
-              className="nx-glass-card rounded-lg py-3 px-4 text-left text-xs leading-relaxed text-foreground hover:border-[color:rgba(91,200,255,0.40)] transition-all hover:-translate-y-0.5"
+              className="nx-glass-card rounded-lg py-3 px-4 text-left text-xs leading-relaxed text-foreground hover:border-ring transition-colors"
             >
               {p}
             </button>
           ))}
         </div>
 
-        <p className="nx-eyebrow mt-10 opacity-70">
+        <p className="text-[11px] text-muted-foreground mt-10">
           Cmd+J nova conversa · Cmd+K buscar · Cmd+Enter enviar · Esc fechar
         </p>
       </div>

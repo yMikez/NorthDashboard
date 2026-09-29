@@ -1,4 +1,4 @@
-/* global React, Icon, fmtCurrency, fmtInt, fmtPct, CpaStatusChip, SkelTablePanel, SkelMiniKpis, AaPlat, AaEmpty, downloadCsv */
+/* global React, Icon, fmtCurrency, fmtInt, fmtPct, CpaStatusChip, SkelTablePanel, SkelMiniKpis, AaPlat, AaEmpty, downloadCsv, Paginated */
 /* Análise de afiliados — visões em SEQUÊNCIA de janelas (Janela 1..K):
      AaSequenceView   tabela por janela (como as "Semanas" do relatório)
      AaEvolutionView  Evolução · Comentários (tag, barras, ranks, título + texto)
@@ -8,15 +8,15 @@
 const { useState: useStateAS, useMemo: useMemoAS } = React;
 
 const AS_TAG = {
-  breakout:    { label: '🚀 Breakout',            tone: 'var(--success)' },
-  crescimento: { label: '📈 Crescimento',         tone: 'var(--success)' },
-  estavel:     { label: '➖ Estável / saudável',   tone: 'var(--accent)' },
-  estagnado:   { label: '➖ Estagnado',            tone: 'var(--accent)' },
-  volatil:     { label: '🔄 Volátil',              tone: 'var(--warning)' },
-  queda:       { label: '📉 Queda',                tone: 'var(--warning)' },
-  queda_forte: { label: '🔻 Queda forte',          tone: 'var(--danger)' },
-  churn:       { label: '⚠️ Saiu do radar',        tone: 'var(--danger)' },
-  novo:        { label: '🆕 Novo entrante',        tone: 'var(--gold)' },
+  breakout:    { label: 'Breakout',            tone: 'var(--success)' },
+  crescimento: { label: 'Crescimento',         tone: 'var(--success)' },
+  estavel:     { label: 'Estável / saudável',  tone: 'var(--accent)' },
+  estagnado:   { label: 'Estagnado',           tone: 'var(--accent)' },
+  volatil:     { label: 'Volátil',             tone: 'var(--warning)' },
+  queda:       { label: 'Queda',               tone: 'var(--warning)' },
+  queda_forte: { label: 'Queda forte',         tone: 'var(--danger)' },
+  churn:       { label: 'Saiu do radar',       tone: 'var(--danger)' },
+  novo:        { label: 'Novo entrante',       tone: 'var(--gold)' },
 };
 
 function asShortRange(w) {
@@ -28,7 +28,7 @@ function AsTag({ tag }) {
   const t = AS_TAG[tag] || { label: tag, tone: 'var(--fg4)' };
   return (
     <span style={{
-      display: 'inline-block', fontFamily: 'var(--f-mono)', fontSize: 10, fontWeight: 700, letterSpacing: '0.04em', textTransform: 'uppercase',
+      display: 'inline-block', fontFamily: 'var(--f-mono)', fontSize: 10, fontWeight: 700,
       padding: '3px 9px', borderRadius: 'var(--r-full)', whiteSpace: 'nowrap',
       color: t.tone, background: `color-mix(in oklab, ${t.tone} 12%, transparent)`, border: `1px solid color-mix(in oklab, ${t.tone} 35%, transparent)`,
     }}>{t.label}</span>
@@ -46,7 +46,7 @@ function AaBars({ values, labels, height = 56, format = 'money' }) {
         const present = values[i] != null;
         return (
           <div key={i} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3, flex: 1, minWidth: 0 }} title={`${labels[i]}: ${present ? (format === 'money' ? fmtCurrency(values[i], 'USD', 0) : fmtInt(values[i])) : 'ausente'}`}>
-            <div style={{ width: '100%', height: h, borderRadius: '3px 3px 0 0', background: present ? 'linear-gradient(180deg, var(--accent), color-mix(in oklab, var(--accent) 60%, var(--bg)))' : 'var(--border)' }}/>
+            <div style={{ width: '100%', height: h, borderRadius: '3px 3px 0 0', background: present ? 'var(--accent)' : 'var(--border)' }}/>
             <div style={{ fontFamily: 'var(--f-mono)', fontSize: 10, color: 'var(--fg5)', whiteSpace: 'nowrap' }}>{labels[i]}</div>
           </div>
         );
@@ -65,9 +65,7 @@ function AsDelta({ value }) {
 function AaSequenceView({ seq, onOpen, cur = 'USD' }) {
   const [idx, setIdx] = useStateAS(seq.windows.length - 1);
   const sectionTitle = (x) => <div className="eyebrow" style={{ fontSize: 10, margin: '4px 0 8px', color: 'var(--accent)' }}>{x}</div>;
-  const [showAll, setShowAll] = useStateAS(false);
   const w = seq.windows[Math.min(idx, seq.windows.length - 1)];
-  const rows = showAll ? w.rows : w.rows.slice(0, 25);
   const prevRank = useMemoAS(() => {
     const p = seq.windows[w.index - 1];
     return p ? new Map(p.rows.map((r) => [r.key, r.rank])) : null;
@@ -75,20 +73,20 @@ function AaSequenceView({ seq, onOpen, cur = 'USD' }) {
   const tone = (n) => (n == null ? 'var(--fg5)' : n < 0 ? 'var(--danger)' : 'var(--money)');
   return (
     <>
-      {sectionTitle(`COMO CADA JANELA SE COMPORTOU (${seq.count} × ${seq.window} DIAS)`)}
+      {sectionTitle(`Como cada janela se comportou (${seq.count} × ${seq.window} dias)`)}
       <AaWindowCards seq={seq} cur={cur}/>
       {seq.transitions.length > 0 && (
         <>
           <div style={{ height: 14 }}/>
-          {sectionTitle('COMPARATIVO ENTRE JANELAS — DE ONDE VEIO A VARIAÇÃO')}
+          {sectionTitle('Comparativo entre janelas — de onde veio a variação')}
           <AaTransitionCards seq={seq} cur={cur}/>
         </>
       )}
       <div style={{ height: 18 }}/>
-      {sectionTitle('TABELA POR JANELA — escolha a janela')}
+      {sectionTitle('Tabela por janela — escolha a janela')}
       <div className="seg" style={{ marginBottom: 12, flexWrap: 'wrap' }}>
         {seq.windows.map((x) => (
-          <button key={x.index} className={x.index === w.index ? 'is-active' : ''} onClick={() => { setIdx(x.index); setShowAll(false); }}>
+          <button key={x.index} className={x.index === w.index ? 'is-active' : ''} onClick={() => setIdx(x.index)}>
             {x.label} · {asShortRange(x)}
           </button>
         ))}
@@ -103,7 +101,7 @@ function AaSequenceView({ seq, onOpen, cur = 'USD' }) {
           ['Net após CPA (total)', w.totals.netAfterCpaTotal == null ? '—' : fmtCurrency(w.totals.netAfterCpaTotal, cur, 0), true],
         ].map(([l, v, money]) => (
           <div key={l} className="panel" style={{ padding: '12px 14px' }}>
-            <div style={{ fontSize: 10, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--fg5)', fontWeight: 600, marginBottom: 4 }}>{l}</div>
+            <div style={{ fontSize: 10, color: 'var(--fg5)', fontWeight: 600, marginBottom: 4 }}>{l}</div>
             <div className="mono" style={{ fontFamily: 'var(--f-display)', fontSize: 22, fontWeight: 700, color: money ? 'var(--money)' : 'var(--fg1)' }}>{v}</div>
           </div>
         ))}
@@ -111,58 +109,58 @@ function AaSequenceView({ seq, onOpen, cur = 'USD' }) {
       <div className="panel" style={{ padding: 0 }}>
         <div className="panel-head" style={{ padding: '12px 16px 6px' }}>
           <div className="panel-title">
-            <span className="panel-eyebrow">{w.label.toUpperCase()} · {w.start} → {w.end}</span>
+            <span className="panel-eyebrow">{w.label} · {w.start} → {w.end}</span>
             <span className="panel-sub">{fmtInt(w.rows.length)} com venda · Δ posição vs a janela anterior · clique pra ver o porquê desta janela</span>
           </div>
         </div>
-        <div className="tbl-wrap" style={{ maxHeight: 640 }}>
-          <table className="tbl tbl--sticky-first">
-            <thead><tr>
-              <th>#</th><th>Afiliado</th><th>Plat.</th>
-              <th className="num">Vendas</th><th className="num">Receita</th><th className="num">AOV</th>
-              <th className="num">Aprov.</th><th className="num">Reemb.</th>
-              <th className="num">CPA pago</th><th className="num">CPA/venda</th><th className="num">Net pós-CPA</th><th>Status</th>
-            </tr></thead>
-            <tbody>
-              {rows.length === 0 && <tr><td colSpan={12}><AaEmpty>Nenhum afiliado com venda nesta janela.</AaEmpty></td></tr>}
-              {rows.map((r) => {
-                const pr = prevRank ? prevRank.get(r.key) : undefined;
-                const d = pr != null ? pr - r.rank : null;
-                return (
-                  <tr tabIndex={0} key={r.key} onClick={() => onOpen?.(r.key, w.end)} style={{ cursor: 'pointer' }}>
-                    <td className="cell-mono" style={{ whiteSpace: 'nowrap' }}>
-                      #{r.rank}
-                      {d != null && d !== 0 && <span style={{ marginLeft: 4, fontSize: 10, color: d > 0 ? 'var(--success)' : 'var(--danger)' }}>{d > 0 ? '▲' : '▼'}{Math.abs(d)}</span>}
-                      {prevRank && pr == null && <span style={{ marginLeft: 4, fontSize: 10, color: 'var(--accent)' }}>novo</span>}
-                    </td>
-                    <td style={{ maxWidth: 220 }}>
-                      <div style={{ fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.kind === 'partner' && <span style={{ color: 'var(--accent)', marginRight: 4 }}><Icon name="link" size={10}/></span>}{r.name}</div>
-                    </td>
-                    <td style={{ whiteSpace: 'nowrap' }}>{r.platforms.map((p) => <span key={p} style={{ marginRight: 3 }}><AaPlat slug={p}/></span>)}</td>
-                    <td className="num cell-mono">{fmtInt(r.m.sales)}</td>
-                    <td className="num cell-mono" style={{ color: 'var(--money)', fontWeight: 600 }}>{fmtCurrency(r.m.revenue, cur, 2)}</td>
-                    <td className="num cell-mono">{fmtCurrency(r.m.aov, cur, 2)}</td>
-                    <td className="num cell-mono">{fmtPct(r.m.approvalRate, 1)}</td>
-                    <td className="num cell-mono" style={{ color: r.m.refundRate > 0.15 ? 'var(--danger)' : undefined }}>{fmtPct(r.m.refundRate, 1)}</td>
-                    <td className="num cell-mono">{fmtCurrency(r.m.cpaPaid, cur, 0)}</td>
-                    <td className="num cell-mono">{r.m.cpaPerFe > 0 ? fmtCurrency(r.m.cpaPerFe, cur, 2) : '—'}</td>
-                    <td className="num cell-mono" style={{ fontWeight: 700, color: tone(r.m.netAfterCpa) }}>{r.m.netAfterCpa == null ? '—' : fmtCurrency(r.m.netAfterCpa, cur, 2)}</td>
-                    <td><CpaStatusChip status={r.m.cpaStatus}/></td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
-        {w.rows.length > 25 && (
-          <div style={{ padding: 10, textAlign: 'center' }}>
-            <button className="btn btn-ghost" onClick={() => setShowAll((v) => !v)}>{showAll ? 'mostrar só o top 25' : `mostrar todos (${w.rows.length})`}</button>
-          </div>
-        )}
+        <Paginated items={w.rows} label="afiliados" resetKey={w.index}>
+          {(pageRows, pager, pg) => (<>
+            <div className="tbl-wrap" key={pg.page} style={{ maxHeight: 640 }}>
+              <table className="tbl tbl--sticky-first">
+                <thead><tr>
+                  <th>#</th><th>Afiliado</th><th>Plat.</th>
+                  <th className="num">Vendas</th><th className="num">Receita</th><th className="num">AOV</th>
+                  <th className="num">Aprov.</th><th className="num">Reemb.</th>
+                  <th className="num">CPA pago</th><th className="num">CPA/venda</th><th className="num">Net pós-CPA</th><th>Status</th>
+                </tr></thead>
+                <tbody>
+                  {w.rows.length === 0 && <tr><td colSpan={12}><AaEmpty>Nenhum afiliado com venda nesta janela.</AaEmpty></td></tr>}
+                  {pageRows.map((r) => {
+                    const pr = prevRank ? prevRank.get(r.key) : undefined;
+                    const d = pr != null ? pr - r.rank : null;
+                    return (
+                      <tr tabIndex={0} key={r.key} onClick={() => onOpen?.(r.key, w.end)} style={{ cursor: 'pointer' }}>
+                        <td className="cell-mono" style={{ whiteSpace: 'nowrap' }}>
+                          #{r.rank}
+                          {d != null && d !== 0 && <span style={{ marginLeft: 4, fontSize: 10, color: d > 0 ? 'var(--success)' : 'var(--danger)' }}>{d > 0 ? '▲' : '▼'}{Math.abs(d)}</span>}
+                          {prevRank && pr == null && <span style={{ marginLeft: 4, fontSize: 10, color: 'var(--accent)' }}>novo</span>}
+                        </td>
+                        <td style={{ maxWidth: 220 }}>
+                          <div style={{ fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.kind === 'partner' && <span style={{ color: 'var(--accent)', marginRight: 4 }}><Icon name="link" size={10}/></span>}{r.name}</div>
+                        </td>
+                        <td style={{ whiteSpace: 'nowrap' }}>{r.platforms.map((p) => <span key={p} style={{ marginRight: 3 }}><AaPlat slug={p}/></span>)}</td>
+                        <td className="num cell-mono">{fmtInt(r.m.sales)}</td>
+                        <td className="num cell-mono" style={{ color: 'var(--money)', fontWeight: 600 }}>{fmtCurrency(r.m.revenue, cur, 2)}</td>
+                        <td className="num cell-mono">{fmtCurrency(r.m.aov, cur, 2)}</td>
+                        <td className="num cell-mono">{fmtPct(r.m.approvalRate, 1)}</td>
+                        <td className="num cell-mono" style={{ color: r.m.refundRate > 0.15 ? 'var(--danger)' : undefined }}>{fmtPct(r.m.refundRate, 1)}</td>
+                        <td className="num cell-mono">{fmtCurrency(r.m.cpaPaid, cur, 0)}</td>
+                        <td className="num cell-mono">{r.m.cpaPerFe > 0 ? fmtCurrency(r.m.cpaPerFe, cur, 2) : '—'}</td>
+                        <td className="num cell-mono" style={{ fontWeight: 700, color: tone(r.m.netAfterCpa) }}>{r.m.netAfterCpa == null ? '—' : fmtCurrency(r.m.netAfterCpa, cur, 2)}</td>
+                        <td><CpaStatusChip status={r.m.cpaStatus}/></td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+            {pager}
+          </>)}
+        </Paginated>
       </div>
       {(w.internalExcluded > 0) && (
-        <div style={{ marginTop: 10, fontSize: 12, color: 'var(--fg4)', lineHeight: 1.6, padding: '12px 14px', border: '1px solid var(--border-soft)', borderRadius: 12 }}>
-          <b>Nota metodológica:</b> {w.internalExcluded} contas de tracking interno/orgânico (ex.: <i>neuromindpro12</i>, ID "0") foram excluídas desta janela — juntas somam {fmtCurrency(w.internalRevenueExcluded, cur, 0)}. Não são parceiros reais; ligue "incluir internos" pra vê-las.
+        <div style={{ marginTop: 10, fontSize: 12, color: 'var(--fg4)', lineHeight: 1.6, padding: '12px 14px', border: '1px solid var(--border-soft)', borderRadius: 'var(--r-lg)' }}>
+          <b>Nota metodológica:</b> {w.internalExcluded} contas de tracking interno/orgânico (ex.: <code>neuromindpro12</code>, ID "0") foram excluídas desta janela — juntas somam {fmtCurrency(w.internalRevenueExcluded, cur, 0)}. Não são parceiros reais; ligue "incluir internos" pra vê-las.
         </div>
       )}
     </>
@@ -176,7 +174,7 @@ function AaTopsByWindow({ seq, onOpen, cur = 'USD', top = 10 }) {
     <div className="panel" style={{ marginTop: 14 }}>
       <div className="panel-head">
         <div className="panel-title">
-          <span className="panel-eyebrow">TOPS POR JANELA · {seq.count} × {seq.window} DIAS</span>
+          <span className="panel-eyebrow">Tops por janela · {seq.count} × {seq.window} dias</span>
           <span className="panel-sub">top {top} por receita em cada janela, da mais antiga pra mais recente · clique pra ver o porquê daquela janela · ajuste "quantas janelas" na barra acima</span>
         </div>
       </div>
@@ -185,7 +183,7 @@ function AaTopsByWindow({ seq, onOpen, cur = 'USD', top = 10 }) {
           const prev = seq.windows[w.index - 1];
           const prevRank = prev ? new Map(prev.rows.map((r) => [r.key, r.rank])) : null;
           return (
-            <div key={w.index} style={{ border: '1px solid var(--border-soft)', borderRadius: 12, overflow: 'hidden' }}>
+            <div key={w.index} style={{ border: '1px solid var(--border-soft)', borderRadius: 'var(--r-lg)', overflow: 'hidden' }}>
               <div style={{ padding: '8px 12px', borderBottom: '1px solid var(--border-soft)', display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 8 }}>
                 <div>
                   <div style={{ fontWeight: 700, fontSize: 12 }}>{w.label}</div>
@@ -247,7 +245,7 @@ function AaNewAffiliatesPanel({ seq, onOpen, cur = 'USD' }) {
     <div className="panel" style={{ marginBottom: 14, padding: 0, border: '1px solid color-mix(in oklab, var(--success) 30%, var(--border))' }}>
       <div className="panel-head" style={{ padding: '12px 16px 6px', flexWrap: 'wrap', gap: 8 }}>
         <div className="panel-title">
-          <span className="panel-eyebrow" style={{ color: 'var(--success)' }}>★ NOVOS AFILIADOS — 1ª VENDA NOS ÚLTIMOS {seq.newRange.days} DIAS</span>
+          <span className="panel-eyebrow" style={{ color: 'var(--success)' }}>Novos afiliados — 1ª venda nos últimos {seq.newRange.days} dias</span>
           <span className="panel-sub">
             primeira venda FE aprovada de TODOS os tempos entre {d(seq.newRange.start)} e {d(seq.newRange.end)} ·
             conta nova de parceiro já ativo não entra · clique pra ver o detalhe
@@ -262,28 +260,33 @@ function AaNewAffiliatesPanel({ seq, onOpen, cur = 'USD' }) {
       </div>
       {list.length === 0 && <div style={{ padding: 16 }}><AaEmpty>Nenhum afiliado fez a primeira venda no período.</AaEmpty></div>}
       {list.length > 0 && (
-        <div className="tbl-wrap" style={{ maxHeight: 360 }}>
-          <table className="tbl">
-            <thead><tr><th>Afiliado</th><th>Plat.</th><th>1ª venda</th><th className="num">Vendas (7d)</th><th className="num">Receita (7d)</th></tr></thead>
-            <tbody>
-              {list.map((r) => (
-                <tr tabIndex={0} key={r.key} onClick={() => onOpen?.(r.key)} style={{ cursor: 'pointer' }}>
-                  <td style={{ fontWeight: 600 }}>
-                    {r.kind === 'partner' && <span style={{ color: 'var(--accent)', marginRight: 4 }}><Icon name="link" size={10}/></span>}
-                    {r.name}
-                    {daysAgo(r.firstSaleDay) <= 1 && (
-                      <span style={{ fontFamily: 'var(--f-mono)', fontSize: 10, fontWeight: 700, marginLeft: 6, padding: '1px 6px', borderRadius: 'var(--r-full)', color: 'var(--success)', background: 'color-mix(in oklab, var(--success) 14%, transparent)' }}>NOVO</span>
-                    )}
-                  </td>
-                  <td style={{ whiteSpace: 'nowrap' }}>{r.platforms.map((p) => <span key={p} style={{ marginRight: 3 }}><AaPlat slug={p}/></span>)}</td>
-                  <td className="cell-mono" style={{ whiteSpace: 'nowrap' }}>{d(r.firstSaleDay)} <span style={{ color: 'var(--fg5)', fontSize: 10 }}>{agoLabel(r.firstSaleDay)}</span></td>
-                  <td className="num cell-mono">{fmtInt(r.sales)}</td>
-                  <td className="num cell-mono" style={{ fontWeight: 700, color: 'var(--money)' }}>{fmtCurrency(r.revenue, cur, 0)}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+        <Paginated items={list} label="afiliados" resetKey={`${seq.newRange.start}|${seq.newRange.end}`}>
+          {(pageRows, pager, pg) => (<>
+            <div className="tbl-wrap" key={pg.page} style={{ maxHeight: 360 }}>
+              <table className="tbl">
+                <thead><tr><th>Afiliado</th><th>Plat.</th><th>1ª venda</th><th className="num">Vendas (7d)</th><th className="num">Receita (7d)</th></tr></thead>
+                <tbody>
+                  {pageRows.map((r) => (
+                    <tr tabIndex={0} key={r.key} onClick={() => onOpen?.(r.key)} style={{ cursor: 'pointer' }}>
+                      <td style={{ fontWeight: 600 }}>
+                        {r.kind === 'partner' && <span style={{ color: 'var(--accent)', marginRight: 4 }}><Icon name="link" size={10}/></span>}
+                        {r.name}
+                        {daysAgo(r.firstSaleDay) <= 1 && (
+                          <span style={{ fontFamily: 'var(--f-mono)', fontSize: 10, fontWeight: 700, marginLeft: 6, padding: '1px 6px', borderRadius: 'var(--r-full)', color: 'var(--success)', background: 'color-mix(in oklab, var(--success) 14%, transparent)' }}>Novo</span>
+                        )}
+                      </td>
+                      <td style={{ whiteSpace: 'nowrap' }}>{r.platforms.map((p) => <span key={p} style={{ marginRight: 3 }}><AaPlat slug={p}/></span>)}</td>
+                      <td className="cell-mono" style={{ whiteSpace: 'nowrap' }}>{d(r.firstSaleDay)} <span style={{ color: 'var(--fg5)', fontSize: 10 }}>{agoLabel(r.firstSaleDay)}</span></td>
+                      <td className="num cell-mono">{fmtInt(r.sales)}</td>
+                      <td className="num cell-mono" style={{ fontWeight: 700, color: 'var(--money)' }}>{fmtCurrency(r.revenue, cur, 0)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            {pager}
+          </>)}
+        </Paginated>
       )}
     </div>
   );
@@ -309,7 +312,7 @@ function AaSlowingPanel({ seq, onOpen, cur = 'USD' }) {
     <div className="panel" style={{ marginBottom: 14, padding: 0, border: '1px solid color-mix(in oklab, var(--danger) 30%, var(--border))' }}>
       <div className="panel-head" style={{ padding: '12px 16px 6px', flexWrap: 'wrap', gap: 8 }}>
         <div className="panel-title">
-          <span className="panel-eyebrow" style={{ color: 'var(--danger)' }}>⚠ QUEM ESTÁ PARANDO DE RODAR</span>
+          <span className="panel-eyebrow" style={{ color: 'var(--danger)' }}><Icon name="alert-triangle" size={12}/> Quem está parando de rodar</span>
           <span className="panel-sub">pico ≥ $500 em alguma janela e, na última, <b>parou</b> (zero vendas) ou está <b>caindo</b> (≤ 50% do pico e ainda descendo) · clique pra ver o porquê</span>
         </div>
         <div className="seg">
@@ -323,28 +326,33 @@ function AaSlowingPanel({ seq, onOpen, cur = 'USD' }) {
       </div>
       {list.length === 0 && <div style={{ padding: 16 }}><AaEmpty>Ninguém parando de rodar nas janelas escolhidas — base saudável.</AaEmpty></div>}
       {list.length > 0 && (
-        <div className="tbl-wrap" style={{ maxHeight: 420 }}>
-          <table className="tbl">
-            <thead><tr><th>Afiliado</th><th>Plat.</th><th>Estado</th><th className="num">Pico</th><th className="num">Última janela</th><th className="num">vs pico</th><th>Receita por janela</th></tr></thead>
-            <tbody>
-              {list.map((r) => (
-                <tr tabIndex={0} key={r.key} onClick={() => onOpen?.(r.key, seq.windows[r.state === 'parou' ? r.lastActiveIndex : seq.windows.length - 1]?.end)} style={{ cursor: 'pointer' }}>
-                  <td style={{ fontWeight: 600 }}>{r.kind === 'partner' && <span style={{ color: 'var(--accent)', marginRight: 4 }}><Icon name="link" size={10}/></span>}{r.name}</td>
-                  <td style={{ whiteSpace: 'nowrap' }}>{r.platforms.map((p) => <span key={p} style={{ marginRight: 3 }}><AaPlat slug={p}/></span>)}</td>
-                  <td>
-                    <span style={{ fontFamily: 'var(--f-mono)', fontSize: 10, fontWeight: 700, padding: '2px 8px', borderRadius: 'var(--r-full)', color: r.state === 'parou' ? 'var(--danger)' : 'var(--warning)', background: `color-mix(in oklab, ${r.state === 'parou' ? 'var(--danger)' : 'var(--warning)'} 12%, transparent)` }}>
-                      {r.state === 'parou' ? `● parou (última venda J${r.lastActiveIndex + 1})` : '● caindo'}
-                    </span>
-                  </td>
-                  <td className="num cell-mono" style={{ color: 'var(--money)' }}>{fmtCurrency(r.peakRevenue, cur, 0)} <span style={{ color: 'var(--fg5)', fontSize: 10 }}>J{r.peakIndex + 1}</span></td>
-                  <td className="num cell-mono">{fmtCurrency(r.lastRevenue, cur, 0)} <span style={{ color: 'var(--fg5)', fontSize: 10 }}>{fmtInt(r.lastSales)} vendas</span></td>
-                  <td className="num cell-mono" style={{ color: 'var(--danger)' }}>▼ {(Math.abs(r.dropPct) * 100).toFixed(0)}%</td>
-                  <td style={{ minWidth: 120 }}><AaBars values={r.revenue} labels={labels} height={32}/></td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+        <Paginated items={list} label="afiliados" resetKey={`${show}|${seq.anchor}|${seq.window}|${seq.count}`}>
+          {(pageRows, pager, pg) => (<>
+            <div className="tbl-wrap" key={pg.page} style={{ maxHeight: 420 }}>
+              <table className="tbl">
+                <thead><tr><th>Afiliado</th><th>Plat.</th><th>Estado</th><th className="num">Pico</th><th className="num">Última janela</th><th className="num">vs pico</th><th>Receita por janela</th></tr></thead>
+                <tbody>
+                  {pageRows.map((r) => (
+                    <tr tabIndex={0} key={r.key} onClick={() => onOpen?.(r.key, seq.windows[r.state === 'parou' ? r.lastActiveIndex : seq.windows.length - 1]?.end)} style={{ cursor: 'pointer' }}>
+                      <td style={{ fontWeight: 600 }}>{r.kind === 'partner' && <span style={{ color: 'var(--accent)', marginRight: 4 }}><Icon name="link" size={10}/></span>}{r.name}</td>
+                      <td style={{ whiteSpace: 'nowrap' }}>{r.platforms.map((p) => <span key={p} style={{ marginRight: 3 }}><AaPlat slug={p}/></span>)}</td>
+                      <td>
+                        <span style={{ fontFamily: 'var(--f-mono)', fontSize: 10, fontWeight: 700, padding: '2px 8px', borderRadius: 'var(--r-full)', color: r.state === 'parou' ? 'var(--danger)' : 'var(--warning)', background: `color-mix(in oklab, ${r.state === 'parou' ? 'var(--danger)' : 'var(--warning)'} 12%, transparent)` }}>
+                          {r.state === 'parou' ? `● parou (última venda J${r.lastActiveIndex + 1})` : '● caindo'}
+                        </span>
+                      </td>
+                      <td className="num cell-mono" style={{ color: 'var(--money)' }}>{fmtCurrency(r.peakRevenue, cur, 0)} <span style={{ color: 'var(--fg5)', fontSize: 10 }}>J{r.peakIndex + 1}</span></td>
+                      <td className="num cell-mono">{fmtCurrency(r.lastRevenue, cur, 0)} <span style={{ color: 'var(--fg5)', fontSize: 10 }}>{fmtInt(r.lastSales)} vendas</span></td>
+                      <td className="num cell-mono" style={{ color: 'var(--danger)' }}>▼ {(Math.abs(r.dropPct) * 100).toFixed(0)}%</td>
+                      <td style={{ minWidth: 120 }}><AaBars values={r.revenue} labels={labels} height={32}/></td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            {pager}
+          </>)}
+        </Paginated>
       )}
     </div>
   );
@@ -362,7 +370,7 @@ function AaEvolutionView({ seq, onOpen, cur = 'USD' }) {
   const list = filter === 'all' ? seq.evolution : seq.evolution.filter((e) => e.tag === filter);
   return (
     <>
-      <div style={{ fontSize: 12, color: 'var(--fg4)', lineHeight: 1.6, padding: '12px 14px', border: '1px solid var(--border-soft)', borderRadius: 12, marginBottom: 12 }}>
+      <div style={{ fontSize: 12, color: 'var(--fg4)', lineHeight: 1.6, padding: '12px 14px', border: '1px solid var(--border-soft)', borderRadius: 'var(--r-lg)', marginBottom: 12 }}>
         Todo afiliado que esteve no <b>Top 10</b> em pelo menos uma das {seq.windows.length} janelas está listado abaixo, ordenado por relevância. As barras mostram a receita em {labels.join(' / ')} (barra vazia = não vendeu naquela janela). Os comentários são gerados pelas regras da própria análise — números, ranks, aprovação e Net após CPA.
       </div>
       <AaNewAffiliatesPanel seq={seq} onOpen={onOpen} cur={cur}/>
@@ -374,36 +382,41 @@ function AaEvolutionView({ seq, onOpen, cur = 'USD' }) {
         ))}
       </div>
       {list.length === 0 && <AaEmpty>Nenhum afiliado no Top 10 das janelas escolhidas.</AaEmpty>}
-      <div style={{ display: 'grid', gap: 12 }}>
-        {list.map((e) => {
-          const last = e.per[e.per.length - 1];
-          return (
-            <div key={e.key} className="panel" style={{ display: 'grid', gridTemplateColumns: 'minmax(200px, 240px) 1fr', gap: 18, cursor: 'pointer' }} onClick={() => onOpen?.(e.key)}>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 8, minWidth: 0 }}>
-                <div>
-                  <div style={{ fontWeight: 700, fontSize: 15, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{e.kind === 'partner' && <span style={{ color: 'var(--accent)', marginRight: 4 }}><Icon name="link" size={11}/></span>}{e.name}</div>
-                  <div style={{ fontSize: 10, color: 'var(--fg5)', fontFamily: 'var(--f-mono)', display: 'flex', gap: 4, alignItems: 'center', flexWrap: 'wrap' }}>
-                    {e.platforms.map((p) => <AaPlat key={p} slug={p}/>)}
-                    {e.bestRank != null && <span>melhor #{e.bestRank}</span>}
+      <Paginated items={list} label="afiliados" resetKey={`${filter}|${seq.anchor}|${seq.window}|${seq.count}`}>
+        {(pageRows, pager) => (<>
+          <div style={{ display: 'grid', gap: 12 }}>
+            {pageRows.map((e) => {
+              const last = e.per[e.per.length - 1];
+              return (
+                <div key={e.key} className="panel" style={{ display: 'grid', gridTemplateColumns: 'minmax(200px, 240px) 1fr', gap: 18, cursor: 'pointer' }} onClick={() => onOpen?.(e.key)}>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 8, minWidth: 0 }}>
+                    <div>
+                      <div style={{ fontWeight: 700, fontSize: 15, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{e.kind === 'partner' && <span style={{ color: 'var(--accent)', marginRight: 4 }}><Icon name="link" size={11}/></span>}{e.name}</div>
+                      <div style={{ fontSize: 10, color: 'var(--fg5)', fontFamily: 'var(--f-mono)', display: 'flex', gap: 4, alignItems: 'center', flexWrap: 'wrap' }}>
+                        {e.platforms.map((p) => <AaPlat key={p} slug={p}/>)}
+                        {e.bestRank != null && <span>melhor #{e.bestRank}</span>}
+                      </div>
+                    </div>
+                    <AsTag tag={e.tag}/>
+                    <AaBars values={e.per.map((p) => (p ? p.revenue : null))} labels={labels}/>
+                  </div>
+                  <div style={{ minWidth: 0 }}>
+                    <h4 style={{ margin: '0 0 6px', fontSize: 15, fontWeight: 700, color: 'var(--accent)' }}>{e.title}</h4>
+                    <p style={{ margin: '0 0 10px', fontSize: 13, lineHeight: 1.65, color: 'var(--fg3)' }}>{e.text}</p>
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 14, fontSize: 12, color: 'var(--fg5)' }}>
+                      <div>Rank: <b className="mono" style={{ color: 'var(--fg1)' }}>{e.per.map((p) => (p && p.rank != null ? `#${p.rank}` : '—')).join(' → ')}</b></div>
+                      <div>Variação: {e.deltas.slice(1).map((d, i) => <span key={i} style={{ marginLeft: i ? 8 : 0 }}><AsDelta value={d}/></span>)}</div>
+                      {last && <div>Última: <b className="mono" style={{ color: 'var(--money)' }}>{fmtCurrency(last.revenue, cur, 0)}</b> · {fmtInt(last.sales)} pedidos{last.netAfterCpa != null ? <> · Net pós-CPA <b className="mono" style={{ color: last.netAfterCpa < 0 ? 'var(--danger)' : 'var(--fg1)' }}>{fmtCurrency(last.netAfterCpa, cur, 2)}</b></> : null}</div>}
+                      {last && <CpaStatusChip status={last.cpaStatus}/>}
+                    </div>
                   </div>
                 </div>
-                <AsTag tag={e.tag}/>
-                <AaBars values={e.per.map((p) => (p ? p.revenue : null))} labels={labels}/>
-              </div>
-              <div style={{ minWidth: 0 }}>
-                <h4 style={{ margin: '0 0 6px', fontSize: 15, fontWeight: 700, color: 'var(--accent)' }}>{e.title}</h4>
-                <p style={{ margin: '0 0 10px', fontSize: 13, lineHeight: 1.65, color: 'var(--fg3)' }}>{e.text}</p>
-                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 14, fontSize: 12, color: 'var(--fg5)' }}>
-                  <div>Rank: <b className="mono" style={{ color: 'var(--fg1)' }}>{e.per.map((p) => (p && p.rank != null ? `#${p.rank}` : '—')).join(' → ')}</b></div>
-                  <div>Variação: {e.deltas.slice(1).map((d, i) => <span key={i} style={{ marginLeft: i ? 8 : 0 }}><AsDelta value={d}/></span>)}</div>
-                  {last && <div>Última: <b className="mono" style={{ color: 'var(--money)' }}>{fmtCurrency(last.revenue, cur, 0)}</b> · {fmtInt(last.sales)} pedidos{last.netAfterCpa != null ? <> · Net pós-CPA <b className="mono" style={{ color: last.netAfterCpa < 0 ? 'var(--danger)' : 'var(--fg1)' }}>{fmtCurrency(last.netAfterCpa, cur, 2)}</b></> : null}</div>}
-                  {last && <CpaStatusChip status={last.cpaStatus}/>}
-                </div>
-              </div>
-            </div>
-          );
-        })}
-      </div>
+              );
+            })}
+          </div>
+          {pager}
+        </>)}
+      </Paginated>
     </>
   );
 }
@@ -418,11 +431,11 @@ function AaWindowCards({ seq, cur = 'USD' }) {
         const n = seq.health.notes.find((x) => x.index === w.index);
         return (
           <div key={w.index} className="panel" style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-            <div style={{ fontFamily: 'var(--f-mono)', fontSize: 10, color: 'var(--fg5)', letterSpacing: '0.08em' }}>{w.label.toUpperCase()} · {w.start} → {w.end}</div>
+            <div style={{ fontFamily: 'var(--f-mono)', fontSize: 10, color: 'var(--fg5)' }}>{w.label} · {w.start} → {w.end}</div>
             {n && <div style={{ fontWeight: 700, fontSize: 13, color: toneColor[n.tone] }}>{n.title}</div>}
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
               {[[fmtCurrency(w.totals.revenue, cur, 0), 'Receita'], [fmtInt(w.totals.sales), 'Pedidos'], [fmtInt(w.active), 'Afiliados ativos'], [fmtPct(w.concentrationTop10, 1), 'Concentração Top 10']].map(([v, l]) => (
-                <div key={l}><div className="mono" style={{ fontSize: 16, fontWeight: 700 }}>{v}</div><div style={{ fontSize: 10, color: 'var(--fg5)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>{l}</div></div>
+                <div key={l}><div className="mono" style={{ fontSize: 16, fontWeight: 700 }}>{v}</div><div style={{ fontSize: 10, color: 'var(--fg5)' }}>{l}</div></div>
               ))}
             </div>
             {n && <div style={{ fontSize: 12, color: 'var(--fg3)', lineHeight: 1.55 }}>{n.text}</div>}
@@ -476,18 +489,18 @@ function AaHealthView({ seq, onOpen, cur = 'USD' }) {
   };
   return (
     <>
-      {sectionTitle(`LINHA DO TEMPO — COMO CADA JANELA SE COMPORTOU (${seq.window} DIAS CADA)`)}
+      {sectionTitle(`Linha do tempo — como cada janela se comportou (${seq.window} dias cada)`)}
       <AaWindowCards seq={seq} cur={cur}/>
 
-      {sectionTitle('DINÂMICA DA BASE DE AFILIADOS')}
+      {sectionTitle('Dinâmica da base de afiliados')}
       <AaTransitionCards seq={seq} cur={cur}/>
 
-      <div style={{ marginTop: 14, padding: '14px 16px', borderRadius: 12, border: '1px solid color-mix(in oklab, var(--danger) 35%, transparent)', background: 'color-mix(in oklab, var(--danger) 6%, transparent)', fontSize: 13, lineHeight: 1.65, color: 'var(--fg2)' }}>
+      <div style={{ marginTop: 14, padding: '14px 16px', borderRadius: 'var(--r-lg)', border: '1px solid color-mix(in oklab, var(--danger) 35%, transparent)', background: 'color-mix(in oklab, var(--danger) 6%, transparent)', fontSize: 13, lineHeight: 1.65, color: 'var(--fg2)' }}>
         <b style={{ color: 'var(--danger)' }}>Risco estrutural de concentração:</b> {seq.health.risk.replace(/^Risco estrutural de concentração:\s*/, '')}
       </div>
 
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, flexWrap: 'wrap' }}>
-        {sectionTitle('QUEM VALE A PENA REATIVAR')}
+        {sectionTitle('Quem vale a pena reativar')}
         <button className="btn btn-ghost" style={{ fontSize: 11, whiteSpace: 'nowrap' }} onClick={exportReactivation} disabled={seq.reactivation.length === 0} title="Baixa a lista (mornos + frios) em CSV — abre no Excel/Sheets">
           <Icon name="download" size={12}/> Exportar CSV
         </button>
@@ -498,27 +511,32 @@ function AaHealthView({ seq, onOpen, cur = 'USD' }) {
       {seq.reactivation.length === 0 && <AaEmpty>Ninguém sumiu na última janela — base estável.</AaEmpty>}
       {seq.reactivation.length > 0 && (
         <div className="panel" style={{ padding: 0 }}>
-          <div className="tbl-wrap" style={{ maxHeight: 520 }}>
-            <table className="tbl">
-              <thead><tr><th>Afiliado</th><th>Plat.</th><th>Parou</th><th className="num">Pico · pedidos</th><th className="num">Pico · receita</th><th>Receita por janela</th></tr></thead>
-              <tbody>
-                {[...warm, ...cold].map((r) => (
-                  <tr tabIndex={0} key={r.key} onClick={() => onOpen?.(r.key, seq.windows[r.lastActiveIndex]?.end)} style={{ cursor: 'pointer' }}>
-                    <td style={{ fontWeight: 600 }}>{r.name}</td>
-                    <td style={{ whiteSpace: 'nowrap' }}>{r.platforms.map((p) => <span key={p} style={{ marginRight: 3 }}><AaPlat slug={p}/></span>)}</td>
-                    <td>
-                      <span style={{ fontFamily: 'var(--f-mono)', fontSize: 10, fontWeight: 700, padding: '2px 8px', borderRadius: 'var(--r-full)', color: r.windowsAgo === 1 ? 'var(--warning)' : 'var(--fg5)', background: `color-mix(in oklab, ${r.windowsAgo === 1 ? 'var(--warning)' : 'var(--fg5)'} 12%, transparent)` }}>
-                        ● {r.windowsAgo === 1 ? 'há 1 janela' : `há ${r.windowsAgo} janelas`}
-                      </span>
-                    </td>
-                    <td className="num cell-mono">{fmtInt(r.peakSales)}</td>
-                    <td className="num cell-mono" style={{ fontWeight: 700, color: 'var(--money)' }}>{fmtCurrency(r.peakRevenue, cur, 2)}</td>
-                    <td style={{ minWidth: 120 }}><AaBars values={r.revenue} labels={seq.windows.map((w) => `J${w.index + 1}`)} height={32}/></td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+          <Paginated items={[...warm, ...cold]} label="afiliados" resetKey={`${seq.anchor}|${seq.window}|${seq.count}`}>
+            {(pageRows, pager, pg) => (<>
+              <div className="tbl-wrap" key={pg.page} style={{ maxHeight: 520 }}>
+                <table className="tbl">
+                  <thead><tr><th>Afiliado</th><th>Plat.</th><th>Parou</th><th className="num">Pico · pedidos</th><th className="num">Pico · receita</th><th>Receita por janela</th></tr></thead>
+                  <tbody>
+                    {pageRows.map((r) => (
+                      <tr tabIndex={0} key={r.key} onClick={() => onOpen?.(r.key, seq.windows[r.lastActiveIndex]?.end)} style={{ cursor: 'pointer' }}>
+                        <td style={{ fontWeight: 600 }}>{r.name}</td>
+                        <td style={{ whiteSpace: 'nowrap' }}>{r.platforms.map((p) => <span key={p} style={{ marginRight: 3 }}><AaPlat slug={p}/></span>)}</td>
+                        <td>
+                          <span style={{ fontFamily: 'var(--f-mono)', fontSize: 10, fontWeight: 700, padding: '2px 8px', borderRadius: 'var(--r-full)', color: r.windowsAgo === 1 ? 'var(--warning)' : 'var(--fg5)', background: `color-mix(in oklab, ${r.windowsAgo === 1 ? 'var(--warning)' : 'var(--fg5)'} 12%, transparent)` }}>
+                            ● {r.windowsAgo === 1 ? 'há 1 janela' : `há ${r.windowsAgo} janelas`}
+                          </span>
+                        </td>
+                        <td className="num cell-mono">{fmtInt(r.peakSales)}</td>
+                        <td className="num cell-mono" style={{ fontWeight: 700, color: 'var(--money)' }}>{fmtCurrency(r.peakRevenue, cur, 2)}</td>
+                        <td style={{ minWidth: 120 }}><AaBars values={r.revenue} labels={seq.windows.map((w) => `J${w.index + 1}`)} height={32}/></td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              {pager}
+            </>)}
+          </Paginated>
         </div>
       )}
     </>

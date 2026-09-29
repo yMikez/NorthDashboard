@@ -29,7 +29,7 @@ function funnelTabStyle(active) {
     background: active ? 'color-mix(in oklab, var(--accent) 12%, transparent)' : 'transparent',
     border: active ? '1px solid var(--accent)' : '1px solid transparent',
     borderRadius: 6, cursor: 'pointer',
-    fontFamily: 'var(--f-mono)', fontSize: 11, letterSpacing: '0.04em',
+    fontFamily: 'var(--f-mono)', fontSize: 11,
     color: active ? 'var(--accent)' : 'var(--fg3)',
   };
 }
@@ -99,7 +99,7 @@ function FunnelPage({ filters }) {
     <div className="page-in">
       <div className="page-head">
         <div className="lead">
-          <span className="eyebrow">FUNNEL ANALYTICS</span>
+          <span className="eyebrow">Funnel analytics</span>
           <h2>Front-end <em>até backend</em>.</h2>
           <span className="sub">
             {funMode === 'janelas'
@@ -191,7 +191,7 @@ function FunnelPage({ filters }) {
       <div className="panel" style={{ marginBottom: 14 }}>
         <div className="panel-head">
           <div className="panel-title">
-            <span className="panel-eyebrow">FUNNEL · FE → BACKEND</span>
+            <span className="panel-eyebrow">Funnel · FE → backend</span>
             <div className="panel-sub">Volume por estágio · take rate relativa às vendas frontend</div>
           </div>
           <div className="panel-legend">
@@ -205,7 +205,7 @@ function FunnelPage({ filters }) {
         <div className="panel">
           <div className="panel-head">
             <div className="panel-title">
-              <span className="panel-eyebrow">TAKE RATES · POR ESTÁGIO</span>
+              <span className="panel-eyebrow">Take rates · por estágio</span>
               <div className="panel-sub">% de pedidos FE que avançaram pra cada estágio backend</div>
             </div>
           </div>
@@ -231,7 +231,7 @@ function FunnelPage({ filters }) {
                     : 'var(--navy-400)';
                   return (
                     <tr key={s.id}>
-                      <td>{s.label}{isFE && <span style={{ marginLeft: 8, fontSize: 10, color: 'var(--fg5)', fontFamily: 'var(--f-mono)' }}>BASELINE</span>}</td>
+                      <td>{s.label}{isFE && <span style={{ marginLeft: 8, fontSize: 10, color: 'var(--fg5)', fontFamily: 'var(--f-mono)' }}>Baseline</span>}</td>
                       <td className="num cell-mono">{fmtInt(s.volume)}</td>
                       <td className="num cell-mono" style={{ color: rateColor }}>
                         {(s.takeRate * 100).toFixed(1)}%
@@ -248,13 +248,13 @@ function FunnelPage({ filters }) {
         <div className="panel">
           <div className="panel-head">
             <div className="panel-title">
-              <span className="panel-eyebrow">AOV LIFT — FE vs FE+UPSELLS</span>
+              <span className="panel-eyebrow">AOV lift — FE vs FE+upsells</span>
               <div className="panel-sub">Quanto cada grupo gasta em média</div>
             </div>
           </div>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: 12, padding: '10px 0' }}>
             {[
-              { label: 'FE only', value: summary.aovFEOnly, color: '#8CA1C8' },
+              { label: 'FE only', value: summary.aovFEOnly, color: 'var(--fg5)' },
               { label: 'FE + upsell/bump/down', value: summary.aovWithUpsell, color: 'var(--accent)' },
               { label: 'AOV global', value: summary.aov, color: 'var(--gold)' },
             ].map((r, i) => {
@@ -299,47 +299,52 @@ function FunnelPage({ filters }) {
         <div className="panel" style={{ marginTop: 14 }}>
           <div className="panel-head">
             <div className="panel-title">
-              <span className="panel-eyebrow">CROSS-SELL · ENTRE FAMÍLIAS</span>
+              <span className="panel-eyebrow">Cross-sell · entre famílias</span>
               <div className="panel-sub">
                 Sessões que entraram via FE de uma família e compraram backend de outra ·
                 não infla as take rates da família origem
               </div>
             </div>
           </div>
-          <div className="tbl-wrap">
-            <table className="tbl">
-              <thead>
-                <tr>
-                  <th>Origem (FE)</th>
-                  <th></th>
-                  <th>Destino (UP/DW)</th>
-                  <th className="num">Sessões</th>
-                  <th className="num">Receita</th>
-                </tr>
-              </thead>
-              <tbody>
-                {state.data.crossSell.map((c, i) => (
-                  <tr key={i}>
-                    <td>
-                      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-                        <span style={{ width: 6, height: 6, borderRadius: '50%', background: familyAccent(c.fromFamily) }}/>
-                        {c.fromFamily}
-                      </span>
-                    </td>
-                    <td style={{ color: 'var(--fg5)', textAlign: 'center', fontFamily: 'var(--f-mono)' }}>→</td>
-                    <td>
-                      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-                        <span style={{ width: 6, height: 6, borderRadius: '50%', background: familyAccent(c.toFamily) }}/>
-                        {c.toFamily}
-                      </span>
-                    </td>
-                    <td className="num cell-mono">{fmtInt(c.sessions)}</td>
-                    <td className="num cell-mono">{fmtCurrency(c.revenue, cur, 0)}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+          <Paginated items={state.data.crossSell} label="pares">
+            {(pageRows, pager) => (<>
+              <div className="tbl-wrap">
+                <table className="tbl">
+                  <thead>
+                    <tr>
+                      <th>Origem (FE)</th>
+                      <th></th>
+                      <th>Destino (UP/DW)</th>
+                      <th className="num">Sessões</th>
+                      <th className="num">Receita</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {pageRows.map((c, i) => (
+                      <tr key={i}>
+                        <td>
+                          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                            <span style={{ width: 6, height: 6, borderRadius: '50%', background: familyAccent(c.fromFamily) }}/>
+                            {c.fromFamily}
+                          </span>
+                        </td>
+                        <td style={{ color: 'var(--fg5)', textAlign: 'center', fontFamily: 'var(--f-mono)' }}>→</td>
+                        <td>
+                          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                            <span style={{ width: 6, height: 6, borderRadius: '50%', background: familyAccent(c.toFamily) }}/>
+                            {c.toFamily}
+                          </span>
+                        </td>
+                        <td className="num cell-mono">{fmtInt(c.sessions)}</td>
+                        <td className="num cell-mono">{fmtCurrency(c.revenue, cur, 0)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              {pager}
+            </>)}
+          </Paginated>
         </div>
       )}
       </>)}
@@ -352,13 +357,13 @@ function FunnelPage({ filters }) {
 function CpaStatusChip({ status }) {
   if (!status) return <span style={{ color: 'var(--fg5)', fontSize: 10 }}>—</span>;
   const meta = {
-    saudavel:   { label: 'SAUDÁVEL',   fg: 'var(--success)', bg: 'color-mix(in oklab, var(--success) 12%, transparent)', border: 'color-mix(in oklab, var(--success) 35%, transparent)' },
-    atencao:    { label: 'ATENÇÃO',    fg: 'var(--warning)', bg: 'color-mix(in oklab, var(--warning) 12%, transparent)', border: 'color-mix(in oklab, var(--warning) 35%, transparent)' },
-    renegociar: { label: 'RENEGOCIAR', fg: 'var(--danger)',  bg: 'color-mix(in oklab, var(--danger) 12%, transparent)',  border: 'color-mix(in oklab, var(--danger) 35%, transparent)' },
-  }[status] || { label: String(status).toUpperCase(), fg: 'var(--fg4)', bg: 'color-mix(in oklab, var(--fg4) 12%, transparent)', border: 'var(--border-soft)' };
+    saudavel:   { label: 'Saudável',   fg: 'var(--success)', bg: 'color-mix(in oklab, var(--success) 12%, transparent)', border: 'color-mix(in oklab, var(--success) 35%, transparent)' },
+    atencao:    { label: 'Atenção',    fg: 'var(--warning)', bg: 'color-mix(in oklab, var(--warning) 12%, transparent)', border: 'color-mix(in oklab, var(--warning) 35%, transparent)' },
+    renegociar: { label: 'Renegociar', fg: 'var(--danger)',  bg: 'color-mix(in oklab, var(--danger) 12%, transparent)',  border: 'color-mix(in oklab, var(--danger) 35%, transparent)' },
+  }[status] || { label: String(status), fg: 'var(--fg4)', bg: 'color-mix(in oklab, var(--fg4) 12%, transparent)', border: 'var(--border-soft)' };
   return (
     <span style={{
-      fontFamily: 'var(--f-mono)', fontSize: 10, fontWeight: 700, letterSpacing: '0.06em',
+      fontFamily: 'var(--f-mono)', fontSize: 10, fontWeight: 700,
       padding: '2px 8px', borderRadius: 'var(--r-full)', whiteSpace: 'nowrap',
       background: meta.bg, color: meta.fg, border: `1px solid ${meta.border}`,
     }}>
@@ -406,15 +411,15 @@ function ProfitConfigPanel() {
       {open && (
         <div style={{ display: 'flex', gap: 14, alignItems: 'end', flexWrap: 'wrap', padding: '4px 14px 12px' }}>
           <label style={{ display: 'grid', gap: 4, fontFamily: 'var(--f-mono)', fontSize: 10, color: 'var(--fg4)' }}>
-            <span>CUSTOS OPERACIONAIS %</span>
+            <span>Custos operacionais %</span>
             <input style={inStyle} value={draft.opexPct ?? cfg?.opexPct ?? ''} onChange={(e) => setDraft((d) => ({ ...d, opexPct: e.target.value }))}/>
           </label>
           <label style={{ display: 'grid', gap: 4, fontFamily: 'var(--f-mono)', fontSize: 10, color: 'var(--fg4)' }}>
-            <span>SAUDÁVEL ≥ (USD)</span>
+            <span>Saudável ≥ (USD)</span>
             <input style={inStyle} value={draft.healthyMinUsd ?? cfg?.healthyMinUsd ?? ''} onChange={(e) => setDraft((d) => ({ ...d, healthyMinUsd: e.target.value }))}/>
           </label>
           <label style={{ display: 'grid', gap: 4, fontFamily: 'var(--f-mono)', fontSize: 10, color: 'var(--fg4)' }}>
-            <span>ATENÇÃO ≥ (USD)</span>
+            <span>Atenção ≥ (USD)</span>
             <input style={inStyle} value={draft.attentionMinUsd ?? cfg?.attentionMinUsd ?? ''} onChange={(e) => setDraft((d) => ({ ...d, attentionMinUsd: e.target.value }))}/>
           </label>
           <button className="btn btn-primary" onClick={save}>Salvar</button>
@@ -457,12 +462,12 @@ function AffiliateRefundModal({ aff, onCancel, onSaved }) {
 
   return (
     <div onClick={onCancel} style={{
-      position: 'fixed', inset: 0, zIndex: 100, background: 'rgba(13,18,21,0.72)',
+      position: 'fixed', inset: 0, zIndex: 100, background: 'color-mix(in srgb, var(--ns-black) 72%, transparent)',
       display: 'grid', placeItems: 'center',
     }}>
       <div onClick={(e) => e.stopPropagation()} className="panel" style={{ width: 'min(380px, 92vw)', padding: 22 }}>
         <div className="eyebrow" style={{ fontSize: 10, color: 'var(--glow-cyan)', marginBottom: 4 }}>
-          REFUND & CHARGEBACK · MODELO CPA
+          Refund & chargeback · modelo CPA
         </div>
         <h3 style={{ margin: '0 0 4px', fontSize: 18 }}>{aff.nickname || aff.externalId}</h3>
         <p style={{ fontSize: 11, color: 'var(--fg4)', marginBottom: 16 }}>
@@ -595,7 +600,7 @@ function LeaderboardPage({ filters, onOpenAffiliate, user }) {
     <div className="page-in">
       <div className="page-head">
         <div className="lead">
-          <span className="eyebrow">AFILIADOS</span>
+          <span className="eyebrow">Afiliados</span>
           <h2>Quem está <em>puxando o resultado</em>.</h2>
           <span className="sub">Ranking + diretório fundidos · modelo da planilha CPA: NET AOV → Net after CPA → status de renegociação</span>
         </div>
@@ -637,6 +642,8 @@ function LeaderboardPage({ filters, onOpenAffiliate, user }) {
           )}><Icon name="download" size={12}/> Exportar CSV</button>
         </div>
       </div>
+      {/* DS1 "dado com contexto": fonte que não reporta estorno = leitura parcial */}
+      <RefundCoverageNotice platforms={Array.from(filters.platforms || [])}/>
 
       <ProfitConfigPanel/>
 
@@ -668,12 +675,12 @@ function LeaderboardPage({ filters, onOpenAffiliate, user }) {
           </div>
         </div>
         <div className={`mini-kpi ${summary.concentration > 0.6 ? 'is-alert' : ''}`}
-          style={summary.concentration > 0.6 ? { borderColor: 'rgba(239,68,68,0.35)' } : {}}>
+          style={summary.concentration > 0.6 ? { borderColor: 'color-mix(in srgb, var(--danger) 35%, transparent)' } : {}}>
           <div className="l">Concentração top 5</div>
           <div className="v" style={summary.concentration > 0.6 ? { color: 'var(--danger)' } : {}}>
             {(summary.concentration * 100).toFixed(0)}%
           </div>
-          <div className="s">{summary.concentration > 0.6 ? '⚠ risco de concentração · acima de 60%' : 'distribuição saudável'}</div>
+          <div className="s">{summary.concentration > 0.6 ? <><Icon name="alert-triangle" size={11}/> risco de concentração · acima de 60%</> : 'distribuição saudável'}</div>
         </div>
         <div className="mini-kpi">
           <div className="l">Novos afiliados</div>
@@ -708,13 +715,13 @@ function LeaderboardPage({ filters, onOpenAffiliate, user }) {
       </div>
 
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '4px 0 12px', flexWrap: 'wrap' }}>
-        <span className="f-label">ORDENAR POR</span>
+        <span className="f-label">Ordenar por</span>
         <div className="seg">
           {[['revenue','Receita'],['aov','AOV'],['orders','Pedidos'],['approvalRate','Aprovação'],['refundRate','Reembolsos'],['chargebackRate','Chargebacks']].map(([k,l]) => (
             <button key={k} className={sortBy === k ? 'is-active' : ''} onClick={() => setSortBy(k)}>{l}</button>
           ))}
         </div>
-        <span className="f-label" style={{ marginLeft: 10 }}>MÍN. PEDIDOS</span>
+        <span className="f-label" style={{ marginLeft: 10 }}>Mín. pedidos</span>
         <div className="seg" style={q ? { opacity: 0.45, pointerEvents: 'none' } : undefined}>
           {[1, 5, 10, 25].map(n => (
             <button key={n} className={minOrders === n ? 'is-active' : ''} onClick={() => setMinOrders(n)}>{n}+</button>
@@ -732,102 +739,107 @@ function LeaderboardPage({ filters, onOpenAffiliate, user }) {
       )}
 
       <div className="panel" style={{ padding: 0 }}>
-        <div className="tbl-wrap" style={{ margin: 0, padding: '0 4px', maxHeight: 620, overflowY: 'auto' }}>
-          <table className="tbl tbl--sticky-first">
-            <thead>
-              <tr>
-                <th style={{ width: 36 }}>#</th>
-                <th>Afiliado</th>
-                <th>Plataforma</th>
-                <th className="num">Pedidos</th>
-                <th className="num">Receita</th>
-                <th className="num" title="AOV = receita das vendas creditadas a ESTE afiliado (FE + os upsells/downsells em que a plataforma manteve o crédito nele) ÷ FEs APROVADAS. É a lente DIRETA: cross-sell da mesma sessão que a plataforma creditou a outro afiliado não entra. Mesmo AOV que alimenta o NET AOV do modelo CPA.">AOV</th>
-                <th title="Aprovadas ÷ pedidos REAIS do período. Na Digistore o estorno é uma linha extra e não entra no denominador — a venda original já está contada.">Aprovação</th>
-                <th className="num">Reembolso</th>
-                <th className="num" title="Chargebacks ÷ pedidos REAIS do período.">Chargeback</th>
-                <th className="num">CPA pago</th>
-                <th className="num" title="Custos operacionais % (global, modelo CPA) — editável no painel de config acima">Custos op.</th>
-                <th className="num" title="NET AOV = AOV global × (1 − refund&cb% − taxa da plataforma − custos operacionais % − reserva retida %). Modelo da planilha CPA — % editáveis em Plataformas e no painel de config acima.">NET AOV</th>
-                <th className="num" title="CPA por venda FE — último valor observado nas transações">CPA/venda</th>
-                <th className="num" title="NET AFTER CPA = NET AOV − CPA por venda. Quanto sobra por pedido depois de pagar o afiliado.">Net after CPA</th>
-                <th title="≥ limiar saudável → SAUDÁVEL · ≥ limiar atenção → ATENÇÃO · abaixo → RENEGOCIAR (régua editável no painel de config)">Status CPA</th>
-              </tr>
-            </thead>
-            <tbody>
-              {state.status === 'loading' && <SkelTableRows rows={10} cols={15}/>}
-              {state.status === 'ready' && rows.length === 0 && (
-                <tr><td colSpan={15} style={{ textAlign: 'center', padding: 24, opacity: 0.6 }}>
-                  Nenhum afiliado com pelo menos {minOrders} pedido{minOrders > 1 ? 's' : ''} no período
-                </td></tr>
-              )}
-              {rows.map((r, i) => {
-                const apClass = r.approvalRate > 0.7 ? 'val-ok' : r.approvalRate > 0.5 ? 'val-warn' : 'val-bad';
-                const rfClass = r.refundRate < 0.06 ? 'val-ok' : r.refundRate < 0.12 ? 'val-warn' : 'val-bad';
-                const cbClass = r.cbRate < 0.005 ? 'val-ok' : r.cbRate < 0.01 ? 'val-warn' : 'val-bad';
-                const { cls: platClass, short: platShort } = platBadge(r.platformSlug);
-                const displayName = r.nickname || r.externalId;
-                return (
-                  <tr tabIndex={0} key={r.key || `${r.platformSlug}:${r.externalId}`} onClick={() => (r.accounts && r.accounts.length > 1 ? setPartnerRow(r) : onOpenAffiliate({ externalId: r.externalId, platformSlug: r.platformSlug }))}>
-                    <td className="rank">{String(i+1).padStart(2, '0')}</td>
-                    <td>
-                      <span className="cell-aff">
-                        <span className="av" style={{ background: avatarColor(r.externalId) }}>{initials(displayName)}</span>
-                        <span className="meta">
-                          <span className="nm">{displayName}{r.accounts && r.accounts.length > 1 && <span title="contas unificadas" style={{ marginLeft: 5, color: 'var(--accent)', verticalAlign: -1 }}><Icon name="link" size={10}/></span>}{r.origin && <span style={{ marginLeft: 6 }}><AiOriginChip origin={r.origin} size={9}/></span>}</span>
-                          <span className="id">{r.accounts && r.accounts.length > 1 ? `${r.accounts.length} contas · ${r.accounts.map((c) => c.externalId).join(' · ')}` : r.externalId}{isAdmin && r.contact?.email ? ` · ${r.contact.email}` : ''}</span>
-                          <span style={{ marginTop: 2 }}><AmMappedChip mapped={r.mapped} platformSlug={r.platformSlug}/></span>
-                        </span>
-                      </span>
-                    </td>
-                    <td style={{ whiteSpace: 'nowrap' }}>
-                      {(r.accounts && r.accounts.length > 1 ? r.accounts : [r]).map((c) => { const pb = platBadge(c.platformSlug); return <span key={`${c.platformSlug}:${c.externalId}`} className={`plat ${pb.cls}`} style={{ marginRight: 3 }} title={c.nickname || c.externalId}>{pb.short}</span>; })}
-                    </td>
-                    <td className="num cell-mono">{fmtInt(r.orders)}</td>
-                    <td className="num cell-mono" style={{ color: 'var(--fg1)' }}>{fmtCurrency(r.revenue, cur, 0)}</td>
-                    <td className="num cell-mono" style={{ color: 'var(--money)' }}>
-                      {aovOf(r) > 0 ? fmtCurrency(aovOf(r), cur, 0) : '—'}
-                      {aovOf(r) > 0 && (
-                        <span style={{ display: 'block', fontSize: 10, color: 'var(--fg5)', fontWeight: 400, marginTop: 1 }}>
-                          {fmtInt(r.feApprovedCount)} FEs
-                        </span>
-                      )}
-                    </td>
-                    <td>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                        <span className={`cell-mono ${apClass}`} style={{ minWidth: 44 }}>{(r.approvalRate * 100).toFixed(1)}%</span>
-                        <div className={`ratebar ${apClass === 'val-ok' ? 'ok' : apClass === 'val-warn' ? 'warn' : 'bad'}`} style={{ width: 48 }}><span style={{ width: `${r.approvalRate * 100}%` }}/></div>
-                      </div>
-                    </td>
-                    <td className="num cell-mono"
-                      title={`Taxa do MODELO CPA usada no NET AOV: ${r.refundCbPctUsed}% (${r.accounts && r.accounts.length > 1 ? 'média ponderada das contas — override é por conta' : r.refundCbPctOverride != null ? 'override deste afiliado' : 'default da plataforma'}).\nObservada no período: ${(r.refundRate * 100).toFixed(1)}% = ${fmtInt(r.refunds)} estornos ÷ ${fmtInt(r.realOrders)} pedidos reais.${r.realOrders !== r.allOrders ? `\n(${fmtInt(r.allOrders - r.realOrders)} linhas de estorno da Digistore fora do denominador.)` : ''}\nCoorte por data da VENDA: período recente ainda vai receber reembolsos.`}>
-                      {r.refundCbPctUsed}%
-                      {r.refundCbPctOverride != null && <span style={{ fontSize: 8, color: 'var(--glow-cyan)', marginLeft: 3 }}>ovr</span>}
-                      <span className={rfClass} style={{ fontSize: 10, marginLeft: 5, opacity: 0.75 }}>obs {(r.refundRate * 100).toFixed(1)}%</span>
-                    </td>
-                    <td className={`num cell-mono ${cbClass}`}>{(r.cbRate * 100).toFixed(2)}%</td>
-                    <td className="num cell-mono">{fmtCurrency(r.cpa, cur, 0)}</td>
-                    <td className="num cell-mono" style={{ color: 'var(--fg4)' }}>{r.opexPctUsed}%</td>
-                    <td className="num cell-mono">{r.netAovUsd > 0 ? fmtCurrency(r.netAovUsd, cur, 0) : '—'}</td>
-                    <td className="num cell-mono">{(r.cpaPerFe || 0) > 0 ? fmtCurrency(r.cpaPerFe, cur, 0) : '—'}</td>
-                    <td className="num cell-mono" style={{ fontWeight: 700, color: r.netAfterCpaUsd == null ? 'var(--fg5)' : r.netAfterCpaUsd < 0 ? 'var(--danger)' : r.cpaStatus === 'saudavel' ? 'var(--money)' : 'var(--warning)' }}>
-                      {r.netAfterCpaUsd != null ? fmtCurrency(r.netAfterCpaUsd, cur, 0) : '—'}
-                    </td>
-                    <td>
-                      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-                        <CpaStatusChip status={r.cpaStatus}/>
-                        {!(r.accounts && r.accounts.length > 1) && (<button
-                          className="btn btn-ghost" style={{ padding: '1px 6px', fontSize: 10 }}
-                          title={`Refund&CB usado: ${r.refundCbPctUsed}% ${r.refundCbPctOverride != null ? '(override deste afiliado)' : '(default da plataforma)'} — clique pra editar só deste afiliado`}
-                          onClick={(e) => { e.stopPropagation(); setRefundModal(r); }}
-                        >%</button>)}
-                      </span>
-                    </td>
+        <Paginated items={rows} label="afiliados" resetKey={`${sortBy}|${q}|${minOrders}|${unify}`}>
+          {(pageRows, pager, pg) => (<>
+            <div className="tbl-wrap" key={`p${pg.page}-${pg.pageSize}`} style={{ margin: 0, padding: '0 4px', maxHeight: 620, overflowY: 'auto' }}>
+              <table className="tbl tbl--sticky-first">
+                <thead>
+                  <tr>
+                    <th style={{ width: 36 }}>#</th>
+                    <th>Afiliado</th>
+                    <th>Plataforma</th>
+                    <th className="num">Pedidos</th>
+                    <th className="num">Receita</th>
+                    <th className="num" title="AOV = receita das vendas creditadas a ESTE afiliado (FE + os upsells/downsells em que a plataforma manteve o crédito nele) ÷ FEs APROVADAS. É a lente DIRETA: cross-sell da mesma sessão que a plataforma creditou a outro afiliado não entra. Mesmo AOV que alimenta o NET AOV do modelo CPA.">AOV</th>
+                    <th title="Aprovadas ÷ pedidos REAIS do período. Na Digistore o estorno é uma linha extra e não entra no denominador — a venda original já está contada.">Aprovação</th>
+                    <th className="num">Reembolso</th>
+                    <th className="num" title="Chargebacks ÷ pedidos REAIS do período.">Chargeback</th>
+                    <th className="num">CPA pago</th>
+                    <th className="num" title="Custos operacionais % (global, modelo CPA) — editável no painel de config acima">Custos op.</th>
+                    <th className="num" title="NET AOV = AOV global × (1 − refund&cb% − taxa da plataforma − custos operacionais % − reserva retida %). Modelo da planilha CPA — % editáveis em Plataformas e no painel de config acima.">NET AOV</th>
+                    <th className="num" title="CPA por venda FE — último valor observado nas transações">CPA/venda</th>
+                    <th className="num" title="NET AFTER CPA = NET AOV − CPA por venda. Quanto sobra por pedido depois de pagar o afiliado.">Net after CPA</th>
+                    <th title="≥ limiar saudável → Saudável · ≥ limiar atenção → Atenção · abaixo → Renegociar (régua editável no painel de config)">Status CPA</th>
                   </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
+                </thead>
+                <tbody>
+                  {state.status === 'loading' && <SkelTableRows rows={10} cols={15}/>}
+                  {state.status === 'ready' && rows.length === 0 && (
+                    <tr><td colSpan={15} style={{ textAlign: 'center', padding: 24, opacity: 0.6 }}>
+                      Nenhum afiliado com pelo menos {minOrders} pedido{minOrders > 1 ? 's' : ''} no período
+                    </td></tr>
+                  )}
+                  {pageRows.map((r, i) => {
+                    const apClass = r.approvalRate > 0.7 ? 'val-ok' : r.approvalRate > 0.5 ? 'val-warn' : 'val-bad';
+                    const rfClass = r.refundRate < 0.06 ? 'val-ok' : r.refundRate < 0.12 ? 'val-warn' : 'val-bad';
+                    const cbClass = r.cbRate < 0.005 ? 'val-ok' : r.cbRate < 0.01 ? 'val-warn' : 'val-bad';
+                    const { cls: platClass, short: platShort } = platBadge(r.platformSlug);
+                    const displayName = r.nickname || r.externalId;
+                    return (
+                      <tr tabIndex={0} key={r.key || `${r.platformSlug}:${r.externalId}`} onClick={() => (r.accounts && r.accounts.length > 1 ? setPartnerRow(r) : onOpenAffiliate({ externalId: r.externalId, platformSlug: r.platformSlug }))}>
+                        <td className="rank">{String(pg.start + i + 1).padStart(2, '0')}</td>
+                        <td>
+                          <span className="cell-aff">
+                            <span className="av" style={{ background: avatarColor(r.externalId) }}>{initials(displayName)}</span>
+                            <span className="meta">
+                              <span className="nm">{displayName}{r.accounts && r.accounts.length > 1 && <span title="contas unificadas" style={{ marginLeft: 5, color: 'var(--accent)', verticalAlign: -1 }}><Icon name="link" size={10}/></span>}{r.origin && <span style={{ marginLeft: 6 }}><AiOriginChip origin={r.origin} size={9}/></span>}</span>
+                              <span className="id">{r.accounts && r.accounts.length > 1 ? `${r.accounts.length} contas · ${r.accounts.map((c) => c.externalId).join(' · ')}` : r.externalId}{isAdmin && r.contact?.email ? ` · ${r.contact.email}` : ''}</span>
+                              <span style={{ marginTop: 2 }}><AmMappedChip mapped={r.mapped} platformSlug={r.platformSlug}/></span>
+                            </span>
+                          </span>
+                        </td>
+                        <td style={{ whiteSpace: 'nowrap' }}>
+                          {(r.accounts && r.accounts.length > 1 ? r.accounts : [r]).map((c) => { const pb = platBadge(c.platformSlug); return <span key={`${c.platformSlug}:${c.externalId}`} className={`plat ${pb.cls}`} style={{ marginRight: 3 }} title={c.nickname || c.externalId}>{pb.short}</span>; })}
+                        </td>
+                        <td className="num cell-mono">{fmtInt(r.orders)}</td>
+                        <td className="num cell-mono" style={{ color: 'var(--fg1)' }}>{fmtCurrency(r.revenue, cur, 0)}</td>
+                        <td className="num cell-mono" style={{ color: 'var(--money)' }}>
+                          {aovOf(r) > 0 ? fmtCurrency(aovOf(r), cur, 0) : '—'}
+                          {aovOf(r) > 0 && (
+                            <span style={{ display: 'block', fontSize: 10, color: 'var(--fg5)', fontWeight: 400, marginTop: 1 }}>
+                              {fmtInt(r.feApprovedCount)} FEs
+                            </span>
+                          )}
+                        </td>
+                        <td>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                            <span className={`cell-mono ${apClass}`} style={{ minWidth: 44 }}>{(r.approvalRate * 100).toFixed(1)}%</span>
+                            <div className={`ratebar ${apClass === 'val-ok' ? 'ok' : apClass === 'val-warn' ? 'warn' : 'bad'}`} style={{ width: 48 }}><span style={{ width: `${r.approvalRate * 100}%` }}/></div>
+                          </div>
+                        </td>
+                        <td className="num cell-mono"
+                          title={`Taxa do MODELO CPA usada no NET AOV: ${r.refundCbPctUsed}% (${r.accounts && r.accounts.length > 1 ? 'média ponderada das contas — override é por conta' : r.refundCbPctOverride != null ? 'override deste afiliado' : 'default da plataforma'}).\nObservada no período: ${(r.refundRate * 100).toFixed(1)}% = ${fmtInt(r.refunds)} estornos ÷ ${fmtInt(r.realOrders)} pedidos reais.${r.realOrders !== r.allOrders ? `\n(${fmtInt(r.allOrders - r.realOrders)} linhas de estorno da Digistore fora do denominador.)` : ''}\nCoorte por data da VENDA: período recente ainda vai receber reembolsos.`}>
+                          {r.refundCbPctUsed}%
+                          {r.refundCbPctOverride != null && <span style={{ fontSize: 8, color: 'var(--glow-cyan)', marginLeft: 3 }}>ovr</span>}
+                          <span className={rfClass} style={{ fontSize: 10, marginLeft: 5, opacity: 0.75 }}>obs {(r.refundRate * 100).toFixed(1)}%</span>
+                        </td>
+                        <td className={`num cell-mono ${cbClass}`}>{(r.cbRate * 100).toFixed(2)}%</td>
+                        <td className="num cell-mono">{fmtCurrency(r.cpa, cur, 0)}</td>
+                        <td className="num cell-mono" style={{ color: 'var(--fg4)' }}>{r.opexPctUsed}%</td>
+                        <td className="num cell-mono">{r.netAovUsd > 0 ? fmtCurrency(r.netAovUsd, cur, 0) : '—'}</td>
+                        <td className="num cell-mono">{(r.cpaPerFe || 0) > 0 ? fmtCurrency(r.cpaPerFe, cur, 0) : '—'}</td>
+                        <td className="num cell-mono" style={{ fontWeight: 700, color: r.netAfterCpaUsd == null ? 'var(--fg5)' : r.netAfterCpaUsd < 0 ? 'var(--danger)' : r.cpaStatus === 'saudavel' ? 'var(--money)' : 'var(--warning)' }}>
+                          {r.netAfterCpaUsd != null ? fmtCurrency(r.netAfterCpaUsd, cur, 0) : '—'}
+                        </td>
+                        <td>
+                          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                            <CpaStatusChip status={r.cpaStatus}/>
+                            {!(r.accounts && r.accounts.length > 1) && (<button
+                              className="btn btn-ghost" style={{ padding: '1px 6px', fontSize: 10 }}
+                              title={`Refund&CB usado: ${r.refundCbPctUsed}% ${r.refundCbPctOverride != null ? '(override deste afiliado)' : '(default da plataforma)'} — clique pra editar só deste afiliado`}
+                              onClick={(e) => { e.stopPropagation(); setRefundModal(r); }}
+                            >%</button>)}
+                          </span>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+            {pager}
+          </>)}
+        </Paginated>
       </div>
     </div>
   );
@@ -984,7 +996,7 @@ function AffiliateDrawer({ affiliateId, filters, onClose }) {
             <div className="panel">
               <div className="panel-head">
                 <div className="panel-title">
-                  <span className="panel-eyebrow">SINAIS AUTOMÁTICOS</span>
+                  <span className="panel-eyebrow">Sinais automáticos</span>
                   <div className="panel-sub">Detectados no período atual</div>
                 </div>
               </div>
@@ -1002,7 +1014,7 @@ function AffiliateDrawer({ affiliateId, filters, onClose }) {
           <div className="panel">
             <div className="panel-head">
               <div className="panel-title">
-                <span className="panel-eyebrow">RECEITA DIÁRIA · PERÍODO</span>
+                <span className="panel-eyebrow">Receita diária · período</span>
                 <div className="panel-sub">Gross aprovado de {displayName}</div>
               </div>
             </div>
@@ -1016,35 +1028,40 @@ function AffiliateDrawer({ affiliateId, filters, onClose }) {
             <div className="panel">
               <div className="panel-head">
                 <div className="panel-title">
-                  <span className="panel-eyebrow">VENDAS POR OFERTA</span>
+                  <span className="panel-eyebrow">Vendas por oferta</span>
                   <div className="panel-sub">Aprovados, ordenados por receita</div>
                 </div>
               </div>
-              <div className="tbl-wrap">
-                <table className="tbl">
-                  <thead>
-                    <tr>
-                      <th>Oferta</th>
-                      <th>Tipo</th>
-                      <th className="num">Pedidos</th>
-                      <th className="num">Receita</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {data.byProduct.map((p) => (
-                      <tr key={p.externalId}>
-                        <td>
-                          <div>{p.name}</div>
-                          <div className="cell-mono" style={{ fontSize: 10, color: 'var(--fg5)' }}>{p.externalId}</div>
-                        </td>
-                        <td><span className="badge neutral">{p.productType.toLowerCase()}</span></td>
-                        <td className="num cell-mono">{fmtInt(p.orders)}</td>
-                        <td className="num cell-mono">{fmtCurrency(p.revenue, cur, 0)}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
+              <Paginated items={data.byProduct} label="ofertas">
+                {(pageRows, pager) => (<>
+                  <div className="tbl-wrap">
+                    <table className="tbl">
+                      <thead>
+                        <tr>
+                          <th>Oferta</th>
+                          <th>Tipo</th>
+                          <th className="num">Pedidos</th>
+                          <th className="num">Receita</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {pageRows.map((p) => (
+                          <tr key={p.externalId}>
+                            <td>
+                              <div>{p.name}</div>
+                              <div className="cell-mono" style={{ fontSize: 10, color: 'var(--fg5)' }}>{p.externalId}</div>
+                            </td>
+                            <td><span className="badge neutral">{({ FRONTEND: 'Frontend', UPSELL: 'Upsell', DOWNSELL: 'Downsell', BUMP: 'Bump', SMS_RECOVERY: 'SMS Recovery' })[p.productType] || p.productType}</span></td>
+                            <td className="num cell-mono">{fmtInt(p.orders)}</td>
+                            <td className="num cell-mono">{fmtCurrency(p.revenue, cur, 0)}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                  {pager}
+                </>)}
+              </Paginated>
             </div>
           )}
 
@@ -1052,7 +1069,7 @@ function AffiliateDrawer({ affiliateId, filters, onClose }) {
             <div className="panel">
               <div className="panel-head">
                 <div className="panel-title">
-                  <span className="panel-eyebrow">PAÍSES · TOP 8</span>
+                  <span className="panel-eyebrow">Países · top 8</span>
                   <div className="panel-sub">Receita aprovada por país</div>
                 </div>
               </div>
@@ -1158,7 +1175,7 @@ function RefundCohortsPage({ filters }) {
     <div className="page-in">
       <div className="page-head">
         <div className="lead">
-          <span className="eyebrow">ANÁLISE · REEMBOLSO POR COORTE</span>
+          <span className="eyebrow">Análise · reembolso por coorte</span>
           <h2>Quando o reembolso <em>realmente acontece</em>.</h2>
           <span className="sub">
             cada estorno preso ao dia da VENDA original · célula em branco = coorte ainda não viveu aquele dia · inclui chargebacks
@@ -1179,6 +1196,8 @@ function RefundCohortsPage({ filters }) {
           )}
         </div>
       </div>
+      {/* DS1 "dado com contexto": fonte que não reporta estorno = leitura parcial */}
+      <RefundCoverageNotice platforms={Array.from(filters.platforms || [])}/>
 
       {view === 'ajuda' && <RefundCohortsHelp horizon={horizon}/>}
 
@@ -1211,7 +1230,6 @@ function RefundCohortsPage({ filters }) {
         <div className="mini-kpi">
           <div className="l">Projeção do período · D{d ? d.horizonDays : horizon}</div>
           <div className="v" style={{
-            fontStyle: 'italic',
             color: (() => {
               const v = d ? (metric === 'usd' ? d.projection?.periodPctUsd : d.projection?.periodPctCount) : null;
               return v != null && v > 0.06 ? 'var(--danger)' : 'inherit';
@@ -1224,7 +1242,7 @@ function RefundCohortsPage({ filters }) {
           </div>
           <div className="s">
             {d?.projection?.tailIncomplete
-              ? 'PISO — falta histórico pro fim da curva'
+              ? 'Piso — falta histórico pro fim da curva'
               : 'estimativa · coortes imaturas projetadas'}
           </div>
         </div>
@@ -1238,13 +1256,13 @@ function RefundCohortsPage({ filters }) {
       </div>
 
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '4px 0 12px', flexWrap: 'wrap' }}>
-        <span className="f-label">HORIZONTE</span>
+        <span className="f-label">Horizonte</span>
         <div className="seg">
           {[14, 30, 60, 90].map((h) => (
             <button key={h} className={horizon === h ? 'is-active' : ''} onClick={() => setHorizon(h)}>{h}d</button>
           ))}
         </div>
-        <span className="f-label" style={{ marginLeft: 10 }}>AMOSTRA MÍN.</span>
+        <span className="f-label" style={{ marginLeft: 10 }}>Amostra mín.</span>
         <div className="seg">
           {[10, 30, 50].map((n) => (
             <button key={n} className={minN === n ? 'is-active' : ''} onClick={() => setMinN(n)}>{n}</button>
@@ -1263,7 +1281,7 @@ function RefundCohortsPage({ filters }) {
       <div className="panel" style={{ marginBottom: 14 }}>
         <div className="panel-head">
           <div className="panel-title">
-            <span className="panel-eyebrow">CURVA DE MATURAÇÃO</span>
+            <span className="panel-eyebrow">Curva de maturação</span>
             <div className="panel-sub">
               % agregado estornado até o dia N — só coortes que JÁ TÊM N dias entram no ponto N (sem viés de coorte imatura)
             </div>
@@ -1282,107 +1300,111 @@ function RefundCohortsPage({ filters }) {
       <div className="panel" style={{ padding: 0 }}>
         <div className="panel-head" style={{ padding: '14px 16px 8px' }}>
           <div className="panel-title">
-            <span className="panel-eyebrow">MATRIZ DE COORTE</span>
+            <span className="panel-eyebrow">Matriz de coorte</span>
             <div className="panel-sub">
               linha = dia da venda · coluna = dias desde a venda · célula = % acumulado {metric === 'usd' ? 'do VALOR vendido' : 'dos PEDIDOS'} estornado
             </div>
           </div>
         </div>
-        <div className="tbl-wrap" style={{ margin: 0, padding: '0 4px 8px', maxHeight: 640, overflow: 'auto' }}>
-          <table className="tbl" style={{ borderCollapse: 'separate', borderSpacing: 2 }}>
-            <thead>
-              <tr>
-                <th style={{ position: 'sticky', left: 0, top: 0, zIndex: 4, background: 'var(--bg-raised)', minWidth: 118 }}>Venda</th>
-                <th className="num" style={{ position: 'sticky', top: 0, zIndex: 3, background: 'var(--bg-raised)', minWidth: 46 }}>Base</th>
-                {cols.map((c) => (
-                  <th key={c} className="num" style={{ position: 'sticky', top: 0, zIndex: 3, background: 'var(--bg-raised)', minWidth: 40 }}>+{c}d</th>
-                ))}
-                <th className="num" style={{ position: 'sticky', top: 0, right: 0, zIndex: 4, background: 'var(--bg-raised)', minWidth: 56 }}
-                  title={`Onde a coorte deve ESTABILIZAR ao completar ${horizon} dias — padrão das coortes maduras + ajuste Bornhuetter-Ferguson, calculado sobre o histórico do próprio recorte. Coorte madura mostra o valor observado.`}>
-                  final D{horizon}
-                </th>
-              </tr>
-            </thead>
-            <tbody>
-              {state.status === 'loading' && <SkelTableRows rows={10} cols={cols.length + 3}/>}
-              {state.status === 'ready' && cohorts.length === 0 && (
-                <tr><td colSpan={cols.length + 3} style={{ textAlign: 'center', padding: 24, opacity: 0.6 }}>Sem vendas no período</td></tr>
-              )}
-              {state.status === 'ready' && cohorts.map((row) => {
-                const lowN = row.baseCount < minN;
-                return (
-                  <tr key={row.day}>
-                    <td className="cell-mono" style={{ position: 'sticky', left: 0, zIndex: 1, background: 'var(--bg-raised)', whiteSpace: 'nowrap' }}
-                        title={lowN ? `amostra baixa: ${row.baseCount} vendas (< ${minN})` : undefined}>
-                      {fmtDateShort(row.day)}
-                      {lowN && <span style={{ color: 'var(--warning)', marginLeft: 4 }} title={`amostra baixa (< ${minN})`}>·</span>}
-                    </td>
-                    <td className="num cell-mono" style={{ color: lowN ? 'var(--fg5)' : 'var(--fg3)' }}>
-                      {fmtInt(row.baseCount)}
-                    </td>
-                    {cols.map((c) => {
-                      const cell = row.cells[c];
-                      if (!cell) return <td key={c} className="num"/>;  // censurado
-                      const p = pctOf(cell);
-                      return (
-                        <td key={c} className="num cell-mono"
-                          title={`vendas de ${fmtDateShort(row.day)} · até ${c} dia${c === 1 ? '' : 's'}\n`
-                            + `${fmtInt(cell.cumCount)} de ${fmtInt(row.baseCount)} pedidos (${(cell.pctCount * 100).toFixed(2)}%)\n`
-                            + `${fmtCurrency(cell.cumUsd, cur, 0)} de ${fmtCurrency(row.baseUsd, cur, 0)} (${(cell.pctUsd * 100).toFixed(2)}%)`}
-                          style={{
-                            background: lowN ? 'color-mix(in oklab, var(--fg5) 10%, transparent)' : cellBg(p),
-                            color: lowN ? 'var(--fg5)' : 'var(--fg1)',
-                            borderRadius: 4,
-                            fontSize: 10.5,
-                            padding: '4px 5px',
-                          }}>
-                          {(p * 100).toFixed(1)}
-                        </td>
-                      );
-                    })}
-                    {(() => {
-                      const proj = row.projection;
-                      const v = proj ? (metric === 'usd' ? proj.pctUsd : proj.pctCount) : null;
-                      const dev = proj ? (metric === 'usd' ? proj.developedUsd : proj.developedCount) : null;
-                      const isMature = row.ageDays >= horizon;
-                      const piso = d?.projection?.tailIncomplete && !isMature;
-                      const stickyRight = { position: 'sticky', right: 0, zIndex: 1 };
-                      if (v == null) {
-                        return <td className="num cell-mono" style={{ ...stickyRight, background: 'var(--bg-raised)', color: 'var(--fg5)' }}>—</td>;
-                      }
-                      // Mix com a SUPERFÍCIE (não transparent): célula sticky
-                      // precisa de fundo opaco pro conteúdo não vazar por baixo.
-                      const solidBg = lowN
-                        ? 'color-mix(in oklab, var(--fg5) 10%, var(--bg-raised))'
-                        : v <= 0.06
-                          ? `color-mix(in oklab, var(--success) ${Math.round((1 - v / 0.06) * 55)}%, var(--bg-raised))`
-                          : `color-mix(in oklab, var(--danger) ${Math.round(Math.min(1, (v - 0.06) / 0.06) * 65)}%, var(--bg-raised))`;
-                      return (
-                        <td className="num cell-mono"
-                          title={isMature
-                            ? `coorte completa: ${(v * 100).toFixed(2)}% observado até D${horizon}`
-                            : `projeção: já viu ${dev != null ? Math.round(dev * 100) : '?'}% do caminho (D${Math.min(row.ageDays, horizon)} de D${horizon}).\npadrão das coortes maduras + ajuste Bornhuetter-Ferguson, sobre o histórico deste recorte.${piso ? '\nPISO: falta histórico pro fim da curva — o real tende a ser maior.' : ''}`}
-                          style={{
-                            ...stickyRight,
-                            background: solidBg,
-                            color: lowN ? 'var(--fg5)' : 'var(--fg1)',
-                            borderRadius: 4,
-                            fontSize: 10.5,
-                            padding: '4px 5px',
-                            fontStyle: isMature ? 'normal' : 'italic',
-                            borderLeft: '2px solid var(--border-soft)',
-                            fontWeight: 600,
-                          }}>
-                          {isMature ? '' : '~'}{(v * 100).toFixed(1)}{piso ? '+' : ''}
-                        </td>
-                      );
-                    })()}
+        <Paginated items={cohorts} label="coortes">
+          {(pageRows, pager) => (<>
+            <div className="tbl-wrap" style={{ margin: 0, padding: '0 4px 8px', maxHeight: 640, overflow: 'auto' }}>
+              <table className="tbl" style={{ borderCollapse: 'separate', borderSpacing: 2 }}>
+                <thead>
+                  <tr>
+                    <th style={{ position: 'sticky', left: 0, top: 0, zIndex: 4, background: 'var(--bg-raised)', minWidth: 118 }}>Venda</th>
+                    <th className="num" style={{ position: 'sticky', top: 0, zIndex: 3, background: 'var(--bg-raised)', minWidth: 46 }}>Base</th>
+                    {cols.map((c) => (
+                      <th key={c} className="num" style={{ position: 'sticky', top: 0, zIndex: 3, background: 'var(--bg-raised)', minWidth: 40 }}>+{c}d</th>
+                    ))}
+                    <th className="num" style={{ position: 'sticky', top: 0, right: 0, zIndex: 4, background: 'var(--bg-raised)', minWidth: 56 }}
+                      title={`Onde a coorte deve ESTABILIZAR ao completar ${horizon} dias — padrão das coortes maduras + ajuste Bornhuetter-Ferguson, calculado sobre o histórico do próprio recorte. Coorte madura mostra o valor observado.`}>
+                      final D{horizon}
+                    </th>
                   </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
+                </thead>
+                <tbody>
+                  {state.status === 'loading' && <SkelTableRows rows={10} cols={cols.length + 3}/>}
+                  {state.status === 'ready' && cohorts.length === 0 && (
+                    <tr><td colSpan={cols.length + 3} style={{ textAlign: 'center', padding: 24, opacity: 0.6 }}>Sem vendas no período</td></tr>
+                  )}
+                  {state.status === 'ready' && pageRows.map((row) => {
+                    const lowN = row.baseCount < minN;
+                    return (
+                      <tr key={row.day}>
+                        <td className="cell-mono" style={{ position: 'sticky', left: 0, zIndex: 1, background: 'var(--bg-raised)', whiteSpace: 'nowrap' }}
+                            title={lowN ? `amostra baixa: ${row.baseCount} vendas (< ${minN})` : undefined}>
+                          {fmtDateShort(row.day)}
+                          {lowN && <span style={{ color: 'var(--warning)', marginLeft: 4 }} title={`amostra baixa (< ${minN})`}>·</span>}
+                        </td>
+                        <td className="num cell-mono" style={{ color: lowN ? 'var(--fg5)' : 'var(--fg3)' }}>
+                          {fmtInt(row.baseCount)}
+                        </td>
+                        {cols.map((c) => {
+                          const cell = row.cells[c];
+                          if (!cell) return <td key={c} className="num"/>;  // censurado
+                          const p = pctOf(cell);
+                          return (
+                            <td key={c} className="num cell-mono"
+                              title={`vendas de ${fmtDateShort(row.day)} · até ${c} dia${c === 1 ? '' : 's'}\n`
+                                + `${fmtInt(cell.cumCount)} de ${fmtInt(row.baseCount)} pedidos (${(cell.pctCount * 100).toFixed(2)}%)\n`
+                                + `${fmtCurrency(cell.cumUsd, cur, 0)} de ${fmtCurrency(row.baseUsd, cur, 0)} (${(cell.pctUsd * 100).toFixed(2)}%)`}
+                              style={{
+                                background: lowN ? 'color-mix(in oklab, var(--fg5) 10%, transparent)' : cellBg(p),
+                                color: lowN ? 'var(--fg5)' : 'var(--fg1)',
+                                borderRadius: 4,
+                                fontSize: 10.5,
+                                padding: '4px 5px',
+                              }}>
+                              {(p * 100).toFixed(1)}
+                            </td>
+                          );
+                        })}
+                        {(() => {
+                          const proj = row.projection;
+                          const v = proj ? (metric === 'usd' ? proj.pctUsd : proj.pctCount) : null;
+                          const dev = proj ? (metric === 'usd' ? proj.developedUsd : proj.developedCount) : null;
+                          const isMature = row.ageDays >= horizon;
+                          const piso = d?.projection?.tailIncomplete && !isMature;
+                          const stickyRight = { position: 'sticky', right: 0, zIndex: 1 };
+                          if (v == null) {
+                            return <td className="num cell-mono" style={{ ...stickyRight, background: 'var(--bg-raised)', color: 'var(--fg5)' }}>—</td>;
+                          }
+                          // Mix com a SUPERFÍCIE (não transparent): célula sticky
+                          // precisa de fundo opaco pro conteúdo não vazar por baixo.
+                          const solidBg = lowN
+                            ? 'color-mix(in oklab, var(--fg5) 10%, var(--bg-raised))'
+                            : v <= 0.06
+                              ? `color-mix(in oklab, var(--success) ${Math.round((1 - v / 0.06) * 55)}%, var(--bg-raised))`
+                              : `color-mix(in oklab, var(--danger) ${Math.round(Math.min(1, (v - 0.06) / 0.06) * 65)}%, var(--bg-raised))`;
+                          return (
+                            <td className="num cell-mono"
+                              title={isMature
+                                ? `coorte completa: ${(v * 100).toFixed(2)}% observado até D${horizon}`
+                                : `projeção: já viu ${dev != null ? Math.round(dev * 100) : '?'}% do caminho (D${Math.min(row.ageDays, horizon)} de D${horizon}).\npadrão das coortes maduras + ajuste Bornhuetter-Ferguson, sobre o histórico deste recorte.${piso ? '\nPISO: falta histórico pro fim da curva — o real tende a ser maior.' : ''}`}
+                              style={{
+                                ...stickyRight,
+                                background: solidBg,
+                                color: lowN ? 'var(--fg5)' : 'var(--fg1)',
+                                borderRadius: 4,
+                                fontSize: 10.5,
+                                padding: '4px 5px',
+                                borderLeft: '2px solid var(--border-soft)',
+                                fontWeight: 600,
+                              }}>
+                              {isMature ? '' : '~'}{(v * 100).toFixed(1)}{piso ? '+' : ''}
+                            </td>
+                          );
+                        })()}
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+            {state.status === 'ready' && pager}
+          </>)}
+        </Paginated>
         <div style={{ padding: '6px 16px 12px', fontSize: 10.5, color: 'var(--fg5)', display: 'flex', gap: 14, flexWrap: 'wrap' }}>
           <span><span style={{ display: 'inline-block', width: 10, height: 10, borderRadius: 3, background: 'color-mix(in oklab, var(--success) 45%, transparent)', verticalAlign: '-1px' }}/> abaixo da meta (6%)</span>
           <span><span style={{ display: 'inline-block', width: 10, height: 10, borderRadius: 3, background: 'color-mix(in oklab, var(--danger) 55%, transparent)', verticalAlign: '-1px' }}/> acima da meta</span>
@@ -1422,7 +1444,6 @@ function RefundCohortsHelp({ horizon }) {
         : 'transparent',
       color: dim ? 'var(--fg5)' : 'var(--fg1)',
       borderRadius: 4, fontSize: 10.5, padding: '4px 7px',
-      fontStyle: italic ? 'italic' : 'normal',
     }}>{v}</td>
   );
 
@@ -1440,7 +1461,7 @@ function RefundCohortsHelp({ horizon }) {
 
   return (
     <div>
-      <Panel eyebrow="POR QUE ESTA ABA EXISTE" sub="o problema que a taxa comum de reembolso não consegue resolver">
+      <Panel eyebrow="Por que esta aba existe" sub="o problema que a taxa comum de reembolso não consegue resolver">
         <P>
           A taxa "normal" divide os estornos do mês pelas vendas do <em>mesmo</em> mês. Só que reembolso
           quase nunca é da venda de hoje — ele chega dias ou semanas depois. Quando o volume de venda muda
@@ -1459,7 +1480,7 @@ function RefundCohortsHelp({ horizon }) {
         </P>
       </Panel>
 
-      <Panel eyebrow="COMO LER A MATRIZ" sub="linha = dia da venda · coluna = dias depois da venda · célula = % acumulado">
+      <Panel eyebrow="Como ler a matriz" sub="linha = dia da venda · coluna = dias depois da venda · célula = % acumulado">
         <div className="tbl-wrap" style={{ margin: '0 0 10px', overflowX: 'auto' }}>
           <table className="tbl" style={{ borderCollapse: 'separate', borderSpacing: 2, maxWidth: 560 }}>
             <thead>
@@ -1502,7 +1523,7 @@ function RefundCohortsHelp({ horizon }) {
         <P>
           <H>Linha 2 (05 de ago):</H> as células vazias são <H>censura</H> — a coorte tem só 13 dias de
           vida, então "+15d" e "+30d" ainda <em>não aconteceram</em>. Vazio ≠ 0%: é "cedo demais pra saber".
-          O <Mono>~6.9</Mono> em itálico é a <H>projeção</H> de onde ela deve parar.
+          O <Mono>~6.9</Mono> é a <H>projeção</H> de onde ela deve parar.
         </P>
         <P>
           <H>Linha 3 (17 de ago):</H> cinza = <H>amostra baixa</H>. 7 vendas com 1 estorno mostra
@@ -1514,7 +1535,7 @@ function RefundCohortsHelp({ horizon }) {
         </P>
       </Panel>
 
-      <Panel eyebrow="A CURVA DE MATURAÇÃO" sub="quanto do estorno total aparece até o dia N — a régua justa entre meses">
+      <Panel eyebrow="A curva de maturação" sub="quanto do estorno total aparece até o dia N — a régua justa entre meses">
         <P>
           A curva agrega as coortes por <H>idade</H>: no ponto "+10d" só entram coortes que já viveram 10
           dias. Isso remove o viés das coortes novas (que puxariam a média pra baixo só por serem novas).
@@ -1527,7 +1548,7 @@ function RefundCohortsHelp({ horizon }) {
         </P>
       </Panel>
 
-      <Panel eyebrow="A PROJEÇÃO (~)" sub="onde a coorte nova deve ESTABILIZAR quando amadurecer">
+      <Panel eyebrow="A projeção (~)" sub="onde a coorte nova deve ESTABILIZAR quando amadurecer">
         <P>
           As coortes antigas ensinam o <H>ritmo</H> do estorno. Exemplo: historicamente, até o dia 5
           aparece <Mono>40%</Mono> de tudo que vai estornar até o dia 30. Se a coorte de 5 dias está com
@@ -1540,13 +1561,13 @@ function RefundCohortsHelp({ horizon }) {
           período até elas terem informação própria.
         </P>
         <P>
-          <H>Como ler:</H> <Mono>~8.2</Mono> em itálico = estimativa. Sem <Mono>~</Mono> = coorte completa,
-          valor observado. <H>"PISO"</H> no chip de projeção = falta histórico pra ver o fim da curva
+          <H>Como ler:</H> <Mono>~8.2</Mono> = estimativa. Sem <Mono>~</Mono> = coorte completa,
+          valor observado. <H>"Piso"</H> no chip de projeção = falta histórico pra ver o fim da curva
           (ex.: horizonte de 90d com só 40 dias de dados) — o número real tende a ser um pouco <em>maior</em>.
         </P>
       </Panel>
 
-      <Panel eyebrow="TRÊS DECISÕES QUE ESTA ABA RESOLVE" sub="exemplos práticos">
+      <Panel eyebrow="Três decisões que esta aba resolve" sub="exemplos práticos">
         <P>
           <H>1. Pegar coorte ruim cedo.</H> A coorte de terça está projetando <Mono>~12%</Mono> com 4 dias
           de vida? Não espere 30 dias pra confirmar: abra Transações naquele dia, veja qual afiliado/campanha
@@ -1562,7 +1583,7 @@ function RefundCohortsHelp({ horizon }) {
         </P>
       </Panel>
 
-      <Panel eyebrow="GLOSSÁRIO" sub="todos os termos da aba, sem economês">
+      <Panel eyebrow="Glossário" sub="todos os termos da aba, sem economês">
         <div className="tbl-wrap" style={{ margin: 0, overflowX: 'auto' }}>
           <table className="tbl" style={{ maxWidth: 860 }}>
             <tbody>
@@ -1731,19 +1752,19 @@ function AllAffiliatesPage({ filters, onOpenAffiliate }) {
       display: 'inline-flex', alignItems: 'center', gap: 4,
       padding: '2px 8px', borderRadius: 999,
       fontFamily: 'var(--f-mono)', fontSize: 11,
-      letterSpacing: '0.02em', fontWeight: 500,
+      fontWeight: 500,
     };
-    if (tier === 'good') return { ...base, background: 'rgba(34,197,94,0.14)', color: 'var(--success)', border: '1px solid rgba(34,197,94,0.35)' };
-    if (tier === 'mid') return { ...base, background: 'rgba(255,180,0,0.14)', color: 'var(--warning)', border: '1px solid rgba(255,180,0,0.35)' };
-    if (tier === 'bad') return { ...base, background: 'rgba(239,68,68,0.14)', color: 'var(--danger)', border: '1px solid rgba(239,68,68,0.35)' };
-    return { ...base, background: 'rgba(140,161,200,0.06)', color: 'var(--fg5)', border: '1px solid var(--border-soft)' };
+    if (tier === 'good') return { ...base, background: 'var(--success-bg)', color: 'var(--success)', border: '1px solid color-mix(in srgb, var(--success) 35%, transparent)' };
+    if (tier === 'mid') return { ...base, background: 'var(--warning-bg)', color: 'var(--warning)', border: '1px solid color-mix(in srgb, var(--warning) 35%, transparent)' };
+    if (tier === 'bad') return { ...base, background: 'var(--danger-bg)', color: 'var(--danger)', border: '1px solid color-mix(in srgb, var(--danger) 35%, transparent)' };
+    return { ...base, background: 'var(--bg-subtle)', color: 'var(--fg5)', border: '1px solid var(--border-soft)' };
   }
 
   return (
     <div className="page-in">
       <div className="page-head">
         <div className="lead">
-          <span className="eyebrow">AFILIADOS · DIRETÓRIO</span>
+          <span className="eyebrow">Afiliados · diretório</span>
           <h2>Todos os <em>afiliados</em></h2>
           <span className="sub">{rows.length} no total · pesquisável · exporta o que está filtrado</span>
         </div>
@@ -1803,66 +1824,71 @@ function AllAffiliatesPage({ filters, onOpenAffiliate }) {
       )}
 
       <div className="panel" style={{ padding: 0 }}>
-        <div className="tbl-wrap" style={{ margin: 0, padding: '0 4px', maxHeight: 720, overflowY: 'auto' }}>
-          <table className="tbl tbl--sticky-first">
-            <thead>
-              <tr>
-                <th>Afiliado</th><th>Plataforma</th>
-                <th className="num" title="CPA fixo negociado — ÚLTIMO valor pago por venda FE aprovada no período (fonte: lista de transações; renegociação atualiza na primeira venda com o valor novo)">CPA por venda</th>
-                <th className="num">Receita · período</th><th className="num">Pedidos · período</th>
-                <th className="num">AOV · período</th>
-                <th className="num">Reembolso</th>
-                <th>1ª venda</th><th>Última venda</th><th></th>
-              </tr>
-            </thead>
-            <tbody>
-              {state.status === 'loading' && <SkelTableRows rows={10} cols={10}/>}
-              {state.status === 'ready' && rows.length === 0 && (
-                <tr><td colSpan={10} style={{ textAlign: 'center', padding: 24, opacity: 0.6 }}>
-                  {query ? 'Nenhum afiliado encontrado' : 'Nenhum afiliado ainda'}
-                </td></tr>
-              )}
-              {rows.map((r) => {
-                const displayName = r.nickname || r.externalId;
-                const { cls: platClass, short: platShort } = platBadge(r.platformSlug);
-                const aov = aovOf(r);
-                const tier = aovTier(aov);
-                return (
-                  <tr tabIndex={0} key={`${r.platformSlug}:${r.externalId}`} onClick={() => onOpenAffiliate(r.externalId)}>
-                    <td>
-                      <span className="cell-aff">
-                        <span className="av" style={{ background: avatarColor(r.externalId) }}>{initials(displayName)}</span>
-                        <span className="meta"><span className="nm">{displayName}</span><span className="id">{r.externalId}</span></span>
-                      </span>
-                    </td>
-                    <td><span className={`plat ${platClass}`}>{platShort}</span></td>
-                    <td className="num cell-mono" title={r.feCpaPaidCount > 0 ? `Detectado em ${r.feCpaPaidCount} venda${r.feCpaPaidCount === 1 ? '' : 's'} FE` : 'Sem vendas FE com CPA no período'}>
-                      {(r.cpaPerFe || 0) > 0 ? fmtCurrency(r.cpaPerFe, cur, 0) : '—'}
-                    </td>
-                    <td className="num cell-mono">{fmtCurrency(r.revenue, cur, 0)}</td>
-                    <td className="num cell-mono">{fmtInt(r.orders)}</td>
-                    <td className="num">
-                      {aov > 0 ? (
-                        <span style={aovPillStyle(tier)} title={`${r.feApprovedCount} FE aprovados · ${fmtCurrency(r.attributedRevenue, cur, 0)} de faturamento (sessão completa com cross-sells)`}>
-                          {fmtCurrency(aov, cur, 0)}
-                        </span>
-                      ) : (
-                        <span style={{ color: 'var(--fg5)', fontFamily: 'var(--f-mono)', fontSize: 11 }}>—</span>
-                      )}
-                    </td>
-                    <td className="num cell-mono"
-                      title={r.realOrders ? `${fmtInt(r.refunds)} estornos ÷ ${fmtInt(r.realOrders)} pedidos reais` : undefined}>
-                      {r.realOrders ? (r.refundRate * 100).toFixed(1) + '%' : '—'}
-                    </td>
-                    <td className="cell-mono">{r.firstSeenAt ? fmtDateShort(r.firstSeenAt) : '—'}</td>
-                    <td className="cell-mono">{r.lastOrderAt ? fmtDateShort(r.lastOrderAt) : '—'}</td>
-                    <td><Icon name="chevron-right" size={13}/></td>
+        <Paginated items={rows} label="afiliados" resetKey={query}>
+          {(pageRows, pager) => (<>
+            <div className="tbl-wrap" style={{ margin: 0, padding: '0 4px', maxHeight: 720, overflowY: 'auto' }}>
+              <table className="tbl tbl--sticky-first">
+                <thead>
+                  <tr>
+                    <th>Afiliado</th><th>Plataforma</th>
+                    <th className="num" title="CPA fixo negociado — ÚLTIMO valor pago por venda FE aprovada no período (fonte: lista de transações; renegociação atualiza na primeira venda com o valor novo)">CPA por venda</th>
+                    <th className="num">Receita · período</th><th className="num">Pedidos · período</th>
+                    <th className="num">AOV · período</th>
+                    <th className="num">Reembolso</th>
+                    <th>1ª venda</th><th>Última venda</th><th></th>
                   </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
+                </thead>
+                <tbody>
+                  {state.status === 'loading' && <SkelTableRows rows={10} cols={10}/>}
+                  {state.status === 'ready' && rows.length === 0 && (
+                    <tr><td colSpan={10} style={{ textAlign: 'center', padding: 24, opacity: 0.6 }}>
+                      {query ? 'Nenhum afiliado encontrado' : 'Nenhum afiliado ainda'}
+                    </td></tr>
+                  )}
+                  {pageRows.map((r) => {
+                    const displayName = r.nickname || r.externalId;
+                    const { cls: platClass, short: platShort } = platBadge(r.platformSlug);
+                    const aov = aovOf(r);
+                    const tier = aovTier(aov);
+                    return (
+                      <tr tabIndex={0} key={`${r.platformSlug}:${r.externalId}`} onClick={() => onOpenAffiliate(r.externalId)}>
+                        <td>
+                          <span className="cell-aff">
+                            <span className="av" style={{ background: avatarColor(r.externalId) }}>{initials(displayName)}</span>
+                            <span className="meta"><span className="nm">{displayName}</span><span className="id">{r.externalId}</span></span>
+                          </span>
+                        </td>
+                        <td><span className={`plat ${platClass}`}>{platShort}</span></td>
+                        <td className="num cell-mono" title={r.feCpaPaidCount > 0 ? `Detectado em ${r.feCpaPaidCount} venda${r.feCpaPaidCount === 1 ? '' : 's'} FE` : 'Sem vendas FE com CPA no período'}>
+                          {(r.cpaPerFe || 0) > 0 ? fmtCurrency(r.cpaPerFe, cur, 0) : '—'}
+                        </td>
+                        <td className="num cell-mono">{fmtCurrency(r.revenue, cur, 0)}</td>
+                        <td className="num cell-mono">{fmtInt(r.orders)}</td>
+                        <td className="num">
+                          {aov > 0 ? (
+                            <span style={aovPillStyle(tier)} title={`${r.feApprovedCount} FE aprovados · ${fmtCurrency(r.attributedRevenue, cur, 0)} de faturamento (sessão completa com cross-sells)`}>
+                              {fmtCurrency(aov, cur, 0)}
+                            </span>
+                          ) : (
+                            <span style={{ color: 'var(--fg5)', fontFamily: 'var(--f-mono)', fontSize: 11 }}>—</span>
+                          )}
+                        </td>
+                        <td className="num cell-mono"
+                          title={r.realOrders ? `${fmtInt(r.refunds)} estornos ÷ ${fmtInt(r.realOrders)} pedidos reais` : undefined}>
+                          {r.realOrders ? (r.refundRate * 100).toFixed(1) + '%' : '—'}
+                        </td>
+                        <td className="cell-mono">{r.firstSeenAt ? fmtDateShort(r.firstSeenAt) : '—'}</td>
+                        <td className="cell-mono">{r.lastOrderAt ? fmtDateShort(r.lastOrderAt) : '—'}</td>
+                        <td><Icon name="chevron-right" size={13}/></td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+            {pager}
+          </>)}
+        </Paginated>
       </div>
     </div>
   );
@@ -1934,9 +1960,9 @@ function useCallCenter() {
 }
 
 const CC_LEVEL_META = {
-  salesbound: { label: 'INTEGRAR SALESBOUND', chip: 'SALESBOUND ≥100/d', fg: 'var(--danger)', bg: 'color-mix(in oklab, var(--danger) 12%, transparent)', border: 'color-mix(in oklab, var(--danger) 35%, transparent)' },
-  tauk:       { label: 'CONECTAR TAUK',       chip: 'TAUK ≥30/d',        fg: 'var(--warning)', bg: 'color-mix(in oklab, var(--warning) 12%, transparent)', border: 'color-mix(in oklab, var(--warning) 35%, transparent)' },
-  ok:         { label: 'OK',                  chip: 'OK',                fg: 'var(--success)', bg: 'rgba(58,214,140,0.10)', border: 'rgba(58,214,140,0.35)' },
+  salesbound: { label: 'Integrar SalesBound', chip: 'SalesBound ≥100/d', fg: 'var(--danger)', bg: 'color-mix(in oklab, var(--danger) 12%, transparent)', border: 'color-mix(in oklab, var(--danger) 35%, transparent)' },
+  tauk:       { label: 'Conectar Tauk',       chip: 'Tauk ≥30/d',        fg: 'var(--warning)', bg: 'color-mix(in oklab, var(--warning) 12%, transparent)', border: 'color-mix(in oklab, var(--warning) 35%, transparent)' },
+  ok:         { label: 'OK',                  chip: 'OK',                fg: 'var(--success)', bg: 'var(--success-bg)', border: 'color-mix(in srgb, var(--success) 35%, transparent)' },
 };
 
 function CallCenterMonitor({ cc }) {
@@ -1983,11 +2009,11 @@ function CallCenterMonitor({ cc }) {
     <>
       {/* Alerta: produto cruzou limiar de call center */}
       {alerts.length > 0 && (
-        <div className="panel" style={{ marginBottom: 14, padding: '12px 16px', background: 'rgba(255,180,0,0.06)', border: '1px solid rgba(255,180,0,0.4)' }}>
+        <div className="panel" style={{ marginBottom: 14, padding: '12px 16px', background: 'var(--warning-bg)', border: '1px solid color-mix(in srgb, var(--warning) 40%, transparent)' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
             <Icon name="bell" size={14}/>
-            <span style={{ fontFamily: 'var(--f-mono)', fontSize: 10.5, fontWeight: 700, letterSpacing: '0.1em', color: 'var(--warning)' }}>
-              CALL CENTER · {alerts.length} {alerts.length === 1 ? 'PRODUTO CRUZOU' : 'PRODUTOS CRUZARAM'} O LIMIAR
+            <span style={{ fontFamily: 'var(--f-mono)', fontSize: 10.5, fontWeight: 700, color: 'var(--warning)' }}>
+              Call center · {alerts.length} {alerts.length === 1 ? 'produto cruzou' : 'produtos cruzaram'} o limiar
             </span>
           </div>
           <div style={{ display: 'grid', gap: 6 }}>
@@ -2002,7 +2028,7 @@ function CallCenterMonitor({ cc }) {
                     {r.avg3d} vendas/dia (média 3d) · ontem {fmtInt(r.yesterday)} · hoje {fmtInt(r.today)}
                   </span>
                   <span style={{
-                    fontFamily: 'var(--f-mono)', fontSize: 9.5, fontWeight: 700, letterSpacing: '0.06em',
+                    fontFamily: 'var(--f-mono)', fontSize: 9.5, fontWeight: 700,
                     padding: '2px 10px', borderRadius: 'var(--r-full)',
                     background: meta.bg, color: meta.fg, border: `1px solid ${meta.border}`,
                   }}>
@@ -2032,60 +2058,65 @@ function CallCenterMonitor({ cc }) {
         </div>
         {open && (
           <>
-            <div className="tbl-wrap" style={{ margin: 0, padding: '0 4px' }}>
-              <table className="tbl">
-                <thead>
-                  <tr>
-                    <th>Produto</th><th>Plataforma</th>
-                    <th className="num">Hoje</th><th className="num">Ontem</th>
-                    <th className="num" title="Média dos últimos 3 dias BRT completos — é o que dispara o alerta">Média 3d</th>
-                    <th className="num">Média 7d</th><th className="num">Pico 7d</th>
-                    <th>Status</th><th></th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {d.rows.length === 0 && (
-                    <tr><td colSpan={9} style={{ textAlign: 'center', padding: 16, opacity: 0.6 }}>Nenhum produto monitorado.</td></tr>
-                  )}
-                  {d.rows.map((r) => {
-                    const meta = CC_LEVEL_META[r.level];
-                    const pb = platBadge(r.platformSlug);
-                    return (
-                      <tr key={`${r.watchId}:${r.family}`} style={r.level !== 'ok' ? { background: `${meta.bg.replace('0.14', '0.05')}` } : undefined}>
-                        <td>
-                          {r.family}
-                          {r.dormant && <span style={{ fontFamily: 'var(--f-mono)', fontSize: 8.5, color: 'var(--fg5)', marginLeft: 6 }}>SEM VENDAS NA JANELA</span>}
-                        </td>
-                        <td><span className={`plat ${pb.cls}`}>{pb.short}</span></td>
-                        <td className="num">{fmtInt(r.today)}</td>
-                        <td className="num">{fmtInt(r.yesterday)}</td>
-                        <td className="num" style={{ fontWeight: 700, color: r.level !== 'ok' ? meta.fg : undefined }}>{r.avg3d}</td>
-                        <td className="num">{r.avg7d}</td>
-                        <td className="num">{fmtInt(r.peak7d)}</td>
-                        <td>
-                          <span style={{
-                            fontFamily: 'var(--f-mono)', fontSize: 10, fontWeight: 600, letterSpacing: '0.06em',
-                            padding: '2px 8px', borderRadius: 'var(--r-full)', whiteSpace: 'nowrap',
-                            background: meta.bg, color: meta.fg, border: `1px solid ${meta.border}`,
-                          }}>
-                            {meta.chip}
-                          </span>
-                        </td>
-                        <td>
-                          <button
-                            className="btn btn-ghost"
-                            style={{ padding: '2px 8px', fontSize: 10 }}
-                            title={`Remover monitoramento${r.wildcard ? ' (remove o monitor da plataforma INTEIRA)' : ''} — use quando o produto for integrado`}
-                            onClick={() => removeWatch(r)}
-                            disabled={busy}
-                          >×</button>
-                        </td>
+            <Paginated items={d.rows} label="produtos">
+              {(pageRows, pager) => (<>
+                <div className="tbl-wrap" style={{ margin: 0, padding: '0 4px' }}>
+                  <table className="tbl">
+                    <thead>
+                      <tr>
+                        <th>Produto</th><th>Plataforma</th>
+                        <th className="num">Hoje</th><th className="num">Ontem</th>
+                        <th className="num" title="Média dos últimos 3 dias BRT completos — é o que dispara o alerta">Média 3d</th>
+                        <th className="num">Média 7d</th><th className="num">Pico 7d</th>
+                        <th>Status</th><th></th>
                       </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
+                    </thead>
+                    <tbody>
+                      {d.rows.length === 0 && (
+                        <tr><td colSpan={9} style={{ textAlign: 'center', padding: 16, opacity: 0.6 }}>Nenhum produto monitorado.</td></tr>
+                      )}
+                      {pageRows.map((r) => {
+                        const meta = CC_LEVEL_META[r.level];
+                        const pb = platBadge(r.platformSlug);
+                        return (
+                          <tr key={`${r.watchId}:${r.family}`} style={r.level !== 'ok' ? { background: `${meta.bg.replace('0.14', '0.05')}` } : undefined}>
+                            <td>
+                              {r.family}
+                              {r.dormant && <span style={{ fontFamily: 'var(--f-mono)', fontSize: 8.5, color: 'var(--fg5)', marginLeft: 6 }}>Sem vendas na janela</span>}
+                            </td>
+                            <td><span className={`plat ${pb.cls}`}>{pb.short}</span></td>
+                            <td className="num">{fmtInt(r.today)}</td>
+                            <td className="num">{fmtInt(r.yesterday)}</td>
+                            <td className="num" style={{ fontWeight: 700, color: r.level !== 'ok' ? meta.fg : undefined }}>{r.avg3d}</td>
+                            <td className="num">{r.avg7d}</td>
+                            <td className="num">{fmtInt(r.peak7d)}</td>
+                            <td>
+                              <span style={{
+                                fontFamily: 'var(--f-mono)', fontSize: 10, fontWeight: 600,
+                                padding: '2px 8px', borderRadius: 'var(--r-full)', whiteSpace: 'nowrap',
+                                background: meta.bg, color: meta.fg, border: `1px solid ${meta.border}`,
+                              }}>
+                                {meta.chip}
+                              </span>
+                            </td>
+                            <td>
+                              <button
+                                className="btn btn-ghost"
+                                style={{ padding: '2px 8px', fontSize: 10 }}
+                                title={`Remover monitoramento${r.wildcard ? ' (remove o monitor da plataforma INTEIRA)' : ''} — use quando o produto for integrado`}
+                                onClick={() => removeWatch(r)}
+                                disabled={busy}
+                              >×</button>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+                {pager}
+              </>)}
+            </Paginated>
             <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap', padding: '10px 14px' }}>
               <select value={plat} onChange={(e) => setPlat(e.target.value)} style={selStyle}>
                 <option value="buygoods">BuyGoods</option>
@@ -2156,13 +2187,15 @@ function useProductsData(filters, enabled) {
 }
 
 const FAMILY_ACCENT = {
-  NeuroMindPro: '#9B7BFF',
-  GlycoPulse: '#5BC8FF',
-  ThermoBurnPro: '#FF8B5B',
-  MaxVitalize: '#5BFFB7',
+  NeuroMindPro: 'var(--chart-1)',
+  GlycoPulse: 'var(--chart-2)',
+  ThermoBurnPro: 'var(--chart-3)',
+  // não --chart-4: a cor da família também vira TEXTO (badge, eyebrow, Pill) e
+  // #4260E6 dá 3,4:1 no card escuro. --chart-5 passa como texto nos dois temas.
+  MaxVitalize: 'var(--chart-5)',
 };
 function familyAccent(family) {
-  return FAMILY_ACCENT[family] || '#5BC8FF';
+  return FAMILY_ACCENT[family] || 'var(--fg4)';
 }
 
 // ----- Funnel page-state (Black/White) -----
@@ -2212,27 +2245,28 @@ function normState(state) { return String(state || '').toLowerCase().replace(/\s
 function pageStateStyle(state) {
   const s = normState(state);
   if (s === 'white' || s === 'white1' || s === 'white01') {
-    return { bg: 'rgba(255,255,255,0.92)', fg: '#0a0b12', border: 'rgba(255,255,255,0.6)' };
+    return { bg: 'var(--ns-white)', fg: 'var(--ns-black)', border: 'var(--border-strong)' };
   }
   if (s === 'black2' || s === 'black02' || s === 'blacktwo' || s === 'blackii') {
-    return { bg: 'rgba(20,20,26,0.92)', fg: '#FFCF8B', border: 'rgba(255,184,91,0.65)' };
+    return { bg: 'var(--ns-black)', fg: 'var(--warning-base)', border: 'color-mix(in srgb, var(--warning-base) 65%, transparent)' };
   }
   if (s === 'black' || s === 'black1' || s === 'black01') {
-    return { bg: 'rgba(20,20,26,0.85)', fg: '#e7e9f0', border: 'rgba(255,255,255,0.30)' };
+    return { bg: 'var(--ns-black)', fg: 'var(--ns-white)', border: 'var(--border-strong)' };
   }
   if (s === 'gray' || s === 'grey') {
-    return { bg: 'rgba(120,130,160,0.30)', fg: '#cdd5e8', border: 'rgba(160,170,200,0.45)' };
+    return { bg: 'color-mix(in srgb, var(--fg5) 18%, transparent)', fg: 'var(--fg3)', border: 'color-mix(in srgb, var(--fg5) 45%, transparent)' };
   }
   return { bg: 'color-mix(in oklab, var(--accent) 18%, transparent)', fg: 'var(--glow-cyan)', border: 'color-mix(in oklab, var(--accent) 45%, transparent)' };
 }
 
-// Rótulo amigável: "black2"→"BLACK 2", "white"→"WHITE", senão UPPER do que veio.
+// Rótulo amigável: "black2"→"Black 2", "white"→"White", senão o que veio com inicial maiúscula.
 function pageStateLabel(state) {
   const s = normState(state);
-  if (s === 'black2' || s === 'black02' || s === 'blacktwo' || s === 'blackii') return 'BLACK 2';
-  if (s === 'black' || s === 'black1' || s === 'black01') return 'BLACK';
-  if (s === 'white' || s === 'white1' || s === 'white01') return 'WHITE';
-  return String(state || '').toUpperCase();
+  if (s === 'black2' || s === 'black02' || s === 'blacktwo' || s === 'blackii') return 'Black 2';
+  if (s === 'black' || s === 'black1' || s === 'black01') return 'Black';
+  if (s === 'white' || s === 'white1' || s === 'white01') return 'White';
+  const raw = String(state || '');
+  return raw.charAt(0).toUpperCase() + raw.slice(1);
 }
 
 function PageStateBadge({ state, platform, size = 'sm' }) {
@@ -2242,7 +2276,6 @@ function PageStateBadge({ state, platform, size = 'sm' }) {
     <span style={{
       display: 'inline-flex', alignItems: 'center', gap: 5,
       fontFamily: 'var(--f-mono)', fontSize: size === 'sm' ? 9.5 : 11, fontWeight: 600,
-      letterSpacing: '0.06em', textTransform: 'uppercase',
       padding: size === 'sm' ? '2px 7px' : '3px 9px', borderRadius: 'var(--r-full)',
       background: st.bg, color: st.fg, border: `1px solid ${st.border}`, whiteSpace: 'nowrap',
     }}>
@@ -2363,11 +2396,11 @@ function CopyBeaconChip({ product, accent, label = 'Script', block = false }) {
         display: 'inline-flex', alignItems: 'center', gap: 6,
         cursor: 'pointer', userSelect: 'none',
         fontFamily: 'var(--f-mono)', fontSize: 10.5, fontWeight: 600,
-        letterSpacing: '0.04em', whiteSpace: 'nowrap',
+        whiteSpace: 'nowrap',
         padding: block ? '7px 12px' : '3px 9px',
         borderRadius: 'var(--r-full)',
-        background: copied ? 'rgba(58,214,140,0.14)' : `${col}1a`,
-        color: col, border: `1px solid ${col}55`,
+        background: copied ? 'var(--success-bg)' : `color-mix(in srgb, ${col} 10%, transparent)`,
+        color: col, border: `1px solid color-mix(in srgb, ${col} 33%, transparent)`,
       }}
     >
       {copied ? '✓ Copiado' : '⧉ ' + label}
@@ -2382,7 +2415,7 @@ function FamilyGrid({ state, cur, onPick, pageStates, callCenter }) {
     <div className="page-in">
       <div className="page-head">
         <div className="lead">
-          <span className="eyebrow">CATÁLOGO · PRODUTOS</span>
+          <span className="eyebrow">Catálogo · Produtos</span>
           <h2>Performance <em>por família</em></h2>
           <span className="sub">{families.length} famílias no catálogo · clica em uma pra ver as variantes</span>
         </div>
@@ -2394,7 +2427,7 @@ function FamilyGrid({ state, cur, onPick, pageStates, callCenter }) {
         <div className="panel" style={{ marginBottom: 14 }}>
           <div className="panel-head" style={{ marginBottom: 10 }}>
             <div className="panel-title">
-              <span className="panel-eyebrow">ESTADO DAS PÁGINAS · FUNIL (UPSELL 01)</span>
+              <span className="panel-eyebrow">Estado das páginas · Funil (Upsell 01)</span>
               <div className="panel-sub">Variante visualizada na página de upsell, por plataforma — White / Black / Black 2</div>
             </div>
           </div>
@@ -2421,69 +2454,74 @@ function FamilyGrid({ state, cur, onPick, pageStates, callCenter }) {
         <SkelCardGrid n={6}/>
       )}
 
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))', gap: 14 }}>
-        {families.map((f) => {
-          const accent = familyAccent(f.family);
-          const liftPct = f.upsellLiftPct;
-          const hasOrders = f.totalOrders > 0;
-          const fStates = platformStatesForFamily(allStates, f.family);
-          return (
-            <button
-              key={f.family}
-              onClick={() => onPick(f.family)}
-              className="prod-card"
-              style={{ cursor: 'pointer', textAlign: 'left', font: 'inherit', borderLeft: `3px solid ${accent}` }}
-              title={`Abrir variantes de ${f.family}`}
-            >
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                  <div style={{ width: 8, height: 8, borderRadius: '50%', background: accent }}/>
-                  <div style={{ fontFamily: 'var(--f-display)', fontSize: 18, color: 'var(--fg1)' }}>{f.family}</div>
-                </div>
-                <div style={{ display: 'flex', gap: 6 }}>
-                  {f.niches.map((n) => (
-                    <span key={n} className="badge" style={{ background: `${accent}22`, color: accent, borderColor: `${accent}55`, fontSize: 10 }}>{n}</span>
-                  ))}
-                </div>
-              </div>
-
-              {fStates.length > 0 && (
-                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 10 }}
-                  title="Último estado de página registrado no Upsell 01">
-                  {fStates.map((s) => (
-                    <PageStateBadge key={`${s.platform}:${s.product}`} state={s.state} platform={s.platform}/>
-                  ))}
-                </div>
-              )}
-
-              <div style={{ display: 'flex', alignItems: 'baseline', gap: 10, marginBottom: 12 }}>
-                <div style={{ fontFamily: 'var(--f-display)', fontSize: 28, color: 'var(--fg1)', letterSpacing: '-0.01em' }}>
-                  {hasOrders ? fmtCurrency(f.grossRevenue, cur, 0) : '—'}
-                </div>
-                {liftPct != null && (
-                  <div style={{ fontFamily: 'var(--f-mono)', fontSize: 11, color: liftPct > 0 ? 'var(--success)' : 'var(--navy-400)' }}>
-                    lift +{(liftPct * 100).toFixed(0)}%
+      <Paginated items={families} label="famílias">
+        {(pageRows, pager) => (<>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))', gap: 14 }}>
+            {pageRows.map((f) => {
+              const accent = familyAccent(f.family);
+              const liftPct = f.upsellLiftPct;
+              const hasOrders = f.totalOrders > 0;
+              const fStates = platformStatesForFamily(allStates, f.family);
+              return (
+                <button
+                  key={f.family}
+                  onClick={() => onPick(f.family)}
+                  className="prod-card"
+                  style={{ cursor: 'pointer', textAlign: 'left', font: 'inherit', borderLeft: `3px solid ${accent}` }}
+                  title={`Abrir variantes de ${f.family}`}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                      <div style={{ width: 8, height: 8, borderRadius: '50%', background: accent }}/>
+                      <div style={{ fontFamily: 'var(--f-display)', fontSize: 18, color: 'var(--fg1)' }}>{f.family}</div>
+                    </div>
+                    <div style={{ display: 'flex', gap: 6 }}>
+                      {f.niches.map((n) => (
+                        <span key={n} className="badge" style={{ background: `color-mix(in srgb, ${accent} 13%, transparent)`, color: accent, borderColor: `color-mix(in srgb, ${accent} 33%, transparent)`, fontSize: 10 }}>{n}</span>
+                      ))}
+                    </div>
                   </div>
-                )}
-              </div>
 
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 8, marginBottom: 12 }}>
-                <div className="prod-stat"><div className="l">FE orders</div><div className="v sm">{fmtInt(f.feOrders)}</div></div>
-                <div className="prod-stat"><div className="l">Total orders</div><div className="v sm">{fmtInt(f.totalOrders)}</div></div>
-                <div className="prod-stat"><div className="l">AOV</div><div className="v sm">{hasOrders ? fmtCurrency(f.aov, cur, 0) : '—'}</div></div>
-              </div>
+                  {fStates.length > 0 && (
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 10 }}
+                      title="Último estado de página registrado no Upsell 01">
+                      {fStates.map((s) => (
+                        <PageStateBadge key={`${s.platform}:${s.product}`} state={s.state} platform={s.platform}/>
+                      ))}
+                    </div>
+                  )}
 
-              <div style={{ paddingTop: 10, borderTop: '1px solid var(--border-soft)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: 11, color: 'var(--fg4)', fontFamily: 'var(--f-mono)' }}>
-                <span>{f.feSkuCount} FE · {f.upSkuCount} UP · {f.dwSkuCount} DW · {f.rcSkuCount} RC</span>
-                <span style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                  <CopyBeaconChip product={f.family} accent={accent}/>
-                  <span style={{ color: accent }}>Abrir →</span>
-                </span>
-              </div>
-            </button>
-          );
-        })}
-      </div>
+                  <div style={{ display: 'flex', alignItems: 'baseline', gap: 10, marginBottom: 12 }}>
+                    <div style={{ fontFamily: 'var(--f-display)', fontSize: 28, color: 'var(--fg1)', letterSpacing: '-0.01em' }}>
+                      {hasOrders ? fmtCurrency(f.grossRevenue, cur, 0) : '—'}
+                    </div>
+                    {liftPct != null && (
+                      <div style={{ fontFamily: 'var(--f-mono)', fontSize: 11, color: liftPct > 0 ? 'var(--success)' : 'var(--fg5)' }}>
+                        lift +{(liftPct * 100).toFixed(0)}%
+                      </div>
+                    )}
+                  </div>
+
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 8, marginBottom: 12 }}>
+                    <div className="prod-stat"><div className="l">FE orders</div><div className="v sm">{fmtInt(f.feOrders)}</div></div>
+                    <div className="prod-stat"><div className="l">Total orders</div><div className="v sm">{fmtInt(f.totalOrders)}</div></div>
+                    <div className="prod-stat"><div className="l">AOV</div><div className="v sm">{hasOrders ? fmtCurrency(f.aov, cur, 0) : '—'}</div></div>
+                  </div>
+
+                  <div style={{ paddingTop: 10, borderTop: '1px solid var(--border-soft)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: 11, color: 'var(--fg4)', fontFamily: 'var(--f-mono)' }}>
+                    <span>{f.feSkuCount} FE · {f.upSkuCount} UP · {f.dwSkuCount} DW · {f.rcSkuCount} RC</span>
+                    <span style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                      <CopyBeaconChip product={f.family} accent={accent}/>
+                      <span style={{ color: accent }}>Abrir →</span>
+                    </span>
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+          {pager}
+        </>)}
+      </Paginated>
     </div>
   );
 }
@@ -2491,8 +2529,8 @@ function FamilyGrid({ state, cur, onPick, pageStates, callCenter }) {
 const TYPE_COL_META = {
   FRONTEND: { label: 'Frontend', accent: 'var(--accent)' },
   UPSELL: { label: 'Upsell', accent: 'var(--gold)' },
-  DOWNSELL: { label: 'Downsell', accent: '#FF8B5B' },
-  SMS_RECOVERY: { label: 'SMS Recovery', accent: '#9B7BFF' },
+  DOWNSELL: { label: 'Downsell', accent: 'var(--chart-2)' },
+  SMS_RECOVERY: { label: 'SMS Recovery', accent: 'var(--chart-5)' },
 };
 
 function FamilyDrillDown({ family, familyAgg, productsState, cur, onBack, onPickVariant, selectedSku, closeDrawer }) {
@@ -2520,7 +2558,7 @@ function FamilyDrillDown({ family, familyAgg, productsState, cur, onBack, onPick
           <button onClick={onBack} className="chip" style={{ marginBottom: 8 }}>
             <Icon name="chevron-right" size={11}/> Famílias
           </button>
-          <span className="eyebrow" style={{ color: accent }}>FAMÍLIA · {family.toUpperCase()}</span>
+          <span className="eyebrow" style={{ color: accent }}>Família · {family}</span>
           <h2>{family} <em>· variantes</em></h2>
           <span className="sub">
             {familyAgg
@@ -2533,7 +2571,7 @@ function FamilyDrillDown({ family, familyAgg, productsState, cur, onBack, onPick
       <div className="panel" style={{ marginBottom: 14 }}>
         <div className="panel-head" style={{ marginBottom: 10 }}>
           <div className="panel-title">
-            <span className="panel-eyebrow">BEACON DE ESTADO · UPSELL 01</span>
+            <span className="panel-eyebrow">Beacon de estado · Upsell 01</span>
             <div className="panel-sub">
               Cole o script abaixo nas páginas de Upsell 01 de <strong>{family}</strong>. O produto já vem embutido —
               você só edita a <strong>plataforma</strong> depois de colar.
@@ -2552,7 +2590,7 @@ function FamilyDrillDown({ family, familyAgg, productsState, cur, onBack, onPick
           </summary>
           <pre style={{
             marginTop: 8, padding: 12, borderRadius: 8, overflowX: 'auto',
-            background: 'rgba(0,0,0,0.25)', border: '1px solid var(--border-soft)',
+            background: 'var(--bg-subtle)', border: '1px solid var(--border-soft)',
             fontFamily: 'var(--f-mono)', fontSize: 10.5, lineHeight: 1.5, color: 'var(--fg2)',
           }}>{beaconScriptFor(family)}</pre>
         </details>
@@ -2571,25 +2609,30 @@ function FamilyDrillDown({ family, familyAgg, productsState, cur, onBack, onPick
             const meta = TYPE_COL_META[type];
             return (
               <div key={type} className="panel" style={{ padding: 12, minHeight: 200 }}>
-                <div style={{ fontFamily: 'var(--f-mono)', fontSize: 10, letterSpacing: '0.12em', color: meta.accent, marginBottom: 12 }}>
-                  {meta.label.toUpperCase()} · {variants.length}
+                <div style={{ fontFamily: 'var(--f-mono)', fontSize: 10, color: meta.accent, marginBottom: 12 }}>
+                  {meta.label} · {variants.length}
                 </div>
                 {variants.length === 0 && (
-                  <div style={{ fontSize: 11, color: 'var(--fg5)', fontStyle: 'italic' }}>
+                  <div style={{ fontSize: 11, color: 'var(--fg5)' }}>
                     Sem variantes deste tipo no catálogo
                   </div>
                 )}
-                <div style={{ display: 'grid', gap: 8 }}>
-                  {variants.map((v) => (
-                    <VariantRow
-                      key={`${v.platformSlug}:${v.externalId}`}
-                      variant={v}
-                      cur={cur}
-                      accent={meta.accent}
-                      onClick={() => onPickVariant(v.externalId)}
-                    />
-                  ))}
-                </div>
+                <Paginated items={variants} label="variantes">
+                  {(pageRows, pager) => (<>
+                    <div style={{ display: 'grid', gap: 8 }}>
+                      {pageRows.map((v) => (
+                        <VariantRow
+                          key={`${v.platformSlug}:${v.externalId}`}
+                          variant={v}
+                          cur={cur}
+                          accent={meta.accent}
+                          onClick={() => onPickVariant(v.externalId)}
+                        />
+                      ))}
+                    </div>
+                    {pager}
+                  </>)}
+                </Paginated>
               </div>
             );
           })}
@@ -2630,7 +2673,7 @@ function VariantRow({ variant: v, cur, accent, onClick }) {
         </span>
         <span className={`plat ${platClass}`} style={{ flexShrink: 0 }}>{platShort}</span>
       </div>
-      <div style={{ fontFamily: 'var(--f-mono)', fontSize: 10, color: 'var(--fg5)', letterSpacing: '0.04em', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+      <div style={{ fontFamily: 'var(--f-mono)', fontSize: 10, color: 'var(--fg5)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
         {v.externalId}{v.vendorAccount ? ` · ${v.vendorAccount}` : ''}
       </div>
       <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 4, fontFamily: 'var(--f-mono)', fontSize: 11 }}>
@@ -2682,7 +2725,7 @@ function VariantDetailDrawer({ variant: v, cur, onClose }) {
       <div className="drawer" style={{ width: 480 }}>
         <div className="drawer-head">
           <div>
-            <span className="eyebrow">VARIANTE · {platBadge(v.platformSlug).upper}</span>
+            <span className="eyebrow">Variante · {platBadge(v.platformSlug).upper}</span>
             <h3 style={{ margin: '4px 0', fontSize: 18, color: 'var(--fg1)' }}>{v.name}</h3>
             <div style={{ fontFamily: 'var(--f-mono)', fontSize: 11, color: 'var(--fg4)' }}>
               {v.externalId} {v.vendorAccount && `· ${v.vendorAccount}`}
@@ -2699,7 +2742,7 @@ function VariantDetailDrawer({ variant: v, cur, onClose }) {
               </span>
             )}
             {v.catalogPriceUsd != null && (
-              <span className="badge" style={{ background: 'rgba(255,255,255,0.05)', color: 'var(--fg1)' }}>
+              <span className="badge" style={{ background: 'var(--bg-subtle)', color: 'var(--fg1)' }}>
                 Catálogo: {fmtCurrency(v.catalogPriceUsd, cur, 0)}
               </span>
             )}
@@ -2709,7 +2752,7 @@ function VariantDetailDrawer({ variant: v, cur, onClose }) {
               </span>
             )}
             {v.catalogStatus && v.catalogStatus !== 'Ativo' && (
-              <span className="badge" style={{ background: 'rgba(255,180,0,0.15)', color: 'var(--warning)', borderColor: 'rgba(255,180,0,0.4)' }}>
+              <span className="badge" style={{ background: 'var(--warning-bg)', color: 'var(--warning)', borderColor: 'color-mix(in srgb, var(--warning) 40%, transparent)' }}>
                 {v.catalogStatus}
               </span>
             )}
@@ -2726,8 +2769,8 @@ function VariantDetailDrawer({ variant: v, cur, onClose }) {
 
           {showAttributed && (
             <div style={{ borderTop: '1px solid var(--border-soft)', paddingTop: 12, display: 'grid', gap: 8 }}>
-              <div style={{ fontFamily: 'var(--f-mono)', fontSize: 10, color: 'var(--fg5)', letterSpacing: '0.1em' }}>
-                LUCRO ATRIBUÍDO · funil completo da sessão
+              <div style={{ fontFamily: 'var(--f-mono)', fontSize: 10, color: 'var(--fg5)' }}>
+                Lucro atribuído · funil completo da sessão
               </div>
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 10 }}>
                 <div className="prod-stat"><div className="l">Sessões</div><div className="v sm">{fmtInt(v.attributedSessions)}</div></div>
@@ -2755,7 +2798,7 @@ function VariantDetailDrawer({ variant: v, cur, onClose }) {
 
           {(v.salesPageUrl || v.checkoutUrl || v.thanksPageUrl || v.driveUrl) && (
             <div style={{ borderTop: '1px solid var(--border-soft)', paddingTop: 12, display: 'grid', gap: 6 }}>
-              <div style={{ fontFamily: 'var(--f-mono)', fontSize: 10, color: 'var(--fg5)', letterSpacing: '0.1em' }}>LINKS DO CATÁLOGO</div>
+              <div style={{ fontFamily: 'var(--f-mono)', fontSize: 10, color: 'var(--fg5)' }}>Links do catálogo</div>
               {v.salesPageUrl && <DrawerLink href={v.salesPageUrl} icon="globe" label="Sales Page"/>}
               {v.checkoutUrl && <DrawerLink href={v.checkoutUrl} icon="credit-card" label="Checkout"/>}
               {v.thanksPageUrl && <DrawerLink href={v.thanksPageUrl} icon="check" label="Thanks Page"/>}
@@ -2815,14 +2858,14 @@ function _LegacyProductsPage({ filters }) {
     FRONTEND: { label: 'Frontend', accent: 'var(--accent)', tagClass: 'plat-cb' },
     UPSELL:   { label: 'Upsell',   accent: 'var(--gold)', tagClass: 'plat-cb' },
     BUMP:     { label: 'Bump',     accent: 'var(--hot)', tagClass: 'plat-d24' },
-    DOWNSELL: { label: 'Downsell', accent: '#6b84b8', tagClass: 'plat-d24' },
+    DOWNSELL: { label: 'Downsell', accent: 'var(--fg5)', tagClass: 'plat-d24' },
   };
 
   return (
     <div className="page-in">
       <div className="page-head">
         <div className="lead">
-          <span className="eyebrow">PRODUTOS · OFERTAS</span>
+          <span className="eyebrow">Produtos · Ofertas</span>
           <h2>Performance <em>do catálogo</em></h2>
           <span className="sub">{products.length} de {allProducts.length} SKUs · clica num card pra abrir detalhes</span>
         </div>
@@ -2844,7 +2887,7 @@ function _LegacyProductsPage({ filters }) {
       </div>
 
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '4px 0 14px', flexWrap: 'wrap' }}>
-        <span className="f-label">TIPO DE PRODUTO</span>
+        <span className="f-label">Tipo de produto</span>
         <div className="seg">
           {[
             ['all', 'Todos'],
@@ -2890,7 +2933,7 @@ function _LegacyProductsPage({ filters }) {
                 </div>
                 <div>
                   <div className="prod-name" title={p.name}>{p.name}</div>
-                  <div style={{ fontFamily: 'var(--f-mono)', fontSize: 10, color: 'var(--fg5)', letterSpacing: '0.06em', marginTop: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                  <div style={{ fontFamily: 'var(--f-mono)', fontSize: 10, color: 'var(--fg5)', marginTop: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                     {p.externalId}
                   </div>
                 </div>
@@ -2909,7 +2952,7 @@ function _LegacyProductsPage({ filters }) {
                   <div className="prod-stat"><div className="l">Receita</div><div className="v">{fmtCurrency(p.revenue, cur, 0)}</div></div>
                   <div className="prod-stat"><div className="l">Pedidos</div><div className="v">{fmtInt(p.orders)}</div></div>
                   <div className="prod-stat"><div className="l">AOV</div><div className="v sm">{fmtCurrency(aov, cur, 0)}</div></div>
-                  <div className="prod-stat"><div className="l">Aprovação</div><div className="v sm" style={{ color: p.allOrders ? apColor : 'var(--navy-400)' }}>
+                  <div className="prod-stat"><div className="l">Aprovação</div><div className="v sm" style={{ color: p.allOrders ? apColor : 'var(--fg5)' }}>
                     {p.allOrders ? (p.approvalRate * 100).toFixed(1) + '%' : '—'}
                   </div></div>
                   <div className="prod-stat"><div className="l">Margem</div><div className="v sm" style={{ color: margin > 0 ? 'var(--success)' : 'var(--danger)' }}>{fmtCurrency(margin, cur, 0)}</div></div>
@@ -2964,7 +3007,7 @@ function _LegacyProductsPage({ filters }) {
                       <td><span className={`plat ${platClass}`}>{platShort}</span></td>
                       <td className="cell-mono" style={{ color: 'var(--fg4)' }}>{p.vendorAccount || '—'}</td>
                       <td className="num cell-mono">{fmtInt(p.orders)}</td>
-                      <td className="num cell-mono" style={{ color: p.allOrders ? apColor : 'var(--navy-400)' }}>
+                      <td className="num cell-mono" style={{ color: p.allOrders ? apColor : 'var(--fg5)' }}>
                         {p.allOrders ? (p.approvalRate * 100).toFixed(1) + '%' : '—'}
                       </td>
                       <td className="num cell-mono">{fmtCurrency(p.revenue, cur, 0)}</td>
@@ -2985,7 +3028,7 @@ function _LegacyProductsPage({ filters }) {
       {/* Resumo por tipo no rodapé — contexto, não headline */}
       {byType.some((b) => b.orders > 0) && (
         <div style={{ marginTop: 18 }}>
-          <div style={{ fontFamily: 'var(--f-mono)', fontSize: 10, letterSpacing: '0.18em', color: 'var(--fg5)', textTransform: 'uppercase', marginBottom: 10 }}>
+          <div style={{ fontFamily: 'var(--f-mono)', fontSize: 10, color: 'var(--fg5)', marginBottom: 10 }}>
             Resumo por tipo · período
           </div>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 10 }}>
@@ -2993,8 +3036,8 @@ function _LegacyProductsPage({ filters }) {
               const meta = TYPE_META[b.productType] || { label: b.productType, accent: 'var(--accent)' };
               return (
                 <div key={b.productType} style={{ padding: 12, border: '1px solid var(--border-soft)', borderRadius: 6, background: 'color-mix(in oklab, var(--accent) 3%, transparent)' }}>
-                  <div style={{ fontFamily: 'var(--f-mono)', fontSize: 10, color: meta.accent, letterSpacing: '0.1em', marginBottom: 6 }}>
-                    {meta.label.toUpperCase()}
+                  <div style={{ fontFamily: 'var(--f-mono)', fontSize: 10, color: meta.accent, marginBottom: 6 }}>
+                    {meta.label}
                   </div>
                   <div style={{ fontFamily: 'var(--f-display)', fontSize: 22, color: 'var(--fg1)', lineHeight: 1, marginBottom: 4 }}>
                     {fmtCurrency(b.revenue, cur, 0)}
@@ -3073,10 +3116,25 @@ function TransactionsPage({ filters }) {
     return () => clearTimeout(t);
   }, [query]);
 
+  // Paginação no SERVIDOR: cada página busca só as suas linhas (limit/offset)
+  // e o total é o real do filtro — antes a tela fatiava um lote de 500 e o
+  // que passasse disso não aparecia em página nenhuma. A página vive junto
+  // com a chave do filtro: filtro novo = página 1 já no MESMO render, sem um
+  // fetch perdido da página antiga.
+  const txFilterKey = [statusFilter, typeFilter, debouncedQuery,
+    filters.dateRange.start.getTime(), filters.dateRange.end.getTime(),
+    Array.from(filters.platforms).join(','), Array.from(filters.countries).join(','),
+    Array.from(filters.funnels).join(','), Array.from(filters.families).join(','),
+    Array.from(filters.affiliates || []).join(',')].join('|');
+  const [txPg, setTxPg] = useState(() => ({ key: txFilterKey, page: 1 }));
+  const page = txPg.key === txFilterKey ? txPg.page : 1;
+  const setPage = (p) => setTxPg({ key: txFilterKey, page: p });
+  const [pageSize, setPageSize] = useState(() => window.nsReadPageSize(50));
+
   useEffect(() => {
     let cancelled = false;
     setStateTx((s) => ({ ...s, status: 'loading' }));
-    window.NSApi.fetchOrders(filters, { status: statusFilter, productType: typeFilter, search: debouncedQuery, limit: 500 })
+    window.NSApi.fetchOrders(filters, { status: statusFilter, productType: typeFilter, search: debouncedQuery, limit: pageSize, offset: (page - 1) * pageSize })
       .then((data) => {
         if (cancelled) return;
         setStateTx({ status: 'ready', data, error: null });
@@ -3091,23 +3149,29 @@ function TransactionsPage({ filters }) {
       Array.from(filters.platforms).join(','), Array.from(filters.countries).join(','),
       Array.from(filters.funnels).join(','),
       Array.from(filters.families).join(','), Array.from(filters.affiliates || []).join(','),
-      statusFilter, typeFilter, debouncedQuery]);
+      statusFilter, typeFilter, debouncedQuery, page, pageSize]);
 
   const cur = filters.currency || 'USD';
   const orders = state.data?.orders || [];
   const statusCounts = state.data?.statusCounts || {};
   const typeCounts = state.data?.typeCounts || {};
   const total = state.data?.total ?? 0;
-  const showing = orders.length;
+  // Enquanto a próxima página carrega, o total da anterior segura o controle
+  // no lugar (sem piscar "Nenhum resultado").
+  const txPager = total > 0 ? (
+    <Pager page={page} pageSize={pageSize} total={total} label="transações"
+      onPageChange={setPage}
+      onPageSizeChange={(n) => { setPageSize(n); window.nsSavePageSize(n); setPage(1); }}/>
+  ) : null;
 
   return (
     <div className="page-in">
       <div className="page-head">
         <div className="lead">
-          <span className="eyebrow">TRANSAÇÕES · LEDGER</span>
+          <span className="eyebrow">Transações · Ledger</span>
           <h2>Cada <em>pedido</em>, cada linha.</h2>
           <span className="sub">
-            Stream bruto · {fmtInt(showing)} de {fmtInt(total)} linhas{showing < total ? ' · cap de 500 linhas · use filtros pra refinar' : ''}
+            Stream bruto · {fmtInt(total)} {total === 1 ? 'linha' : 'linhas'} no filtro
           </span>
         </div>
         <div className="page-head-actions" style={{ flexWrap: 'wrap' }}>
@@ -3117,10 +3181,10 @@ function TransactionsPage({ filters }) {
               style={{ background: 'transparent', border: 0, color: 'var(--fg1)', outline: 'none', flex: 1, fontFamily: 'var(--f-mono)', fontSize: 12 }}/>
           </div>
           {/* Download navegando direto pro endpoint (sessão no cookie): o
-              servidor exporta TODAS as linhas do filtro atual, não só as
-              500 da tela. XLSX removido — era um botão morto; CSV com BOM
+              servidor exporta TODAS as linhas do filtro atual, não só a
+              página da tela. XLSX removido — era um botão morto; CSV com BOM
               abre no Excel do mesmo jeito. */}
-          <button className="btn btn-ghost" title="Exporta todas as transações do filtro atual (não só as 500 visíveis)"
+          <button className="btn btn-ghost" title="Exporta todas as transações do filtro atual (não só a página visível)"
             onClick={() => { window.location.href = window.NSApi.ordersExportUrl(filters, { status: statusFilter, productType: typeFilter, search: debouncedQuery }); }}>
             <Icon name="download" size={12}/> Exportar CSV
           </button>
@@ -3128,7 +3192,7 @@ function TransactionsPage({ filters }) {
       </div>
 
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '4px 0 12px', flexWrap: 'wrap' }}>
-        <span className="f-label">STATUS</span>
+        <span className="f-label">Status</span>
         <div className="seg">
           {[['all','Todos'],['approved','Aprovados'],['pending','Pendentes'],['refunded','Reembolsados'],['chargeback','Chargeback']].map(([k, l]) => (
             <button key={k} className={statusFilter === k ? 'is-active' : ''} onClick={() => setStatusFilter(k)}>
@@ -3136,7 +3200,7 @@ function TransactionsPage({ filters }) {
             </button>
           ))}
         </div>
-        <span className="f-label" style={{ marginLeft: 8 }}>ETAPA</span>
+        <span className="f-label" style={{ marginLeft: 8 }}>Etapa</span>
         <div className="seg">
           {[['all','Todas'],['FRONTEND','FE'],['UPSELL','Upsell'],['DOWNSELL','Downsell'],['BUMP','Bump'],['SMS_RECOVERY','Recovery']].map(([k, l]) => (
             <button key={k} className={typeFilter === k ? 'is-active' : ''} onClick={() => setTypeFilter(k)}>
@@ -3153,101 +3217,109 @@ function TransactionsPage({ filters }) {
       {isMobile ? (
         /* MOBILE (R2): mesma lista, em cards — mesmo handler do drawer da
            linha. Estilos de .tx-cards/.tx-card vêm do CSS (contrato R2). */
-        <div className="tx-cards">
-          {state.status === 'loading' && Array.from({ length: 6 }).map((_, i) => (
-            <div className="tx-card" key={`sk-${i}`}>
-              <div className="l1"><SkelLine w="55%"/></div>
-              <div className="l3"><SkelLine w="75%"/></div>
-            </div>
-          ))}
-          {state.status === 'ready' && orders.length === 0 && (
-            <div style={{ textAlign: 'center', padding: 24, opacity: 0.6 }}>Nenhuma transação no período</div>
-          )}
-          {orders.map((o) => {
-            const { cls: platClass, short: platShort } = platBadge(o.platformSlug);
-            const statusLc = o.status.toLowerCase();
-            return (
-              <div className="tx-card" key={`${o.platformSlug}:${o.externalId}`}
-                   onClick={() => setDrawer({ externalId: o.externalId, platformSlug: o.platformSlug })}>
-                <div className="l1">
-                  <span>{o.productName || o.productExternalId}</span>
-                  <span className="val" style={o.grossAmountUsd < 0 ? { color: 'var(--danger)' } : undefined}>
-                    {fmtCurrency(o.grossAmountUsd, cur, 2)}
-                  </span>
+        <>
+            <div className="tx-cards">
+              {state.status === 'loading' && Array.from({ length: 6 }).map((_, i) => (
+                <div className="tx-card" key={`sk-${i}`}>
+                  <div className="l1"><SkelLine w="55%"/></div>
+                  <div className="l3"><SkelLine w="75%"/></div>
                 </div>
-                <div className="l2">
-                  <span className={`plat ${platClass}`}>{platShort}</span>
-                  <StagePill type={o.productType} />
-                  <span className={`st st-${statusLc}`}>{statusLc}</span>
-                </div>
-                <div className="l3">
-                  {fmtDateTime(o.eventAt || o.orderedAt)} · {o.affiliateNickname || o.affiliateExternalId || '—'}{o.mappedAffiliateName ? ` (${o.mappedAffiliateName})` : ''} · {o.country || '—'} · {shortTxId(o.externalId)}
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      ) : (
-      <div className="panel" style={{ padding: 0 }}>
-        <div className="tbl-wrap" style={{ margin: 0, padding: '0 4px', maxHeight: 720, overflowY: 'auto' }}>
-          <table className="tbl">
-            <thead>
-              <tr>
-                <th>Data/hora</th><th>Pedido</th><th>Plataforma</th>
-                <th>Produto</th><th>Afiliado</th>
-                <th title="Identidade no NorthScale Afiliados (affiliate_id resolvido pelo mapeamento)">Afiliado (sistema)</th>
-                <th>País</th><th>Pagamento</th>
-                <th className="num">Bruto</th><th className="num">Taxas</th>
-                <th className="num">Líquido</th>
-                <th>Status</th>
-                <th className="num">CPA</th>
-              </tr>
-            </thead>
-            <tbody>
-              {state.status === 'loading' && <SkelTableRows rows={12} cols={13}/>}
+              ))}
               {state.status === 'ready' && orders.length === 0 && (
-                <tr><td colSpan={13} style={{ textAlign: 'center', padding: 24, opacity: 0.6 }}>Nenhuma transação no período</td></tr>
+                <div style={{ textAlign: 'center', padding: 24, opacity: 0.6 }}>Nenhuma transação no período</div>
               )}
-              {orders.map((o) => {
+              {state.status !== 'loading' && orders.map((o) => {
                 const { cls: platClass, short: platShort } = platBadge(o.platformSlug);
                 const statusLc = o.status.toLowerCase();
                 return (
-                  <tr key={`${o.platformSlug}:${o.externalId}`}
-                      onClick={() => setDrawer({ externalId: o.externalId, platformSlug: o.platformSlug })}
-                      style={{ cursor: 'pointer' }}>
-                    {/* Linha de estorno é datada da VENDA na Digistore (é
-                        linha extra), então mostramos a data do EVENTO —
-                        quando o dinheiro voltou — com a venda no title. */}
-                    <td className="cell-mono" title={o.eventAt !== o.orderedAt ? `venda em ${fmtDateTime(o.orderedAt)}` : undefined}>
-                      {fmtDateTime(o.eventAt || o.orderedAt)}
-                    </td>
-                    <td className="cell-mono">{o.externalId}</td>
-                    <td><span className={`plat ${platClass}`}>{platShort}</span></td>
-                    <td>
-                      <span style={{ display: 'inline-flex', alignItems: 'center', flexWrap: 'wrap' }}>
-                        {o.productName || o.productExternalId}
-                        <StagePill type={o.productType} />
+                  <div className="tx-card" key={`${o.platformSlug}:${o.externalId}`}
+                       onClick={() => setDrawer({ externalId: o.externalId, platformSlug: o.platformSlug })}>
+                    <div className="l1">
+                      <span>{o.productName || o.productExternalId}</span>
+                      <span className="val" style={o.grossAmountUsd < 0 ? { color: 'var(--danger)' } : undefined}>
+                        {fmtCurrency(o.grossAmountUsd, cur, 2)}
                       </span>
-                    </td>
-                    <td className="cell-mono">{o.affiliateNickname || o.affiliateExternalId || '—'}</td>
-                    <td>
-                      {o.mappedAffiliateId
-                        ? <AmMappedChip mapped={{ id: o.mappedAffiliateId, name: o.mappedAffiliateName || o.mappedAffiliateId, status: o.mappedAffiliateStatus || 'active' }}/>
-                        : (o.affiliateExternalId ? <AmMappedChip mapped={null} platformSlug={o.platformSlug}/> : <span style={{ color: 'var(--fg5)' }}>—</span>)}
-                    </td>
-                    <td className="cell-mono">{o.country || '—'}</td>
-                    <td className="cell-mono">{o.paymentMethod || '—'}</td>
-                    <td className="num cell-mono" style={{ color: o.grossAmountUsd < 0 ? 'var(--danger)' : 'var(--fg1)' }}>{fmtCurrency(o.grossAmountUsd, cur, 2)}</td>
-                    <td className="num cell-mono" style={{ color: 'var(--fg5)' }}>{fmtCurrency(o.fees, cur, 2)}</td>
-                    <td className="num cell-mono" style={{ color: o.netAmountUsd < 0 ? 'var(--danger)' : 'var(--fg1)' }}>{fmtCurrency(o.netAmountUsd, cur, 2)}</td>
-                    <td><span className={`st st-${statusLc}`}>{statusLc}</span></td>
-                    <td className="num cell-mono">{fmtCurrency(o.cpaPaidUsd, cur, 2)}</td>
-                  </tr>
+                    </div>
+                    <div className="l2">
+                      <span className={`plat ${platClass}`}>{platShort}</span>
+                      <StagePill type={o.productType} />
+                      <span className={`st st-${statusLc}`}>{statusLc}</span>
+                    </div>
+                    <div className="l3">
+                      {fmtDateTime(o.eventAt || o.orderedAt)} · {o.affiliateNickname || o.affiliateExternalId || '—'}{o.mappedAffiliateName ? ` (${o.mappedAffiliateName})` : ''} · {o.country || '—'} · {shortTxId(o.externalId)}
+                    </div>
+                  </div>
                 );
               })}
-            </tbody>
-          </table>
-        </div>
+            </div>
+            {txPager}
+        </>
+      ) : (
+      <div className="panel" style={{ padding: 0 }}>
+        <>
+            {/* key por página: o scroller (maxHeight 720) remonta e volta ao topo —
+                senão a página 2 abre rolada onde o usuário parou na página 1. */}
+            <div className="tbl-wrap" key={`${page}:${pageSize}`} style={{ margin: 0, padding: '0 4px', maxHeight: 720, overflowY: 'auto' }}>
+              <table className="tbl">
+                <thead>
+                  <tr>
+                    <th>Data/hora</th><th>Pedido</th><th>Plataforma</th>
+                    <th>Produto</th><th>Afiliado</th>
+                    <th title="Identidade no NorthScale Afiliados (affiliate_id resolvido pelo mapeamento)">Afiliado (sistema)</th>
+                    <th>País</th><th>Pagamento</th>
+                    <th className="num">Bruto</th><th className="num">Taxas</th>
+                    <th className="num">Líquido</th>
+                    <th>Status</th>
+                    <th className="num">CPA</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {state.status === 'loading' && <SkelTableRows rows={12} cols={13}/>}
+                  {state.status === 'ready' && orders.length === 0 && (
+                    <tr><td colSpan={13} style={{ textAlign: 'center', padding: 24, opacity: 0.6 }}>Nenhuma transação no período</td></tr>
+                  )}
+                  {state.status !== 'loading' && orders.map((o) => {
+                    const { cls: platClass, short: platShort } = platBadge(o.platformSlug);
+                    const statusLc = o.status.toLowerCase();
+                    return (
+                      <tr key={`${o.platformSlug}:${o.externalId}`}
+                          onClick={() => setDrawer({ externalId: o.externalId, platformSlug: o.platformSlug })}
+                          style={{ cursor: 'pointer' }}>
+                        {/* Linha de estorno é datada da VENDA na Digistore (é
+                            linha extra), então mostramos a data do EVENTO —
+                            quando o dinheiro voltou — com a venda no title. */}
+                        <td className="cell-mono" title={o.eventAt !== o.orderedAt ? `venda em ${fmtDateTime(o.orderedAt)}` : undefined}>
+                          {fmtDateTime(o.eventAt || o.orderedAt)}
+                        </td>
+                        <td className="cell-mono">{o.externalId}</td>
+                        <td><span className={`plat ${platClass}`}>{platShort}</span></td>
+                        <td>
+                          <span style={{ display: 'inline-flex', alignItems: 'center', flexWrap: 'wrap' }}>
+                            {o.productName || o.productExternalId}
+                            <StagePill type={o.productType} />
+                          </span>
+                        </td>
+                        <td className="cell-mono">{o.affiliateNickname || o.affiliateExternalId || '—'}</td>
+                        <td>
+                          {o.mappedAffiliateId
+                            ? <AmMappedChip mapped={{ id: o.mappedAffiliateId, name: o.mappedAffiliateName || o.mappedAffiliateId, status: o.mappedAffiliateStatus || 'active' }}/>
+                            : (o.affiliateExternalId ? <AmMappedChip mapped={null} platformSlug={o.platformSlug}/> : <span style={{ color: 'var(--fg5)' }}>—</span>)}
+                        </td>
+                        <td className="cell-mono">{o.country || '—'}</td>
+                        <td className="cell-mono">{o.paymentMethod || '—'}</td>
+                        <td className="num cell-mono" style={{ color: o.grossAmountUsd < 0 ? 'var(--danger)' : 'var(--fg1)' }}>{fmtCurrency(o.grossAmountUsd, cur, 2)}</td>
+                        <td className="num cell-mono" style={{ color: 'var(--fg5)' }}>{fmtCurrency(o.fees, cur, 2)}</td>
+                        <td className="num cell-mono" style={{ color: o.netAmountUsd < 0 ? 'var(--danger)' : 'var(--fg1)' }}>{fmtCurrency(o.netAmountUsd, cur, 2)}</td>
+                        <td><span className={`st st-${statusLc}`}>{statusLc}</span></td>
+                        <td className="num cell-mono">{fmtCurrency(o.cpaPaidUsd, cur, 2)}</td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+            {txPager}
+        </>
       </div>
       )}
 
@@ -3321,7 +3393,7 @@ function TransactionDrawer({ externalId, platformSlug, cur, onClose, onPickOrder
       <div className="drawer" style={{ width: 540 }}>
         <div className="drawer-head">
           <div>
-            <span className="eyebrow">PEDIDO · {o.platformDisplayName.toUpperCase()}</span>
+            <span className="eyebrow">Pedido · {o.platformDisplayName}</span>
             <h3 style={{ margin: '4px 0', fontSize: 18, color: 'var(--fg1)' }}>{o.externalId}</h3>
             <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
               <span className={`plat ${platClass}`}>{platShort}</span>
@@ -3330,8 +3402,8 @@ function TransactionDrawer({ externalId, platformSlug, cur, onClose, onPickOrder
               </span>
               <span className={`st st-${statusLc}`}>{statusLc}</span>
               {isCrossSell && (
-                <span className="badge" style={{ background: 'rgba(255,140,0,0.15)', color: 'var(--warning)', borderColor: 'rgba(255,140,0,0.4)' }}>
-                  CROSS-SELL
+                <span className="badge" style={{ background: 'var(--warning-bg)', color: 'var(--warning)', borderColor: 'color-mix(in srgb, var(--warning) 40%, transparent)' }}>
+                  Cross-sell
                 </span>
               )}
             </div>
@@ -3343,8 +3415,8 @@ function TransactionDrawer({ externalId, platformSlug, cur, onClose, onPickOrder
 
           {/* Financial breakdown */}
           <div>
-            <div style={{ fontFamily: 'var(--f-mono)', fontSize: 10, color: 'var(--fg4)', letterSpacing: '0.1em', marginBottom: 8 }}>
-              FLUXO FINANCEIRO
+            <div style={{ fontFamily: 'var(--f-mono)', fontSize: 10, color: 'var(--fg4)', marginBottom: 8 }}>
+              Fluxo financeiro
             </div>
             <FinRow label="Cliente pagou" value={o.grossAmountUsd} cur={cur} bold/>
             <FinRow label="Imposto / IVA" value={-o.taxAmount} cur={cur} muted/>
@@ -3361,14 +3433,14 @@ function TransactionDrawer({ externalId, platformSlug, cur, onClose, onPickOrder
             <div style={{ height: 1, background: 'var(--border)', margin: '8px 0' }}/>
             <FinRow label={o.status === 'APPROVED' ? 'Empresa recebeu' : 'Empresa receberia (refund/cb)'}
                     value={o.companyKept} cur={cur}
-                    accent={o.status === 'APPROVED' ? (o.companyKept > 0 ? 'var(--success)' : 'var(--danger)') : 'var(--navy-400)'}/>
+                    accent={o.status === 'APPROVED' ? (o.companyKept > 0 ? 'var(--success)' : 'var(--danger)') : 'var(--fg5)'}/>
             {o.cogsUsd != null && o.fulfillmentUsd != null && (
               <>
                 <FinRow label="Custo do produto" value={-o.cogsUsd} cur={cur} muted/>
                 <FinRow label="Frete" value={-o.fulfillmentUsd} cur={cur} muted/>
                 <div style={{ height: 1, background: 'var(--border)', margin: '8px 0' }}/>
                 <FinRow
-                  label={o.status === 'APPROVED' ? 'LUCRO LÍQUIDO' : 'PREJUÍZO (refund/cb)'}
+                  label={o.status === 'APPROVED' ? 'Lucro líquido' : 'Prejuízo (refund/cb)'}
                   value={o.estimatedProfit ?? 0}
                   cur={cur}
                   bold
@@ -3385,7 +3457,7 @@ function TransactionDrawer({ externalId, platformSlug, cur, onClose, onPickOrder
               </>
             )}
             {o.cogsUsd == null && (
-              <div style={{ marginTop: 8, fontSize: 11, color: 'var(--fg5)', fontStyle: 'italic' }}>
+              <div style={{ marginTop: 8, fontSize: 11, color: 'var(--fg5)' }}>
                 COGS não calculado pra este pedido — rode /api/admin/backfill-cogs.
               </div>
             )}
@@ -3398,8 +3470,8 @@ function TransactionDrawer({ externalId, platformSlug, cur, onClose, onPickOrder
 
           {/* Product */}
           <div>
-            <div style={{ fontFamily: 'var(--f-mono)', fontSize: 10, color: 'var(--fg4)', letterSpacing: '0.1em', marginBottom: 8 }}>
-              PRODUTO
+            <div style={{ fontFamily: 'var(--f-mono)', fontSize: 10, color: 'var(--fg4)', marginBottom: 8 }}>
+              Produto
             </div>
             <div style={{ fontFamily: 'var(--f-display)', fontSize: 16, color: 'var(--fg1)' }}>{product.name}</div>
             <div style={{ fontFamily: 'var(--f-mono)', fontSize: 11, color: 'var(--fg4)', marginTop: 2 }}>
@@ -3419,8 +3491,8 @@ function TransactionDrawer({ externalId, platformSlug, cur, onClose, onPickOrder
           {/* Affiliate */}
           {affiliate ? (
             <div>
-              <div style={{ fontFamily: 'var(--f-mono)', fontSize: 10, color: 'var(--fg4)', letterSpacing: '0.1em', marginBottom: 8 }}>
-                AFILIADO
+              <div style={{ fontFamily: 'var(--f-mono)', fontSize: 10, color: 'var(--fg4)', marginBottom: 8 }}>
+                Afiliado
               </div>
               <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                 <div className="av" style={{ background: avatarColor(affiliate.externalId) }}>
@@ -3434,10 +3506,10 @@ function TransactionDrawer({ externalId, platformSlug, cur, onClose, onPickOrder
             </div>
           ) : (
             <div>
-              <div style={{ fontFamily: 'var(--f-mono)', fontSize: 10, color: 'var(--fg4)', letterSpacing: '0.1em', marginBottom: 8 }}>
-                AFILIADO
+              <div style={{ fontFamily: 'var(--f-mono)', fontSize: 10, color: 'var(--fg4)', marginBottom: 8 }}>
+                Afiliado
               </div>
-              <div style={{ fontSize: 12, color: 'var(--fg5)', fontStyle: 'italic' }}>
+              <div style={{ fontSize: 12, color: 'var(--fg5)' }}>
                 Venda direta (sem afiliado atribuído)
               </div>
             </div>
@@ -3446,8 +3518,8 @@ function TransactionDrawer({ externalId, platformSlug, cur, onClose, onPickOrder
           {/* Customer */}
           {customer && (
             <div>
-              <div style={{ fontFamily: 'var(--f-mono)', fontSize: 10, color: 'var(--fg4)', letterSpacing: '0.1em', marginBottom: 8 }}>
-                CLIENTE
+              <div style={{ fontFamily: 'var(--f-mono)', fontSize: 10, color: 'var(--fg4)', marginBottom: 8 }}>
+                Cliente
               </div>
               <div style={{ color: 'var(--fg1)' }}>
                 {[customer.firstName, customer.lastName].filter(Boolean).join(' ') || '(nome n/d)'}
@@ -3461,8 +3533,8 @@ function TransactionDrawer({ externalId, platformSlug, cur, onClose, onPickOrder
           {/* Session */}
           {session.length > 1 && (
             <div>
-              <div style={{ fontFamily: 'var(--f-mono)', fontSize: 10, color: 'var(--fg4)', letterSpacing: '0.1em', marginBottom: 8, display: 'flex', justifyContent: 'space-between' }}>
-                <span>SESSÃO COMPLETA · {session.length} pedidos</span>
+              <div style={{ fontFamily: 'var(--f-mono)', fontSize: 10, color: 'var(--fg4)', marginBottom: 8, display: 'flex', justifyContent: 'space-between' }}>
+                <span>Sessão completa · {session.length} pedidos</span>
                 <span style={{ color: 'var(--success)' }}>{fmtCurrency(sumSession, cur, 2)}</span>
               </div>
               <div style={{ display: 'grid', gap: 4 }}>
@@ -3503,8 +3575,8 @@ function TransactionDrawer({ externalId, platformSlug, cur, onClose, onPickOrder
           {/* Tracking */}
           {(o.clickId || o.trackingId || o.campaignKey || o.trafficSource) && (
             <div>
-              <div style={{ fontFamily: 'var(--f-mono)', fontSize: 10, color: 'var(--fg4)', letterSpacing: '0.1em', marginBottom: 8 }}>
-                ORIGEM DO TRÁFEGO
+              <div style={{ fontFamily: 'var(--f-mono)', fontSize: 10, color: 'var(--fg4)', marginBottom: 8 }}>
+                Origem do tráfego
               </div>
               <div style={{ display: 'grid', gap: 4, fontFamily: 'var(--f-mono)', fontSize: 11 }}>
                 {o.trafficSource && <KV k="source" v={o.trafficSource}/>}
@@ -3517,8 +3589,8 @@ function TransactionDrawer({ externalId, platformSlug, cur, onClose, onPickOrder
 
           {/* Timeline */}
           <div>
-            <div style={{ fontFamily: 'var(--f-mono)', fontSize: 10, color: 'var(--fg4)', letterSpacing: '0.1em', marginBottom: 8 }}>
-              TIMELINE
+            <div style={{ fontFamily: 'var(--f-mono)', fontSize: 10, color: 'var(--fg4)', marginBottom: 8 }}>
+              Timeline
             </div>
             <div style={{ display: 'grid', gap: 4, fontFamily: 'var(--f-mono)', fontSize: 11 }}>
               <KV k="ordered" v={fmtDateTime(o.orderedAt)}/>
@@ -3549,12 +3621,12 @@ function FinRow({ label, value, cur, bold, muted, accent }) {
   return (
     <div style={{
       display: 'flex', justifyContent: 'space-between', padding: '4px 0',
-      fontSize: 12, color: muted ? 'var(--navy-400)' : 'var(--navy-100)',
+      fontSize: 12, color: muted ? 'var(--fg5)' : 'var(--fg2)',
     }}>
       <span>{label}</span>
       <span style={{
         fontFamily: 'var(--f-mono)',
-        color: accent || (bold ? 'var(--white)' : 'inherit'),
+        color: accent || (bold ? 'var(--fg1)' : 'inherit'),
         fontWeight: bold ? 600 : 400,
       }}>
         {fmtCurrency(value, cur, 2)}
@@ -3566,9 +3638,9 @@ function FinRow({ label, value, cur, bold, muted, accent }) {
 function Pill({ label, color }) {
   return (
     <span className="badge" style={{
-      background: color ? `${color}22` : 'rgba(255,255,255,0.05)',
-      color: color || 'var(--navy-100)',
-      borderColor: color ? `${color}55` : 'var(--border-soft)',
+      background: color ? `color-mix(in srgb, ${color} 13%, transparent)` : 'var(--bg-subtle)',
+      color: color || 'var(--fg2)',
+      borderColor: color ? `color-mix(in srgb, ${color} 33%, transparent)` : 'var(--border-soft)',
       fontSize: 10,
     }}>{label}</span>
   );
@@ -3578,7 +3650,7 @@ function KV({ k, v, color }) {
   return (
     <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12 }}>
       <span style={{ color: 'var(--fg5)' }}>{k}</span>
-      <span style={{ color: color || 'var(--white)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+      <span style={{ color: color || 'var(--fg1)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
         {v}
       </span>
     </div>
@@ -3586,11 +3658,11 @@ function KV({ k, v, color }) {
 }
 
 function txTypeLabel(productType, funnelStep) {
-  if (productType === 'FRONTEND') return 'FRONTEND';
-  if (productType === 'BUMP') return 'ORDER BUMP';
-  if (productType === 'DOWNSELL') return 'DOWNSELL';
-  if (productType === 'SMS_RECOVERY') return 'SMS RECOVERY';
-  if (productType === 'UPSELL') return funnelStep && funnelStep >= 2 ? 'UPSELL 2' : 'UPSELL 1';
+  if (productType === 'FRONTEND') return 'Frontend';
+  if (productType === 'BUMP') return 'Order bump';
+  if (productType === 'DOWNSELL') return 'Downsell';
+  if (productType === 'SMS_RECOVERY') return 'SMS Recovery';
+  if (productType === 'UPSELL') return funnelStep && funnelStep >= 2 ? 'Upsell 2' : 'Upsell 1';
   return productType;
 }
 function txTypeColor(productType) {
@@ -3598,9 +3670,9 @@ function txTypeColor(productType) {
     case 'FRONTEND': return 'var(--accent)';
     case 'UPSELL': return 'var(--gold)';
     case 'BUMP': return 'var(--hot)';
-    case 'DOWNSELL': return '#FF8B5B';
-    case 'SMS_RECOVERY': return '#9B7BFF';
-    default: return '#8CA1C8';
+    case 'DOWNSELL': return 'var(--chart-2)';
+    case 'SMS_RECOVERY': return 'var(--chart-5)';
+    default: return 'var(--fg5)';
   }
 }
 
@@ -3640,7 +3712,7 @@ function IntegrationsPage({ filters }) {
     <div className="page-in">
       <div className="page-head">
         <div className="lead">
-          <span className="eyebrow">SISTEMA · PLATAFORMAS</span>
+          <span className="eyebrow">Sistema · Plataformas</span>
           <h2>Visão <em>das plataformas</em></h2>
           <span className="sub">Receita, pedidos e saúde dos connectors por plataforma no período selecionado</span>
         </div>
@@ -3677,8 +3749,8 @@ function IntegrationsPage({ filters }) {
                   </div>
                 </div>
                 {healthy
-                  ? <span className="ph-status ok"><span className="led"/>SAUDÁVEL</span>
-                  : <span className="badge warn">SEM SYNC</span>
+                  ? <span className="ph-status ok"><span className="led"/>Saudável</span>
+                  : <span className="badge warn">Sem sync</span>
                 }
               </div>
 
@@ -3736,8 +3808,8 @@ function IntegrationsPage({ filters }) {
               {(p.feeRatePct != null || p.allowancePct != null) && (
                 <div style={{ marginTop: 12, paddingTop: 10, borderTop: '1px solid var(--border-soft)' }}>
                   <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
-                    <div style={{ fontSize: 10, letterSpacing: '0.1em', color: 'var(--fg4)' }}>
-                      WATERFALL · PERÍODO
+                    <div style={{ fontSize: 10, color: 'var(--fg4)' }}>
+                      Waterfall · Período
                     </div>
                     <button
                       className="btn btn-ghost"
@@ -3820,8 +3892,8 @@ function IntegrationsPage({ filters }) {
 
               {p.topProduct && (
                 <div style={{ marginTop: 12, paddingTop: 10, borderTop: '1px solid var(--border-soft)' }}>
-                  <div style={{ fontSize: 10, letterSpacing: '0.1em', color: 'var(--fg4)', marginBottom: 4 }}>
-                    TOP PRODUTO
+                  <div style={{ fontSize: 10, color: 'var(--fg4)', marginBottom: 4 }}>
+                    Top produto
                   </div>
                   <div style={{ fontSize: 13, color: 'var(--fg1)', display: 'flex', justifyContent: 'space-between', gap: 12 }}>
                     <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
@@ -3855,7 +3927,7 @@ function IntegrationsPage({ filters }) {
                   <span className="sync">Não configurado</span>
                 </div>
               </div>
-              <span className="badge neutral">EM BREVE</span>
+              <span className="badge neutral">Em breve</span>
             </div>
             <div style={{ fontSize: 12, color: 'var(--fg3)', lineHeight: 1.5, marginTop: 8 }}>
               {p.desc}
@@ -3923,7 +3995,7 @@ function PlatformFeesModal({ platform, onCancel, onSaved }) {
     <div
       onClick={onCancel}
       style={{
-        position: 'fixed', inset: 0, zIndex: 100, background: 'rgba(13,18,21,0.72)',
+        position: 'fixed', inset: 0, zIndex: 100, background: 'color-mix(in srgb, var(--ns-black) 72%, transparent)',
         display: 'grid', placeItems: 'center',
       }}
     >
@@ -3933,7 +4005,7 @@ function PlatformFeesModal({ platform, onCancel, onSaved }) {
         style={{ width: 'min(380px, 92vw)', padding: 22 }}
       >
         <div className="eyebrow" style={{ fontSize: 10, color: 'var(--glow-cyan)', marginBottom: 4 }}>
-          PLATAFORMA · {platform.slug.toUpperCase()}
+          Plataforma · {platform.displayName || platform.slug}
         </div>
         <h3 style={{ margin: '0 0 4px', fontSize: 18 }}>{platform.displayName}</h3>
         <p style={{ fontSize: 11, color: 'var(--fg4)', marginBottom: 18 }}>
@@ -4037,7 +4109,7 @@ function FXPage({ filters }) {
     <div className="page-in">
       <div className="page-head">
         <div className="lead">
-          <span className="eyebrow">SETTINGS · FX / CURRENCY</span>
+          <span className="eyebrow">Settings · FX / currency</span>
           <h2>Rate <em>table</em></h2>
           <span className="sub">Daily snapshots · applied at time of order for historical accuracy</span>
         </div>
@@ -4102,11 +4174,12 @@ function UsersPage({ currentUser }) {
   const [creating, setCreating] = useState(false);
   const [bumpRefresh, setBumpRefresh] = useState(0);
   const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(50);
 
   useEffect(() => {
     let cancelled = false;
     setState((s) => ({ ...s, status: 'loading' }));
-    window.NSApi.adminListUsers({ page, pageSize: 50 })
+    window.NSApi.adminListUsers({ page, pageSize })
       .then((data) => {
         if (cancelled) return;
         if (Array.isArray(data.availableTabs) && data.availableTabs.length) SERVER_TAB_CATALOG = data.availableTabs;
@@ -4118,7 +4191,7 @@ function UsersPage({ currentUser }) {
         setState({ status: 'error', users: [], pagination: null, error: err.message });
       });
     return () => { cancelled = true; };
-  }, [bumpRefresh, page]);
+  }, [bumpRefresh, page, pageSize]);
 
   function reload() { setBumpRefresh((n) => n + 1); }
 
@@ -4126,10 +4199,11 @@ function UsersPage({ currentUser }) {
     <div className="page-in">
       <div className="page-head">
         <div className="lead">
-          <span className="eyebrow">ADMIN · USUÁRIOS DO DASHBOARD</span>
+          <span className="eyebrow">Admin · Usuários do dashboard</span>
           <h2>Quem tem <em>acesso</em></h2>
           <span className="sub">
-            {state.users.length} {state.users.length === 1 ? 'usuário' : 'usuários'}
+            {/* total do servidor (paginação no servidor), não só a página atual */}
+            {fmtInt(state.pagination ? state.pagination.total : state.users.length)} {(state.pagination ? state.pagination.total : state.users.length) === 1 ? 'usuário' : 'usuários'}
             {' · '}admin vê tudo, member vê só as abas marcadas
           </span>
         </div>
@@ -4171,8 +4245,8 @@ function UsersPage({ currentUser }) {
                           <span className="nm">
                             {display}
                             {isSelf && (
-                              <span style={{ marginLeft: 6, fontFamily: 'var(--f-mono)', fontSize: 10, color: 'var(--glow-cyan)', letterSpacing: '0.1em' }}>
-                                VOCÊ
+                              <span style={{ marginLeft: 6, fontFamily: 'var(--f-mono)', fontSize: 10, color: 'var(--glow-cyan)' }}>
+                                Você
                               </span>
                             )}
                           </span>
@@ -4193,7 +4267,7 @@ function UsersPage({ currentUser }) {
                       {u.role === 'ADMIN' ? (
                         <span style={{ fontFamily: 'var(--f-mono)', fontSize: 11, color: 'var(--glow-cyan)' }}>todas as abas</span>
                       ) : (
-                        <span style={{ fontFamily: 'var(--f-mono)', fontSize: 11, color: u.allowedTabs.length === 0 ? 'var(--danger)' : 'var(--navy-200)' }}>
+                        <span style={{ fontFamily: 'var(--f-mono)', fontSize: 11, color: u.allowedTabs.length === 0 ? 'var(--danger)' : 'var(--fg2)' }}>
                           {u.allowedTabs.length === 0 ? 'nenhuma aba' : `${u.allowedTabs.length} ${u.allowedTabs.length === 1 ? 'aba' : 'abas'}`}
                         </span>
                       )}
@@ -4207,7 +4281,7 @@ function UsersPage({ currentUser }) {
                         color: u.active ? 'var(--success)' : 'var(--danger)',
                         borderColor: u.active ? 'color-mix(in oklab, var(--success) 35%, transparent)' : 'color-mix(in oklab, var(--danger) 35%, transparent)',
                       }}>
-                        {u.active ? 'ATIVO' : 'INATIVO'}
+                        {u.active ? 'Ativo' : 'Inativo'}
                       </span>
                     </td>
                     <td onClick={(e) => e.stopPropagation()}>
@@ -4220,16 +4294,18 @@ function UsersPage({ currentUser }) {
               })}
             </tbody>
           </table>
-          {state.pagination && (
-            <Pagination
-              page={state.pagination.page}
-              pageSize={state.pagination.pageSize}
-              total={state.pagination.total}
-              hasMore={state.pagination.hasMore}
-              onChange={setPage}
-            />
-          )}
         </div>
+        {state.pagination && (
+          <Pager
+            page={state.pagination.page}
+            pageSize={state.pagination.pageSize}
+            total={state.pagination.total}
+            hasMore={state.pagination.hasMore}
+            onPageChange={setPage}
+            onPageSizeChange={(n) => { setPageSize(n); setPage(1); }}
+            label="usuários"
+          />
+        )}
       </div>
 
       {creating && (
@@ -4363,7 +4439,7 @@ function UserFormDrawer({ mode, initial, isSelf, onClose, onSaved }) {
       <div className="modal-card" onClick={(e) => e.stopPropagation()}>
         <div className="modal-head">
           <div>
-            <span className="eyebrow">{isCreate ? 'NOVO USUÁRIO' : 'EDITAR USUÁRIO'}</span>
+            <span className="eyebrow">{isCreate ? 'Novo usuário' : 'Editar usuário'}</span>
             <h3 style={{ margin: '4px 0', fontSize: 18, color: 'var(--fg1)' }}>
               {isCreate ? 'Convidar pro dashboard' : (initial.name || initial.email)}
             </h3>
@@ -4391,16 +4467,15 @@ function UserFormDrawer({ mode, initial, isSelf, onClose, onSaved }) {
                   justifySelf: 'start', padding: '4px 10px', fontFamily: 'var(--f-mono)', fontSize: 10,
                   color: 'var(--glow-cyan)', background: 'color-mix(in oklab, var(--accent) 8%, transparent)',
                   border: '1px solid color-mix(in oklab, var(--accent) 30%, transparent)', borderRadius: 4, cursor: 'pointer',
-                  letterSpacing: '0.08em',
                 }}
               >
-                <Icon name="key" size={10}/> GERAR
+                <Icon name="key" size={10}/> Gerar
               </button>
             </div>
           )}
 
           <div style={{ display: 'grid', gap: 6 }}>
-            <span style={{ fontFamily: 'var(--f-mono)', fontSize: 10, letterSpacing: '0.12em', color: 'var(--fg4)' }}>PAPEL</span>
+            <span style={{ fontFamily: 'var(--f-mono)', fontSize: 10, color: 'var(--fg4)' }}>Papel</span>
             <div className="seg" style={{ width: 'fit-content' }}>
               {[['MEMBER', 'Member'], ['ADMIN', 'Admin']].map(([k, l]) => (
                 <button
@@ -4423,16 +4498,16 @@ function UserFormDrawer({ mode, initial, isSelf, onClose, onSaved }) {
           {role === 'MEMBER' && (
             <div style={{ display: 'grid', gap: 8 }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <span style={{ fontFamily: 'var(--f-mono)', fontSize: 10, letterSpacing: '0.12em', color: 'var(--fg4)' }}>
-                  ABAS LIBERADAS · {allowedTabs.size}
+                <span style={{ fontFamily: 'var(--f-mono)', fontSize: 10, color: 'var(--fg4)' }}>
+                  Abas liberadas · {allowedTabs.size}
                 </span>
                 <button
                   onClick={selectAllTabs}
                   style={{ background: 'transparent', border: 0, color: 'var(--glow-cyan)',
-                           fontFamily: 'var(--f-mono)', fontSize: 10, letterSpacing: '0.08em',
+                           fontFamily: 'var(--f-mono)', fontSize: 10,
                            cursor: 'pointer' }}
                 >
-                  TUDO
+                  Tudo
                 </button>
               </div>
               {tabGroups().map((group) => {
@@ -4441,20 +4516,20 @@ function UserFormDrawer({ mode, initial, isSelf, onClose, onSaved }) {
                 return (
                   <div key={group} style={{ border: '1px solid var(--border-soft)', borderRadius: 6, padding: 10 }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
-                      <span style={{ fontFamily: 'var(--f-mono)', fontSize: 10, color: 'var(--fg4)', letterSpacing: '0.1em' }}>
-                        {group.toUpperCase()} · {checked}/{tabs.length}
+                      <span style={{ fontFamily: 'var(--f-mono)', fontSize: 10, color: 'var(--fg4)' }}>
+                        {group} · {checked}/{tabs.length}
                       </span>
                       <span style={{ display: 'flex', gap: 4 }}>
                         <button
                           onClick={() => selectAllInGroup(group)}
                           style={{ background: 'transparent', border: 0, color: 'var(--glow-cyan)',
-                                   fontFamily: 'var(--f-mono)', fontSize: 10, letterSpacing: '0.08em', cursor: 'pointer' }}
-                        >TODOS</button>
+                                   fontFamily: 'var(--f-mono)', fontSize: 10, cursor: 'pointer' }}
+                        >Todos</button>
                         <button
                           onClick={() => clearGroup(group)}
                           style={{ background: 'transparent', border: 0, color: 'var(--fg5)',
-                                   fontFamily: 'var(--f-mono)', fontSize: 10, letterSpacing: '0.08em', cursor: 'pointer' }}
-                        >NENHUM</button>
+                                   fontFamily: 'var(--f-mono)', fontSize: 10, cursor: 'pointer' }}
+                        >Nenhum</button>
                       </span>
                     </div>
                     <div style={{ display: 'grid', gap: 4 }}>
@@ -4478,7 +4553,7 @@ function UserFormDrawer({ mode, initial, isSelf, onClose, onSaved }) {
 
           {!isCreate && (
             <div style={{ display: 'grid', gap: 6, paddingTop: 6, borderTop: '1px solid var(--border-soft)' }}>
-              <span style={{ fontFamily: 'var(--f-mono)', fontSize: 10, letterSpacing: '0.12em', color: 'var(--fg4)' }}>STATUS</span>
+              <span style={{ fontFamily: 'var(--f-mono)', fontSize: 10, color: 'var(--fg4)' }}>Status</span>
               <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, color: 'var(--fg1)', cursor: isSelf ? 'not-allowed' : 'pointer', opacity: isSelf ? 0.6 : 1 }}>
                 <input
                   type="checkbox"
@@ -4495,15 +4570,15 @@ function UserFormDrawer({ mode, initial, isSelf, onClose, onSaved }) {
           {!isCreate && (
             <div style={{ display: 'grid', gap: 6, paddingTop: 6, borderTop: '1px solid var(--border-soft)' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <span style={{ fontFamily: 'var(--f-mono)', fontSize: 10, letterSpacing: '0.12em', color: 'var(--fg4)' }}>SENHA</span>
+                <span style={{ fontFamily: 'var(--f-mono)', fontSize: 10, color: 'var(--fg4)' }}>Senha</span>
                 {!showResetField && (
                   <button
                     onClick={() => setShowResetField(true)}
-                    style={{ background: 'rgba(255,180,0,0.08)', border: '1px solid rgba(255,180,0,0.3)',
+                    style={{ background: 'var(--warning-bg)', border: '1px solid color-mix(in srgb, var(--warning) 30%, transparent)',
                              color: 'var(--warning)', fontFamily: 'var(--f-mono)', fontSize: 10,
-                             letterSpacing: '0.08em', padding: '4px 10px', borderRadius: 4, cursor: 'pointer' }}
+                             padding: '4px 10px', borderRadius: 4, cursor: 'pointer' }}
                   >
-                    <Icon name="key" size={10}/> RESETAR SENHA
+                    <Icon name="key" size={10}/> Resetar senha
                   </button>
                 )}
               </div>
@@ -4516,15 +4591,15 @@ function UserFormDrawer({ mode, initial, isSelf, onClose, onSaved }) {
                       style={{ padding: '4px 10px', fontFamily: 'var(--f-mono)', fontSize: 10,
                                color: 'var(--glow-cyan)', background: 'color-mix(in oklab, var(--accent) 8%, transparent)',
                                border: '1px solid color-mix(in oklab, var(--accent) 30%, transparent)', borderRadius: 4,
-                               cursor: 'pointer', letterSpacing: '0.08em' }}
-                    ><Icon name="key" size={10}/> GERAR</button>
+                               cursor: 'pointer' }}
+                    ><Icon name="key" size={10}/> Gerar</button>
                     <button
                       onClick={() => { setShowResetField(false); setPassword(''); }}
                       style={{ padding: '4px 10px', fontFamily: 'var(--f-mono)', fontSize: 10,
                                color: 'var(--fg5)', background: 'transparent',
                                border: '1px solid var(--border-soft)', borderRadius: 4,
-                               cursor: 'pointer', letterSpacing: '0.08em' }}
-                    >CANCELAR</button>
+                               cursor: 'pointer' }}
+                    >Cancelar</button>
                   </div>
                   <div style={{ fontSize: 10, color: 'var(--warning)', fontFamily: 'var(--f-mono)' }}>
                     Ao salvar, sessões ativas deste usuário serão derrubadas.
@@ -4535,8 +4610,8 @@ function UserFormDrawer({ mode, initial, isSelf, onClose, onSaved }) {
           )}
 
           {error && (
-            <div style={{ fontSize: 12, color: 'var(--danger)', background: 'rgba(239,68,68,0.08)',
-                          border: '1px solid rgba(239,68,68,0.25)', padding: '8px 10px', borderRadius: 6,
+            <div style={{ fontSize: 12, color: 'var(--danger)', background: 'var(--danger-bg)',
+                          border: '1px solid color-mix(in srgb, var(--danger) 25%, transparent)', padding: '8px 10px', borderRadius: 6,
                           fontFamily: 'var(--f-mono)' }}>
               {error}
             </div>
@@ -4549,21 +4624,21 @@ function UserFormDrawer({ mode, initial, isSelf, onClose, onSaved }) {
               disabled={busy || (isCreate && (!email || !password))}
               style={{ flex: 1 }}
             >
-              {busy ? 'SALVANDO...' : (isCreate ? 'CRIAR USUÁRIO' : 'SALVAR ALTERAÇÕES')}
+              {busy ? 'Salvando...' : (isCreate ? 'Criar usuário' : 'Salvar alterações')}
             </button>
             {!isCreate && !isSelf && (
               <button
                 onClick={deleteUser}
                 disabled={busy || !initial.active}
                 style={{
-                  padding: '8px 12px', fontFamily: 'var(--f-mono)', fontSize: 11, letterSpacing: '0.08em',
-                  color: 'var(--danger)', background: 'rgba(239,68,68,0.08)',
-                  border: '1px solid rgba(239,68,68,0.3)', borderRadius: 6,
+                  padding: '8px 12px', fontFamily: 'var(--f-mono)', fontSize: 11,
+                  color: 'var(--danger)', background: 'var(--danger-bg)',
+                  border: '1px solid color-mix(in srgb, var(--danger) 30%, transparent)', borderRadius: 6,
                   cursor: busy ? 'not-allowed' : 'pointer',
                 }}
                 title={!initial.active ? 'já está inativo' : 'desativa + derruba sessões'}
               >
-                <Icon name="trash" size={11}/> DESATIVAR
+                <Icon name="trash" size={11}/> Desativar
               </button>
             )}
           </div>
@@ -4576,8 +4651,8 @@ function UserFormDrawer({ mode, initial, isSelf, onClose, onSaved }) {
 function UserField({ label, value, onChange, type, required }) {
   return (
     <label style={{ display: 'grid', gap: 6 }}>
-      <span style={{ fontFamily: 'var(--f-mono)', fontSize: 10, letterSpacing: '0.12em', color: 'var(--fg4)' }}>
-        {label.toUpperCase()}
+      <span style={{ fontFamily: 'var(--f-mono)', fontSize: 10, color: 'var(--fg4)' }}>
+        {label}
       </span>
       <input
         type={type}
@@ -4635,7 +4710,7 @@ function HealthPage() {
     <div className="page-in">
       <div className="page-head">
         <div className="lead">
-          <span className="eyebrow">SISTEMA · OBSERVABILIDADE</span>
+          <span className="eyebrow">Sistema · Observabilidade</span>
           <h2>Saúde <em>do dado</em></h2>
           <span className="sub">
             Atualizado {fmtDateTime(d.generatedAt)} · {d.metricsView.rowCount} linhas na MV daily_metrics
@@ -4652,7 +4727,7 @@ function HealthPage() {
       <div className="panel" style={{ marginBottom: 14 }}>
         <div className="panel-head">
           <div className="panel-title">
-            <span className="panel-eyebrow">INGESTÃO POR PLATAFORMA · ÚLTIMAS 24H</span>
+            <span className="panel-eyebrow">Ingestão por plataforma · Últimas 24h</span>
             <div className="panel-sub">Recebido = IPNs aceitos · Falhados = parse/auth errors</div>
           </div>
         </div>
@@ -4674,16 +4749,16 @@ function HealthPage() {
                 const noTraffic = p.receivedCount24h === 0;
                 const failing = p.failedCount24h > 0;
                 const ok = !stale && !noTraffic && !failing;
-                const stateLabel = ok ? 'OK' : stale ? 'STALE' : noTraffic ? 'SEM TRÁFEGO' : 'FALHAS';
+                const stateLabel = ok ? 'OK' : stale ? 'Stale' : noTraffic ? 'Sem tráfego' : 'Falhas';
                 const stateColor = ok ? 'var(--success)' : 'var(--warning)';
                 return (
                   <tr key={p.platform}>
                     <td>{p.displayName}</td>
-                    <td className="cell-mono" style={{ color: stale ? 'var(--danger)' : 'var(--navy-100)' }}>
+                    <td className="cell-mono" style={{ color: stale ? 'var(--danger)' : 'var(--fg2)' }}>
                       {p.lastReceivedAt ? `${fmtAgo(p.secondsAgo)} atrás` : '—'}
                     </td>
                     <td className="num cell-mono">{fmtInt(p.receivedCount24h)}</td>
-                    <td className="num cell-mono" style={{ color: failing ? 'var(--danger)' : 'var(--navy-300)' }}>
+                    <td className="num cell-mono" style={{ color: failing ? 'var(--danger)' : 'var(--fg3)' }}>
                       {fmtInt(p.failedCount24h)}
                     </td>
                     <td className="num cell-mono">{(p.successRate24h * 100).toFixed(1)}%</td>
@@ -4705,7 +4780,7 @@ function HealthPage() {
         <div className="panel">
           <div className="panel-head">
             <div className="panel-title">
-              <span className="panel-eyebrow">TAXAS · 24H</span>
+              <span className="panel-eyebrow">Taxas · 24h</span>
               <div className="panel-sub">Status dos pedidos no último dia</div>
             </div>
           </div>
@@ -4721,7 +4796,7 @@ function HealthPage() {
         <div className="panel">
           <div className="panel-head">
             <div className="panel-title">
-              <span className="panel-eyebrow">CATÁLOGO</span>
+              <span className="panel-eyebrow">Catálogo</span>
               <div className="panel-sub">Cobertura de classificação SKU → família</div>
             </div>
           </div>
@@ -4744,8 +4819,8 @@ function HealthPage() {
             )}
             {d.catalog.productsWithoutFamily > 0 ? (
               <>
-                <div style={{ fontFamily: 'var(--f-mono)', fontSize: 10, color: 'var(--warning)', letterSpacing: '0.1em' }}>
-                  {d.catalog.productsWithoutFamily} SEM FAMÍLIA
+                <div style={{ fontFamily: 'var(--f-mono)', fontSize: 10, color: 'var(--warning)' }}>
+                  {d.catalog.productsWithoutFamily} sem família
                 </div>
                 <div style={{ fontFamily: 'var(--f-mono)', fontSize: 11, color: 'var(--fg4)', maxHeight: 180, overflowY: 'auto', display: 'grid', gap: 4 }}>
                   {d.catalog.unknownSKUs.map((s, i) => (
@@ -4755,6 +4830,11 @@ function HealthPage() {
                     </div>
                   ))}
                 </div>
+                {d.catalog.unknownSKUs.length < d.catalog.productsWithoutFamily && (
+                  <div style={{ fontSize: 11, color: 'var(--fg5)' }}>
+                    Mostrando {fmtInt(d.catalog.unknownSKUs.length)} de {fmtInt(d.catalog.productsWithoutFamily)} — o servidor devolve no máximo 25.
+                  </div>
+                )}
               </>
             ) : (
               <div style={{ color: 'var(--success)', fontSize: 12 }}>
@@ -4770,7 +4850,7 @@ function HealthPage() {
 
 function HealthRate({ label, value, good, threshold, baseline, baselineLabel, deltaColor }) {
   const pct = (value * 100).toFixed(2);
-  let color = 'var(--white)';
+  let color = 'var(--fg1)';
   if (good === 'up') color = value >= threshold ? 'var(--success)' : value >= threshold * 0.7 ? 'var(--warning)' : 'var(--danger)';
   if (good === 'down') color = value <= threshold ? 'var(--success)' : value <= threshold * 1.5 ? 'var(--warning)' : 'var(--danger)';
   return (
@@ -4779,7 +4859,7 @@ function HealthRate({ label, value, good, threshold, baseline, baselineLabel, de
       <div style={{ textAlign: 'right' }}>
         <div style={{ fontFamily: 'var(--f-display)', fontSize: 22, color }}>{pct}%</div>
         {baseline != null && (
-          <div style={{ fontFamily: 'var(--f-mono)', fontSize: 10, color: deltaColor || 'var(--navy-400)' }}>
+          <div style={{ fontFamily: 'var(--f-mono)', fontSize: 10, color: deltaColor || 'var(--fg4)' }}>
             {(baseline * 100).toFixed(2)}% {baselineLabel}
           </div>
         )}
@@ -4800,18 +4880,18 @@ function fmtAgo(seconds) {
 // Fornecedores de fulfillment — metadados p/ UI genérica (redrock/shipoffers/
 // fullstack/+). Cores usadas nos cards de distribuição, barra, chart e selos.
 const SUPPLIER_META = {
-  shipoffers: { label: 'ShipOffers', solid: '#5BC8FF', text: '#7cd0ff', darkText: true,
-    chipBg: 'rgba(124,208,255,0.18)' },
-  redrock: { label: 'RedRock', solid: '#ff5a5a', text: '#ff8a8a', darkText: false,
-    chipBg: 'rgba(255,138,138,0.18)' },
-  fullstack: { label: 'FullStack', solid: '#9b7bff', text: '#b99cff', darkText: false,
-    chipBg: 'rgba(155,123,255,0.18)' },
+  shipoffers: { label: 'ShipOffers', solid: 'var(--chart-1)', text: 'var(--chart-1)', darkText: true,
+    chipBg: 'color-mix(in srgb, var(--chart-1) 10%, transparent)' },
+  redrock: { label: 'RedRock', solid: 'var(--chart-3)', text: 'var(--chart-3)', darkText: false,
+    chipBg: 'color-mix(in srgb, var(--chart-3) 18%, transparent)' },
+  fullstack: { label: 'FullStack', solid: 'var(--chart-2)', text: 'var(--chart-2)', darkText: false,
+    chipBg: 'color-mix(in srgb, var(--chart-2) 10%, transparent)' },
 };
 function supMeta(s) {
   return SUPPLIER_META[s] || {
     label: s ? String(s).charAt(0).toUpperCase() + String(s).slice(1) : '—',
-    solid: '#8aa0c0', text: '#aab8d0', darkText: false,
-    chipBg: 'rgba(140,160,190,0.18)',
+    solid: 'var(--chart-5)', text: 'var(--chart-5)', darkText: false,
+    chipBg: 'color-mix(in srgb, var(--chart-5) 18%, transparent)',
   };
 }
 const SUPPLIER_OPTIONS = ['shipoffers', 'redrock', 'fullstack'];
@@ -5167,7 +5247,7 @@ function CostsPage({ filters }) {
     <div className="page-in">
       <div className="page-head">
         <div className="lead">
-          <span className="eyebrow">SISTEMA · FULFILLMENT</span>
+          <span className="eyebrow">Sistema · Fulfillment</span>
           <h2>Fulfillment <em>e custo de envio</em></h2>
           <span className="sub">
             Quanto sai, quanto custa e onde o cálculo está furado · premissa: venda aprovada = enviado ·
@@ -5231,7 +5311,7 @@ function CostsPage({ filters }) {
                 ))}
                 {info.map((i) => (
                   <div key={i.type} style={{ fontSize: 11, color: 'var(--fg4)' }}>
-                    ⓘ {i.label} — {fmtInt(i.orders)} {i.orders === 1 ? 'pedido' : 'pedidos'} no período
+                    <Icon name="info" size={11}/> {i.label} — {fmtInt(i.orders)} {i.orders === 1 ? 'pedido' : 'pedidos'} no período
                   </div>
                 ))}
               </div>
@@ -5287,7 +5367,7 @@ function CostsPage({ filters }) {
         <div className="panel" style={{ marginBottom: 14 }}>
           <div className="panel-head">
             <div className="panel-title">
-              <span className="panel-eyebrow">ENVIADO · POTES E PACOTES POR DIA</span>
+              <span className="panel-eyebrow">Enviado · Potes e pacotes por dia</span>
               <div className="panel-metric">
                 {fmtInt(fm.kpis.bottles)} potes
                 <span className="panel-sub" style={{ marginLeft: 8 }}>em {fmtInt(fm.kpis.packages)} pacotes no período</span>
@@ -5323,30 +5403,35 @@ function CostsPage({ filters }) {
           <div className="panel-head" style={{ padding: '12px 14px 0' }}>
             <div className="panel-title">Por família <span style={{ color: 'var(--fg5)', fontSize: 10, marginLeft: 6 }}>volume e custo no período</span></div>
           </div>
-          <div className="tbl-wrap" style={{ margin: 0, padding: '0 4px' }}>
-            <table className="tbl">
-              <thead>
-                <tr><th>Família</th><th className="num">Pedidos</th><th className="num">Potes</th><th className="num">Frete</th><th className="num">COGS</th><th className="num">Custo/pote</th></tr>
-              </thead>
-              <tbody>
-                {fm.byFamily.map((f) => (
-                  <tr key={f.family}>
-                    <td>
-                      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-                        <span style={{ width: 6, height: 6, borderRadius: '50%', background: familyAccent(f.family) }}/>
-                        {f.family}
-                      </span>
-                    </td>
-                    <td className="num">{fmtInt(f.orders)}</td>
-                    <td className="num">{fmtInt(f.bottles)}</td>
-                    <td className="num">{fmtCurrency(f.fulfillmentUsd, cur, 0)}</td>
-                    <td className="num">{fmtCurrency(f.cogsUsd, cur, 0)}</td>
-                    <td className="num" style={{ color: 'var(--money)' }}>{f.costPerBottleUsd != null ? fmtCurrency(f.costPerBottleUsd, cur, 2) : '—'}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+          <Paginated items={fm.byFamily} label="famílias">
+            {(pageRows, pager) => (<>
+              <div className="tbl-wrap" style={{ margin: 0, padding: '0 4px' }}>
+                <table className="tbl">
+                  <thead>
+                    <tr><th>Família</th><th className="num">Pedidos</th><th className="num">Potes</th><th className="num">Frete</th><th className="num">COGS</th><th className="num">Custo/pote</th></tr>
+                  </thead>
+                  <tbody>
+                    {pageRows.map((f) => (
+                      <tr key={f.family}>
+                        <td>
+                          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                            <span style={{ width: 6, height: 6, borderRadius: '50%', background: familyAccent(f.family) }}/>
+                            {f.family}
+                          </span>
+                        </td>
+                        <td className="num">{fmtInt(f.orders)}</td>
+                        <td className="num">{fmtInt(f.bottles)}</td>
+                        <td className="num">{fmtCurrency(f.fulfillmentUsd, cur, 0)}</td>
+                        <td className="num">{fmtCurrency(f.cogsUsd, cur, 0)}</td>
+                        <td className="num" style={{ color: 'var(--money)' }}>{f.costPerBottleUsd != null ? fmtCurrency(f.costPerBottleUsd, cur, 2) : '—'}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              {pager}
+            </>)}
+          </Paginated>
         </div>
       )}
 
@@ -5355,7 +5440,7 @@ function CostsPage({ filters }) {
         <div className="panel" style={{ marginBottom: 14 }}>
           <div className="panel-head">
             <div className="panel-title">
-              <span className="panel-eyebrow">GASTO · FRETE + COGS POR DIA</span>
+              <span className="panel-eyebrow">Gasto · Frete + COGS por dia</span>
               <div className="panel-metric">
                 {fmtCurrency(fm.kpis.totalUsd, cur, 0)}
                 <span className="panel-sub" style={{ marginLeft: 8 }}>
@@ -5368,7 +5453,7 @@ function CostsPage({ filters }) {
             data={fm.daily.map((d) => ({ date: d.date, frete: d.fulfillmentUsd, cogs: d.cogsUsd }))}
             series={[
               { key: 'frete', label: 'Frete', color: 'var(--accent)' },
-              { key: 'cogs', label: 'COGS', color: '#ffb86b' },
+              { key: 'cogs', label: 'COGS', color: 'var(--chart-3)' },
             ]}/>
         </div>
       )}
@@ -5378,7 +5463,7 @@ function CostsPage({ filters }) {
         <div className="panel" style={{ marginBottom: 14 }}>
           <div className="panel-head">
             <div className="panel-title">
-              <span className="panel-eyebrow">PREVISIBILIDADE · NO RITMO DOS ÚLTIMOS 7 DIAS</span>
+              <span className="panel-eyebrow">Previsibilidade · No ritmo dos últimos 7 dias</span>
               <div className="panel-metric" style={{ fontSize: 14, color: 'var(--fg3)' }}>
                 ~{fmtCurrency(fm.forecast.avg7d.totalPerDay, cur, 0)}/dia · ~{fm.forecast.avg7d.bottlesPerDay} potes/dia
               </div>
@@ -5395,7 +5480,7 @@ function CostsPage({ filters }) {
               <div className="v">{fmtInt(fm.forecast.month.projectedBottles)}</div>
               <div className="s">{fmtInt(fm.forecast.month.actualBottles)} já enviados</div>
             </div>
-            <div className="mini-kpi" style={fm.forecast.trendPct != null && Math.abs(fm.forecast.trendPct) >= 20 ? { borderColor: 'rgba(255,180,0,0.35)' } : undefined}>
+            <div className="mini-kpi" style={fm.forecast.trendPct != null && Math.abs(fm.forecast.trendPct) >= 20 ? { borderColor: 'color-mix(in srgb, var(--warning) 35%, transparent)' } : undefined}>
               <div className="l">Tendência (7d vs 30d)</div>
               <div className="v" style={{ color: fm.forecast.trendPct == null ? 'var(--fg3)' : fm.forecast.trendPct > 0 ? 'var(--warning)' : 'var(--success)' }}>
                 {fm.forecast.trendPct == null ? '—' : `${fm.forecast.trendPct >= 0 ? '+' : ''}${fm.forecast.trendPct.toFixed(1)}%`}
@@ -5428,7 +5513,7 @@ function CostsPage({ filters }) {
             return (
               <div style={{ marginTop: 12 }}>
                 <div className="eyebrow" style={{ fontSize: 8.5, marginBottom: 6 }}>
-                  CICLOS DE FATURA (QUA→TER) · CUSTO VS FATURAMENTO · REFERÊNCIA ~{bench.toFixed(0)}%
+                  Ciclos de fatura (qua→ter) · Custo vs faturamento · Referência ~{bench.toFixed(0)}%
                 </div>
                 <div className="tbl-wrap" style={{ margin: 0 }}>
                   <table className="tbl">
@@ -5514,7 +5599,7 @@ function CostsPage({ filters }) {
             <div className="panel" style={{ marginBottom: 14 }}>
               <div className="panel-head">
                 <div className="panel-title">
-                  <span className="panel-eyebrow">DISTRIBUIÇÃO POR FORNECEDOR</span>
+                  <span className="panel-eyebrow">Distribuição por fornecedor</span>
                   <div className="panel-metric" style={{ display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap' }}>
                     {(fulfDist.bySupplier || []).filter((s) => s.orderCount > 0).map((s, i) => {
                       const m = supMeta(s.supplier);
@@ -5527,7 +5612,7 @@ function CostsPage({ filters }) {
                               background: m.solid, boxShadow: `0 0 0 2px ${m.chipBg}`,
                             }}/>
                             <span style={{ color: m.text }}>{s.pct.toFixed(1)}%</span>
-                            <span style={{ color: 'var(--fg3)', fontFamily: 'var(--f-mono)', fontSize: 13, fontWeight: 500, letterSpacing: '0.04em' }}>{m.label}</span>
+                            <span style={{ color: 'var(--fg3)', fontFamily: 'var(--f-mono)', fontSize: 13, fontWeight: 500 }}>{m.label}</span>
                           </span>
                         </span>
                       );
@@ -5539,13 +5624,11 @@ function CostsPage({ filters }) {
                 position: 'relative',
                 display: 'flex',
                 height: 30,
-                borderRadius: 15,
+                borderRadius: 'var(--r-lg)',
                 overflow: 'hidden',
-                background: 'rgba(255,255,255,0.03)',
+                background: 'var(--bg-subtle)',
                 marginTop: 10,
-                // Bevel: inset shadow embaixo + highlight em cima
-                boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.06), inset 0 -1px 2px rgba(0,0,0,0.4)',
-                border: '1px solid rgba(255,255,255,0.05)',
+                border: '1px solid var(--border-soft)',
               }}>
                 {(fulfDist.bySupplier || []).filter((s) => s.orderCount > 0).map((s) => {
                   const m = supMeta(s.supplier);
@@ -5554,8 +5637,7 @@ function CostsPage({ filters }) {
                       width: `${s.pct}%`,
                       background: m.solid,
                       display: 'flex', alignItems: 'center', justifyContent: 'center',
-                      fontSize: 11, fontWeight: 600, color: m.darkText ? '#0a1820' : '#fff',
-                      letterSpacing: '0.04em',
+                      fontSize: 11, fontWeight: 600, color: 'var(--bg-raised)',
                       position: 'relative',
                     }}>
                       <span style={{ position: 'relative', zIndex: 1 }}>
@@ -5573,7 +5655,7 @@ function CostsPage({ filters }) {
             <div className="panel" style={{ marginBottom: 14 }}>
               <div className="panel-head">
                 <div className="panel-title">
-                  <span className="panel-eyebrow">PEDIDOS POR DIA · POR FORNECEDOR</span>
+                  <span className="panel-eyebrow">Pedidos por dia · Por fornecedor</span>
                   <div className="panel-metric" style={{ fontSize: 14, color: 'var(--fg3)', fontWeight: 500 }}>
                     {fulfDist.daily.length} {fulfDist.daily.length === 1 ? 'dia' : 'dias'} no intervalo
                   </div>
@@ -5584,7 +5666,7 @@ function CostsPage({ filters }) {
                     return (
                       <span key={s.supplier} style={{
                         display: 'inline-flex', alignItems: 'center', gap: 6,
-                        fontFamily: 'var(--f-mono)', fontSize: 11, letterSpacing: '0.05em', color: 'var(--fg3)',
+                        fontFamily: 'var(--f-mono)', fontSize: 11, color: 'var(--fg3)',
                       }}>
                         <span style={{
                           display: 'inline-block', width: 9, height: 9, borderRadius: '50%',
@@ -5631,7 +5713,7 @@ function CostsPage({ filters }) {
       {showConfig && (<>
       {/* Token gate */}
       {!token && (
-        <div className="panel" style={{ marginBottom: 14, background: 'rgba(255,180,0,0.06)', borderColor: 'rgba(255,180,0,0.4)' }}>
+        <div className="panel" style={{ marginBottom: 14, background: 'var(--warning-bg)', borderColor: 'color-mix(in srgb, var(--warning) 40%, transparent)' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
             <Icon name="alert-triangle" size={14} className="" />
             <div style={{ flex: 1, minWidth: 200 }}>
@@ -5664,8 +5746,8 @@ function CostsPage({ filters }) {
       {saveState.message && (
         <div className="panel" style={{
           marginBottom: 14,
-          background: saveState.status === 'error' ? 'rgba(239,68,68,0.06)' : 'rgba(40,200,120,0.06)',
-          borderColor: saveState.status === 'error' ? 'rgba(239,68,68,0.4)' : 'rgba(40,200,120,0.4)',
+          background: saveState.status === 'error' ? 'var(--danger-bg)' : 'var(--success-bg)',
+          borderColor: saveState.status === 'error' ? 'color-mix(in srgb, var(--danger) 40%, transparent)' : 'color-mix(in srgb, var(--success) 40%, transparent)',
           color: saveState.status === 'error' ? 'var(--danger)' : 'var(--success)',
           fontSize: 12,
         }}>
@@ -5677,136 +5759,146 @@ function CostsPage({ filters }) {
       <div className="panel" style={{ marginBottom: 14 }}>
         <div className="panel-head">
           <div className="panel-title">
-            <span className="panel-eyebrow">CUSTO DO POTE + FORNECEDOR · POR FAMÍLIA</span>
+            <span className="panel-eyebrow">Custo do pote + fornecedor · Por família</span>
             <div className="panel-sub">
               Custo de produção por pote (no fornecedor da família) + quem entrega.
               Funil NeuroMind → RedRock · resto → ShipOffers.
             </div>
           </div>
         </div>
-        <div className="tbl-wrap">
-          <table className="tbl">
-            <thead>
-              <tr>
-                <th>Família</th>
-                <th className="num">Custo / pote (USD)</th>
-                <th>Fornecedor</th>
-                <th>Atualizado</th>
-              </tr>
-            </thead>
-            <tbody>
-              {state.data.families.map((f) => {
-                const dirty = familyDirty(f.family);
-                return (
-                  <tr key={f.family}>
-                    <td>
-                      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
-                        <span style={{ width: 6, height: 6, borderRadius: '50%', background: familyAccent(f.family) }}/>
-                        {f.family}
-                        {f.isCataloged === false && (
-                          <span title="Família ainda não catalogada — usando custo médio como placeholder. Atualize o valor real e salve."
-                            style={{
-                              fontFamily: 'var(--f-mono)', fontSize: 10, letterSpacing: '0.06em',
-                              color: 'var(--warning)', background: 'rgba(255,180,0,0.12)',
-                              border: '1px solid rgba(255,180,0,0.35)', borderRadius: 4,
-                              padding: '1px 6px',
-                            }}>
-                            PLACEHOLDER
-                          </span>
-                        )}
-                      </span>
-                    </td>
-                    <td className="num">
-                      <input
-                        type="number"
-                        step="0.01"
-                        min="0"
-                        disabled={!token}
-                        value={valueForFamily(f.family)}
-                        onChange={(e) => setDraftFamilies((d) => ({ ...d, [f.family]: e.target.value }))}
-                        style={costInputStyle(dirty, !token)}
-                      />
-                    </td>
-                    <td>
-                      <select
-                        disabled={!token}
-                        value={supplierForFamily(f.family)}
-                        onChange={(e) => setDraftSuppliers((d) => ({ ...d, [f.family]: e.target.value }))}
-                        style={{
-                          ...costInputStyle(
-                            f.family in draftSuppliers
-                              && draftSuppliers[f.family] !== (f.fulfillmentSupplier || 'shipoffers'),
-                            !token,
-                          ),
-                          minWidth: 120,
-                        }}
-                      >
-                        {SUPPLIER_OPTIONS.map((s) => (
-                          <option key={s} value={s}>{supMeta(s).label}</option>
-                        ))}
-                      </select>
-                    </td>
-                    <td className="cell-mono" style={{ color: 'var(--fg4)' }}>{fmtDateShort(f.updatedAt)}</td>
+        <Paginated items={state.data.families} label="famílias">
+          {(pageRows, pager) => (<>
+            <div className="tbl-wrap">
+              <table className="tbl">
+                <thead>
+                  <tr>
+                    <th>Família</th>
+                    <th className="num">Custo / pote (USD)</th>
+                    <th>Fornecedor</th>
+                    <th>Atualizado</th>
                   </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
+                </thead>
+                <tbody>
+                  {pageRows.map((f) => {
+                    const dirty = familyDirty(f.family);
+                    return (
+                      <tr key={f.family}>
+                        <td>
+                          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                            <span style={{ width: 6, height: 6, borderRadius: '50%', background: familyAccent(f.family) }}/>
+                            {f.family}
+                            {f.isCataloged === false && (
+                              <span title="Família ainda não catalogada — usando custo médio como placeholder. Atualize o valor real e salve."
+                                style={{
+                                  fontFamily: 'var(--f-mono)', fontSize: 10,
+                                  color: 'var(--warning)', background: 'var(--warning-bg)',
+                                  border: '1px solid color-mix(in srgb, var(--warning) 35%, transparent)', borderRadius: 4,
+                                  padding: '1px 6px',
+                                }}>
+                                Placeholder
+                              </span>
+                            )}
+                          </span>
+                        </td>
+                        <td className="num">
+                          <input
+                            type="number"
+                            step="0.01"
+                            min="0"
+                            disabled={!token}
+                            value={valueForFamily(f.family)}
+                            onChange={(e) => setDraftFamilies((d) => ({ ...d, [f.family]: e.target.value }))}
+                            style={costInputStyle(dirty, !token)}
+                          />
+                        </td>
+                        <td>
+                          <select
+                            disabled={!token}
+                            value={supplierForFamily(f.family)}
+                            onChange={(e) => setDraftSuppliers((d) => ({ ...d, [f.family]: e.target.value }))}
+                            style={{
+                              ...costInputStyle(
+                                f.family in draftSuppliers
+                                  && draftSuppliers[f.family] !== (f.fulfillmentSupplier || 'shipoffers'),
+                                !token,
+                              ),
+                              minWidth: 120,
+                            }}
+                          >
+                            {SUPPLIER_OPTIONS.map((s) => (
+                              <option key={s} value={s}>{supMeta(s).label}</option>
+                            ))}
+                          </select>
+                        </td>
+                        <td className="cell-mono" style={{ color: 'var(--fg4)' }}>{fmtDateShort(f.updatedAt)}</td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+            {pager}
+          </>)}
+        </Paginated>
       </div>
 
       {/* Frete por fornecedor → família → qtd de potes */}
       <div className="panel" style={{ marginBottom: 14 }}>
         <div className="panel-head">
           <div className="panel-title">
-            <span className="panel-eyebrow">FRETE · POR FORNECEDOR · FAMÍLIA · QTD DE POTES</span>
+            <span className="panel-eyebrow">Frete · Por fornecedor · Família · Qtd de potes</span>
             <div className="panel-sub">
               Custo de envio (ship + fee + pick + packaging + paper/fuel), sem o pote.
               Linha "_default" = fallback do fornecedor pra famílias sem tarifa própria.
             </div>
           </div>
         </div>
-        <div className="tbl-wrap" style={{ maxHeight: 520, overflowY: 'auto' }}>
-          <table className="tbl">
-            <thead>
-              <tr>
-                <th>Fornecedor</th>
-                <th>Família</th>
-                <th className="num">Potes ≤</th>
-                <th className="num">Preço (USD)</th>
-              </tr>
-            </thead>
-            <tbody>
-              {state.data.fulfillment.map((r) => {
-                const key = rateKey(r);
-                const dirty = rateDirty(key, r.priceUsd);
-                const rm = supMeta(r.supplier);
-                return (
-                  <tr key={key}>
-                    <td className="cell-mono" style={{ fontSize: 11, color: rm.text }}>
-                      {rm.label}
-                    </td>
-                    <td style={{ fontSize: 12, color: r.family === '_default' ? 'var(--fg5)' : 'var(--fg2)' }}>
-                      {r.family === '_default' ? '(padrão)' : r.family}
-                    </td>
-                    <td className="num cell-mono">{r.bottlesMax === 999 ? '7+' : r.bottlesMax}</td>
-                    <td className="num">
-                      <input
-                        type="number"
-                        step="0.01"
-                        min="0"
-                        disabled={!token}
-                        value={valueForRate(key, r.priceUsd)}
-                        onChange={(e) => setDraftRates((d) => ({ ...d, [key]: e.target.value }))}
-                        style={costInputStyle(dirty, !token)}
-                      />
-                    </td>
+        <Paginated items={state.data.fulfillment} label="tarifas">
+          {(pageRows, pager) => (<>
+            <div className="tbl-wrap" style={{ maxHeight: 520, overflowY: 'auto' }}>
+              <table className="tbl">
+                <thead>
+                  <tr>
+                    <th>Fornecedor</th>
+                    <th>Família</th>
+                    <th className="num">Potes ≤</th>
+                    <th className="num">Preço (USD)</th>
                   </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
+                </thead>
+                <tbody>
+                  {pageRows.map((r) => {
+                    const key = rateKey(r);
+                    const dirty = rateDirty(key, r.priceUsd);
+                    const rm = supMeta(r.supplier);
+                    return (
+                      <tr key={key}>
+                        <td className="cell-mono" style={{ fontSize: 11, color: rm.text }}>
+                          {rm.label}
+                        </td>
+                        <td style={{ fontSize: 12, color: r.family === '_default' ? 'var(--fg5)' : 'var(--fg2)' }}>
+                          {r.family === '_default' ? '(padrão)' : r.family}
+                        </td>
+                        <td className="num cell-mono">{r.bottlesMax === 999 ? '7+' : r.bottlesMax}</td>
+                        <td className="num">
+                          <input
+                            type="number"
+                            step="0.01"
+                            min="0"
+                            disabled={!token}
+                            value={valueForRate(key, r.priceUsd)}
+                            onChange={(e) => setDraftRates((d) => ({ ...d, [key]: e.target.value }))}
+                            style={costInputStyle(dirty, !token)}
+                          />
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+            {pager}
+          </>)}
+        </Paginated>
       </div>
 
       {/* Cobertura de classificação — produtos sem família/potes geram
@@ -5814,7 +5906,7 @@ function CostsPage({ filters }) {
       <div className="panel" style={{ marginTop: 14 }}>
         <div className="panel-head">
           <div className="panel-title">
-            <span className="panel-eyebrow">COBERTURA DE CLASSIFICAÇÃO</span>
+            <span className="panel-eyebrow">Cobertura de classificação</span>
             <div className="panel-sub">
               Todo pedido registra nº de potes na ingestão (regex no nome do produto).
               Produtos abaixo NÃO foram reconhecidos → COGS + frete = $0 neles.
@@ -5837,36 +5929,41 @@ function CostsPage({ filters }) {
             ✓ Todos os produtos com pedidos estão classificados (potes + família).
           </div>
         ) : (
-          <div className="tbl-wrap" style={{ maxHeight: 280, overflowY: 'auto' }}>
-            <table className="tbl">
-              <thead>
-                <tr>
-                  <th>Produto (nome)</th>
-                  <th>SKU</th>
-                  <th className="num">Família</th>
-                  <th className="num">Potes</th>
-                  <th className="num">Pedidos afetados</th>
-                </tr>
-              </thead>
-              <tbody>
-                {state.data.unclassified.map((p) => (
-                  <tr key={p.externalId}>
-                    <td style={{ maxWidth: 360, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                      {p.name}
-                    </td>
-                    <td className="cell-mono" style={{ color: 'var(--fg4)', fontSize: 11 }}>{p.externalId}</td>
-                    <td className="num cell-mono" style={{ color: p.family ? 'var(--fg2)' : 'var(--danger)' }}>
-                      {p.family || '— null —'}
-                    </td>
-                    <td className="num cell-mono" style={{ color: p.bottles != null ? 'var(--fg2)' : 'var(--danger)' }}>
-                      {p.bottles != null ? p.bottles : '— null —'}
-                    </td>
-                    <td className="num cell-mono">{fmtInt(p.orders)}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+          <Paginated items={state.data.unclassified} label="produtos">
+            {(pageRows, pager) => (<>
+              <div className="tbl-wrap" style={{ maxHeight: 280, overflowY: 'auto' }}>
+                <table className="tbl">
+                  <thead>
+                    <tr>
+                      <th>Produto (nome)</th>
+                      <th>SKU</th>
+                      <th className="num">Família</th>
+                      <th className="num">Potes</th>
+                      <th className="num">Pedidos afetados</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {pageRows.map((p) => (
+                      <tr key={p.externalId}>
+                        <td style={{ maxWidth: 360, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                          {p.name}
+                        </td>
+                        <td className="cell-mono" style={{ color: 'var(--fg4)', fontSize: 11 }}>{p.externalId}</td>
+                        <td className="num cell-mono" style={{ color: p.family ? 'var(--fg2)' : 'var(--danger)' }}>
+                          {p.family || '— null —'}
+                        </td>
+                        <td className="num cell-mono" style={{ color: p.bottles != null ? 'var(--fg2)' : 'var(--danger)' }}>
+                          {p.bottles != null ? p.bottles : '— null —'}
+                        </td>
+                        <td className="num cell-mono">{fmtInt(p.orders)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              {pager}
+            </>)}
+          </Paginated>
         )}
       </div>
 
@@ -5876,7 +5973,7 @@ function CostsPage({ filters }) {
         <div className="panel" style={{ marginTop: 14 }}>
           <div className="panel-head">
             <div className="panel-title">
-              <span className="panel-eyebrow">CADASTRO DE SKUs POR FORNECEDOR</span>
+              <span className="panel-eyebrow">Cadastro de SKUs por fornecedor</span>
               <div className="panel-sub">
                 Override por SKU vence o default da família. "Herda da família"
                 volta o SKU pro comportamento padrão (NeuroMindPro/NightCalm/
@@ -5959,73 +6056,78 @@ function CostsPage({ filters }) {
             </div>
           )}
           {supplierList.status === 'ready' && supplierList.products.length > 0 && (
-            <div className="tbl-wrap" style={{ margin: 0, maxHeight: 480, overflow: 'auto', borderRadius: 6 }}>
-              <table className="tbl" style={{ fontSize: 12 }}>
-                <thead style={{ position: 'sticky', top: 0, background: 'var(--bg-raised)', zIndex: 1 }}>
-                  <tr>
-                    <th style={{ textAlign: 'left' }}>SKU / Produto</th>
-                    <th style={{ textAlign: 'left' }}>Plataforma</th>
-                    <th style={{ textAlign: 'left' }}>Família</th>
-                    <th style={{ textAlign: 'left' }}>Potes</th>
-                    <th style={{ textAlign: 'right' }}>Pedidos</th>
-                    <th style={{ textAlign: 'left' }}>Fornecedor</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {supplierList.products.map((p) => {
-                    const dirty = supplierDirty(p);
-                    const ovr = supplierFor(p);
-                    const eff = supplierEffective(p);
-                    const choiceVal = ovr === null ? 'inherit' : (ovr || 'inherit');
-                    return (
-                      <tr key={p.id} style={{ background: dirty ? 'color-mix(in oklab, var(--accent) 6%, transparent)' : undefined }}>
-                        <td>
-                          <div style={{ fontWeight: 500 }}>{p.name}</div>
-                          <div style={{ color: 'var(--fg5)', fontSize: 10 }}>{p.externalId}</div>
-                        </td>
-                        <td style={{ color: 'var(--fg3)' }}>{p.platformName}</td>
-                        <td style={{ color: p.family ? 'var(--fg2)' : 'var(--fg5)' }}>
-                          {p.family || '—'}
-                        </td>
-                        <td style={{ color: 'var(--fg3)' }}>{p.bottles ?? '—'}</td>
-                        <td style={{ textAlign: 'right', color: 'var(--fg3)' }}>{fmtInt(p.orderCount)}</td>
-                        <td>
-                          <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
-                            <select
-                              value={choiceVal}
-                              onChange={(e) => setSupplierDraft(p.id, e.target.value)}
-                              style={{
-                                background: dirty ? 'color-mix(in oklab, var(--accent) 12%, transparent)' : 'var(--bg)',
-                                border: `1px solid ${dirty ? 'var(--accent)' : 'var(--border)'}`,
-                                color: 'var(--fg1)', padding: '4px 8px', borderRadius: 4, fontSize: 11,
-                                minWidth: 120,
-                              }}
-                            >
-                              <option value="inherit">Herda família ({supMeta(p.familyDefault || 'shipoffers').label})</option>
-                              {SUPPLIER_OPTIONS.map((s) => (
-                                <option key={s} value={s}>{supMeta(s).label}</option>
-                              ))}
-                            </select>
-                            <span style={{
-                              fontSize: 10,
-                              padding: '2px 6px',
-                              borderRadius: 4,
-                              background: supMeta(eff).chipBg,
-                              color: supMeta(eff).text,
-                              fontWeight: 600,
-                              minWidth: 70,
-                              textAlign: 'center',
-                            }}>
-                              {supMeta(eff).label}
-                            </span>
-                          </div>
-                        </td>
+            <Paginated items={supplierList.products} label="SKUs">
+              {(pageRows, pager) => (<>
+                <div className="tbl-wrap" style={{ margin: 0, maxHeight: 480, overflow: 'auto', borderRadius: 6 }}>
+                  <table className="tbl" style={{ fontSize: 12 }}>
+                    <thead style={{ position: 'sticky', top: 0, background: 'var(--bg-raised)', zIndex: 1 }}>
+                      <tr>
+                        <th style={{ textAlign: 'left' }}>SKU / Produto</th>
+                        <th style={{ textAlign: 'left' }}>Plataforma</th>
+                        <th style={{ textAlign: 'left' }}>Família</th>
+                        <th className="num">Potes</th>
+                        <th className="num" style={{ textAlign: 'right' }}>Pedidos</th>
+                        <th style={{ textAlign: 'left' }}>Fornecedor</th>
                       </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
+                    </thead>
+                    <tbody>
+                      {pageRows.map((p) => {
+                        const dirty = supplierDirty(p);
+                        const ovr = supplierFor(p);
+                        const eff = supplierEffective(p);
+                        const choiceVal = ovr === null ? 'inherit' : (ovr || 'inherit');
+                        return (
+                          <tr key={p.id} style={{ background: dirty ? 'color-mix(in oklab, var(--accent) 6%, transparent)' : undefined }}>
+                            <td>
+                              <div style={{ fontWeight: 500 }}>{p.name}</div>
+                              <div style={{ color: 'var(--fg5)', fontSize: 10 }}>{p.externalId}</div>
+                            </td>
+                            <td style={{ color: 'var(--fg3)' }}>{p.platformName}</td>
+                            <td style={{ color: p.family ? 'var(--fg2)' : 'var(--fg5)' }}>
+                              {p.family || '—'}
+                            </td>
+                            <td className="num" style={{ color: 'var(--fg3)' }}>{p.bottles ?? '—'}</td>
+                            <td className="num" style={{ textAlign: 'right', color: 'var(--fg3)' }}>{fmtInt(p.orderCount)}</td>
+                            <td>
+                              <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
+                                <select
+                                  value={choiceVal}
+                                  onChange={(e) => setSupplierDraft(p.id, e.target.value)}
+                                  style={{
+                                    background: dirty ? 'color-mix(in oklab, var(--accent) 12%, transparent)' : 'var(--bg)',
+                                    border: `1px solid ${dirty ? 'var(--accent)' : 'var(--border)'}`,
+                                    color: 'var(--fg1)', padding: '4px 8px', borderRadius: 4, fontSize: 11,
+                                    minWidth: 120,
+                                  }}
+                                >
+                                  <option value="inherit">Herda família ({supMeta(p.familyDefault || 'shipoffers').label})</option>
+                                  {SUPPLIER_OPTIONS.map((s) => (
+                                    <option key={s} value={s}>{supMeta(s).label}</option>
+                                  ))}
+                                </select>
+                                <span style={{
+                                  fontSize: 10,
+                                  padding: '2px 6px',
+                                  borderRadius: 4,
+                                  background: supMeta(eff).chipBg,
+                                  color: supMeta(eff).text,
+                                  fontWeight: 600,
+                                  minWidth: 70,
+                                  textAlign: 'center',
+                                }}>
+                                  {supMeta(eff).label}
+                                </span>
+                              </div>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+                {pager}
+              </>)}
+            </Paginated>
           )}
         </div>
       )}
@@ -6036,7 +6138,7 @@ function CostsPage({ filters }) {
       <div className="panel" style={{ marginTop: 14 }}>
         <div className="panel-head">
           <div className="panel-title">
-            <span className="panel-eyebrow">RECLASSIFICAR + RECALCULAR HISTÓRICO</span>
+            <span className="panel-eyebrow">Reclassificar + recalcular histórico</span>
             <div className="panel-sub">
               (1) Reclassifica todos os produtos com o classifier atual — preenche
               família/potes dos BuyGoods e corrige tipo/funil. (2) Reescreve
@@ -6083,6 +6185,18 @@ function CatalogQueuePanel({ token }) {
   const [drafts, setDrafts] = useState({});
   const [busy, setBusy] = useState(null); // mensagem de operação em curso/resultado
   const [migration, setMigration] = useState(null); // resultado do verify-catalog
+  // Paginação da fila com estado PRÓPRIO (não <Paginated>/usePaged): confirmar
+  // ou reabrir um SKU chama load() e, em "só pendências", a fila encolhe —
+  // o usePaged volta à página 1 sempre que o total muda, jogando o operador
+  // pro começo a cada clique. Aqui a página só volta a 1 em busca/filtro novo;
+  // quando a lista encolhe ela é só limitada ao fim.
+  const [qPage, setQPage] = useState(1);
+  const [qSize, setQSize] = useState(() => {
+    try {
+      const v = Number(localStorage.getItem('ns-page-size'));
+      return (window.NS_PAGE_SIZES || [10, 25, 50, 100]).includes(v) ? v : 25;
+    } catch (e) { return 25; }
+  });
 
   async function load() {
     setList((s) => ({ ...s, status: 'loading' }));
@@ -6093,7 +6207,7 @@ function CatalogQueuePanel({ token }) {
       setList({ status: 'error', summary: null, products: [], error: err.message });
     }
   }
-  useEffect(() => { load(); }, [token, onlyIssues]);
+  useEffect(() => { setQPage(1); load(); }, [token, onlyIssues]);
 
   const draftOf = (p) => drafts[p.productId] || {};
   const effField = (p, key, sugKey) => {
@@ -6109,7 +6223,9 @@ function CatalogQueuePanel({ token }) {
     try {
       const res = await window.NSApi.adminPatchCatalog(token, updates);
       setBusy(`${res.updated} SKU(s) atualizados${res.aliases ? ` · ${res.aliases} alias aprendido(s)` : ''}. Rode "Reclassificar + recalcular" abaixo pra propagar pro histórico.`);
-      setDrafts({});
+      // Limpa só os rascunhos dos SKUs gravados — com a fila paginada, um
+      // rascunho digitado em outra página sumiria sem o operador ver.
+      setDrafts((d) => { const n = { ...d }; updates.forEach((u) => { delete n[u.productId]; }); return n; });
       load();
     } catch (err) {
       setBusy(`Erro: ${err.message}`);
@@ -6154,7 +6270,7 @@ function CatalogQueuePanel({ token }) {
     try {
       const res = await window.NSApi.adminVerifyCatalog(token, !apply);
       setMigration(res);
-      setBusy(`${res.dryRun ? 'DRY-RUN' : 'APLICADO'}: ${res.verified} verificados · ${res.fixedPhantom.length} famílias corrigidas · ${res.queue.length} na fila`);
+      setBusy(`${res.dryRun ? 'Dry-run' : 'Aplicado'}: ${res.verified} verificados · ${res.fixedPhantom.length} famílias corrigidas · ${res.queue.length} na fila`);
       if (apply) load();
     } catch (err) {
       setBusy(`Erro: ${err.message}`);
@@ -6162,11 +6278,16 @@ function CatalogQueuePanel({ token }) {
   }
 
   const sm = list.summary;
+  const qTotal = list.products.length;
+  const qActive = qTotal > 10; // mesma régua do usePaged (minToShow)
+  const qSafePage = Math.min(qPage, Math.max(1, Math.ceil(qTotal / qSize)));
+  const qStart = qActive ? (qSafePage - 1) * qSize : 0;
+  const qRows = qActive ? list.products.slice(qStart, qStart + qSize) : list.products;
   return (
     <div className="panel" style={{ marginTop: 14 }}>
       <div className="panel-head" style={{ flexWrap: 'wrap', gap: 8 }}>
         <div className="panel-title">
-          <span className="panel-eyebrow">CATÁLOGO DE SKUs — FILA DE CONFIRMAÇÃO</span>
+          <span className="panel-eyebrow">Catálogo de SKUs — fila de confirmação</span>
           <div className="panel-sub">
             SKU <b>verificado</b> fica imune a renomeação do vendor (a identidade ancora no ID).
             SKU novo roda pela sugestão do nome e espera 1 clique aqui. Corrigiu a família de um
@@ -6193,18 +6314,23 @@ function CatalogQueuePanel({ token }) {
         </label>
         <input placeholder="buscar nome/ID/família" value={search} style={{ ...CAT_INPUT, width: 220 }}
           onChange={(e) => setSearch(e.target.value)}
-          onKeyDown={(e) => { if (e.key === 'Enter') load(); }}/>
-        <button className="btn btn-ghost" style={{ fontSize: 11 }} onClick={load}>Buscar</button>
+          onKeyDown={(e) => { if (e.key === 'Enter') { setQPage(1); load(); } }}/>
+        <button className="btn btn-ghost" style={{ fontSize: 11 }} onClick={() => { setQPage(1); load(); }}>Buscar</button>
         {busy && <span style={{ fontSize: 11, color: 'var(--accent)' }}>{busy}</span>}
       </div>
 
       {migration && migration.fixedPhantom.length > 0 && (
-        <div style={{ fontSize: 11, color: 'var(--fg4)', marginBottom: 8, maxHeight: 120, overflowY: 'auto' }}>
-          <b style={{ color: 'var(--warning)' }}>{migration.dryRun ? 'Corrigiria' : 'Corrigidas'} famílias fantasma:</b>
-          {migration.fixedPhantom.map((f, i) => (
-            <div key={i} className="mono" style={{ fontSize: 10 }}>{f.externalId}: "{f.from}" → "{f.to}"</div>
-          ))}
-        </div>
+        <Paginated items={migration.fixedPhantom} label="famílias">
+          {(pageRows, pager) => (<>
+            <div style={{ fontSize: 11, color: 'var(--fg4)', marginBottom: 8, maxHeight: 120, overflowY: 'auto' }}>
+              <b style={{ color: 'var(--warning)' }}>{migration.dryRun ? 'Corrigiria' : 'Corrigidas'} famílias fantasma:</b>
+              {pageRows.map((f, i) => (
+                <div key={i} className="mono" style={{ fontSize: 10 }}>{f.externalId}: "{f.from}" → "{f.to}"</div>
+              ))}
+            </div>
+            {pager}
+          </>)}
+        </Paginated>
       )}
 
       {list.status === 'error' && <div style={{ color: 'var(--danger)', fontSize: 12 }}>Erro: {list.error}</div>}
@@ -6212,76 +6338,83 @@ function CatalogQueuePanel({ token }) {
         <div style={{ fontSize: 12, color: 'var(--success)', padding: '8px 0' }}>✓ Nenhuma pendência no catálogo.</div>
       )}
       {list.products.length > 0 && (
-        <div className="tbl-wrap" style={{ maxHeight: 480 }}>
-          <table className="tbl">
-            <thead><tr><th>SKU</th><th>Família</th><th>Papel</th><th>Etapa</th><th className="num">Potes</th><th className="num">Bônus</th><th></th></tr></thead>
-            <tbody>
-              {list.products.map((p) => {
-                const sug = p.suggestion || {};
-                return (
-                  <tr key={p.productId}>
-                    <td style={{ maxWidth: 340 }}>
-                      <div style={{ fontWeight: 600, fontSize: 12, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={p.name}>{p.name}</div>
-                      <div className="mono" style={{ fontSize: 10, color: 'var(--fg5)', display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-                        <span>{p.platformSlug} · {p.externalId} · {fmtInt(p.orderCount)} pedidos</span>
-                        {p.verified
-                          ? <span style={{ color: 'var(--success)' }}>✓ verificado ({p.verifiedBy})</span>
-                          : <span style={{ color: 'var(--warning)' }}>● aguardando</span>}
-                        {p.flags.drift && <span style={{ color: 'var(--warning)' }}>renomeado: era "{p.nameAtVerification}"</span>}
-                        {p.flags.conflict && <span style={{ color: 'var(--danger)' }}>nome sugere "{sug.family}"</span>}
-                        {p.pendingOrders > 0 && <span style={{ color: 'var(--danger)' }}>{p.pendingOrders} pedidos sem custo ({fmtCurrency(p.pendingGross, 'USD', 0)})</span>}
-                        {p.flags.noCost && !p.flags.noFamily && <span style={{ color: 'var(--warning)' }}>família sem custo cadastrado</span>}
-                      </div>
-                    </td>
-                    <td>
-                      <input value={effField(p, 'family', 'family') ?? ''} placeholder={sug.family || '—'} disabled={p.verified}
-                        style={{ ...CAT_INPUT, width: 150, opacity: p.verified ? 0.6 : 1 }}
-                        onChange={(e) => setDraft(p, 'family', e.target.value || null)}/>
-                    </td>
-                    <td>
-                      <select value={effField(p, 'productType', 'type') ?? 'FRONTEND'} disabled={p.verified}
-                        style={{ ...CAT_INPUT, opacity: p.verified ? 0.6 : 1 }}
-                        onChange={(e) => setDraft(p, 'productType', e.target.value)}>
-                        {CAT_TYPES.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
-                      </select>
-                    </td>
-                    <td>
-                      <select value={String(effField(p, 'funnelStep', 'funnelStep') ?? '')} disabled={p.verified}
-                        style={{ ...CAT_INPUT, opacity: p.verified ? 0.6 : 1 }}
-                        onChange={(e) => setDraft(p, 'funnelStep', e.target.value === '' ? null : parseInt(e.target.value, 10))}>
-                        <option value="">—</option>
-                        <option value="1">1 (FE)</option>
-                        <option value="2">2 (UP1/DW1)</option>
-                        <option value="3">3 (UP2/DW2)</option>
-                        <option value="4">4 (UP3/DW3)</option>
-                      </select>
-                    </td>
-                    <td className="num">
-                      <input type="number" min="0" value={effField(p, 'bottles', 'bottles') ?? ''} disabled={p.verified}
-                        style={{ ...CAT_INPUT, width: 58, opacity: p.verified ? 0.6 : 1 }}
-                        onChange={(e) => setDraft(p, 'bottles', e.target.value === '' ? null : parseInt(e.target.value, 10))}/>
-                    </td>
-                    <td className="num">
-                      <input type="number" min="0" value={effField(p, 'bonusBottles', 'bonusBottles') ?? ''} disabled={p.verified}
-                        style={{ ...CAT_INPUT, width: 58, opacity: p.verified ? 0.6 : 1 }}
-                        onChange={(e) => setDraft(p, 'bonusBottles', e.target.value === '' ? null : parseInt(e.target.value, 10))}/>
-                    </td>
-                    <td style={{ whiteSpace: 'nowrap' }}>
-                      {!p.verified && <button className="btn" style={{ fontSize: 11 }} onClick={() => confirmRow(p)}>Confirmar</button>}
-                      {p.verified && p.flags.drift && (
-                        <button className="btn btn-ghost" style={{ fontSize: 11 }} title="O nome novo é só rename — mantém a classificação e limpa o aviso"
-                          onClick={() => patch([{ productId: p.productId, acceptRename: true }], 'Aceitando rename…')}>Aceitar rename</button>
-                      )}
-                      {p.verified && (
-                        <button className="btn btn-ghost" style={{ fontSize: 11, marginLeft: 4 }} onClick={() => patch([{ productId: p.productId, verified: false }], 'Reabrindo…')}>Reabrir</button>
-                      )}
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
+        <>
+            <div className="tbl-wrap" style={{ maxHeight: 480 }}>
+              <table className="tbl">
+                <thead><tr><th>SKU</th><th>Família</th><th>Papel</th><th>Etapa</th><th className="num">Potes</th><th className="num">Bônus</th><th></th></tr></thead>
+                <tbody>
+                  {qRows.map((p) => {
+                    const sug = p.suggestion || {};
+                    return (
+                      <tr key={p.productId}>
+                        <td style={{ maxWidth: 340 }}>
+                          <div style={{ fontWeight: 600, fontSize: 12, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={p.name}>{p.name}</div>
+                          <div className="mono" style={{ fontSize: 10, color: 'var(--fg5)', display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                            <span>{p.platformSlug} · {p.externalId} · {fmtInt(p.orderCount)} pedidos</span>
+                            {p.verified
+                              ? <span style={{ color: 'var(--success)' }}>✓ verificado ({p.verifiedBy})</span>
+                              : <span style={{ color: 'var(--warning)' }}>● aguardando</span>}
+                            {p.flags.drift && <span style={{ color: 'var(--warning)' }}>renomeado: era "{p.nameAtVerification}"</span>}
+                            {p.flags.conflict && <span style={{ color: 'var(--danger)' }}>nome sugere "{sug.family}"</span>}
+                            {p.pendingOrders > 0 && <span style={{ color: 'var(--danger)' }}>{p.pendingOrders} pedidos sem custo ({fmtCurrency(p.pendingGross, 'USD', 0)})</span>}
+                            {p.flags.noCost && !p.flags.noFamily && <span style={{ color: 'var(--warning)' }}>família sem custo cadastrado</span>}
+                          </div>
+                        </td>
+                        <td>
+                          <input value={effField(p, 'family', 'family') ?? ''} placeholder={sug.family || '—'} disabled={p.verified}
+                            style={{ ...CAT_INPUT, width: 150, opacity: p.verified ? 0.6 : 1 }}
+                            onChange={(e) => setDraft(p, 'family', e.target.value || null)}/>
+                        </td>
+                        <td>
+                          <select value={effField(p, 'productType', 'type') ?? 'FRONTEND'} disabled={p.verified}
+                            style={{ ...CAT_INPUT, opacity: p.verified ? 0.6 : 1 }}
+                            onChange={(e) => setDraft(p, 'productType', e.target.value)}>
+                            {CAT_TYPES.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+                          </select>
+                        </td>
+                        <td>
+                          <select value={String(effField(p, 'funnelStep', 'funnelStep') ?? '')} disabled={p.verified}
+                            style={{ ...CAT_INPUT, opacity: p.verified ? 0.6 : 1 }}
+                            onChange={(e) => setDraft(p, 'funnelStep', e.target.value === '' ? null : parseInt(e.target.value, 10))}>
+                            <option value="">—</option>
+                            <option value="1">1 (FE)</option>
+                            <option value="2">2 (UP1/DW1)</option>
+                            <option value="3">3 (UP2/DW2)</option>
+                            <option value="4">4 (UP3/DW3)</option>
+                          </select>
+                        </td>
+                        <td className="num">
+                          <input type="number" min="0" value={effField(p, 'bottles', 'bottles') ?? ''} disabled={p.verified}
+                            style={{ ...CAT_INPUT, width: 58, opacity: p.verified ? 0.6 : 1 }}
+                            onChange={(e) => setDraft(p, 'bottles', e.target.value === '' ? null : parseInt(e.target.value, 10))}/>
+                        </td>
+                        <td className="num">
+                          <input type="number" min="0" value={effField(p, 'bonusBottles', 'bonusBottles') ?? ''} disabled={p.verified}
+                            style={{ ...CAT_INPUT, width: 58, opacity: p.verified ? 0.6 : 1 }}
+                            onChange={(e) => setDraft(p, 'bonusBottles', e.target.value === '' ? null : parseInt(e.target.value, 10))}/>
+                        </td>
+                        <td style={{ whiteSpace: 'nowrap' }}>
+                          {!p.verified && <button className="btn" style={{ fontSize: 11 }} onClick={() => confirmRow(p)}>Confirmar</button>}
+                          {p.verified && p.flags.drift && (
+                            <button className="btn btn-ghost" style={{ fontSize: 11 }} title="O nome novo é só rename — mantém a classificação e limpa o aviso"
+                              onClick={() => patch([{ productId: p.productId, acceptRename: true }], 'Aceitando rename…')}>Aceitar rename</button>
+                          )}
+                          {p.verified && (
+                            <button className="btn btn-ghost" style={{ fontSize: 11, marginLeft: 4 }} onClick={() => patch([{ productId: p.productId, verified: false }], 'Reabrindo…')}>Reabrir</button>
+                          )}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+            {qActive && (
+              <Pager page={qSafePage} pageSize={qSize} total={qTotal} label="SKUs"
+                onPageChange={setQPage}
+                onPageSizeChange={(n) => { setQSize(n); setQPage(1); try { localStorage.setItem('ns-page-size', String(n)); } catch (e) {} }}/>
+            )}
+        </>
       )}
     </div>
   );
@@ -6312,50 +6445,6 @@ function fmtRelativeShort(iso) {
   const d = Math.floor(ms / 86400000);
   if (d < 7) return `${d}d`;
   return new Date(iso).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' });
-}
-
-// Pagination genérica. Espera `{ page, pageSize, total, hasMore }` na shape
-// que o /lib/pagination.ts retorna do server. onChange(newPage) atualiza
-// só o page; pageSize fica imutável aqui (UI sem seletor de tamanho).
-function Pagination({ page, pageSize, total, hasMore, onChange }) {
-  const totalPages = total > 0 ? Math.ceil(total / pageSize) : 1;
-  const from = total === 0 ? 0 : (page - 1) * pageSize + 1;
-  const to = Math.min(page * pageSize, total);
-  return (
-    <div style={{
-      display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-      padding: '10px 14px', borderTop: '1px solid var(--border-soft)',
-      fontSize: 11, fontFamily: 'var(--f-mono)', color: 'var(--fg5)',
-      gap: 12,
-    }}>
-      <div>
-        {total === 0
-          ? 'nenhum registro'
-          : `${from}–${to} de ${fmtInt(total)}`}
-      </div>
-      <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
-        <button
-          onClick={() => onChange(page - 1)}
-          disabled={page <= 1}
-          className="btn btn-ghost"
-          style={{ padding: '4px 10px', fontSize: 10, opacity: page <= 1 ? 0.4 : 1 }}
-        >
-          <Icon name="chevron-left" size={10}/> Anterior
-        </button>
-        <span style={{ minWidth: 60, textAlign: 'center', color: 'var(--fg3)' }}>
-          {page} / {totalPages}
-        </span>
-        <button
-          onClick={() => onChange(page + 1)}
-          disabled={!hasMore}
-          className="btn btn-ghost"
-          style={{ padding: '4px 10px', fontSize: 10, opacity: !hasMore ? 0.4 : 1 }}
-        >
-          Próxima <Icon name="chevron-right" size={10}/>
-        </button>
-      </div>
-    </div>
-  );
 }
 
 function ChatPage({ user }) {
@@ -6470,11 +6559,11 @@ function ChatWidget({ user }) {
           style={{
             position: 'fixed', bottom: 24, right: 24, zIndex: 1000,
             width: 52, height: 52, borderRadius: '50%',
-            background: 'var(--accent)',
+            background: 'var(--cta)',
             border: 0, cursor: 'pointer',
-            boxShadow: '0 8px 20px -4px color-mix(in oklab, var(--accent) 40%, transparent)',
+            boxShadow: 'var(--shadow-md)',
             display: 'grid', placeItems: 'center',
-            color: '#0A1638',
+            color: 'var(--on-cta)',
           }}
         >
           <Icon name="sparkles" size={20}/>
@@ -6487,7 +6576,7 @@ function ChatWidget({ user }) {
           display: 'flex', flexDirection: 'column',
           background: 'var(--bg-elev)',
           border: '1px solid var(--border)',
-          borderRadius: 12, overflow: 'hidden',
+          borderRadius: 'var(--r-lg)', overflow: 'hidden',
           boxShadow: 'var(--shadow-lg)',
         }}>
           <div style={{
@@ -6497,7 +6586,7 @@ function ChatWidget({ user }) {
           }}>
             <Icon name="sparkles" size={14} className=""/>
             <div style={{ flex: 1 }}>
-              <div style={{ fontFamily: 'var(--f-mono)', fontSize: 10, letterSpacing: '0.12em', color: 'var(--fg4)' }}>ANÁLISE COM IA</div>
+              <div style={{ fontFamily: 'var(--f-mono)', fontSize: 10, color: 'var(--fg4)' }}>Análise com IA</div>
               <div style={{ fontSize: 11, color: 'var(--fg5)' }}>Especialista em analytics nutra DR</div>
             </div>
             <a
@@ -6684,7 +6773,7 @@ function ChatBody({ conversationId, onConversationCreated, onMessageSent, compac
           </div>
         )}
         {error && (
-          <div style={{ color: 'var(--danger)', fontSize: 12, background: 'rgba(239,68,68,0.06)', padding: 10, borderRadius: 6 }}>
+          <div style={{ color: 'var(--danger)', fontSize: 12, background: 'var(--danger-bg)', padding: 10, borderRadius: 6 }}>
             Erro: {error}
           </div>
         )}
@@ -6758,7 +6847,7 @@ function ChatMessage({ message, compact, streaming }) {
         style={{
           maxWidth: '85%',
           padding: '8px 12px', borderRadius: 8,
-          background: isUser ? 'color-mix(in oklab, var(--accent) 10%, transparent)' : 'rgba(255,255,255,0.03)',
+          background: isUser ? 'color-mix(in oklab, var(--accent) 10%, transparent)' : 'var(--bg-subtle)',
           border: `1px solid ${isUser ? 'color-mix(in oklab, var(--accent) 25%, transparent)' : 'var(--border-soft)'}`,
           fontSize: compact ? 12 : 13, color: 'var(--fg1)',
           wordBreak: 'break-word', lineHeight: 1.5,
@@ -6773,9 +6862,9 @@ function ChatMessage({ message, compact, streaming }) {
           {message.toolUses.map((t, i) => (
             <span key={i} style={{
               fontFamily: 'var(--f-mono)', fontSize: 10,
-              padding: '1px 6px', borderRadius: 3,
-              background: 'rgba(40,200,120,0.08)', color: 'var(--success)',
-              border: '1px solid rgba(40,200,120,0.2)',
+              padding: '1px 6px', borderRadius: 'var(--r-sm)',
+              background: 'var(--success-bg)', color: 'var(--success)',
+              border: '1px solid color-mix(in srgb, var(--success) 20%, transparent)',
             }}>
               ✓ {t.name}
             </span>
@@ -6932,7 +7021,7 @@ function CopyKpi({ label, value, sub, tone }) {
   return (
     <div className="panel" style={{ padding: '12px 14px' }}>
       <div className="eyebrow" style={{ fontSize: 10 }}>{label}</div>
-      <div style={{ fontFamily: 'var(--f-display)', fontSize: 24, fontWeight: 600, color, marginTop: 4 }}>{value}</div>
+      <div style={{ fontFamily: 'var(--f-mono)', fontSize: 24, fontWeight: 600, color, marginTop: 4 }}>{value}</div>
       {sub && <div style={{ fontSize: 10, color: 'var(--fg5)', marginTop: 2 }}>{sub}</div>}
     </div>
   );
@@ -6978,7 +7067,7 @@ function CopyForecastCard({ forecast }) {
     <div className="panel" style={{ marginBottom: 12, borderColor: color, display: 'flex', gap: 12, alignItems: 'flex-start' }}>
       <Icon name={icon} size={18}/>
       <div>
-        <div className="eyebrow" style={{ fontSize: 10 }}>PREVISÃO ATÉ A META</div>
+        <div className="eyebrow" style={{ fontSize: 10 }}>Previsão até a meta</div>
         <div style={{ fontWeight: 600, fontSize: 15, color, marginTop: 2 }}>{title}</div>
         <div style={{ fontSize: 11, color: 'var(--fg4)', marginTop: 3, lineHeight: 1.5 }}>{detail}</div>
         <div style={{ fontSize: 10, color: 'var(--fg5)', marginTop: 5, fontFamily: 'var(--f-mono)' }}>Extrapolação linear "no ritmo atual" sobre o período selecionado — estimativa, não garantia.</div>
@@ -7060,16 +7149,21 @@ function CopyRulesPanel() {
       {applyAll && <CopyApplyAllForm onClose={() => setApplyAll(false)} onApplied={reload}/>}
       {creating && <CopyRuleCreateForm onClose={() => setCreating(false)} onSaved={() => { setCreating(false); reload(); }}/>}
       <div className="panel" style={{ padding: 0 }}>
-        <div className="tbl-wrap" style={{ margin: 0, padding: '0 4px' }}>
-          <table className="tbl">
-            <thead><tr><th>Afiliado</th><th>Tipo</th><th style={{ width: 240 }}>% Black 2</th><th>Auto-tune</th><th>Status</th><th>Última</th><th></th></tr></thead>
-            <tbody>
-              {state.status === 'loading' && <SkelTableRows rows={6} cols={7}/>}
-              {state.status === 'ready' && rules.length === 0 && <tr><td colSpan={7} style={{ textAlign: 'center', padding: 24, opacity: 0.6 }}>Nenhuma regra ainda. Crie a primeira.</td></tr>}
-              {rules.map((r) => <CopyRuleRow key={r.id} rule={r} onChanged={reload}/>)}
-            </tbody>
-          </table>
-        </div>
+        <Paginated items={rules} label="regras">
+          {(pageRows, pager) => (<>
+            <div className="tbl-wrap" style={{ margin: 0, padding: '0 4px' }}>
+              <table className="tbl">
+                <thead><tr><th>Afiliado</th><th>Tipo</th><th style={{ width: 240 }}>% Black 2</th><th>Auto-tune</th><th>Status</th><th>Última</th><th></th></tr></thead>
+                <tbody>
+                  {state.status === 'loading' && <SkelTableRows rows={6} cols={7}/>}
+                  {state.status === 'ready' && rules.length === 0 && <tr><td colSpan={7} style={{ textAlign: 'center', padding: 24, opacity: 0.6 }}>Nenhuma regra ainda. Crie a primeira.</td></tr>}
+                  {pageRows.map((r) => <CopyRuleRow key={r.id} rule={r} onChanged={reload}/>)}
+                </tbody>
+              </table>
+            </div>
+            {pager}
+          </>)}
+        </Paginated>
       </div>
       <div style={{ marginTop: 10, fontFamily: 'var(--f-mono)', fontSize: 10, color: 'var(--fg5)', lineHeight: 1.6 }}>
         Decisão server-side · match por <b>aff_id</b> ou <b>aff_name</b> (verbatim, mais inclusivo vence) · bucket sticky djb2 · Black 2 só com email válido · pausar = % vira 0.
@@ -7117,10 +7211,10 @@ function CopyObservabilityPanel() {
       {d && !empty && (
         <>
           <div className="grid-2" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', marginBottom: 12 }}>
-            <CopyKpi label="AOV NO PERÍODO" value={fmtCurrency(d.summary.aovOverall, 'USD', 2)}/>
-            <CopyKpi label="VIEWS" value={fmtInt(d.summary.totalViews)}/>
-            <CopyKpi label="CONVERSÃO" value={fmtPct(d.summary.convOverall)}/>
-            <CopyKpi label={`GAP vs ${fmtCurrency(d.summary.aovTarget, 'USD', 0)}`} value={(d.summary.aovGap >= 0 ? '+' : '') + fmtCurrency(d.summary.aovGap, 'USD', 2)} tone={d.summary.aovGap < 0 ? 'danger' : 'ok'}/>
+            <CopyKpi label="AOV no período" value={fmtCurrency(d.summary.aovOverall, 'USD', 2)}/>
+            <CopyKpi label="Views" value={fmtInt(d.summary.totalViews)}/>
+            <CopyKpi label="Conversão" value={fmtPct(d.summary.convOverall)}/>
+            <CopyKpi label={`Gap vs ${fmtCurrency(d.summary.aovTarget, 'USD', 0)}`} value={(d.summary.aovGap >= 0 ? '+' : '') + fmtCurrency(d.summary.aovGap, 'USD', 2)} tone={d.summary.aovGap < 0 ? 'danger' : 'ok'}/>
           </div>
 
           <CopyForecastCard forecast={d.forecast}/>
@@ -7133,7 +7227,7 @@ function CopyObservabilityPanel() {
             <div className="panel">
               <div className="panel-head"><div className="panel-title">Distribuição por layer</div></div>
               <Donut items={[
-                { label: 'Black 1', value: d.summary.byLayer.black1 || 0, color: '#a8b7d8' },
+                { label: 'Black 1', value: d.summary.byLayer.black1 || 0, color: 'var(--chart-5)' },
                 { label: 'Black 2', value: d.summary.byLayer.black2 || 0, color: 'var(--accent)' },
                 { label: 'White', value: d.summary.byLayer.white || 0, color: 'var(--warning)' },
               ]} totalLabel="views" format={(v) => fmtInt(v)}/>
@@ -7164,24 +7258,29 @@ function CopyObservabilityPanel() {
 
           <div className="panel" style={{ padding: 0 }}>
             <div className="panel-head" style={{ padding: '12px 14px 0' }}><div className="panel-title">Performance por afiliado</div></div>
-            <div className="tbl-wrap" style={{ margin: 0, padding: '0 4px' }}>
-              <table className="tbl">
-                <thead><tr><th>Afiliado</th><th className="num">Leads</th><th className="num">B1 conv</th><th className="num">B2 conv</th><th className="num">Lift</th><th className="num">% atual</th></tr></thead>
-                <tbody>
-                  {d.byAffiliate.length === 0 && <tr><td colSpan={6} style={{ textAlign: 'center', padding: 16, opacity: 0.6 }}>Sem afiliados com amostra ≥5.</td></tr>}
-                  {d.byAffiliate.map((a) => (
-                    <tr key={a.key}>
-                      <td className="cell-mono">{a.key}{a.nLeads < 30 && <span className="badge neutral" style={{ marginLeft: 6, fontSize: 8 }}>amostra baixa</span>}</td>
-                      <td className="num">{fmtInt(a.nLeads)}</td>
-                      <td className="num">{pctCell(a.byLayer.black1)}</td>
-                      <td className="num">{pctCell(a.byLayer.black2)}</td>
-                      <td className="num" style={{ color: a.liftPp == null ? 'var(--fg5)' : a.liftPp >= 0 ? 'var(--success)' : 'var(--danger)' }}>{a.liftPp == null ? '—' : `${a.liftPp >= 0 ? '+' : ''}${a.liftPp}pp`}</td>
-                      <td className="num cell-mono">{a.currentPct == null ? '—' : `${a.currentPct}%`}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+            <Paginated items={d.byAffiliate} label="afiliados" resetKey={period}>
+              {(pageRows, pager) => (<>
+                <div className="tbl-wrap" style={{ margin: 0, padding: '0 4px' }}>
+                  <table className="tbl">
+                    <thead><tr><th>Afiliado</th><th className="num">Leads</th><th className="num">B1 conv</th><th className="num">B2 conv</th><th className="num">Lift</th><th className="num">% atual</th></tr></thead>
+                    <tbody>
+                      {d.byAffiliate.length === 0 && <tr><td colSpan={6} style={{ textAlign: 'center', padding: 16, opacity: 0.6 }}>Sem afiliados com amostra ≥5.</td></tr>}
+                      {pageRows.map((a) => (
+                        <tr key={a.key}>
+                          <td className="cell-mono">{a.key}{a.nLeads < 30 && <span className="badge neutral" style={{ marginLeft: 6, fontSize: 8 }}>amostra baixa</span>}</td>
+                          <td className="num">{fmtInt(a.nLeads)}</td>
+                          <td className="num">{pctCell(a.byLayer.black1)}</td>
+                          <td className="num">{pctCell(a.byLayer.black2)}</td>
+                          <td className="num" style={{ color: a.liftPp == null ? 'var(--fg5)' : a.liftPp >= 0 ? 'var(--success)' : 'var(--danger)' }}>{a.liftPp == null ? '—' : `${a.liftPp >= 0 ? '+' : ''}${a.liftPp}pp`}</td>
+                          <td className="num cell-mono">{a.currentPct == null ? '—' : `${a.currentPct}%`}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+                {pager}
+              </>)}
+            </Paginated>
           </div>
         </>
       )}
@@ -7253,9 +7352,9 @@ function CopyCalculatorPanel() {
       <div style={{ display: 'grid', gap: 12 }}>
         {res && (
           <div className="grid-2" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))' }}>
-            <CopyKpi label="BASELINE" value={fmtCurrency(res.baselineAov, 'USD', 2)}/>
-            <CopyKpi label="GAP" value={(res.gap >= 0 ? '+' : '') + fmtCurrency(res.gap, 'USD', 2)} tone={res.gap > 0 ? 'danger' : 'ok'}/>
-            <CopyKpi label="MAIS FÁCIL" value={res.easiestScenario || '—'} sub="menor esforço"/>
+            <CopyKpi label="Baseline" value={fmtCurrency(res.baselineAov, 'USD', 2)}/>
+            <CopyKpi label="Gap" value={(res.gap >= 0 ? '+' : '') + fmtCurrency(res.gap, 'USD', 2)} tone={res.gap > 0 ? 'danger' : 'ok'}/>
+            <CopyKpi label="Mais fácil" value={res.easiestScenario || '—'} sub="menor esforço"/>
           </div>
         )}
         {res && (
@@ -7264,9 +7363,9 @@ function CopyCalculatorPanel() {
               <div key={sc.label} className="panel" style={{ opacity: sc.status === 'over' ? 0.5 : 1, borderColor: sc.label === res.easiestScenario ? 'var(--glow-cyan)' : undefined }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                   <span style={{ fontWeight: 600, fontSize: 13 }}>{sc.label === res.easiestScenario ? '★ ' : ''}{sc.label}</span>
-                  <span className="badge" style={{ background: sc.status === 'ok' ? 'color-mix(in oklab, var(--success) 12%, transparent)' : sc.status === 'below' ? 'color-mix(in oklab, var(--accent) 12%, transparent)' : 'color-mix(in oklab, var(--danger) 12%, transparent)', fontSize: 10 }}>{sc.status}</span>
+                  <span className="badge" style={{ background: sc.status === 'ok' ? 'color-mix(in oklab, var(--success) 12%, transparent)' : sc.status === 'below' ? 'color-mix(in oklab, var(--accent) 12%, transparent)' : 'color-mix(in oklab, var(--danger) 12%, transparent)', fontSize: 10 }}>{sc.status === 'ok' ? 'OK' : sc.status.charAt(0).toUpperCase() + sc.status.slice(1)}</span>
                 </div>
-                <div style={{ fontFamily: 'var(--f-display)', fontSize: 18, marginTop: 4 }}>{fmtCurrency(sc.aov, 'USD', 0)}</div>
+                <div style={{ fontFamily: 'var(--f-mono)', fontSize: 18, marginTop: 4 }}>{fmtCurrency(sc.aov, 'USD', 0)}</div>
                 <div style={{ fontSize: 10, color: 'var(--fg5)', marginTop: 4 }}>convs: {sc.convs.map((c) => fmtPct(c)).join(' · ')}</div>
                 <div style={{ fontSize: 10, color: 'var(--fg5)' }}>esforço: {(sc.effort * 100).toFixed(1)}pp</div>
               </div>
@@ -7276,14 +7375,19 @@ function CopyCalculatorPanel() {
         {res && res.suggestedRuleUpdates && res.suggestedRuleUpdates.rules.length > 0 && (
           <div className="panel">
             <div className="panel-head"><div className="panel-title">Sugestão de regras</div></div>
-            <div style={{ display: 'grid', gap: 4, marginTop: 8, fontSize: 12 }}>
-              {res.suggestedRuleUpdates.rules.map((r) => (
-                <div key={r.key} style={{ display: 'flex', justifyContent: 'space-between', color: 'var(--fg2)' }}>
-                  <span className="cell-mono">{r.key}</span>
-                  <span>{r.currentPct}% → <b style={{ color: 'var(--glow-cyan)' }}>{r.newPct}%</b> <span style={{ color: 'var(--fg5)' }}>· {r.reasoning}</span></span>
+            <Paginated items={res.suggestedRuleUpdates.rules} label="sugestões">
+              {(pageRows, pager) => (<>
+                <div style={{ display: 'grid', gap: 4, marginTop: 8, fontSize: 12 }}>
+                  {pageRows.map((r) => (
+                    <div key={r.key} style={{ display: 'flex', justifyContent: 'space-between', color: 'var(--fg2)' }}>
+                      <span className="cell-mono">{r.key}</span>
+                      <span>{r.currentPct}% → <b style={{ color: 'var(--glow-cyan)' }}>{r.newPct}%</b> <span style={{ color: 'var(--fg5)' }}>· {r.reasoning}</span></span>
+                    </div>
+                  ))}
                 </div>
-              ))}
-            </div>
+                {pager}
+              </>)}
+            </Paginated>
             <button className="btn btn-primary" style={{ marginTop: 10 }} onClick={applySuggestion} disabled={busy}>Aplicar sugestão</button>
             {applyMsg && <div style={{ fontSize: 11, color: 'var(--fg3)', marginTop: 6 }}>{applyMsg}</div>}
           </div>
@@ -7337,23 +7441,28 @@ function CopyAutotunePanel() {
       </div>
 
       <div className="panel" style={{ padding: 0 }}>
-        <div className="panel-head" style={{ padding: '12px 14px 0' }}><div className="panel-title">Histórico de decisões</div></div>
-        <div className="tbl-wrap" style={{ margin: 0, padding: '0 4px' }}>
-          <table className="tbl">
-            <thead><tr><th>Quando</th><th>Afiliado</th><th className="num">% antes→depois</th><th>Motivo</th></tr></thead>
-            <tbody>
-              {logs.length === 0 && <tr><td colSpan={4} style={{ textAlign: 'center', padding: 16, opacity: 0.6 }}>Nenhuma decisão registrada ainda.</td></tr>}
-              {logs.map((l) => (
-                <tr key={l.id}>
-                  <td className="cell-mono" style={{ fontSize: 10 }}>{fmtDateTime(l.decidedAt)}</td>
-                  <td className="cell-mono">{l.ruleKey || '—'}</td>
-                  <td className="num cell-mono">{l.pctBefore}% → {l.pctAfter}%</td>
-                  <td><span className="badge neutral" style={{ fontSize: 10 }}>{l.reason}</span></td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+        <div className="panel-head" style={{ padding: '12px 14px 0' }}><div className="panel-title">Histórico de decisões <span style={{ color: 'var(--fg5)', fontSize: 10, marginLeft: 6 }}>somente as últimas 50 · mais recente primeiro</span></div></div>
+        <Paginated items={logs} label="decisões">
+          {(pageRows, pager) => (<>
+            <div className="tbl-wrap" style={{ margin: 0, padding: '0 4px' }}>
+              <table className="tbl">
+                <thead><tr><th>Quando</th><th>Afiliado</th><th className="num">% antes→depois</th><th>Motivo</th></tr></thead>
+                <tbody>
+                  {logs.length === 0 && <tr><td colSpan={4} style={{ textAlign: 'center', padding: 16, opacity: 0.6 }}>Nenhuma decisão registrada ainda.</td></tr>}
+                  {pageRows.map((l) => (
+                    <tr key={l.id}>
+                      <td className="cell-mono" style={{ fontSize: 10 }}>{fmtDateTime(l.decidedAt)}</td>
+                      <td className="cell-mono">{l.ruleKey || '—'}</td>
+                      <td className="num cell-mono">{l.pctBefore}% → {l.pctAfter}%</td>
+                      <td><span className="badge neutral" style={{ fontSize: 10 }}>{l.reason}</span></td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            {pager}
+          </>)}
+        </Paginated>
       </div>
     </div>
   );
@@ -7378,25 +7487,25 @@ function CopyOptimizerPage() {
     <div className="page-in">
       <div className="page-head">
         <div className="lead">
-          <span className="eyebrow">ADMIN · COPY OPTIMIZER</span>
+          <span className="eyebrow">Admin · Copy Optimizer</span>
           <h2>Copy <em>Optimizer</em></h2>
           <span className="sub">Exposição da copy Black 2 no Upsell01 (BuyGoods) — regras, observabilidade, calculadora de AOV e auto-tune.</span>
         </div>
       </div>
 
-      <CopySection n="01" title="REGRAS" desc="% de Black 2 por afiliado (decisão server-side)." first>
+      <CopySection n="01" title="Regras" desc="% de Black 2 por afiliado (decisão server-side)." first>
         <CopyRulesPanel/>
       </CopySection>
 
-      <CopySection n="02" title="OBSERVABILIDADE" desc="Conversão e AOV por stage / layer / afiliado.">
+      <CopySection n="02" title="Observabilidade" desc="Conversão e AOV por stage / layer / afiliado.">
         <CopyObservabilityPanel/>
       </CopySection>
 
-      <CopySection n="03" title="CALCULADORA DE AOV" desc="Cenários pra atingir o target e sugestão de ajuste de regras.">
+      <CopySection n="03" title="Calculadora de AOV" desc="Cenários pra atingir o target e sugestão de ajuste de regras.">
         <CopyCalculatorPanel/>
       </CopySection>
 
-      <CopySection n="04" title="AUTO-TUNE" desc="Config global do gradiente + histórico de decisões.">
+      <CopySection n="04" title="Auto-tune" desc="Config global do gradiente + histórico de decisões.">
         <CopyAutotunePanel/>
       </CopySection>
     </div>
@@ -7494,28 +7603,33 @@ function RecoveryManage({ affs, onChanged }) {
         registradas com a taxa antiga e um novo contador começa com a nova.
       </div>
       {msg && <div style={{ fontSize: 11, color: 'var(--fg3)', marginTop: 6 }}>{msg}</div>}
-      <div style={{ marginTop: 12 }}>
-        {affs.length === 0 && <div style={{ fontSize: 11, color: 'var(--fg5)' }}>Nenhum afiliado marcado ainda.</div>}
-        {affs.map((a) => {
-          const history = (a.ratePeriods || []).filter((p) => p.effectiveTo != null);
-          return (
-            <div key={a.id} style={{ padding: '7px 0', borderTop: '1px solid var(--border-soft)' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <span className="cell-mono" style={{ fontSize: 12 }}>{a.nickname || a.affiliateExternalId}<span style={{ color: 'var(--fg5)' }}> · {a.affiliateExternalId} · {a.platformSlug} · </span><span style={{ color: 'var(--glow-cyan)' }}>{(a.commissionPct * 100).toFixed(0)}% vigente</span></span>
-                <button className="btn btn-ghost" style={{ padding: '4px 8px' }} onClick={() => remove(a.id, a.nickname || a.affiliateExternalId)} title="Remover"><Icon name="trash-2" size={12}/></button>
-              </div>
-              {a.note && (
-                <div className="cell-mono" style={{ fontSize: 10, color: 'var(--fg4)', marginTop: 2 }}>empresa: {a.note}</div>
-              )}
-              {history.length > 0 && (
-                <div className="cell-mono" style={{ fontSize: 10, color: 'var(--fg5)', marginTop: 2 }}>
-                  histórico: {history.map((p) => `${(p.commissionPct * 100).toFixed(0)}% até ${fmtDateShort(p.effectiveTo)}`).join(' · ')}
+      <Paginated items={affs} label="afiliados">
+        {(pageRows, pager) => (<>
+          <div style={{ marginTop: 12 }}>
+            {affs.length === 0 && <div style={{ fontSize: 11, color: 'var(--fg5)' }}>Nenhum afiliado marcado ainda.</div>}
+            {pageRows.map((a) => {
+              const history = (a.ratePeriods || []).filter((p) => p.effectiveTo != null);
+              return (
+                <div key={a.id} style={{ padding: '7px 0', borderTop: '1px solid var(--border-soft)' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <span className="cell-mono" style={{ fontSize: 12 }}>{a.nickname || a.affiliateExternalId}<span style={{ color: 'var(--fg5)' }}> · {a.affiliateExternalId} · {a.platformSlug} · </span><span style={{ color: 'var(--glow-cyan)' }}>{(a.commissionPct * 100).toFixed(0)}% vigente</span></span>
+                    <button className="btn btn-ghost" style={{ padding: '4px 8px' }} onClick={() => remove(a.id, a.nickname || a.affiliateExternalId)} title="Remover"><Icon name="trash-2" size={12}/></button>
+                  </div>
+                  {a.note && (
+                    <div className="cell-mono" style={{ fontSize: 10, color: 'var(--fg4)', marginTop: 2 }}>empresa: {a.note}</div>
+                  )}
+                  {history.length > 0 && (
+                    <div className="cell-mono" style={{ fontSize: 10, color: 'var(--fg5)', marginTop: 2 }}>
+                      histórico: {history.map((p) => `${(p.commissionPct * 100).toFixed(0)}% até ${fmtDateShort(p.effectiveTo)}`).join(' · ')}
+                    </div>
+                  )}
                 </div>
-              )}
-            </div>
-          );
-        })}
-      </div>
+              );
+            })}
+          </div>
+          {pager}
+        </>)}
+      </Paginated>
     </div>
   );
 }
@@ -7547,7 +7661,7 @@ function RecoveryPage({ filters }) {
     <div className="page-in">
       <div className="page-head">
         <div className="lead">
-          <span className="eyebrow">AFILIADOS · RECUPERAÇÃO</span>
+          <span className="eyebrow">Afiliados · Recuperação</span>
           <h2>Recuperação <em>de vendas</em></h2>
           <span className="sub">Vendas trazidas por afiliados de recuperação (SMS/email) + comissão devida. Respeita o filtro de período.</span>
         </div>
@@ -7570,10 +7684,10 @@ function RecoveryPage({ filters }) {
       {m && (
         <>
           <div className="grid-2" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', marginBottom: 12 }}>
-            <CopyKpi label="VENDAS RECUPERADAS" value={fmtInt(m.kpis.sales)}/>
-            <CopyKpi label="RECEITA" value={fmtCurrency(m.kpis.grossUsd, 'USD', 2)}/>
-            <CopyKpi label="COMISSÃO DEVIDA" value={fmtCurrency(m.kpis.commissionUsd, 'USD', 2)} tone="danger"/>
-            <CopyKpi label="LÍQUIDO (pós-comissão)" value={fmtCurrency(m.kpis.netUsd, 'USD', 2)} tone="ok"/>
+            <CopyKpi label="Vendas recuperadas" value={fmtInt(m.kpis.sales)}/>
+            <CopyKpi label="Receita" value={fmtCurrency(m.kpis.grossUsd, 'USD', 2)}/>
+            <CopyKpi label="Comissão devida" value={fmtCurrency(m.kpis.commissionUsd, 'USD', 2)} tone="danger"/>
+            <CopyKpi label="Líquido (pós-comissão)" value={fmtCurrency(m.kpis.netUsd, 'USD', 2)} tone="ok"/>
           </div>
 
           <div className="panel" style={{ padding: 0 }}>
@@ -7581,92 +7695,101 @@ function RecoveryPage({ filters }) {
               <div className="panel-title">Por empresa</div>
               <div className="panel-sub">clique pra ver as contas</div>
             </div>
-            <div className="tbl-wrap" style={{ margin: 0, padding: '0 4px' }}>
-              <table className="tbl">
-                <thead><tr><th>Empresa</th><th className="num">% comissão</th><th className="num">Vendas</th><th className="num">Receita</th><th className="num">Comissão devida</th></tr></thead>
-                <tbody>
-                  {data.status === 'loading' && <SkelTableRows rows={5} cols={5}/>}
-                  {data.status === 'ready' && (m.byCompany || []).length === 0 && (
-                    <tr><td colSpan={5} style={{ textAlign: 'center', padding: 20, opacity: 0.6 }}>
-                      Nenhuma venda de recuperação no período.{affs.length === 0 ? ' Marque um afiliado em "Gerenciar afiliados".' : ''}
-                    </td></tr>
-                  )}
-                  {(m.byCompany || []).map((c) => {
-                    const aberta = openCo.has(c.company);
-                    // Uma conta só e sem histórico de taxa: não há o que abrir.
-                    const temDetalhe = c.accounts.length > 1 || (c.accounts[0]?.periods || []).length > 1;
-                    return (
-                      <React.Fragment key={c.company}>
-                        <tr
-                          tabIndex={temDetalhe ? 0 : undefined}
-                          aria-expanded={temDetalhe ? aberta : undefined}
-                          onClick={() => temDetalhe && setOpenCo((prev) => { const n = new Set(prev); if (n.has(c.company)) n.delete(c.company); else n.add(c.company); return n; })}
-                          style={{ cursor: temDetalhe ? 'pointer' : 'default' }}
-                        >
-                          <td style={{ fontWeight: 600 }}>
-                            {temDetalhe && (
-                              <span style={{ display: 'inline-block', transform: aberta ? 'rotate(90deg)' : 'none', transition: 'transform 150ms' }}>
-                                <Icon name="chevron-right" size={11}/>
-                              </span>
-                            )}
-                            <span style={{ marginLeft: temDetalhe ? 6 : 17 }}>{c.company}</span>
-                            <span style={{ color: 'var(--fg5)', marginLeft: 8, fontSize: 10 }}>
-                              {c.accounts.length === 1 ? c.accounts[0].platformSlug : `${c.accounts.length} contas`}
-                            </span>
-                          </td>
-                          <td className="num cell-mono">{(c.effectivePct * 100).toFixed(0)}%</td>
-                          <td className="num">{fmtInt(c.sales)}</td>
-                          <td className="num">{fmtCurrency(c.grossUsd, 'USD', 2)}</td>
-                          <td className="num" style={{ color: 'var(--money)' }}>{fmtCurrency(c.commissionUsd, 'USD', 2)}</td>
-                        </tr>
+            <Paginated items={m.byCompany || []} label="empresas" resetKey={`${filters.dateRange.start.getTime()}|${filters.dateRange.end.getTime()}`}>
+              {(pageRows, pager) => (<>
+                <div className="tbl-wrap" style={{ margin: 0, padding: '0 4px' }}>
+                  <table className="tbl">
+                    <thead><tr><th>Empresa</th><th className="num">% comissão</th><th className="num">Vendas</th><th className="num">Receita</th><th className="num">Comissão devida</th></tr></thead>
+                    <tbody>
+                      {data.status === 'loading' && <SkelTableRows rows={5} cols={5}/>}
+                      {data.status === 'ready' && (m.byCompany || []).length === 0 && (
+                        <tr><td colSpan={5} style={{ textAlign: 'center', padding: 20, opacity: 0.6 }}>
+                          Nenhuma venda de recuperação no período.{affs.length === 0 ? ' Marque um afiliado em "Gerenciar afiliados".' : ''}
+                        </td></tr>
+                      )}
+                      {pageRows.map((c) => {
+                        const aberta = openCo.has(c.company);
+                        // byCompany.accounts NÃO traz `periods` (lib/services/recovery.ts):
+                        // o histórico de taxa vem de m.byAffiliate, casado por ID + plataforma
+                        // (o mesmo ID pode existir em duas plataformas).
+                        const fullOf = (a) => (m.byAffiliate || []).find((x) => x.affiliateExternalId === a.affiliateExternalId && (x.platformSlug || null) === (a.platformSlug || null)) || a;
+                        // Uma conta só e sem histórico de taxa: não há o que abrir.
+                        const temDetalhe = c.accounts.length > 1 || (c.accounts[0] ? (fullOf(c.accounts[0]).periods || []).length > 1 : false);
+                        return (
+                          <React.Fragment key={c.company}>
+                            <tr
+                              tabIndex={temDetalhe ? 0 : undefined}
+                              aria-expanded={temDetalhe ? aberta : undefined}
+                              onClick={() => temDetalhe && setOpenCo((prev) => { const n = new Set(prev); if (n.has(c.company)) n.delete(c.company); else n.add(c.company); return n; })}
+                              style={{ cursor: temDetalhe ? 'pointer' : 'default' }}
+                            >
+                              <td style={{ fontWeight: 600 }}>
+                                {temDetalhe && (
+                                  <span style={{ display: 'inline-block', transform: aberta ? 'rotate(90deg)' : 'none', transition: 'transform 150ms' }}>
+                                    <Icon name="chevron-right" size={11}/>
+                                  </span>
+                                )}
+                                <span style={{ marginLeft: temDetalhe ? 6 : 17 }}>{c.company}</span>
+                                <span style={{ color: 'var(--fg5)', marginLeft: 8, fontSize: 10 }}>
+                                  {c.accounts.length === 1 ? c.accounts[0].platformSlug : `${c.accounts.length} contas`}
+                                </span>
+                              </td>
+                              <td className="num cell-mono">{(c.effectivePct * 100).toFixed(0)}%</td>
+                              <td className="num">{fmtInt(c.sales)}</td>
+                              <td className="num">{fmtCurrency(c.grossUsd, 'USD', 2)}</td>
+                              <td className="num" style={{ color: 'var(--money)' }}>{fmtCurrency(c.commissionUsd, 'USD', 2)}</td>
+                            </tr>
 
-                        {aberta && c.accounts.map((a) => {
-                          const full = (m.byAffiliate || []).find((x) => x.affiliateExternalId === a.affiliateExternalId) || a;
-                          const periodos = full.periods || [];
-                          const multi = periodos.length > 1;
-                          return (
-                            <React.Fragment key={`${c.company}-${a.platformSlug}-${a.affiliateExternalId}`}>
-                              <tr style={{ background: 'color-mix(in oklab, var(--accent) 4%, transparent)' }}>
-                                <td className="cell-mono" style={{ paddingLeft: 26, fontSize: 11 }}>
-                                  {a.nickname || a.affiliateExternalId}
-                                  <span style={{ color: 'var(--fg5)', marginLeft: 6, fontSize: 10 }}>{a.affiliateExternalId} · {a.platformSlug}</span>
-                                </td>
-                                <td className="num cell-mono" style={{ fontSize: 11 }}>
-                                  {(a.commissionPct * 100).toFixed(0)}%
-                                  {multi && <span style={{ color: 'var(--warning)', marginLeft: 4 }} title="A % mudou dentro do período — contadores por taxa abaixo">*</span>}
-                                </td>
-                                <td className="num" style={{ fontSize: 11 }}>{fmtInt(a.sales)}</td>
-                                <td className="num" style={{ fontSize: 11 }}>{fmtCurrency(a.grossUsd, 'USD', 2)}</td>
-                                <td className="num" style={{ fontSize: 11, color: 'var(--money)' }}>{fmtCurrency(a.commissionUsd, 'USD', 2)}</td>
-                              </tr>
-                              {/* Contadores por período de taxa: venda feita com a % antiga
-                                  fica no contador antigo; a % nova acumula no novo. */}
-                              {multi && periodos.map((p, i) => {
-                                const vigente = p.effectiveTo == null;
-                                const label = vigente
-                                  ? `desde ${p.effectiveFrom ? fmtDateShort(p.effectiveFrom) : 'sempre'} · vigente`
-                                  : p.effectiveFrom
-                                    ? `${fmtDateShort(p.effectiveFrom)} → ${fmtDateShort(p.effectiveTo)}`
-                                    : `até ${fmtDateShort(p.effectiveTo)}`;
-                                return (
-                                  <tr key={`${a.affiliateExternalId}-p${i}`}>
-                                    <td className="cell-mono" style={{ paddingLeft: 46, fontSize: 10, color: vigente ? 'var(--fg3)' : 'var(--fg5)' }}>{label}</td>
-                                    <td className="num cell-mono" style={{ fontSize: 10, color: vigente ? 'var(--glow-cyan)' : 'var(--fg5)' }}>{(p.commissionPct * 100).toFixed(0)}%</td>
-                                    <td className="num" style={{ fontSize: 10, color: 'var(--fg4)' }}>{fmtInt(p.sales)}</td>
-                                    <td className="num" style={{ fontSize: 10, color: 'var(--fg4)' }}>{fmtCurrency(p.grossUsd, 'USD', 2)}</td>
-                                    <td className="num" style={{ fontSize: 10, color: vigente ? 'var(--money)' : 'var(--fg4)' }}>{fmtCurrency(p.commissionUsd, 'USD', 2)}</td>
+                            {aberta && c.accounts.map((a) => {
+                              const full = fullOf(a);
+                              const periodos = full.periods || [];
+                              const multi = periodos.length > 1;
+                              return (
+                                <React.Fragment key={`${c.company}-${a.platformSlug}-${a.affiliateExternalId}`}>
+                                  <tr style={{ background: 'color-mix(in oklab, var(--accent) 4%, transparent)' }}>
+                                    <td className="cell-mono" style={{ paddingLeft: 26, fontSize: 11 }}>
+                                      {a.nickname || a.affiliateExternalId}
+                                      <span style={{ color: 'var(--fg5)', marginLeft: 6, fontSize: 10 }}>{a.affiliateExternalId} · {a.platformSlug}</span>
+                                    </td>
+                                    <td className="num cell-mono" style={{ fontSize: 11 }}>
+                                      {(a.commissionPct * 100).toFixed(0)}%
+                                      {multi && <span style={{ color: 'var(--warning)', marginLeft: 4 }} title="A % mudou dentro do período — contadores por taxa abaixo">*</span>}
+                                    </td>
+                                    <td className="num" style={{ fontSize: 11 }}>{fmtInt(a.sales)}</td>
+                                    <td className="num" style={{ fontSize: 11 }}>{fmtCurrency(a.grossUsd, 'USD', 2)}</td>
+                                    <td className="num" style={{ fontSize: 11, color: 'var(--money)' }}>{fmtCurrency(a.commissionUsd, 'USD', 2)}</td>
                                   </tr>
-                                );
-                              })}
-                            </React.Fragment>
-                          );
-                        })}
-                      </React.Fragment>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
+                                  {/* Contadores por período de taxa: venda feita com a % antiga
+                                      fica no contador antigo; a % nova acumula no novo. */}
+                                  {multi && periodos.map((p, i) => {
+                                    const vigente = p.effectiveTo == null;
+                                    const label = vigente
+                                      ? `desde ${p.effectiveFrom ? fmtDateShort(p.effectiveFrom) : 'sempre'} · vigente`
+                                      : p.effectiveFrom
+                                        ? `${fmtDateShort(p.effectiveFrom)} → ${fmtDateShort(p.effectiveTo)}`
+                                        : `até ${fmtDateShort(p.effectiveTo)}`;
+                                    return (
+                                      <tr key={`${a.affiliateExternalId}-p${i}`}>
+                                        <td className="cell-mono" style={{ paddingLeft: 46, fontSize: 10, color: vigente ? 'var(--fg3)' : 'var(--fg5)' }}>{label}</td>
+                                        <td className="num cell-mono" style={{ fontSize: 10, color: vigente ? 'var(--glow-cyan)' : 'var(--fg5)' }}>{(p.commissionPct * 100).toFixed(0)}%</td>
+                                        <td className="num" style={{ fontSize: 10, color: 'var(--fg4)' }}>{fmtInt(p.sales)}</td>
+                                        <td className="num" style={{ fontSize: 10, color: 'var(--fg4)' }}>{fmtCurrency(p.grossUsd, 'USD', 2)}</td>
+                                        <td className="num" style={{ fontSize: 10, color: vigente ? 'var(--money)' : 'var(--fg4)' }}>{fmtCurrency(p.commissionUsd, 'USD', 2)}</td>
+                                      </tr>
+                                    );
+                                  })}
+                                </React.Fragment>
+                              );
+                            })}
+                          </React.Fragment>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+                {pager}
+              </>)}
+            </Paginated>
           </div>
 
           <div style={{ marginTop: 10, fontFamily: 'var(--f-mono)', fontSize: 10, color: 'var(--fg5)', lineHeight: 1.6 }}>
@@ -7689,12 +7812,12 @@ function RecoveryPage({ filters }) {
 
 function taukStatusStyle(status) {
   const up = String(status || '').toUpperCase();
-  if (up === 'CHARGEBACK') return { bg: 'rgba(229,72,77,0.16)', fg: 'var(--danger)', border: 'rgba(229,72,77,0.45)' };
-  if (up === 'PENDING' || up === 'PROCESSING') return { bg: 'rgba(255,180,0,0.14)', fg: 'var(--warning)', border: 'rgba(255,180,0,0.40)' };
+  if (up === 'CHARGEBACK') return { bg: 'var(--danger-bg)', fg: 'var(--danger)', border: 'color-mix(in srgb, var(--danger) 45%, transparent)' };
+  if (up === 'PENDING' || up === 'PROCESSING') return { bg: 'var(--warning-bg)', fg: 'var(--warning)', border: 'color-mix(in srgb, var(--warning) 40%, transparent)' };
   const s = String(status || '').toUpperCase();
   if (s === 'HOLD') return { bg: 'color-mix(in oklab, var(--warning) 12%, transparent)', fg: 'var(--warning)', border: 'color-mix(in oklab, var(--warning) 35%, transparent)' };
   if (s === 'SHIPPED' || s === 'FULFILLED' || s === 'DELIVERED') {
-    return { bg: 'rgba(58,214,140,0.14)', fg: 'var(--success)', border: 'rgba(58,214,140,0.4)' };
+    return { bg: 'var(--success-bg)', fg: 'var(--success)', border: 'color-mix(in srgb, var(--success) 40%, transparent)' };
   }
   if (s === 'CANCELED' || s === 'CANCELLED' || s === 'REFUNDED') {
     return { bg: 'color-mix(in oklab, var(--danger) 12%, transparent)', fg: 'var(--danger)', border: 'color-mix(in oklab, var(--danger) 35%, transparent)' };
@@ -7708,8 +7831,8 @@ function TaukStatusBadge({ status }) {
   // abaixo já os conhece; este wrapper só renderiza.)
   return (
     <span style={{
-      fontFamily: 'var(--f-mono)', fontSize: 9.5, fontWeight: 600, letterSpacing: '0.06em',
-      textTransform: 'uppercase', padding: '2px 8px', borderRadius: 'var(--r-full)',
+      fontFamily: 'var(--f-mono)', fontSize: 9.5, fontWeight: 600,
+      padding: '2px 8px', borderRadius: 'var(--r-full)',
       background: st.bg, color: st.fg, border: `1px solid ${st.border}`, whiteSpace: 'nowrap',
     }}>
       {String(status || '—').toUpperCase()}
@@ -7731,17 +7854,17 @@ function fmtTaukWhen(iso) {
 // desde 2026-08-22). Substitui a TaukPage. Endpoint e id da tab seguem
 // 'tauk' (permissões dos usuários apontam pra ele).
 const CC_PROVIDER_META = {
-  tauk:       { label: 'Tauk',       color: 'var(--accent)' },
-  logicall:   { label: 'Logicall',   color: 'var(--warning)' },
-  salesbound: { label: 'SalesBound', color: 'var(--accent2)' },
+  tauk:       { label: 'Tauk',       color: 'var(--chart-1)' },
+  logicall:   { label: 'Logicall',   color: 'var(--chart-3)' },
+  salesbound: { label: 'SalesBound', color: 'var(--chart-2)' },
 };
 
 function CcProviderBadge({ provider }) {
   const m = CC_PROVIDER_META[provider] || { label: provider, color: 'var(--fg4)' };
   return (
     <span style={{
-      fontFamily: 'var(--f-mono)', fontSize: 9.5, fontWeight: 700, letterSpacing: '0.08em',
-      textTransform: 'uppercase', padding: '2px 7px', borderRadius: 'var(--r-full)',
+      fontFamily: 'var(--f-mono)', fontSize: 9.5, fontWeight: 700,
+      padding: '2px 7px', borderRadius: 'var(--r-full)',
       color: m.color, border: `1px solid color-mix(in oklab, ${m.color} 40%, transparent)`,
       background: `color-mix(in oklab, ${m.color} 10%, transparent)`, whiteSpace: 'nowrap',
     }}>{m.label}</span>
@@ -7767,12 +7890,15 @@ function CallCenterPage({ filters, user }) {
   // KPIs do recorte: totais quando "Todos", senão o parceiro selecionado.
   const k = m ? (provider === 'all' ? m.totals : (m.providers.find((p) => p.provider === provider) || m.totals)) : null;
   const sync = m?.logicallSync;
+  // Reset da paginação: parceiro + período. "Vendas recentes" tem teto de 80 no
+  // servidor — com o tamanho fixo, o reset por tamanho do usePaged nunca dispara.
+  const pageResetKey = provider + '|' + filters.dateRange.start.getTime() + '|' + filters.dateRange.end.getTime();
 
   return (
     <div className="page-in">
       <div className="page-head">
         <div className="lead">
-          <span className="eyebrow">CAPTAÇÃO · CALL CENTER</span>
+          <span className="eyebrow">Captação · Call Center</span>
           <h2>Call Center <em>· Tauk + Logicall + SalesBound</em></h2>
           <span className="sub">
             Vendas por telefone dos parceiros. Tauk chega por webhook; Logicall é puxada da API deles a cada 30 min; SalesBound (cross-sell) chega por webhook do CRM deles, com reembolso e void vindo do export. Respeita o filtro de período.
@@ -7805,16 +7931,16 @@ function CallCenterPage({ filters, user }) {
       {m && k && (
         <div style={{ opacity: data.status === 'loading' ? 0.45 : 1, transition: 'opacity .15s' }}>
           <div className="grid-2" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', marginBottom: 12 }}>
-            <CopyKpi label="VENDAS RECUPERADAS" value={fmtInt(k.sales)} sub={k.refundedCount > 0 ? `${fmtInt(k.approved)} sem estorno` : undefined}/>
-            <CopyKpi label="RECEITA" value={fmtCurrency(k.grossUsd, 'USD', 2)}/>
-            <CopyKpi label="TICKET MÉDIO" value={fmtCurrency(k.aovUsd, 'USD', 2)}/>
+            <CopyKpi label="Vendas recuperadas" value={fmtInt(k.sales)} sub={k.refundedCount > 0 ? `${fmtInt(k.approved)} sem estorno` : undefined}/>
+            <CopyKpi label="Receita" value={fmtCurrency(k.grossUsd, 'USD', 2)}/>
+            <CopyKpi label="Ticket médio" value={fmtCurrency(k.aovUsd, 'USD', 2)}/>
             <CopyKpi
-              label={`COMISSÃO (${Math.round((k.commissionPct || 0) * 100)}%)${k.commissionAssumed ? ' · assumida' : ''}`}
+              label={`Comissão (${Math.round((k.commissionPct || 0) * 100)}%)${k.commissionAssumed ? ' · assumida' : ''}`}
               value={fmtCurrency(k.commissionUsd || 0, 'USD', 2)} tone="danger"
               sub={k.commissionAssumed ? 'parceiro sem % configurada — usando o padrão' : undefined}/>
-            <CopyKpi label="LÍQUIDO (pós-comissão)" value={fmtCurrency(k.netUsd || 0, 'USD', 2)} tone="ok"/>
-            <CopyKpi label="PENDENTES (HOLD/PENDING)" value={fmtInt(k.pendingCount)} tone={k.pendingCount > 0 ? 'danger' : undefined}/>
-            <CopyKpi label="ESTORNOS" value={fmtInt(k.refundedCount)} sub={k.refundedCount > 0 ? fmtCurrency(k.refundedUsd, 'USD', 0) : 'a Tauk não reporta'}/>
+            <CopyKpi label="Líquido (pós-comissão)" value={fmtCurrency(k.netUsd || 0, 'USD', 2)} tone="ok"/>
+            <CopyKpi label="Pendentes (HOLD/PENDING)" value={fmtInt(k.pendingCount)} tone={k.pendingCount > 0 ? 'danger' : undefined}/>
+            <CopyKpi label="Estornos" value={fmtInt(k.refundedCount)} sub={k.refundedCount > 0 ? fmtCurrency(k.refundedUsd, 'USD', 0) : 'a Tauk não reporta'}/>
           </div>
 
           {/* Por parceiro — sempre os dois, mesmo com filtro, pra comparar. */}
@@ -7868,7 +7994,7 @@ function CallCenterPage({ filters, user }) {
             <div className="panel" style={{ marginBottom: 12 }}>
               <div className="panel-head">
                 <div className="panel-title">
-                  <span className="panel-eyebrow">RECEITA RECUPERADA · POR DIA · POR PARCEIRO</span>
+                  <span className="panel-eyebrow">Receita recuperada · por dia · por parceiro</span>
                   <div className="panel-metric" style={{ fontSize: 14, color: 'var(--fg3)' }}>
                     {m.daily.length} {m.daily.length === 1 ? 'dia' : 'dias'} com venda no período
                   </div>
@@ -7890,50 +8016,60 @@ function CallCenterPage({ filters, user }) {
               <div className="panel-head" style={{ padding: '12px 14px 0' }}>
                 <div className="panel-title">Por agente <span style={{ color: 'var(--fg5)', fontSize: 10, marginLeft: 6 }}>Logicall (IA × humano) + SalesBound</span></div>
               </div>
-              <div className="tbl-wrap" style={{ margin: 0, padding: '0 4px', maxHeight: 320, overflowY: 'auto' }}>
-                <table className="tbl">
-                  <thead><tr><th>Agente</th><th className="num">Vendas</th><th className="num">Receita</th><th className="num">Ticket</th></tr></thead>
-                  <tbody>
-                    {m.byAgent.length === 0 && (
-                      <tr><td colSpan={4} style={{ textAlign: 'center', padding: 16, opacity: 0.6 }}>Sem dado de agente no período (a Tauk não informa).</td></tr>
-                    )}
-                    {m.byAgent.map((a) => (
-                      <tr key={a.agent}>
-                        <td className="cell-mono" style={{ fontSize: 11 }}>
-                          {a.agent}
-                          {a.isAi && <span style={{ marginLeft: 6, fontSize: 10, fontWeight: 700, color: 'var(--accent)', letterSpacing: '0.08em' }}>IA</span>}
-                        </td>
-                        <td className="num">{fmtInt(a.sales)}</td>
-                        <td className="num" style={{ color: 'var(--money)' }}>{fmtCurrency(a.grossUsd, 'USD', 0)}</td>
-                        <td className="num">{fmtCurrency(a.aovUsd, 'USD', 0)}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
+              <Paginated items={m.byAgent} label="agentes" resetKey={pageResetKey}>
+                {(pageRows, pager, pg) => (<>
+                  <div key={pg.page + ':' + pg.pageSize} className="tbl-wrap" style={{ margin: 0, padding: '0 4px', maxHeight: 320, overflowY: 'auto' }}>
+                    <table className="tbl">
+                      <thead><tr><th>Agente</th><th className="num">Vendas</th><th className="num">Receita</th><th className="num">Ticket</th></tr></thead>
+                      <tbody>
+                        {m.byAgent.length === 0 && (
+                          <tr><td colSpan={4} style={{ textAlign: 'center', padding: 16, opacity: 0.6 }}>Sem dado de agente no período (a Tauk não informa).</td></tr>
+                        )}
+                        {pageRows.map((a) => (
+                          <tr key={a.agent}>
+                            <td className="cell-mono" style={{ fontSize: 11 }}>
+                              {a.agent}
+                              {a.isAi && <span style={{ marginLeft: 6, fontSize: 10, fontWeight: 700, color: 'var(--accent)' }}>IA</span>}
+                            </td>
+                            <td className="num">{fmtInt(a.sales)}</td>
+                            <td className="num" style={{ color: 'var(--money)' }}>{fmtCurrency(a.grossUsd, 'USD', 0)}</td>
+                            <td className="num">{fmtCurrency(a.aovUsd, 'USD', 0)}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                  {pager}
+                </>)}
+              </Paginated>
             </div>
 
             <div className="panel" style={{ padding: 0 }}>
               <div className="panel-head" style={{ padding: '12px 14px 0' }}>
                 <div className="panel-title">Por produto <span style={{ color: 'var(--fg5)', fontSize: 10, marginLeft: 6 }}>Logicall + SalesBound</span></div>
               </div>
-              <div className="tbl-wrap" style={{ margin: 0, padding: '0 4px', maxHeight: 320, overflowY: 'auto' }}>
-                <table className="tbl">
-                  <thead><tr><th>Produto</th><th className="num">Vendas</th><th className="num">Receita</th></tr></thead>
-                  <tbody>
-                    {m.byProduct.length === 0 && (
-                      <tr><td colSpan={3} style={{ textAlign: 'center', padding: 16, opacity: 0.6 }}>Sem dado de produto no período (a Tauk não informa).</td></tr>
-                    )}
-                    {m.byProduct.map((p) => (
-                      <tr key={p.product}>
-                        <td>{p.product}{p.family && <span style={{ color: 'var(--fg5)', fontSize: 10, marginLeft: 6 }}>{p.family}</span>}</td>
-                        <td className="num">{fmtInt(p.sales)}</td>
-                        <td className="num" style={{ color: 'var(--money)' }}>{fmtCurrency(p.grossUsd, 'USD', 0)}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
+              <Paginated items={m.byProduct} label="produtos" resetKey={pageResetKey}>
+                {(pageRows, pager, pg) => (<>
+                  <div key={pg.page + ':' + pg.pageSize} className="tbl-wrap" style={{ margin: 0, padding: '0 4px', maxHeight: 320, overflowY: 'auto' }}>
+                    <table className="tbl">
+                      <thead><tr><th>Produto</th><th className="num">Vendas</th><th className="num">Receita</th></tr></thead>
+                      <tbody>
+                        {m.byProduct.length === 0 && (
+                          <tr><td colSpan={3} style={{ textAlign: 'center', padding: 16, opacity: 0.6 }}>Sem dado de produto no período (a Tauk não informa).</td></tr>
+                        )}
+                        {pageRows.map((p) => (
+                          <tr key={p.product}>
+                            <td>{p.product}{p.family && <span style={{ color: 'var(--fg5)', fontSize: 10, marginLeft: 6 }}>{p.family}</span>}</td>
+                            <td className="num">{fmtInt(p.sales)}</td>
+                            <td className="num" style={{ color: 'var(--money)' }}>{fmtCurrency(p.grossUsd, 'USD', 0)}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                  {pager}
+                </>)}
+              </Paginated>
             </div>
 
             {m.bySourcePlatform?.length > 0 && (
@@ -7988,38 +8124,43 @@ function CallCenterPage({ filters, user }) {
             <div className="panel-head" style={{ padding: '12px 14px 0' }}>
               <div className="panel-title">Vendas recentes <span style={{ color: 'var(--fg5)', fontSize: 10, marginLeft: 6 }}>últimas {m.recent.length} do período · horário BRT</span></div>
             </div>
-            <div className="tbl-wrap" style={{ margin: 0, padding: '0 4px', maxHeight: 460, overflowY: 'auto' }}>
-              <table className="tbl">
-                <thead><tr><th>Quando</th><th>Parceiro</th><th>Cliente</th><th>Produto</th><th>Agente</th><th className="num">Valor</th><th>Status</th></tr></thead>
-                <tbody>
-                  {m.recent.length === 0 && (
-                    <tr><td colSpan={7} style={{ textAlign: 'center', padding: 16, opacity: 0.6 }}>Nenhuma venda de call center no período.</td></tr>
-                  )}
-                  {m.recent.map((r) => (
-                    <tr key={r.id} style={{ opacity: r.status === 'APPROVED' ? 1 : 0.6 }}>
-                      <td className="cell-mono" style={{ fontSize: 11 }}>{fmtTaukWhen(r.purchasedAt)}</td>
-                      <td><CcProviderBadge provider={r.provider}/></td>
-                      <td>
-                        {r.name}
-                        <div className="cell-mono" style={{ fontSize: 10, color: 'var(--fg5)' }}>{r.email || '—'}{r.phone ? ` · ${r.phone}` : ''}</div>
-                      </td>
-                      <td style={{ fontSize: 11.5 }}>{r.productName || <span style={{ color: 'var(--fg5)' }}>—</span>}</td>
-                      <td className="cell-mono" style={{ fontSize: 10.5 }}>{r.agentName || <span style={{ color: 'var(--fg5)' }}>—</span>}</td>
-                      <td className="num" style={{ color: r.status === 'APPROVED' ? 'var(--money)' : 'var(--danger)', textDecoration: r.status === 'APPROVED' ? 'none' : 'line-through' }}
-                        title={r.placeholder ? 'estorno recebido antes da venda ser sincronizada — a venda entra no próximo backfill' : (r.refundedUsd && r.status === 'APPROVED' ? `refund parcial: −${fmtCurrency(r.refundedUsd, 'USD', 2)}` : undefined)}>
-                        {r.placeholder ? '—' : fmtCurrency(r.amountUsd, 'USD', 2)}
-                        {r.refundedUsd && r.status === 'APPROVED' ? <span style={{ fontSize: 9.5, color: 'var(--warning)', marginLeft: 4 }}>−{fmtCurrency(r.refundedUsd, 'USD', 0)}</span> : null}
-                      </td>
-                      <td>
-                        {r.status !== 'APPROVED'
-                          ? <TaukStatusBadge status={r.status}/>
-                          : <TaukStatusBadge status={r.fulfillmentStatus}/>}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+            <Paginated items={m.recent} label="vendas" resetKey={pageResetKey}>
+              {(pageRows, pager, pg) => (<>
+                <div key={pg.page + ':' + pg.pageSize} className="tbl-wrap" style={{ margin: 0, padding: '0 4px', maxHeight: 460, overflowY: 'auto' }}>
+                  <table className="tbl">
+                    <thead><tr><th>Quando</th><th>Parceiro</th><th>Cliente</th><th>Produto</th><th>Agente</th><th className="num">Valor</th><th>Status</th></tr></thead>
+                    <tbody>
+                      {m.recent.length === 0 && (
+                        <tr><td colSpan={7} style={{ textAlign: 'center', padding: 16, opacity: 0.6 }}>Nenhuma venda de call center no período.</td></tr>
+                      )}
+                      {pageRows.map((r) => (
+                        <tr key={r.id} style={{ opacity: r.status === 'APPROVED' ? 1 : 0.6 }}>
+                          <td className="cell-mono" style={{ fontSize: 11 }}>{fmtTaukWhen(r.purchasedAt)}</td>
+                          <td><CcProviderBadge provider={r.provider}/></td>
+                          <td>
+                            {r.name}
+                            <div className="cell-mono" style={{ fontSize: 10, color: 'var(--fg5)' }}>{r.email || '—'}{r.phone ? ` · ${r.phone}` : ''}</div>
+                          </td>
+                          <td style={{ fontSize: 11.5 }}>{r.productName || <span style={{ color: 'var(--fg5)' }}>—</span>}</td>
+                          <td className="cell-mono" style={{ fontSize: 10.5 }}>{r.agentName || <span style={{ color: 'var(--fg5)' }}>—</span>}</td>
+                          <td className="num" style={{ color: r.status === 'APPROVED' ? 'var(--money)' : 'var(--danger)', textDecoration: r.status === 'APPROVED' ? 'none' : 'line-through' }}
+                            title={r.placeholder ? 'estorno recebido antes da venda ser sincronizada — a venda entra no próximo backfill' : (r.refundedUsd && r.status === 'APPROVED' ? `refund parcial: −${fmtCurrency(r.refundedUsd, 'USD', 2)}` : undefined)}>
+                            {r.placeholder ? '—' : fmtCurrency(r.amountUsd, 'USD', 2)}
+                            {r.refundedUsd && r.status === 'APPROVED' ? <span style={{ fontSize: 9.5, color: 'var(--warning)', marginLeft: 4 }}>−{fmtCurrency(r.refundedUsd, 'USD', 0)}</span> : null}
+                          </td>
+                          <td>
+                            {r.status !== 'APPROVED'
+                              ? <TaukStatusBadge status={r.status}/>
+                              : <TaukStatusBadge status={r.fulfillmentStatus}/>}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+                {pager}
+              </>)}
+            </Paginated>
           </div>
 
           <div style={{ marginTop: 10, fontFamily: 'var(--f-mono)', fontSize: 10, color: 'var(--fg5)', lineHeight: 1.6 }}>
@@ -8092,7 +8233,7 @@ function LogicallIntegrationPanel({ sync, onChanged }) {
     <div className="panel" style={{ marginBottom: 12 }}>
       <div className="panel-head">
         <div className="panel-title">
-          <span className="panel-eyebrow">INTEGRAÇÃO LOGICALL · ADMIN</span>
+          <span className="panel-eyebrow">Integração Logicall · Admin</span>
           <div className="panel-sub">
             {!sync?.configured
               ? 'Chave da API não configurada — a sincronização está desligada.'
@@ -8112,7 +8253,7 @@ function LogicallIntegrationPanel({ sync, onChanged }) {
 
       <div style={{ display: 'grid', gap: 10, padding: '4px 0' }}>
         <div style={row}>
-          <span className="f-label">BACKFILL (datas)</span>
+          <span className="f-label">Backfill (datas)</span>
           <div style={{ display: 'flex', gap: 6 }}>
             <input type="date" style={inputStyle} value={range.start} onChange={(e) => setRange((r) => ({ ...r, start: e.target.value }))}/>
             <input type="date" style={inputStyle} value={range.end} onChange={(e) => setRange((r) => ({ ...r, end: e.target.value }))}/>
@@ -8121,7 +8262,7 @@ function LogicallIntegrationPanel({ sync, onChanged }) {
         </div>
 
         <div style={row}>
-          <span className="f-label">CHAVE DA API</span>
+          <span className="f-label">Chave da API</span>
           <input type="password" style={inputStyle} value={apiKey} onChange={(e) => setApiKey(e.target.value)}
             placeholder={envLocked('logicall.apiKey') ? 'definida por env (LOGICALL_API_KEY)' : (current('logicall.apiKey')?.value || 'cole a key da Logicall')}
             disabled={envLocked('logicall.apiKey')}/>
@@ -8134,7 +8275,7 @@ function LogicallIntegrationPanel({ sync, onChanged }) {
         </div>
 
         <div style={row}>
-          <span className="f-label">COMISSÃO LOGICALL %</span>
+          <span className="f-label">Comissão Logicall %</span>
           <input type="number" min="0" max="100" step="0.5" style={inputStyle} value={lcPct} onChange={(e) => setLcPct(e.target.value)}
             placeholder={envLocked('logicall.commissionPct') ? 'definida por env' : (current('logicall.commissionPct')?.value || '35 (assumida)')}
             disabled={envLocked('logicall.commissionPct')}/>
@@ -8147,7 +8288,7 @@ function LogicallIntegrationPanel({ sync, onChanged }) {
         </div>
 
         <div style={row}>
-          <span className="f-label">COMISSÃO TAUK %</span>
+          <span className="f-label">Comissão Tauk %</span>
           <input type="number" min="0" max="100" step="0.5" style={inputStyle} value={taukPct} onChange={(e) => setTaukPct(e.target.value)}
             placeholder={envLocked('tauk.commissionPct') ? 'definida por env (TAUK_COMMISSION_PCT)' : (current('tauk.commissionPct')?.value || '35 (acordo)')}
             disabled={envLocked('tauk.commissionPct')}/>
@@ -8179,17 +8320,17 @@ function LogicallIntegrationPanel({ sync, onChanged }) {
 // ─────────────────────────────────────────────────────────────────────────────
 
 const SMS_HEALTH_META = {
-  green:  { label: 'SAUDÁVEL',    fg: 'var(--success)', bg: 'rgba(58,214,140,0.14)',  border: 'rgba(58,214,140,0.45)' },
-  yellow: { label: 'ATENÇÃO',     fg: 'var(--warning)', bg: 'color-mix(in oklab, var(--warning) 12%, transparent)', border: 'color-mix(in oklab, var(--warning) 35%, transparent)' },
-  red:    { label: 'CRÍTICO',     fg: 'var(--danger)',  bg: 'color-mix(in oklab, var(--danger) 12%, transparent)',  border: 'color-mix(in oklab, var(--danger) 35%, transparent)' },
-  idle:   { label: 'SEM TRÁFEGO', fg: 'var(--fg5)',     bg: 'rgba(255,255,255,0.04)', border: 'var(--border-soft)' },
+  green:  { label: 'Saudável',    fg: 'var(--success)', bg: 'var(--success-bg)',  border: 'color-mix(in srgb, var(--success) 45%, transparent)' },
+  yellow: { label: 'Atenção',     fg: 'var(--warning)', bg: 'color-mix(in oklab, var(--warning) 12%, transparent)', border: 'color-mix(in oklab, var(--warning) 35%, transparent)' },
+  red:    { label: 'Crítico',     fg: 'var(--danger)',  bg: 'color-mix(in oklab, var(--danger) 12%, transparent)',  border: 'color-mix(in oklab, var(--danger) 35%, transparent)' },
+  idle:   { label: 'Sem tráfego', fg: 'var(--fg5)',     bg: 'var(--bg-subtle)', border: 'var(--border-soft)' },
 };
 
 function SmsHealthBadge({ level, big }) {
   const meta = SMS_HEALTH_META[level] || SMS_HEALTH_META.idle;
   return (
     <span style={{
-      fontFamily: 'var(--f-mono)', fontWeight: 700, letterSpacing: '0.08em', whiteSpace: 'nowrap',
+      fontFamily: 'var(--f-mono)', fontWeight: 700, whiteSpace: 'nowrap',
       fontSize: big ? 11 : 9.5, padding: big ? '4px 12px' : '2px 8px', borderRadius: 'var(--r-full)',
       background: meta.bg, color: meta.fg, border: `1px solid ${meta.border}`,
       display: 'inline-flex', alignItems: 'center', gap: 6,
@@ -8203,19 +8344,19 @@ function SmsHealthBadge({ level, big }) {
 // Chip do feed de diagnóstico: sent=neutro, delivered=verde,
 // undelivered/failed=vermelho, stop=laranja, skipped=cinza.
 const SMS_TYPE_META = {
-  sent:        { label: 'ENVIADO',    fg: 'var(--accent)', bg: 'color-mix(in oklab, var(--accent) 12%, transparent)', border: 'color-mix(in oklab, var(--accent) 35%, transparent)' },
-  delivered:   { label: 'ENTREGUE',   fg: 'var(--success)',   bg: 'rgba(58,214,140,0.14)',  border: 'rgba(58,214,140,0.4)' },
-  undelivered: { label: 'NÃO ENTREGUE', fg: 'var(--danger)', bg: 'color-mix(in oklab, var(--danger) 12%, transparent)', border: 'color-mix(in oklab, var(--danger) 35%, transparent)' },
-  failed:      { label: 'FALHOU',     fg: 'var(--danger)',   bg: 'color-mix(in oklab, var(--danger) 12%, transparent)', border: 'color-mix(in oklab, var(--danger) 35%, transparent)' },
-  stop:        { label: 'STOP',       fg: '#ffb86b',          bg: 'rgba(255,150,60,0.14)',  border: 'rgba(255,150,60,0.4)' },
-  skipped:     { label: 'DESCARTADO', fg: 'var(--fg4)',       bg: 'rgba(255,255,255,0.05)', border: 'var(--border-soft)' },
+  sent:        { label: 'Enviado',    fg: 'var(--accent)', bg: 'color-mix(in oklab, var(--accent) 12%, transparent)', border: 'color-mix(in oklab, var(--accent) 35%, transparent)' },
+  delivered:   { label: 'Entregue',   fg: 'var(--success)',   bg: 'var(--success-bg)',  border: 'color-mix(in srgb, var(--success) 40%, transparent)' },
+  undelivered: { label: 'Não entregue', fg: 'var(--danger)', bg: 'color-mix(in oklab, var(--danger) 12%, transparent)', border: 'color-mix(in oklab, var(--danger) 35%, transparent)' },
+  failed:      { label: 'Falhou',     fg: 'var(--danger)',   bg: 'color-mix(in oklab, var(--danger) 12%, transparent)', border: 'color-mix(in oklab, var(--danger) 35%, transparent)' },
+  stop:        { label: 'STOP',       fg: 'var(--warning)',   bg: 'var(--warning-bg)',  border: 'color-mix(in srgb, var(--warning) 40%, transparent)' },
+  skipped:     { label: 'Descartado', fg: 'var(--fg4)',       bg: 'var(--bg-subtle)', border: 'var(--border-soft)' },
 };
 
 function SmsTypeChip({ type }) {
-  const meta = SMS_TYPE_META[type] || { label: String(type || '—').toUpperCase(), fg: 'var(--fg4)', bg: 'rgba(255,255,255,0.05)', border: 'var(--border-soft)' };
+  const meta = SMS_TYPE_META[type] || { label: String(type || '—').toUpperCase(), fg: 'var(--fg4)', bg: 'var(--bg-subtle)', border: 'var(--border-soft)' };
   return (
     <span style={{
-      fontFamily: 'var(--f-mono)', fontSize: 10, fontWeight: 600, letterSpacing: '0.06em',
+      fontFamily: 'var(--f-mono)', fontSize: 10, fontWeight: 600,
       padding: '2px 8px', borderRadius: 'var(--r-full)', whiteSpace: 'nowrap',
       background: meta.bg, color: meta.fg, border: `1px solid ${meta.border}`,
     }}>
@@ -8226,12 +8367,12 @@ function SmsTypeChip({ type }) {
 
 function SmsCampaignStatusBadge({ row }) {
   if (row.orphan) {
-    return <span style={{ fontFamily: 'var(--f-mono)', fontSize: 10, color: 'var(--warning)', border: '1px solid color-mix(in oklab, var(--warning) 35%, transparent)', background: 'color-mix(in oklab, var(--warning) 12%, transparent)', padding: '2px 8px', borderRadius: 'var(--r-full)', whiteSpace: 'nowrap' }}>NÃO ENCONTRADA NO MAUTIC</span>;
+    return <span style={{ fontFamily: 'var(--f-mono)', fontSize: 10, color: 'var(--warning)', border: '1px solid color-mix(in oklab, var(--warning) 35%, transparent)', background: 'color-mix(in oklab, var(--warning) 12%, transparent)', padding: '2px 8px', borderRadius: 'var(--r-full)', whiteSpace: 'nowrap' }}>Não encontrada no Mautic</span>;
   }
   const map = {
-    active:   { label: 'ATIVA',     fg: 'var(--success)', bg: 'rgba(58,214,140,0.14)', border: 'rgba(58,214,140,0.4)' },
-    paused:   { label: 'PAUSADA',   fg: 'var(--warning)', bg: 'color-mix(in oklab, var(--warning) 12%, transparent)', border: 'color-mix(in oklab, var(--warning) 35%, transparent)' },
-    archived: { label: 'ARQUIVADA', fg: 'var(--fg5)',     bg: 'rgba(255,255,255,0.04)', border: 'var(--border-soft)' },
+    active:   { label: 'Ativa',     fg: 'var(--success)', bg: 'var(--success-bg)', border: 'color-mix(in srgb, var(--success) 40%, transparent)' },
+    paused:   { label: 'Pausada',   fg: 'var(--warning)', bg: 'color-mix(in oklab, var(--warning) 12%, transparent)', border: 'color-mix(in oklab, var(--warning) 35%, transparent)' },
+    archived: { label: 'Arquivada', fg: 'var(--fg5)',     bg: 'var(--bg-subtle)', border: 'var(--border-soft)' },
   };
   const meta = map[row.status] || map.archived;
   return (
@@ -8256,7 +8397,7 @@ function SmsNumberCard({ n }) {
   const meta = SMS_HEALTH_META[n.health] || SMS_HEALTH_META.idle;
   const spark = (n.daily || []).filter((d) => d.deliveryRate != null).map((d) => d.deliveryRate);
   return (
-    <div className="panel" style={{ padding: '14px 16px', borderColor: n.health === 'red' ? 'rgba(255,90,90,0.5)' : undefined }}>
+    <div className="panel" style={{ padding: '14px 16px', borderColor: n.health === 'red' ? 'color-mix(in srgb, var(--danger) 50%, transparent)' : undefined }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 10 }}>
         <div>
           <div style={{ fontFamily: 'var(--f-display)', fontSize: 17, color: 'var(--fg1)' }}>
@@ -8271,8 +8412,8 @@ function SmsNumberCard({ n }) {
 
       <div style={{ display: 'flex', alignItems: 'flex-end', gap: 12, marginTop: 12 }}>
         <div>
-          <div className="eyebrow" style={{ fontSize: 8.5 }}>TAXA DE ENTREGA</div>
-          <div style={{ fontFamily: 'var(--f-display)', fontSize: 26, fontWeight: 600, color: meta.fg }}>
+          <div className="eyebrow" style={{ fontSize: 8.5 }}>Taxa de entrega</div>
+          <div style={{ fontFamily: 'var(--f-mono)', fontSize: 26, fontWeight: 600, color: meta.fg }}>
             {n.deliveryRate != null ? fmtPct(n.deliveryRate) : '—'}
           </div>
         </div>
@@ -8283,25 +8424,25 @@ function SmsNumberCard({ n }) {
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 8, marginTop: 12 }}>
         <div>
-          <div className="eyebrow" style={{ fontSize: 8.5 }}>ENVIADOS</div>
+          <div className="eyebrow" style={{ fontSize: 8.5 }}>Enviados</div>
           <div style={{ fontFamily: 'var(--f-mono)', fontSize: 14, color: 'var(--fg2)' }}>{fmtInt(n.sent)}</div>
         </div>
         <div>
-          <div className="eyebrow" style={{ fontSize: 8.5 }}>30007 (OPERADORA)</div>
+          <div className="eyebrow" style={{ fontSize: 8.5 }}>30007 (operadora)</div>
           <div style={{ fontFamily: 'var(--f-mono)', fontSize: 14, color: n.filtered30007 > 0 ? 'var(--danger)' : 'var(--fg2)', fontWeight: n.filtered30007 > 0 ? 700 : 400 }}>
             {fmtInt(n.filtered30007)}
             {n.filtered30007Last24h > 0 && <span style={{ fontSize: 9.5, marginLeft: 4, color: 'var(--danger)' }}>({n.filtered30007Last24h} em 24h)</span>}
           </div>
         </div>
         <div>
-          <div className="eyebrow" style={{ fontSize: 8.5 }}>STOPS</div>
+          <div className="eyebrow" style={{ fontSize: 8.5 }}>STOPs</div>
           <div style={{ fontFamily: 'var(--f-mono)', fontSize: 14, color: 'var(--fg2)' }}>
             {fmtInt(n.stops)}
             <span style={{ fontSize: 9.5, marginLeft: 4, color: 'var(--fg5)' }}>{n.stopRate != null ? fmtPct(n.stopRate) : ''}</span>
           </div>
         </div>
         <div>
-          <div className="eyebrow" style={{ fontSize: 8.5 }}>PENDENTES &gt;1H</div>
+          <div className="eyebrow" style={{ fontSize: 8.5 }}>Pendentes &gt;1h</div>
           <div style={{ fontFamily: 'var(--f-mono)', fontSize: 14, color: n.pending > 0 ? 'var(--warning)' : 'var(--fg2)' }}>{fmtInt(n.pending)}</div>
         </div>
       </div>
@@ -8309,7 +8450,7 @@ function SmsNumberCard({ n }) {
       {n.health === 'red' && (
         <div style={{
           marginTop: 12, padding: '9px 12px', borderRadius: 8, fontSize: 11.5, lineHeight: 1.5,
-          background: 'rgba(255,90,90,0.12)', border: '1px solid rgba(255,90,90,0.45)', color: 'var(--danger)',
+          background: 'var(--danger-bg)', border: '1px solid color-mix(in srgb, var(--danger) 45%, transparent)', color: 'var(--danger)',
         }}>
           <b>Pausar envios desta marca e acionar o parceiro de SMS.</b>
           {n.healthReasons.length > 0 && <span style={{ color: 'var(--fg3)' }}> Motivo: {n.healthReasons.join(' · ')}.</span>}
@@ -8375,13 +8516,16 @@ function SmsPage({ filters }) {
   const actives = m ? m.numbers.filter((n) => n.role === 'active' || n.sent > 0 || n.stops > 0) : [];
   const reserves = m ? m.numbers.filter((n) => !actives.includes(n)) : [];
   const feedRows = m ? (feedType ? m.feed.filter((f) => f.type === feedType) : m.feed) : [];
+  // Reset da paginação ao trocar marca/campanha/período. O feed tem teto de 100
+  // no servidor (tamanho fixo), então o reset por tamanho do usePaged não dispara.
+  const pageResetKey = [brand, campaign, filters.dateRange.start.getTime(), filters.dateRange.end.getTime()].join('|');
   const topReason = m && m.kpis.skippedByReason.length > 0 ? m.kpis.skippedByReason[0] : null;
 
   return (
     <div className="page-in">
       <div className="page-head">
         <div className="lead">
-          <span className="eyebrow">CAPTAÇÃO · SMS</span>
+          <span className="eyebrow">Captação · SMS</span>
           <h2>SMS <em>· saúde da operação</em></h2>
           <span className="sub">Telemetria da stack Mautic → n8n → Twilio (envios, entregas, STOPs, filtragem de operadora). Observabilidade — disparo e pausa continuam no Mautic.</span>
         </div>
@@ -8414,7 +8558,7 @@ function SmsPage({ filters }) {
           {m.alerts.redNumbers.length > 0 && (
             <div className="panel" style={{
               marginBottom: 12, padding: '12px 16px', display: 'flex', alignItems: 'center', gap: 10,
-              background: 'rgba(255,90,90,0.1)', border: '1px solid rgba(255,90,90,0.5)',
+              background: 'var(--danger-bg)', border: '1px solid color-mix(in srgb, var(--danger) 50%, transparent)',
             }}>
               <Icon name="alert-triangle" size={16}/>
               <div style={{ fontSize: 12.5, color: 'var(--danger)' }}>
@@ -8425,8 +8569,8 @@ function SmsPage({ filters }) {
           )}
           {m.alerts.callbacksSuspect && (
             <div style={{
-              marginBottom: 12, padding: '8px 14px', borderRadius: 9, fontSize: 11.5,
-              background: 'rgba(255,180,0,0.08)', border: '1px solid rgba(255,180,0,0.35)', color: 'var(--warning)',
+              marginBottom: 12, padding: '8px 14px', borderRadius: 'var(--r-lg)', fontSize: 11.5,
+              background: 'var(--warning-bg)', border: '1px solid color-mix(in srgb, var(--warning) 35%, transparent)', color: 'var(--warning)',
             }}>
               {fmtPct(m.alerts.recentPendingRatio)} dos envios recentes seguem sem status final há mais de 1h — os callbacks do Twilio podem estar fora do ar.
               {m.kpis.pending > 0 ? ` ${fmtInt(m.kpis.pending)} pendentes no período.` : ''}
@@ -8435,17 +8579,17 @@ function SmsPage({ filters }) {
 
           {/* Bloco A — KPIs do período */}
           <div className="grid-2" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', marginBottom: 12 }}>
-            <CopyKpi label="ENVIADOS" value={fmtInt(m.kpis.sent)}
+            <CopyKpi label="Enviados" value={fmtInt(m.kpis.sent)}
               sub={m.kpis.pending > 0 ? `${fmtInt(m.kpis.pending)} pendentes >1h` : undefined}/>
-            <CopyKpi label="TAXA DE ENTREGA" value={m.kpis.deliveryRate != null ? fmtPct(m.kpis.deliveryRate) : '—'}
+            <CopyKpi label="Taxa de entrega" value={m.kpis.deliveryRate != null ? fmtPct(m.kpis.deliveryRate) : '—'}
               tone={m.kpis.deliveryRate != null ? (m.kpis.deliveryRate >= 0.95 ? 'ok' : m.kpis.deliveryRate < 0.90 ? 'danger' : undefined) : undefined}
               sub={m.kpis.deliveryRateDeltaPp != null
                 ? `${m.kpis.deliveryRateDeltaPp >= 0 ? '+' : ''}${m.kpis.deliveryRateDeltaPp}pp vs período anterior`
                 : `${fmtInt(m.kpis.finals)} status finais no denominador`}/>
-            <CopyKpi label="STOPS" value={fmtInt(m.kpis.stops)}
+            <CopyKpi label="STOPs" value={fmtInt(m.kpis.stops)}
               tone={m.kpis.stopRate != null && m.kpis.stopRate > 0.02 ? 'danger' : undefined}
               sub={m.kpis.stopRate != null ? `taxa ${fmtPct(m.kpis.stopRate)} dos enviados` : undefined}/>
-            <CopyKpi label="DESCARTADOS (GATEWAY)" value={fmtInt(m.kpis.skipped)}
+            <CopyKpi label="Descartados (gateway)" value={fmtInt(m.kpis.skipped)}
               sub={topReason ? `${topReason.reason} (${topReason.count})` : 'nenhum descarte no período'}/>
           </div>
 
@@ -8453,7 +8597,7 @@ function SmsPage({ filters }) {
           <div className="panel" style={{ marginBottom: 12 }}>
             <div className="panel-head">
               <div className="panel-title">
-                <span className="panel-eyebrow">RECEITA DOS DISPAROS · utm_source={m.sales.utmSource}</span>
+                <span className="panel-eyebrow">Receita dos disparos · utm_source={m.sales.utmSource}</span>
                 <div className="panel-metric" style={{ fontSize: 14, color: 'var(--fg3)' }}>
                   vendas aprovadas com o UTM dos SMS no checkout
                   {brand ? ' · este painel não segue o filtro de marca (a venda não carrega marca)' : ''}
@@ -8461,9 +8605,9 @@ function SmsPage({ filters }) {
               </div>
             </div>
             <div className="grid-2" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', marginBottom: m.sales.daily.length > 0 ? 12 : 0 }}>
-              <CopyKpi label="VENDAS ATRIBUÍDAS" value={fmtInt(m.sales.sales)}/>
-              <CopyKpi label="RECEITA" value={fmtCurrency(m.sales.grossUsd, 'USD', 2)} tone={m.sales.grossUsd > 0 ? 'ok' : undefined}/>
-              <CopyKpi label="TICKET MÉDIO" value={m.sales.aovUsd != null ? fmtCurrency(m.sales.aovUsd, 'USD', 2) : '—'}/>
+              <CopyKpi label="Vendas atribuídas" value={fmtInt(m.sales.sales)}/>
+              <CopyKpi label="Receita" value={fmtCurrency(m.sales.grossUsd, 'USD', 2)} tone={m.sales.grossUsd > 0 ? 'ok' : undefined}/>
+              <CopyKpi label="Ticket médio" value={m.sales.aovUsd != null ? fmtCurrency(m.sales.aovUsd, 'USD', 2) : '—'}/>
             </div>
             {m.sales.daily.length > 0 && (
               <NSTimeSeries height={160} currency="USD"
@@ -8471,16 +8615,21 @@ function SmsPage({ filters }) {
                 series={[{ key: 'receita', label: 'Receita', color: 'var(--money)' }]}/>
             )}
             {m.sales.byCampaign.length > 0 && (
+              <Paginated items={m.sales.byCampaign} label="campanhas">
+              {(pageCampaigns, pager) => (<>
               <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 10 }}>
-                {m.sales.byCampaign.map((c) => (
+                {pageCampaigns.map((c) => (
                   <span key={c.campaignKey} style={{
                     fontFamily: 'var(--f-mono)', fontSize: 10, padding: '3px 10px', borderRadius: 'var(--r-full)',
-                    background: 'rgba(58,214,140,0.1)', border: '1px solid rgba(58,214,140,0.35)', color: 'var(--fg3)',
+                    background: 'var(--success-bg)', border: '1px solid color-mix(in srgb, var(--success) 35%, transparent)', color: 'var(--fg3)',
                   }}>
                     {c.campaignKey} · {fmtInt(c.sales)} {c.sales === 1 ? 'venda' : 'vendas'} · <span style={{ color: 'var(--success)' }}>{fmtCurrency(c.grossUsd, 'USD', 0)}</span>
                   </span>
                 ))}
               </div>
+              {pager}
+              </>)}
+              </Paginated>
             )}
             {m.sales.sales === 0 && (
               <div style={{ fontSize: 11, color: 'var(--fg5)', marginTop: 8 }}>
@@ -8524,79 +8673,84 @@ function SmsPage({ filters }) {
                 Campanhas <span style={{ color: 'var(--fg5)', fontSize: 10, marginLeft: 6 }}>catálogo Mautic (snapshot horário) × telemetria · clique pra expandir</span>
               </div>
             </div>
-            <div className="tbl-wrap" style={{ margin: 0, padding: '0 4px' }}>
-              <table className="tbl">
-                <thead>
-                  <tr>
-                    <th>Campanha</th><th>Status Mautic</th><th>Marca</th>
-                    <th className="num">Enviados</th><th className="num">Entrega %</th>
-                    <th className="num">STOPs</th><th className="num">Descartados</th><th>Último envio</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {m.campaigns.length === 0 && (
-                    <tr><td colSpan={8} style={{ textAlign: 'center', padding: 16, opacity: 0.6 }}>
-                      Nenhuma campanha ainda — o snapshot do catálogo do Mautic chega de hora em hora.
-                    </td></tr>
-                  )}
-                  {m.campaigns.map((c) => {
-                    const key = c.slug || `mautic-${c.mauticId}`;
-                    const isOpen = expanded === key;
-                    return (
-                      <React.Fragment key={key}>
-                        <tr tabIndex={0} onClick={() => setExpanded(isOpen ? null : key)} style={{ cursor: 'pointer' }}>
-                          <td>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                              <span style={{ color: 'var(--fg2)' }}>{c.name || c.slug}</span>
-                              {!c.slug && (
-                                <span style={{ fontFamily: 'var(--f-mono)', fontSize: 8.5, color: 'var(--fg5)', border: '1px solid var(--border-soft)', padding: '1px 6px', borderRadius: 'var(--r-full)', whiteSpace: 'nowrap' }}>
-                                  SEM TELEMETRIA
-                                </span>
-                              )}
-                            </div>
-                            {c.slug && <div style={{ fontFamily: 'var(--f-mono)', fontSize: 10, color: 'var(--fg5)', marginTop: 1 }}>{c.slug}</div>}
-                          </td>
-                          <td><SmsCampaignStatusBadge row={c}/></td>
-                          <td style={{ fontSize: 11, color: 'var(--fg3)' }}>{c.brand || '—'}</td>
-                          <td className="num">{fmtInt(c.sent)}</td>
-                          <td className="num" style={{ color: c.deliveryRate != null && c.deliveryRate < 0.9 ? 'var(--danger)' : undefined }}>
-                            {c.deliveryRate != null ? fmtPct(c.deliveryRate) : '—'}
-                          </td>
-                          <td className="num">{fmtInt(c.stops)}</td>
-                          <td className="num" style={{ color: c.skipped > 0 ? 'var(--warning)' : undefined }}>{fmtInt(c.skipped)}</td>
-                          <td className="cell-mono" style={{ fontSize: 10.5 }}>{fmtSmsWhen(c.lastSentAt)}</td>
-                        </tr>
-                        {isOpen && (
-                          <tr>
-                            <td colSpan={8} style={{ background: 'rgba(255,255,255,0.02)', padding: '10px 16px' }}>
-                              <div style={{ display: 'grid', gridTemplateColumns: '1fr 2fr', gap: 16, alignItems: 'start' }}>
-                                <div>
-                                  <div className="eyebrow" style={{ fontSize: 8.5, marginBottom: 6 }}>DESCARTES POR MOTIVO</div>
-                                  {c.skippedByReason.length === 0 && <div style={{ fontSize: 11, color: 'var(--fg5)' }}>Nenhum descarte no período.</div>}
-                                  {c.skippedByReason.map((r) => (
-                                    <div key={r.reason} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, color: 'var(--fg3)', padding: '2px 0' }}>
-                                      <span style={{ marginRight: 12 }}>{r.reason}</span>
-                                      <span className="cell-mono" style={{ color: 'var(--warning)' }}>{fmtInt(r.count)}</span>
+            <Paginated items={m.campaigns} label="campanhas" resetKey={pageResetKey}>
+              {(pageRows, pager) => (<>
+                <div className="tbl-wrap" style={{ margin: 0, padding: '0 4px' }}>
+                  <table className="tbl">
+                    <thead>
+                      <tr>
+                        <th>Campanha</th><th>Status Mautic</th><th>Marca</th>
+                        <th className="num">Enviados</th><th className="num">Entrega %</th>
+                        <th className="num">STOPs</th><th className="num">Descartados</th><th>Último envio</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {m.campaigns.length === 0 && (
+                        <tr><td colSpan={8} style={{ textAlign: 'center', padding: 16, opacity: 0.6 }}>
+                          Nenhuma campanha ainda — o snapshot do catálogo do Mautic chega de hora em hora.
+                        </td></tr>
+                      )}
+                      {pageRows.map((c) => {
+                        const key = c.slug || `mautic-${c.mauticId}`;
+                        const isOpen = expanded === key;
+                        return (
+                          <React.Fragment key={key}>
+                            <tr tabIndex={0} onClick={() => setExpanded(isOpen ? null : key)} style={{ cursor: 'pointer' }}>
+                              <td>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                                  <span style={{ color: 'var(--fg2)' }}>{c.name || c.slug}</span>
+                                  {!c.slug && (
+                                    <span style={{ fontFamily: 'var(--f-mono)', fontSize: 8.5, color: 'var(--fg5)', border: '1px solid var(--border-soft)', padding: '1px 6px', borderRadius: 'var(--r-full)', whiteSpace: 'nowrap' }}>
+                                      Sem telemetria
+                                    </span>
+                                  )}
+                                </div>
+                                {c.slug && <div style={{ fontFamily: 'var(--f-mono)', fontSize: 10, color: 'var(--fg5)', marginTop: 1 }}>{c.slug}</div>}
+                              </td>
+                              <td><SmsCampaignStatusBadge row={c}/></td>
+                              <td style={{ fontSize: 11, color: 'var(--fg3)' }}>{c.brand || '—'}</td>
+                              <td className="num">{fmtInt(c.sent)}</td>
+                              <td className="num" style={{ color: c.deliveryRate != null && c.deliveryRate < 0.9 ? 'var(--danger)' : undefined }}>
+                                {c.deliveryRate != null ? fmtPct(c.deliveryRate) : '—'}
+                              </td>
+                              <td className="num">{fmtInt(c.stops)}</td>
+                              <td className="num" style={{ color: c.skipped > 0 ? 'var(--warning)' : undefined }}>{fmtInt(c.skipped)}</td>
+                              <td className="cell-mono" style={{ fontSize: 10.5 }}>{fmtSmsWhen(c.lastSentAt)}</td>
+                            </tr>
+                            {isOpen && (
+                              <tr>
+                                <td colSpan={8} style={{ background: 'var(--bg-subtle)', padding: '10px 16px' }}>
+                                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 2fr', gap: 16, alignItems: 'start' }}>
+                                    <div>
+                                      <div className="eyebrow" style={{ fontSize: 8.5, marginBottom: 6 }}>Descartes por motivo</div>
+                                      {c.skippedByReason.length === 0 && <div style={{ fontSize: 11, color: 'var(--fg5)' }}>Nenhum descarte no período.</div>}
+                                      {c.skippedByReason.map((r) => (
+                                        <div key={r.reason} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, color: 'var(--fg3)', padding: '2px 0' }}>
+                                          <span style={{ marginRight: 12 }}>{r.reason}</span>
+                                          <span className="cell-mono" style={{ color: 'var(--warning)' }}>{fmtInt(r.count)}</span>
+                                        </div>
+                                      ))}
                                     </div>
-                                  ))}
-                                </div>
-                                <div>
-                                  <div className="eyebrow" style={{ fontSize: 8.5, marginBottom: 6 }}>ENVIOS POR DIA</div>
-                                  {c.dailySent.length > 0
-                                    ? <NSTimeSeries height={120} format="int" data={c.dailySent.map((d) => ({ date: d.date, enviados: d.sent }))}
-                                        series={[{ key: 'enviados', label: 'Enviados', color: 'var(--accent)' }]}/>
-                                    : <div style={{ fontSize: 11, color: 'var(--fg5)' }}>Sem envios no período.</div>}
-                                </div>
-                              </div>
-                            </td>
-                          </tr>
-                        )}
-                      </React.Fragment>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
+                                    <div>
+                                      <div className="eyebrow" style={{ fontSize: 8.5, marginBottom: 6 }}>Envios por dia</div>
+                                      {c.dailySent.length > 0
+                                        ? <NSTimeSeries height={120} format="int" data={c.dailySent.map((d) => ({ date: d.date, enviados: d.sent }))}
+                                            series={[{ key: 'enviados', label: 'Enviados', color: 'var(--accent)' }]}/>
+                                        : <div style={{ fontSize: 11, color: 'var(--fg5)' }}>Sem envios no período.</div>}
+                                    </div>
+                                  </div>
+                                </td>
+                              </tr>
+                            )}
+                          </React.Fragment>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+                {pager}
+              </>)}
+            </Paginated>
           </div>
 
           {/* Bloco D — feed de diagnóstico (colapsável) */}
@@ -8622,26 +8776,31 @@ function SmsPage({ filters }) {
                     </button>
                   ))}
                 </div>
-                <div className="tbl-wrap" style={{ margin: 0, padding: '0 4px', maxHeight: 380, overflowY: 'auto' }}>
-                  <table className="tbl">
-                    <thead><tr><th>Quando</th><th>Evento</th><th>Marca</th><th>Campanha</th><th>Destino</th><th>Detalhe</th></tr></thead>
-                    <tbody>
-                      {feedRows.length === 0 && (
-                        <tr><td colSpan={6} style={{ textAlign: 'center', padding: 16, opacity: 0.6 }}>Nenhum evento no período{feedType ? ' pra esse tipo' : ''}.</td></tr>
-                      )}
-                      {feedRows.map((f) => (
-                        <tr key={f.id}>
-                          <td className="cell-mono" style={{ fontSize: 10.5 }}>{fmtSmsWhen(f.occurredAt)}</td>
-                          <td><SmsTypeChip type={f.type}/></td>
-                          <td style={{ fontSize: 11, color: 'var(--fg3)' }}>{f.brand || '—'}</td>
-                          <td className="cell-mono" style={{ fontSize: 10, color: 'var(--fg4)' }}>{f.campaign || '—'}</td>
-                          <td className="cell-mono" style={{ fontSize: 10.5 }}>{f.toMasked || '—'}</td>
-                          <td style={{ fontSize: 10.5, color: f.type === 'undelivered' || f.type === 'failed' ? 'var(--danger)' : 'var(--fg4)' }}>{f.detail || '—'}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
+                <Paginated items={feedRows} label="eventos" resetKey={feedType + '|' + pageResetKey}>
+                  {(pageRows, pager, pg) => (<>
+                    <div key={pg.page + ':' + pg.pageSize} className="tbl-wrap" style={{ margin: 0, padding: '0 4px', maxHeight: 380, overflowY: 'auto' }}>
+                      <table className="tbl">
+                        <thead><tr><th>Quando</th><th>Evento</th><th>Marca</th><th>Campanha</th><th>Destino</th><th>Detalhe</th></tr></thead>
+                        <tbody>
+                          {feedRows.length === 0 && (
+                            <tr><td colSpan={6} style={{ textAlign: 'center', padding: 16, opacity: 0.6 }}>Nenhum evento no período{feedType ? ' pra esse tipo' : ''}.</td></tr>
+                          )}
+                          {pageRows.map((f) => (
+                            <tr key={f.id}>
+                              <td className="cell-mono" style={{ fontSize: 10.5 }}>{fmtSmsWhen(f.occurredAt)}</td>
+                              <td><SmsTypeChip type={f.type}/></td>
+                              <td style={{ fontSize: 11, color: 'var(--fg3)' }}>{f.brand || '—'}</td>
+                              <td className="cell-mono" style={{ fontSize: 10, color: 'var(--fg4)' }}>{f.campaign || '—'}</td>
+                              <td className="cell-mono" style={{ fontSize: 10.5 }}>{f.toMasked || '—'}</td>
+                              <td style={{ fontSize: 10.5, color: f.type === 'undelivered' || f.type === 'failed' ? 'var(--danger)' : 'var(--fg4)' }}>{f.detail || '—'}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                    {pager}
+                  </>)}
+                </Paginated>
               </>
             )}
           </div>
@@ -8650,8 +8809,8 @@ function SmsPage({ filters }) {
             Taxa de entrega = entregues ÷ status finais (delivered+undelivered+failed) — callbacks podem atrasar,
             então o denominador NÃO são os enviados. Pendentes = enviados há mais de 1h sem status final (sinal de
             callback quebrado). 30007 = filtragem de operadora — se recorrente, pausar a marca e acionar o parceiro.
-            Semáforo: 🟢 entrega ≥95% e STOP &lt;1% · 🟡 entrega 90–95% ou STOP 1–2% ou qualquer 30007 em 24h ·
-            🔴 entrega &lt;90% ou STOP &gt;2% ou ≥5× 30007 em 24h. Números de leads sempre mascarados.
+            Semáforo: saudável = entrega ≥95% e STOP &lt;1% · atenção = entrega 90–95% ou STOP 1–2% ou qualquer 30007 em 24h ·
+            crítico = entrega &lt;90% ou STOP &gt;2% ou ≥5× 30007 em 24h. Números de leads sempre mascarados.
           </div>
         </>
       )}

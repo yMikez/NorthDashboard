@@ -20,10 +20,10 @@ export function MarkdownBlock({
         components={{
           h1: ({ children }) => <h1 className="text-base font-semibold mt-3 mb-1.5">{children}</h1>,
           h2: ({ children }) => <h2 className="text-sm font-semibold mt-3 mb-1.5">{children}</h2>,
-          h3: ({ children }) => <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mt-2 mb-1">{children}</h3>,
+          h3: ({ children }) => <h3 className="text-xs font-semibold text-muted-foreground mt-2 mb-1">{children}</h3>,
           p: ({ children }) => <p className="my-2">{children}</p>,
           strong: ({ children }) => <strong className="font-semibold text-foreground">{children}</strong>,
-          em: ({ children }) => <em className="italic text-muted-foreground">{children}</em>,
+          em: ({ children }) => <em className="not-italic text-muted-foreground">{children}</em>,
           ul: ({ children }) => <ul className="my-2 ml-4 list-disc space-y-1">{children}</ul>,
           ol: ({ children }) => <ol className="my-2 ml-4 list-decimal space-y-1">{children}</ol>,
           li: ({ children }) => <li className="leading-relaxed">{children}</li>,
@@ -50,7 +50,7 @@ export function MarkdownBlock({
             </div>
           ),
           th: ({ children, ...props }) => (
-            <th className="border-b border-border bg-popover/40 px-3 py-1.5 text-left text-[10px] uppercase tracking-wider font-mono text-muted-foreground" {...props}>
+            <th className="border-b border-border bg-popover/40 px-3 py-1.5 text-left text-[10px] font-mono text-muted-foreground" {...props}>
               {children}
             </th>
           ),
@@ -60,7 +60,7 @@ export function MarkdownBlock({
             </td>
           ),
           blockquote: ({ children }) => (
-            <blockquote className="border-l-2 border-primary/40 pl-3 my-2 text-muted-foreground italic">
+            <blockquote className="border-l-2 border-primary/40 pl-3 my-2 text-muted-foreground">
               {children}
             </blockquote>
           ),
