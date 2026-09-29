@@ -7410,17 +7410,45 @@ function CopyOptimizerPage() {
 function RecoveryManage({ affs, onChanged }) {
   const [ext, setExt] = useState('');
   const [plat, setPlat] = useState('digistore24');
-  const [pct, setPct] = useState(30);
+  const [pct, setPct] = useState(25);
+  const [empresa, setEmpresa] = useState('');
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState(null);
+  // Conta que a plataforma ainda não conhece (parceria fechada, tráfego não
+  // começou). Em vez de cadastrar às cegas, o erro vira uma oferta: o botão
+  // só aparece depois que o dash confirmou que o ID não existe.
+  const [semVenda, setSemVenda] = useState(null);
 
-  async function add() {
+  // Empresas já cadastradas — datalist pra atrelar conta nova sem redigitar
+  // (e sem criar "MailX" e "Mailx" como se fossem duas).
+  const empresas = Array.from(new Set((affs || []).map((a) => (a.note || '').trim()).filter(Boolean))).sort();
+
+  async function add(criarSemVenda) {
     if (!ext.trim()) { setMsg('Informe o ID do afiliado.'); return; }
     setBusy(true); setMsg(null);
     try {
-      await window.NSApi.addRecoveryAffiliate({ affiliateExternalId: ext.trim(), platformSlug: plat, commissionPct: Number(pct) });
-      setExt(''); setMsg('Afiliado marcado.'); onChanged();
-    } catch (e) { setMsg('Erro: ' + (e.message || 'falha')); }
+      await window.NSApi.addRecoveryAffiliate({
+        affiliateExternalId: ext.trim(),
+        platformSlug: plat,
+        commissionPct: Number(pct),
+        note: empresa.trim() || null,
+        nickname: empresa.trim() || null,
+        createIfMissing: criarSemVenda === true,
+      });
+      setExt(''); setSemVenda(null);
+      setMsg(criarSemVenda ? 'Conta pré-cadastrada — a marca vale da primeira venda em diante.' : 'Afiliado marcado.');
+      onChanged();
+    } catch (e) {
+      const erro = e.message || 'falha';
+      // 404 do serviço: o ID não existe nessa plataforma ainda.
+      if (/não encontrado/i.test(erro)) {
+        setSemVenda({ ext: ext.trim(), plat });
+        setMsg(`Esse ID ainda não vendeu nada em ${plat}. Confira se está certo — ou cadastre mesmo assim, se o parceiro ainda vai começar.`);
+      } else {
+        setSemVenda(null);
+        setMsg('Erro: ' + erro);
+      }
+    }
     finally { setBusy(false); }
   }
   async function remove(id, label) {
@@ -7433,7 +7461,11 @@ function RecoveryManage({ affs, onChanged }) {
     <div className="panel" style={{ marginBottom: 12 }}>
       <div className="panel-head"><div className="panel-title">Afiliados de recuperação</div></div>
       <div style={{ display: 'flex', gap: 10, alignItems: 'end', marginTop: 10, flexWrap: 'wrap' }}>
-        <label style={coFieldLabel}><span>ID do afiliado</span><input value={ext} onChange={(e) => setExt(e.target.value)} placeholder="3722234" style={{ ...coInputStyle, width: 150 }}/></label>
+        <label style={coFieldLabel}><span>ID do afiliado</span><input value={ext} onChange={(e) => { setExt(e.target.value); setSemVenda(null); }} placeholder="3722234" style={{ ...coInputStyle, width: 150 }}/></label>
+        <label style={coFieldLabel}><span>Empresa</span>
+          <input value={empresa} onChange={(e) => setEmpresa(e.target.value)} list="ns-empresas-recuperacao" placeholder="MailX" style={{ ...coInputStyle, width: 160 }}/>
+          <datalist id="ns-empresas-recuperacao">{empresas.map((n) => <option key={n} value={n}/>)}</datalist>
+        </label>
         <label style={coFieldLabel}><span>Plataforma</span>
           <select value={plat} onChange={(e) => setPlat(e.target.value)} style={{ ...coInputStyle, width: 150 }}>
             <option value="digistore24">Digistore24</option>
@@ -7444,7 +7476,16 @@ function RecoveryManage({ affs, onChanged }) {
           </select>
         </label>
         <label style={coFieldLabel}><span>Comissão %</span><input type="number" min={0} max={100} value={pct} onChange={(e) => setPct(e.target.value)} style={{ ...coInputStyle, width: 100 }}/></label>
-        <button className="btn btn-primary" onClick={add} disabled={busy}>{busy ? '…' : 'Marcar'}</button>
+        <button className="btn btn-primary" onClick={() => add(false)} disabled={busy}>{busy ? '…' : 'Marcar'}</button>
+        {semVenda && semVenda.ext === ext.trim() && semVenda.plat === plat && (
+          <button className="btn btn-ghost" onClick={() => add(true)} disabled={busy} title="Cria a conta agora; a marca vale da primeira venda em diante">
+            Cadastrar mesmo assim
+          </button>
+        )}
+      </div>
+      <div style={{ marginTop: 6, fontSize: 10, color: 'var(--fg5)' }}>
+        A <strong>empresa</strong> é o que agrupa as contas: a mesma parceira pode ter um ID por plataforma, e a aba
+        soma tudo numa linha só. Uma parceira com vários IDs? Marque um por vez com a mesma empresa.
       </div>
       <div style={{ marginTop: 8, fontSize: 10, color: 'var(--fg5)' }}>
         Pra alterar a % de quem já está marcado, re-marque com a nova % — as vendas antigas continuam
