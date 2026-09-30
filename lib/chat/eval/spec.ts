@@ -203,6 +203,11 @@ export class SpecError extends Error {}
 export interface Resolved {
   items: unknown[][];
   list: boolean;
+  /**
+   * Só `dominant`: alternativas dos rótulos PERDEDORES. A pergunta costuma
+   * citar os dois ("foi volume ou AOV?") — o veredito é o que vem primeiro.
+   */
+  rivals?: string[];
 }
 
 type Selector =

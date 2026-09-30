@@ -57,7 +57,55 @@ function turndown(): TurndownService {
   return td;
 }
 
+/**
+ * Acima disso o turndown fica QUADRÁTICO: o join dele indexa a string de
+ * saída a cada nó irmão, o que achata a concatenação inteira (1 MB de HTML
+ * ≈ 7 s, 2 MB ≈ 26 s de event loop travado; DOCX grande vira HTML maior
+ * ainda). HTML maior vai por uma limpeza LINEAR: mantém títulos (#),
+ * parágrafos, itens e células; perde negrito/links/pipe table — é dado pra
+ * busca e leitura, não pra exibir.
+ */
+const TURNDOWN_MAX_CHARS = 300_000;
+const DROP_BLOCKS = ['script', 'style', 'noscript', 'iframe', 'object', 'embed', 'canvas', 'video', 'audio', 'head', 'title', 'svg'];
+const ENTITIES: Record<string, string> = { amp: '&', lt: '<', gt: '>', quot: '"', '#39': "'", apos: "'", nbsp: ' ' };
+
+/** Remove <tag …>…</tag> por indexOf (regex com [\s\S]*? seria quadrática sem fechamento). */
+function dropBlock(html: string, tag: string): string {
+  const lower = html.toLowerCase();
+  let out = '';
+  let pos = 0;
+  for (;;) {
+    const start = lower.indexOf(`<${tag}`, pos);
+    if (start < 0) break;
+    out += html.slice(pos, start);
+    const end = lower.indexOf(`</${tag}`, start + tag.length + 1);
+    const close = end < 0 ? -1 : lower.indexOf('>', end);
+    pos = close < 0 ? html.length : close + 1;
+  }
+  return out + html.slice(pos);
+}
+
+/** [^<>]* para no próximo < ou >: cada tentativa custa só até ali (linear). */
+function htmlToPlainMarkdown(html: string): string {
+  let s = html;
+  for (const tag of DROP_BLOCKS) s = dropBlock(s, tag);
+  return s
+    .replace(/<h([1-6])\b[^<>]*>/gi, (_m, level: string) => `\n\n${'#'.repeat(Number(level))} `)
+    .replace(/<li\b[^<>]*>/gi, '\n- ')
+    .replace(/<br\b[^<>]*>/gi, '\n')
+    .replace(/<\/(?:p|div|h[1-6]|li|tr|table|ul|ol|blockquote|section|article|pre)\s*>/gi, '\n\n')
+    .replace(/<\/(?:td|th)\s*>/gi, ' | ')
+    .replace(/<[A-Za-z!/?][^<>]*>/g, '')
+    .replace(/&(amp|lt|gt|quot|#39|apos|nbsp);/g, (_m, e: string) => ENTITIES[e])
+    .split('\n')
+    .map((l) => l.trim())
+    .join('\n')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+}
+
 export function htmlToMarkdown(html: string): string {
+  if (html.length > TURNDOWN_MAX_CHARS) return htmlToPlainMarkdown(html);
   return turndown()
     .turndown(html)
     .replace(/\n{3,}/g, '\n\n')

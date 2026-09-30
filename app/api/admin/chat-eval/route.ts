@@ -54,6 +54,11 @@ export async function POST(req: Request) {
 export async function GET() {
   const auth = await requireAdmin();
   if (!auth.ok) return auth.response;
+  // Rodada órfã (container reiniciou/deploy no meio) ficava 'running' pra
+  // sempre: a tela desabilita "Rodar avaliação" enquanto houver uma e o POST
+  // era o único lugar que chamava markStaleRuns.
+  const { markStaleRuns } = await import('@/lib/services/chatEval');
+  await markStaleRuns().catch((err) => logger.warn({ err }, '[chat-eval] limpeza de rodadas órfãs falhou'));
   const runs = await db.chatEvalRun.findMany({
     orderBy: { startedAt: 'desc' },
     take: 30,

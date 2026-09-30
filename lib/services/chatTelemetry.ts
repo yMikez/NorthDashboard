@@ -113,6 +113,13 @@ function stableJson(value: unknown): string {
 
 /** Hash curto do resultado — igual entre execuções ⇔ mesmo dado. */
 export function resultHash(value: unknown): string {
+  // _meta muda com o relógio (range.endBrt/hoursElapsedToday, ressalvas de
+  // cobertura com "há Nh") sem o dado mudar — fora do hash, senão o replay
+  // acusa "dado mudou" à toa.
+  if (value && typeof value === 'object' && !Array.isArray(value) && '_meta' in value) {
+    const { _meta: _clock, ...data } = value as Record<string, unknown>;
+    return sha256Hex(stableJson(data), 16);
+  }
   return sha256Hex(stableJson(value), 16);
 }
 
@@ -155,7 +162,11 @@ function scrub(v: unknown, depth: number): unknown {
     const out: Record<string, unknown> = {};
     for (const [k, val] of Object.entries(v as Record<string, unknown>)) {
       if (PII_KEY.test(k)) continue;
-      if (FREE_TEXT_KEY.test(k)) {
+      // `filters` OBJETO é escopo estruturado (compare_periods: plataformas,
+      // famílias…) e vai pro log como o resto; `filters`/`where` em LISTA são
+      // condições sobre valores (anexo do usuário) e seguem omitidos.
+      const structuredScope = k === 'filters' && !!val && typeof val === 'object' && !Array.isArray(val);
+      if (FREE_TEXT_KEY.test(k) && !structuredScope) {
         out[k] = { _omitido: 'texto', chars: stableJson(val).length };
         continue;
       }
@@ -278,7 +289,9 @@ export function diffDigests(before: unknown, after: unknown, limit = 40): Digest
 const SYNTHETIC_ERRORS = new Set(['ungrounded', 'terminal_with_data']);
 // Tools cujo resultado É conteúdo (arquivo do usuário, trechos da base,
 // playbooks): só o hash vai pro log — um digest copiaria o texto.
-const CONTENT_TOOLS = new Set(['read_attachment', 'query_attachment_table', 'search_knowledge', 'get_definitions', 'load_skill']);
+// aggregate_result entra aqui porque pode agregar um $rN de
+// query_attachment_table (linhas do arquivo do usuário, chaves = colunas dele).
+const CONTENT_TOOLS = new Set(['read_attachment', 'query_attachment_table', 'search_knowledge', 'get_definitions', 'load_skill', 'aggregate_result']);
 
 function isSynthetic(t: ToolTrace): boolean {
   return t.name === TERMINAL_TOOL && !!t.error && SYNTHETIC_ERRORS.has(t.error);
@@ -516,7 +529,9 @@ export function parseFeedbackInput(body: unknown): Parsed<FeedbackInputParsed> {
       reasons: positive ? [] : reasons,
       comment: comment.value,
       expected: positive ? null : expected.value,
-      shared: b.shared ?? true,
+      // 👍 não tem checkbox de consentimento na tela: só compartilha com o
+      // admin quando o client pede explicitamente (shared: true).
+      shared: positive ? b.shared === true : (b.shared ?? true),
     },
   };
 }
@@ -888,7 +903,12 @@ export async function replayTurnTool(args: {
   user: { id: string; role: string; allowedTabs: string[] };
 }): Promise<ReplayOutcome> {
   const log = await db.chatTurnLog.findFirst({
-    where: args.turnLogId ? { id: args.turnLogId } : { messageId: args.messageId },
+    // Só turno com voto COMPARTILHADO (o consentimento que abre a conversa ao
+    // admin) — sem isso o replay devolvia input e período de chat alheio por id.
+    where: {
+      ...(args.turnLogId ? { id: args.turnLogId } : { messageId: args.messageId }),
+      message: { feedback: { some: { shared: true } } },
+    },
     select: { trace: true, message: { select: { conversationId: true, createdAt: true } } },
   });
   if (!log) return { ok: false, status: 404, error: 'turno não encontrado' };

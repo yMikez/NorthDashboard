@@ -169,7 +169,9 @@ export function markdownSections(text: string): MarkdownSection[] {
   let fence = false;
   lines.forEach((l, idx) => {
     if (/^\s*(```|~~~)/.test(l)) fence = !fence;
-    const m = !fence && l.match(/^(#{1,6})\s+(.+?)\s*#*\s*$/);
+    // Linear (conteúdo termina em \S): `(.+?)\s*#*\s*$` era cúbica numa linha
+    // "# a" + milhares de espaços + "x" e travava o processo no read_attachment.
+    const m = !fence && l.match(/^(#{1,6})\s+(\S(?:.*?\S)??)(?:\s+#+)?\s*$/);
     if (m) heads.push({ idx, level: m[1].length, heading: m[2].trim() });
   });
   return heads.map((h, i) => {

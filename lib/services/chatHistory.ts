@@ -35,6 +35,11 @@ export interface HistoryOptions {
   /** Orçamento de tokens de anexos inline por conversa. */
   inlineBudgetTokens: number;
   sources?: SourceRegistry;
+  /**
+   * Anexos de mensagens que ficaram FORA da janela de mensagens (conversa
+   * longa). Voltam no início do histórico — anexo nunca some da conversa.
+   */
+  olderAttachments?: AttachmentRef[];
 }
 
 export interface BuiltHistory {
@@ -67,7 +72,14 @@ function assistantText(row: HistoryRow): string {
   const pieces: string[] = [];
   const text = stripCiteMarkers((row.content ?? '').trim());
   if (text) pieces.push(text);
-  const blocks = renderBlocksToText(row.blocks);
+  let blocks = '';
+  try {
+    blocks = renderBlocksToText(row.blocks);
+  } catch {
+    // Bloco malformado persistido (input da tool sem validação estrita) não
+    // pode derrubar o histórico — senão a conversa inteira passa a dar 500.
+    blocks = JSON.stringify(row.blocks ?? null).slice(0, 12_000);
+  }
   if (blocks) pieces.push(`[blocos exibidos ao usuário]\n${blocks}`);
   const ledger = queryLedger(row.toolUses);
   if (ledger) pieces.push(ledger);
@@ -94,6 +106,14 @@ export async function buildApiHistory(
   let budget = opts.inlineBudgetTokens;
   let attachmentTokens = 0;
   const drafts: Draft[] = [];
+  // Os mais antigos de todos (fora da janela) gastam o orçamento primeiro.
+  const orphanAttach: Anthropic.ContentBlockParam[] = [];
+  if (opts.olderAttachments?.length) {
+    const built = await buildAttachmentBlocks(opts.olderAttachments, { inlineBudgetTokens: budget, sources: opts.sources });
+    orphanAttach.push(...built.blocks);
+    budget = Math.max(0, budget - built.tokens);
+    attachmentTokens += built.tokens;
+  }
   for (const row of rows) {
     if (row.role === 'user') {
       const refs = attachmentsByMessage.get(row.id) ?? [];
@@ -120,7 +140,6 @@ export async function buildApiHistory(
   // Orçamento de texto: corta do início; anexos das mensagens cortadas
   // migram pra primeira mensagem do usuário que ficou.
   let chars = drafts.reduce((n, d) => n + d.chars, 0);
-  const orphanAttach: Anthropic.ContentBlockParam[] = [];
   while (drafts.length > 1 && chars > opts.maxChars) {
     const gone = drafts.shift()!;
     chars -= gone.chars;

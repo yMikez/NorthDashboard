@@ -6853,7 +6853,8 @@ function renderMarkdown(text) {
 
 function ChatMessage({ message, compact, streaming }) {
   const isUser = message.role === 'user';
-  const mdHtml = !isUser ? renderMarkdown(message.content) : null;
+  // ` [[cite:n]]` (citação do chat novo): o widget não tem chip de fonte — vira "[n]".
+  const mdHtml = !isUser ? renderMarkdown(String(message.content || '').replace(/[ \t]?\[\[cite:(\d+)\]\]/g, ' [$1]')) : null;
   return (
     <div style={{ display: 'flex', flexDirection: 'column', alignItems: isUser ? 'flex-end' : 'flex-start' }}>
       <div

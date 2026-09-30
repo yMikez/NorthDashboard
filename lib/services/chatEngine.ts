@@ -197,7 +197,11 @@ export async function runChatTurn(input: TurnInput, ev: TurnEvents = {}): Promis
   const maxOut = input.maxOutputTokens ?? ENGINE_DEFAULTS.maxOutputTokens;
   const toolMax = input.toolResultMaxBytes ?? ENGINE_DEFAULTS.toolResultMaxBytes;
   const ctxMax = input.contextMaxChars ?? ENGINE_DEFAULTS.contextMaxChars;
-  const grounding = input.groundingMode ?? ENGINE_DEFAULTS.groundingMode;
+  // Número lido de anexo (PDF/imagem/texto inline, read_attachment) não passa
+  // pelo ResultStore — em conversa com anexo a checagem só registra (shadow),
+  // senão todo bloco tirado do arquivo volta como "sem fonte".
+  const groundingBase = input.groundingMode ?? ENGINE_DEFAULTS.groundingMode;
+  const grounding = groundingBase === 'enforce' && input.toolCtx.attachments?.length ? 'shadow' : groundingBase;
   const signal = input.signal;
 
   const ctx: ToolContext = { ...input.toolCtx };
@@ -275,14 +279,19 @@ export async function runChatTurn(input: TurnInput, ev: TurnEvents = {}): Promis
         const cites = blockCites.get(event.index);
         if (cites?.length && blockType.get(event.index) === 'text') {
           const ns: number[] = [];
+          const touched = new Map<number, Citation>();
           for (const c of cites) {
             const resolved = sources.resolve(c);
             if (!resolved) continue;
             if (!ns.includes(resolved.n)) ns.push(resolved.n);
-            if (!emittedCitations.has(resolved.n)) {
-              emittedCitations.add(resolved.n);
-              ev.citation?.(resolved);
-            }
+            touched.set(resolved.n, resolved);
+          }
+          // Toda fonte do bloco vai (de novo) ANTES do marcador: citada outra
+          // vez, traz trecho novo — o cliente faz upsert por n e a tela ao
+          // vivo fica igual à que volta no F5.
+          for (const r of touched.values()) {
+            emittedCitations.add(r.n);
+            ev.citation?.(r);
           }
           if (ns.length) emitText(ns.map(citeMarker).join(''));
         }
@@ -345,24 +354,50 @@ export async function runChatTurn(input: TurnInput, ev: TurnEvents = {}): Promis
 
       const toolBlocks = finalMessage.content.filter((b): b is Anthropic.ToolUseBlock => b.type === 'tool_use');
       if (toolBlocks.length === 0) break;
-      const terminal = toolBlocks.find((b) => b.name === TERMINAL_TOOL);
+      const terminals = toolBlocks.filter((b) => b.name === TERMINAL_TOOL);
+      const terminal = terminals[0];
       const dataBlocks = toolBlocks.filter((b) => b.name !== TERMINAL_TOOL);
+      const NO_REPEAT = ' Não repita a introdução/veredito que você já escreveu — ela já está na tela.';
+      /** tool_result de erro pra cada terminal da rodada (tool_use sem result = 400 na API). */
+      const rejectTerminals = (list: Anthropic.ToolUseBlock[], message: string, tag: string): Anthropic.ToolResultBlockParam[] =>
+        list.map((t) => {
+          rt.tools.push({ name: t.name, id: t.id, input: { guard: tag }, ms: 0, bytes: 0, error: tag });
+          // O chip "Montando a resposta" nasceu no tool_use_start: fecha aqui.
+          ev.toolResult?.({ name: t.name, id: t.id, ok: false, bytes: 0, truncated: false, ms: 0 });
+          return { type: 'tool_result', tool_use_id: t.id, is_error: true, content: message };
+        });
+
+      // Duas+ chamadas da terminal na mesma rodada: pedir UMA só (entregar a
+      // primeira descartaria em silêncio os blocos das outras).
+      if (terminals.length > 1 && dataBlocks.length === 0 && loop < maxLoops - 1) {
+        apiMessages.push({
+          role: 'user',
+          content: rejectTerminals(
+            terminals,
+            'respond_with_blocks foi chamado mais de uma vez na mesma rodada — junte todos os blocos numa ÚNICA chamada e chame de novo, sozinho.' + NO_REPEAT,
+            'terminal_repeated',
+          ),
+        });
+        continue;
+      }
 
       // ── Terminal SOZINHA: confere os números e entrega ────────────────
       if (terminal && dataBlocks.length === 0) {
         const tin = terminal.input as { blocks?: unknown; sources?: unknown; scope?: unknown };
         const blocks = Array.isArray(tin?.blocks) ? (tin.blocks as unknown[]) : null;
         const report = blocks && grounding !== 'off' ? verifyBlockNumbers(blocks, store) : { unmatched: [], checked: 0 };
-        if (report.unmatched.length && grounding === 'enforce' && groundingRetries === 0) {
+        if (report.unmatched.length && grounding === 'enforce' && groundingRetries === 0 && loop < maxLoops - 1) {
           groundingRetries += 1;
           const list = report.unmatched.slice(0, 15).join(', ');
           const tr: Anthropic.ToolResultBlockParam = {
             type: 'tool_result',
             tool_use_id: terminal.id,
             is_error: true,
-            content: `Números sem fonte nos blocos: ${list}. Todo número exibido precisa vir de um resultado de tool ou de calc. Recalcule com calc (referenciando $rN) ou corrija, e chame respond_with_blocks de novo — sozinho.`,
+            content: `Números sem fonte nos blocos: ${list}. Todo número exibido precisa vir de um resultado de tool ou de calc. Recalcule com calc (referenciando $rN) ou corrija, e chame respond_with_blocks de novo — sozinho.${NO_REPEAT}`,
           };
           rt.tools.push({ name: terminal.name, id: terminal.id, input: { grounding: 'retry' }, ms: 0, bytes: 0, error: 'ungrounded' });
+          // O chip "Montando a resposta" nasceu no tool_use_start: fecha aqui (a nova chamada abre outro).
+          ev.toolResult?.({ name: terminal.name, id: terminal.id, ok: true, bytes: 0, truncated: false, ms: 0 });
           apiMessages.push({ role: 'user', content: [tr] });
           logger.info({ conversationId: ctx.conversationId, unmatched: report.unmatched.length }, '[chat] grounding: pedindo correção dos blocos');
           continue;
@@ -411,7 +446,18 @@ export async function runChatTurn(input: TurnInput, ev: TurnEvents = {}): Promis
         const { v: raw, ms } = raws[i];
         if (input.captureRaw) result.raw!.push({ name: block.name, input: block.input, value: raw });
         if (isContentResult(raw)) {
-          const content = raw.__content;
+          // A API recusa tool_result que mistura search_result com outro tipo
+          // de bloco ("all of its blocks must be search_result"): com
+          // search_result presente, os text blocks (cabeçalho com
+          // low_confidence, notas de página) entram no INÍCIO do conteúdo do
+          // primeiro search_result — continuam legíveis pro modelo.
+          let content = raw.__content;
+          if (content.some((b) => b.type === 'search_result')) {
+            const texts = content.filter((b): b is Anthropic.TextBlockParam => b.type === 'text' && b.text.trim() !== '');
+            const results = content.filter((b): b is Anthropic.SearchResultBlockParam => b.type === 'search_result');
+            if (texts.length) results[0] = { ...results[0], content: [...texts, ...results[0].content] };
+            content = results;
+          }
           const size = contentChars(content);
           contextChars += size;
           result.toolUses.push({ name: block.name, input: block.input, result: { ok: true, bytes: size } });
@@ -432,14 +478,15 @@ export async function runChatTurn(input: TurnInput, ev: TurnEvents = {}): Promis
       });
 
       // Terminal junto com consultas: os blocos foram escritos SEM o dado.
-      if (terminal) {
-        toolResults.push({
-          type: 'tool_result',
-          tool_use_id: terminal.id,
-          is_error: true,
-          content: 'respond_with_blocks foi chamado na mesma rodada das consultas — os blocos não podem ter usado esses resultados. Leia os resultados acima e chame respond_with_blocks SOZINHO na próxima rodada.',
-        });
-        rt.tools.push({ name: terminal.name, id: terminal.id, input: { guard: 'same_round' }, ms: 0, bytes: 0, error: 'terminal_with_data' });
+      // TODAS as chamadas da terminal recebem resposta (tool_use órfão = 400).
+      if (terminals.length) {
+        toolResults.push(
+          ...rejectTerminals(
+            terminals,
+            'respond_with_blocks foi chamado na mesma rodada das consultas — os blocos não podem ter usado esses resultados. Leia os resultados acima e chame respond_with_blocks SOZINHO na próxima rodada.' + NO_REPEAT,
+            'terminal_with_data',
+          ),
+        );
       }
 
       result.contextCharsPeak = Math.max(result.contextCharsPeak, contextChars);

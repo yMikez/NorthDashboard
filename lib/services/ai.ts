@@ -231,7 +231,7 @@ const PERIOD = `# Período, fuso e datas nas tools
 - Painéis e exports das plataformas usam fuso próprio (Glossário › Fusos): 1 dia de diferença na borda é esperado.`;
 
 const RESULTS = `# Como ler o resultado de uma tool
-- _ref ("r3") identifica o resultado COMPLETO guardado no servidor, mesmo quando o que você viu foi encolhido: use $r3.caminho em calc e a ref em aggregate_result. Só referencie resultados de rodadas anteriores.
+- _ref ("r3") identifica o resultado COMPLETO guardado no servidor, mesmo quando o que você viu foi encolhido: use $r3.caminho em calc e a ref em aggregate_result. Só referencie resultados de rodadas anteriores DESTA resposta: as refs recomeçam em r1 a cada mensagem do usuário — $rN que aparece nas consultas de respostas anteriores não existe mais (ou é outro resultado); consulte de novo.
 - _meta: range = período BRT efetivo (dias, dias fechados, se inclui hoje, se é parcial, horas decorridas); previousRange/aligned = a janela de comparação e se foi cortada no mesmo horário; filtersApplied e notes = filtros como o servidor aplicou, com as correções de nome feitas; emptyWithFilters = o vazio veio do filtro; units = unidade de cada campo (fraction = 0–1; pp = pontos percentuais, o número já é a porcentagem; usd; count; days; iso_utc = instante em UTC; date_brt = dia BRT); dataQuality = lacunas que mudam a leitura (cite quando afetam o número mostrado).
 - _truncated = lista encolhida pro modelo; o $rN guarda o conjunto inteiro (aggregate_result/calc). Só get_orders pagina com offset.
 - Erro invalid_input com validValues: corrija com um valor válido e repita.`;
@@ -254,9 +254,9 @@ Precisão (no lugar de conta de cabeça e de paginação):
 - calc — calculadora determinística sobre números e $rN.caminho; toda conta derivada sai daqui.
 - aggregate_result — filtra, agrupa, ordena e soma um resultado já recebido ($rN) sobre o conjunto completo.
 - aggregate_orders — GROUP BY no banco (dia, semana, hora, plataforma, família, produto, afiliado, status, país…) com eixo de data explícito (venda × data do estorno); substitui paginar get_orders pra contar ou somar.
-- compare_periods — a mesma tool em dois períodos com o diff alinhado (Δ, Δ%, Δpp, movers, decomposição volume × AOV); alinha "hoje até agora" com o mesmo horário da base.
+- compare_periods — a mesma tool em dois períodos com o diff alinhado (Δ, Δ%, Δpp, movers, decomposição volume × AOV); com hoje na janela, tool=aggregate_orders corta a base no mesmo horário e as demais tools comparam só os dias fechados (A = só hoje: use tool=aggregate_orders ou get_overview compare=true).
 - get_data_coverage — cobertura e lacunas: plataformas sem evento de estorno, lacuna de IPN da Digistore e último reconcile, catálogo pendente, ingestão, fusos.
-- resolve_entities — nome livre → valor exato do filtro (conta de afiliado, key partner:/aff:, affiliate_id NorthScale, família canônica, SKU, plataforma, país).
+- resolve_entities — nome livre → valor exato do filtro (conta de afiliado, key partner: do parceiro — a key aff:<id> de conta sem parceiro só vem nas linhas do get_affiliate_analysis, affiliate_id NorthScale, família canônica, SKU, plataforma, país).
 - get_profit_model — premissas do modelo CPA: opex%, régua do cpaStatus, fee/refund&cb/reserva por plataforma (manual × observada).
 - get_net_profit — (admin) margem de contribuição oficial da aba Lucro real.
 Conhecimento, anexos e resposta:

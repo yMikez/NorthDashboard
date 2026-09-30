@@ -67,7 +67,9 @@ export async function indexDocument(documentId: string, opts: IndexOptions = {})
     if (doc.scope === 'CONVERSATION') {
       drafts = drafts.map((d) => {
         const content = maskPii(d.content);
-        return { ...d, content, tokenCount: estimateTokens(content) };
+        // Rótulo e caminho de títulos também: vão pro tsvector (peso A), pro
+        // título do search_result e pra citação gravada na mensagem.
+        return { ...d, label: maskPii(d.label), headingPath: maskPii(d.headingPath), content, tokenCount: estimateTokens(content) };
       });
     }
 

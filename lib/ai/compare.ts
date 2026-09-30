@@ -280,6 +280,10 @@ const KEYERS: Keyer[] = [
   { name: 'productType', key: (o) => str(o.productType) },
   { name: 'label', key: (o) => str(o.label) },
   { name: 'name', key: (o) => str(o.name) },
+  // screenCards do get_overview (cards de reembolso e Net after CPA da tela):
+  // sem chave, compare_periods(get_overview) só diffava kpis.refundRate — a
+  // taxa por data da venda que NÃO é o card.
+  { name: 'card', key: (o) => str(o.card) },
 ];
 const METRIC_FIELDS = ['revenue', 'gross', 'grossUsd', 'totalRevenue', 'value', 'netUsd', 'profitUsd', 'net', 'orders', 'approvedOrders', 'sales', 'volume', 'count'];
 const EXTRA_FIELDS = ['orders', 'approvedOrders', 'feOrders', 'aov', 'approvalRate', 'refundRate', 'cbRate', 'takeRate', 'cpaPerFe', 'netAfterCpaTotalUsd', 'volume', 'sales'];
@@ -525,6 +529,27 @@ export async function runComparePeriods(input: Record<string, unknown>, ctx: Too
   const align = (['auto', 'full', 'same_elapsed'].includes(String(input.align)) ? input.align : 'auto') as AlignMode;
   const top = Math.min(Math.max(Math.trunc(Number(input.top) || 20), 1), 100);
   const filters = pickObject(input.filters, FILTER_KEYS, 'filters');
+  // Filtro que a tool alvo não aceita seria ignorado CALADO (get_profit_split
+  // sem SKU/etapa, get_call_center sem plataforma…) e a comparação do TOTAL
+  // sairia dita como "filtrada" — recusa dizendo o que vale pra ela.
+  const TOOL_FILTERS: Record<string, readonly string[]> = {
+    get_overview: ['platforms', 'countries', 'families', 'products', 'stages', 'affiliate_ids'],
+    get_platforms: ['platforms', 'countries', 'families', 'products', 'stages', 'affiliate_ids'],
+    get_products: ['platforms', 'countries', 'families', 'products', 'stages', 'affiliate_ids'],
+    get_costs_overview: ['platforms', 'countries', 'families', 'products', 'stages', 'affiliate_ids'],
+    aggregate_orders: ['platforms', 'countries', 'families', 'products', 'stages', 'affiliate_ids'],
+    get_affiliates: ['platforms', 'countries', 'families', 'products', 'affiliate_ids', 'search'],
+    get_funnel: ['platforms', 'countries', 'families', 'products', 'affiliate_ids'],
+    get_families: ['platforms', 'countries', 'families', 'affiliate_ids'],
+    get_profit_split: ['platforms', 'countries', 'families', 'affiliate_ids'],
+    get_fulfillment: ['platforms', 'countries', 'families', 'affiliate_ids'],
+    get_call_center: ['provider'],
+  };
+  const accepted = TOOL_FILTERS[tool] ?? FILTER_KEYS;
+  const ignored = Object.keys(filters).filter((k) => !accepted.includes(k));
+  if (ignored.length) {
+    throw new PeriodInputError(`filters.${ignored.join(', filters.')} não se aplica a tool=${tool} (aceita: ${accepted.join(', ')})`);
+  }
   const aggregate = tool === 'aggregate_orders' ? pickObject(input.aggregate, AGG_KEYS, 'aggregate') : {};
   if (tool !== 'aggregate_orders' && input.aggregate !== undefined) throw new PeriodInputError('aggregate só vale com tool="aggregate_orders"');
 
@@ -560,7 +585,7 @@ export async function runComparePeriods(input: Record<string, unknown>, ctx: Too
     a: side(plan.a, lenA, refA),
     b: side(plan.b, lenB, refB),
     notes: plan.notes,
-    howToRead: 'delta = A − B; deltaPct = variação relativa em pontos percentuais; deltaPp = diferença de taxas em pontos percentuais. A e B completos ficam nas refs indicadas (use aggregate_result/calc).',
+    howToRead: 'delta = A − B; deltaPct = variação relativa em pontos percentuais; deltaPp = diferença de taxas em pontos percentuais. EXCEÇÃO — em funnel e decomposition (volume × AOV) os campos fePct, aovPct, revenuePct, takeRate, prevTakeRate, takePp, lift e prevLift estão em FRAÇÃO (0.05 = 5% / +5 pp). A e B completos ficam nas refs indicadas (use aggregate_result/calc).',
     ...diff,
   };
 }

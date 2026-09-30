@@ -56,14 +56,27 @@ export function lexicalSql(query: string, f: ScopeFilter, limit = 80): Prisma.Sq
       WHERE ${scopeWhere(f)}
     ),
     n AS (SELECT count(*)::float8 AS n FROM sc),
+    -- Stopwords da pergunta. O ns_pt aplica unaccent ANTES do stemmer, então
+    -- "não/você/já/só/até" deixam de ser reconhecidas como stopword e viram
+    -- termo — e o all_terms passava a exigir "nao" no trecho. Aqui elas saem
+    -- da CONSULTA (no documento o idf delas já é quase zero).
+    stop AS (
+      SELECT DISTINCT l
+        FROM ts_debug('pg_catalog.portuguese'::regconfig, ${query}) d,
+             unnest(
+               tsvector_to_array(to_tsvector('public.ns_pt'::regconfig, d.token))
+               || tsvector_to_array(to_tsvector('public.ns_simple'::regconfig, d.token))
+             ) l
+       WHERE d.lexemes = '{}'::text[]
+    ),
     terms AS (
       SELECT 'pt'::text AS cfg, l
         FROM unnest(tsvector_to_array(to_tsvector('public.ns_pt'::regconfig, ${query}))) l
-       WHERE length(l) > 1
+       WHERE length(l) > 1 AND l NOT IN (SELECT l FROM stop)
       UNION ALL
       SELECT 'simple'::text, l
         FROM unnest(tsvector_to_array(to_tsvector('public.ns_simple'::regconfig, ${query}))) l
-       WHERE length(l) > 1 AND length(to_tsvector('public.ns_pt'::regconfig, l)) > 0
+       WHERE length(l) > 1 AND length(to_tsvector('public.ns_pt'::regconfig, l)) > 0 AND l NOT IN (SELECT l FROM stop)
     ),
     tq AS (SELECT cfg, l, to_tsquery('simple', quote_literal(l)) AS t FROM terms),
     df AS (

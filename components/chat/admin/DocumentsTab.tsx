@@ -179,6 +179,11 @@ export function DocumentsTab({ active }: { active: boolean }) {
       doc.sourceType === 'repo_md'
         ? `Excluir "${doc.title}"? Ele vem do repositório e volta na próxima recarga — para tirá-lo da busca de vez, desligue.`
         : `Excluir "${doc.title}"? Os trechos indexados saem da busca e não dá para desfazer.`;
+    // A API recusa (409) excluir documento de docs/kb — o seed o recriaria.
+    if (doc.sourceType === 'repo_md') {
+      setFlash({ tone: 'error', text: `"${doc.title}" vem do repositório (docs/kb): desligue-o para tirá-lo da busca.` });
+      return;
+    }
     if (!window.confirm(warn)) return;
     void run(doc, async () => {
       await adminFetch<unknown>(`/api/admin/kb/documents/${encodeURIComponent(doc.id)}`, { method: 'DELETE' });
@@ -193,7 +198,14 @@ export function DocumentsTab({ active }: { active: boolean }) {
     setSeeding(true);
     try {
       const res = await adminFetch<unknown>('/api/admin/kb/seed', { method: 'POST' });
-      setFlash({ tone: 'ok', text: summarizeSeedResult(res) });
+      // 202: a recarga roda em segundo plano (o resultado vai pro /stats e pela lista).
+      const started = (res as { started?: unknown } | null)?.started;
+      setFlash({
+        tone: 'ok',
+        text: started === false
+          ? 'Já há uma recarga do repositório em andamento — a lista acompanha.'
+          : 'Recarga do repositório iniciada — os documentos alterados reindexam em segundo plano.',
+      });
       docs.reload();
       stats.reload();
     } catch (err) {
@@ -460,7 +472,8 @@ function DocRow({
             variant="ghost"
             size="icon"
             onClick={onEdit}
-            disabled={busy}
+            // docs/kb e espelhos: a API só aceita ligar/desligar (PATCH de conteúdo = 409).
+            disabled={busy || managed != null || doc.sourceType === 'repo_md'}
             aria-expanded={editing}
             aria-label={`Editar "${doc.title}"`}
             title="Editar título, descrição, tipo e vigência"
@@ -546,9 +559,10 @@ function DocEditForm({
       const res = await adminFetch<{ document?: KbDocumentDTO }>(`/api/admin/kb/documents/${encodeURIComponent(doc.id)}`, {
         method: 'PATCH',
         json: {
-          title: title.trim(),
+          // Só título/tipo que MUDARAM: presentes, o servidor sobe a versão e reindexa (o doc sai da busca até terminar).
+          ...(title.trim() !== doc.title ? { title: title.trim() } : {}),
           description: description.trim() || null,
-          ...(kindEditable ? { kind } : {}),
+          ...(kindEditable && kind !== doc.kind ? { kind } : {}),
           effectiveDate: effectiveDate || null,
         },
       });

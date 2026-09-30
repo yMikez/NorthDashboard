@@ -168,14 +168,27 @@ export async function POST(req: Request) {
     take: HISTORY_MAX_MESSAGES,
     select: { id: true, role: true, content: true, blocks: true, toolUses: true, turnContext: true, createdAt: true },
   });
-  const userMessageIds = rows.filter((r) => r.role === 'user').map((r) => r.id);
-  const attachmentsByMessage = await loadMessageAttachments(user.id, conversationId, userMessageIds);
+  // Anexos da conversa INTEIRA (não só da janela de mensagens): numa conversa
+  // longa, o arquivo de uma mensagem antiga continua valendo pro modelo e
+  // pras tools de anexo.
+  const windowUserIds = new Set(rows.filter((r) => r.role === 'user').map((r) => r.id));
+  const linked = await db.kbDocument.findMany({
+    where: { conversationId, userId: user.id, scope: 'CONVERSATION', messageId: { not: null } },
+    select: { messageId: true },
+    distinct: ['messageId'],
+  });
+  const allMessageIds = [...new Set([...windowUserIds, ...linked.map((l) => l.messageId as string)])];
+  const attachmentsByMessage = await loadMessageAttachments(user.id, conversationId, allMessageIds);
+  const olderAttachments = [...attachmentsByMessage]
+    .filter(([messageId]) => !windowUserIds.has(messageId))
+    .flatMap(([, refs]) => refs);
   const sources = new SourceRegistry();
   const history = await buildApiHistory(rows, attachmentsByMessage, {
     maxMessages: HISTORY_MAX_MESSAGES,
     maxChars: HISTORY_MAX_CHARS,
     inlineBudgetTokens: ATTACH_INLINE_BUDGET_TOKENS,
     sources,
+    olderAttachments,
   });
   if (history.messages.length === 0) {
     return new Response(JSON.stringify({ error: 'histórico vazio' }), { status: 400 });

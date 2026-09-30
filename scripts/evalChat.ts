@@ -1,7 +1,15 @@
 // Eval do chat IA pela linha de comando — o mesmo runner do endpoint admin.
 //
-// Uso (DATABASE_URL + ANTHROPIC_API_KEY; em prod dentro do container:
-//   docker exec dashboard-app node_modules/.bin/tsx scripts/evalChat.ts …):
+// EM PRODUÇÃO use o painel (Chat IA → admin → Avaliação) ou
+// POST /api/admin/chat-eval { cases, categories, reps, model, effort, knowledge }.
+// O CLI NÃO roda dentro do container: a imagem só leva o tsx sem as deps dele
+// (get-tsconfig, resolve-pkg-maps) e o standalone do Next não tem
+// @anthropic-ai/sdk nem pino fora dos chunks. Contra o banco de prod, rode
+// local com um túnel SSH até o IP do dashboard-postgres na rede do compose
+// (a porta 5432 não é publicada no host): ssh -L 5433:<ip-do-container>:5432 …
+// e DATABASE_URL apontando pra localhost:5433.
+//
+// Uso local (DATABASE_URL + ANTHROPIC_API_KEY):
 //
 //   npx tsx scripts/evalChat.ts                       # todos os casos, 1 repetição, modelo/esforço do .env
 //   npx tsx scripts/evalChat.ts --cases=G01,G13 --reps=3

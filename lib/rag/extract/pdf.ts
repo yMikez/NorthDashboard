@@ -54,7 +54,15 @@ export async function extractPdf(bytes: Buffer, maxPages: number): Promise<PdfEx
     const { info } = await getMeta(doc);
     const encrypted = !!(info as { EncryptFilterName?: string | null }).EncryptFilterName;
     const pageCount = doc.numPages;
-    const { text } = await extractText(doc, { mergePages: false });
+    // Página a página e SÓ até o teto: o extractText do unpdf abre TODAS as
+    // páginas de uma vez (Promise.all) antes de qualquer corte — um PDF de
+    // 3 MB com 30 mil páginas vazias estourou o heap (4 GB) e derrubou o
+    // processo. Mesmo texto por página que o extractText montava.
+    const text: string[] = [];
+    for (let i = 1; i <= Math.min(pageCount, maxPages); i++) {
+      const content = await (await doc.getPage(i)).getTextContent();
+      text.push(content.items.map((item) => ('str' in item ? item.str + (item.hasEOL ? '\n' : '') : '')).join(''));
+    }
     const limit = Math.min(pageCount, maxPages);
     if (pageCount > limit) warnings.push(`Texto extraído só das primeiras ${limit} de ${pageCount} páginas.`);
     const pages = text.slice(0, limit).map((t, i) => ({ page: i + 1, text: normalizeText(t, { prose: true }) }));

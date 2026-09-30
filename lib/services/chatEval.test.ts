@@ -90,14 +90,14 @@ describe('resolveLens (cálculos sobre resultados)', () => {
     expect(r.items[0][0]).toBeCloseTo(10, 9);
   });
 
-  it('dominant devolve as palavras do rótulo vencedor', async () => {
+  it('dominant devolve as palavras do rótulo vencedor (e as dos perdedores)', async () => {
     const seq = (p: string) => ({ tool: 'get_funnel_sequence', args: {}, path: p });
     const r = await resolveLens(
       { name: 'x', calc: { op: 'dominant', inputs: [seq('scopes.all.transitions[-1].volumeEffect'), seq('scopes.all.transitions[-1].aovEffect')], labels: ['volume|sessões', 'AOV|ticket'] } },
       exec,
       NOW,
     );
-    expect(r).toEqual({ items: [['volume', 'sessões']], list: false });
+    expect(r).toEqual({ items: [['volume', 'sessões']], list: false, rivals: ['AOV', 'ticket'] });
   });
 
   it('erro da tool vira erro da lente (não valor zero)', async () => {

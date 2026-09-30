@@ -13,7 +13,7 @@ function syntheticLens(l: Lens, kind: FactExpectation['kind'], j: number, absolu
   const sign = absolute ? -1 : 1;
   const path = l.source?.path ?? '';
   if (k === 'text') {
-    if (l.calc?.op === 'dominant') return { items: [l.calc.labels![0].split('|')], list: false };
+    if (l.calc?.op === 'dominant') return { items: [l.calc.labels![0].split('|')], list: false, rivals: l.calc.labels!.slice(1).flatMap((x) => x.split('|')) };
     if (/\[\d+\.\.\d+\]/.test(path)) return { items: NAMES.map((n) => [n]), list: true };
     return { items: [[NAMES[j]]], list: false };
   }
@@ -159,6 +159,15 @@ describe('regras específicas', () => {
     const spec = byId('G10'); // variação sintética −8.23% → caiu
     expect(gradeAnswer(answer(spec, 'A receita de ontem caiu 8.23% contra anteontem.')).status).toBe('pass');
     expect(gradeAnswer(answer(spec, 'A receita de ontem subiu 8.23% contra anteontem.')).status).toBe('fail');
+  });
+
+  it('veredito "foi X ou Y?": o perdedor citado antes do vencedor reprova', () => {
+    const spec = byId('G12'); // vencedor sintético = volume
+    const certo = gradeAnswer(answer(spec, 'Foi volume: as sessões caíram, enquanto o AOV ficou estável.'));
+    expect(check(certo, 'fact:fator dominante')?.status).toBe('pass');
+    const errado = gradeAnswer(answer(spec, 'Foi AOV: o ticket caiu, enquanto o volume ficou estável.'));
+    expect(check(errado, 'fact:fator dominante')?.status).toBe('fail');
+    expect(check(errado, 'fact:fator dominante')?.detail).toContain('antes de');
   });
 
   it('dado que mexeu entre antes e depois vira inconclusive, não fail', () => {

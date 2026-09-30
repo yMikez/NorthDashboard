@@ -15,7 +15,7 @@ version: 1
 - Diga as datas exatas das janelas (vêm em windows / _meta.range): "7 dias fechados até ontem" ≠ período da tela.
 - Pseudo-afiliados internos ficam fora (include_internal=false), igual à aba.
 - Breakout/queda forte só com volume mínimo (≥ 30 FEs numa das janelas); abaixo disso, "oscilação de amostra pequena".
-- Ranking por NET AFTER CPA: linha com netAfterCpaTotalUsd null = sem CPA detectado — liste à parte, não como zero.
+- Ranking por NET AFTER CPA: linha com NET AFTER CPA null (campo netAfterCpaTotal em get_affiliate_analysis/get_affiliate_sequence; netAfterCpaTotalUsd em get_affiliates) = sem CPA detectado — liste à parte, não como zero.
 - view=partner soma contas da mesma pessoa em plataformas diferentes; view=platform mostra conta a conta.
 
 ## Formato

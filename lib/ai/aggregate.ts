@@ -280,6 +280,22 @@ function sortRows(rows: Array<Record<string, unknown>>, by: string, dir: 'asc' |
 export function runAggregate(value: unknown, spec: AggregateSpec): AggregateOutput {
   const notes: string[] = [];
   const { rows: source, path } = resolveRows(value, spec.path, notes);
+  // Campo com nome errado virava soma 0 / "todas as linhas são null" sem
+  // erro (zero confiante) — o calc já recusa chave inexistente; aqui também.
+  const used = new Set<string>([
+    ...(spec.where ?? []).map((w) => w.field),
+    ...(spec.group_by ?? []),
+    ...(spec.metrics ?? []).flatMap((m) => [m.field, m.weight, m.num, m.den].filter((f): f is string => !!f)),
+    ...(spec.select ?? []),
+    ...(spec.sort && !spec.group_by?.length && !spec.metrics?.length ? [spec.sort.by] : []),
+  ]);
+  for (const f of used) {
+    if (source.length && !source.some((r) => fieldValue(r, f) !== undefined)) {
+      const first = source.find((r) => r && typeof r === 'object' && !Array.isArray(r));
+      const keys = first ? Object.keys(first as object).slice(0, 30).join(', ') : '';
+      throw new AggregateInputError(`campo "${f}" não existe nas linhas de "${path || '(lista)'}"${keys ? ` — campos: ${keys}` : ''}`);
+    }
+  }
   const matched = spec.where?.length ? source.filter((r) => spec.where!.every((w) => matches(r, w))) : source;
   const limit = spec.limit ?? AGG_DEFAULT_LIMIT;
   const metrics = spec.metrics ?? [];

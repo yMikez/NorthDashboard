@@ -286,6 +286,16 @@ export async function acceptUpload(input: UploadInput): Promise<UploadOutcome> {
   if (drafts >= ATTACHMENT_LIMITS.maxOpenDrafts) {
     return fail(429, 'too_many_drafts', 'Muitos anexos ainda não enviados — envie ou remova alguns antes de anexar mais.');
   }
+  // Teto de bytes guardados POR USUÁRIO (anexos vivos): os limites por
+  // mensagem/conversa não freiam conversas novas em série — 25 MB × 5 × 1.000
+  // mensagens/dia enchiam o disco do Postgres (o mesmo da ingestão).
+  const stored = await db.kbDocument.aggregate({
+    where: { ...ATTACHMENT_WHERE, userId, status: { not: 'EXPIRED' } },
+    _sum: { byteSize: true },
+  });
+  if ((stored._sum.byteSize ?? 0) + bytes.length > envInt('CHAT_ATTACH_USER_MAX_MB', 2048) * MB) {
+    return fail(429, 'user_quota', 'Limite de armazenamento de anexos atingido — remova anexos antigos antes de enviar mais.');
+  }
 
   // Tipo pelos bytes ANTES de gravar qualquer coisa: formato recusado nem entra.
   let sniffedMime: string;

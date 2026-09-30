@@ -12,7 +12,7 @@ version: 1
 
 ## Checagens obrigatórias
 - Toda premissa explícita e com a fonte (get_profit_model ou o usuário). Premissa do usuário que muda o resultado: use a dele e mostre a do sistema ao lado.
-- AOV do mesmo escopo e período do CPA (AOV de sessão atribuído do afiliado, não o da operação).
+- AOV do mesmo escopo e período do CPA: pra afiliado, o AOV do ranking (revenue ÷ feApprovedCount — o mesmo que gera netAovUsd e o cpaStatus), não o AOV de sessão da operação nem attributedRevenue ÷ attributedSessions.
 - Reembolso: use a taxa madura (coorte / refund&cb% do modelo), não a de caixa de poucos dias.
 - Percentuais em pontos (15 = 15%) na fórmula; confira a unidade em _meta.units.
 

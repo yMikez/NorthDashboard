@@ -45,10 +45,25 @@ export async function POST(req: Request) {
   const declared = Number(req.headers.get('content-length') ?? '');
   if (Number.isFinite(declared) && declared > ATTACHMENT_LIMITS.maxFileBytes + MULTIPART_SLACK) return tooLarge();
 
+  // Teto também SEM Content-Length (Transfer-Encoding: chunked): o formData()
+  // bufferizaria na memória do processo um corpo de qualquer tamanho (o
+  // middleware, que cortava em 10 MB, saiu de /api). Conta os bytes no caminho.
+  const bodyLimit = ATTACHMENT_LIMITS.maxFileBytes + MULTIPART_SLACK;
+  let seen = 0;
+  const limited = req.body?.pipeThrough(
+    new TransformStream<Uint8Array, Uint8Array>({
+      transform(chunk, ctl) {
+        seen += chunk.byteLength;
+        if (seen > bodyLimit) ctl.error(new Error('too_large'));
+        else ctl.enqueue(chunk);
+      },
+    }),
+  );
   let form: FormData;
   try {
-    form = await req.formData();
+    form = await new Request(req.url, { method: 'POST', headers: req.headers, body: limited ?? null, duplex: 'half' } as RequestInit).formData();
   } catch {
+    if (seen > bodyLimit) return tooLarge();
     return fail(400, 'invalid_body', 'Envio inválido: use multipart/form-data com o campo "file".');
   }
   const file = form.get('file');

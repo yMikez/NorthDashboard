@@ -618,7 +618,14 @@ export function displayValue(v: number | null, unit: CalcUnit): string {
 
 function inferUnit(expr: string): CalcUnit {
   try {
-    const n = parseExpression(expr);
+    let n = parseExpression(expr);
+    // round(…)/abs(…)/−(…) não mudam a unidade: round(pct_change(a, b), 1)
+    // saía "12.5" (sem %) no display que o modelo copia pros blocos.
+    for (;;) {
+      if (n.k === 'neg') { n = n.e; continue; }
+      if (n.k === 'call' && (n.fn === 'round' || n.fn === 'abs') && n.args.length >= 1) { n = n.args[0]; continue; }
+      break;
+    }
     if (n.k === 'call' && PERCENT_FUNCTIONS.has(n.fn)) return 'percent';
     if (n.k === 'call' && n.fn === 'pp_change') return 'pp';
   } catch {

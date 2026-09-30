@@ -31,9 +31,16 @@ export interface MdBlock {
 }
 
 const FENCE_OPEN_RE = /^\s{0,3}(`{3,}|~{3,})/;
-const HEADING_RE = /^\s{0,3}(#{1,6})\s+(.+?)\s*#*\s*$/;
+// Linear de propósito: o conteúdo do título termina em \S, então o rabo
+// (?:\s+#+)?\s*$ só é testado uma vez por trecho de espaço. A versão
+// `(.+?)\s*#*\s*$` (dois \s* em volta de #*) era CÚBICA numa linha
+// "# a" + milhares de espaços + "x": um .txt de 20 KB travava o event loop
+// do servidor inteiro por meia hora na indexação do anexo.
+const HEADING_RE = /^\s{0,3}(#{1,6})\s+(\S(?:.*?\S)??)(?:\s+#+)?\s*$/;
 const LIST_ITEM_RE = /^\s*(?:[-*+]|\d+[.)])\s+/;
-const TABLE_SEP_RE = /^\s*\|?\s*:?-{3,}:?\s*(?:\|\s*:?-{3,}:?\s*)*\|?\s*$/;
+// Mesma linguagem de antes, sem dois \s* separados por \|? (quadrático numa
+// linha longa de espaços depois de uma linha com "|").
+const TABLE_SEP_RE = /^\s*(?:\|\s*)?:?-{3,}:?\s*(?:\|\s*:?-{3,}:?\s*)*(?:\|\s*)?$/;
 
 function isTableStart(lines: string[], i: number): boolean {
   const l = lines[i];
@@ -264,7 +271,20 @@ export function splitOversizedBlock(b: MdBlock): MdBlock[] {
     }
     return groupByTokens(items, '\n', CHUNK_TARGET_TOKENS).map((text) => ({ kind: 'list', text }));
   }
-  return groupByTokens(splitSentences(b.text), ' ', CHUNK_TARGET_TOKENS).map((text) => ({ kind: 'paragraph', text }));
+  // "Frase" sem pontuação maior que o alvo (TXT de um registro por linha,
+  // log, lista de e-mails): parte por linha e, no limite, por caracteres —
+  // senão o parágrafo inteiro vira UM trecho de dezenas de milhares de tokens
+  // (e o search_result devolve tudo, sem teto).
+  const maxChars = tokensToChars(CHUNK_TARGET_TOKENS);
+  const parts = splitSentences(b.text).flatMap((s) => {
+    if (estimateTokens(s) <= CHUNK_TARGET_TOKENS) return [s];
+    return s.split('\n').flatMap((line) => {
+      const out: string[] = [];
+      for (let i = 0; i < line.length; i += maxChars) out.push(line.slice(i, i + maxChars));
+      return out;
+    });
+  });
+  return groupByTokens(parts, ' ', CHUNK_TARGET_TOKENS).map((text) => ({ kind: 'paragraph', text }));
 }
 
 /** Rabo (≤ ~60 tokens) do último bloco de texto corrido — nunca de tabela/código. */

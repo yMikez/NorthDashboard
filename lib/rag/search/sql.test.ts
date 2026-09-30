@@ -180,6 +180,15 @@ describe('busca lexical no Postgres (PGlite com todas as migrações)', () => {
     expect(ids).toEqual([]);
   });
 
+  it('stopword acentuada ("não", "você", "já") não vira termo obrigatório', async () => {
+    const res = await run<{ id: string; all_terms: boolean }>(
+      db,
+      lexicalSql('por que o estorno já não é reembolso no dashboard até você?', { scope: 'knowledge' }),
+    );
+    const top = res.rows.find((r) => r.id === 'doc_ressalvas#0');
+    expect(top?.all_terms).toBe(true);
+  });
+
   it('trigram acha nome com erro de digitação no rótulo', async () => {
     const ok = await run(db, trigramAvailableSql);
     expect(ok.rows.length).toBe(1);

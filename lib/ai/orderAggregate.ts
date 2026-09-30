@@ -250,9 +250,15 @@ export function parseOrderAggSpec(raw: Record<string, unknown>, period: { startA
   if (axis !== 'sale' && axis !== 'refund_event') throw new OrderAggInputError('date_axis inválido — valid: sale, refund_event');
   const groupBy = (list(raw.group_by, 'group_by', ORDER_DIMENSIONS) ?? []) as OrderDimension[];
   if (groupBy.length > 3) throw new OrderAggInputError('group_by aceita no máximo 3 dimensões');
-  const metrics = (list(raw.metrics, 'metrics', ORDER_METRICS) ?? ['approved', 'gross_approved']) as OrderMetric[];
+  // Default por eixo: no eixo do estorno só existem linhas REFUNDED/CHARGEBACK
+  // — approved/gross_approved davam 0 em todo grupo (a skill de reembolso
+  // chama aggregate_orders(date_axis=refund_event, group_by) sem metrics).
+  const metrics = (list(raw.metrics, 'metrics', ORDER_METRICS)
+    ?? (axis === 'refund_event' ? ['refunds', 'chargebacks', 'refunded_usd'] : ['approved', 'gross_approved'])) as OrderMetric[];
   if (axis === 'refund_event') {
-    const bad = metrics.filter((m) => SESSION_METRICS.has(m) || m === 'approval_rate');
+    // approved/gross_approved são 0 por construção e real_orders vira "estornos
+    // fora da Digistore" — denominador falso se dividido à mão (a taxa é refund_rate).
+    const bad = metrics.filter((m) => SESSION_METRICS.has(m) || m === 'approval_rate' || m === 'approved' || m === 'gross_approved' || m === 'real_orders');
     if (bad.length) throw new OrderAggInputError(`${bad.join(', ')} só existe no eixo da venda (date_axis=sale)`);
   }
   const statuses = list(raw.status, 'status', ORDER_STATUSES) as OrderAggSpec['statuses'];

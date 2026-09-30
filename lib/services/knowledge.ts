@@ -96,7 +96,7 @@ export function buildKnowledgeBlock(
     .sort((a, b) => {
       const ka = KIND_ORDER.indexOf(a.kind);
       const kb = KIND_ORDER.indexOf(b.kind);
-      return (ka < 0 ? 99 : ka) - (kb < 0 ? 99 : kb) || a.title.localeCompare(b.title, 'pt-BR');
+      return (ka < 0 ? 99 : ka) - (kb < 0 ? 99 : kb) || a.title.localeCompare(b.title, 'pt-BR') || a.id.localeCompare(b.id);
     });
   let indexChars = 0;
   let hidden = 0;
@@ -206,7 +206,9 @@ export async function syncKnowledgeEntry(id: string): Promise<void> {
         text: mirrorText(e),
         mimeType: 'text/markdown',
         effectiveDate: isMemory ? e.createdAt : null,
-        enabled: true,
+        // Sem `enabled`: o espelho nasce ligado (entrada desligada/pendente
+        // apaga o espelho acima), e o liga/desliga que o admin fizer na aba
+        // Documentos sobrevive ao próximo sync/seed.
       },
       // Entrada curta: o rótulo já diz do que é — contexto do modelo não paga.
       { contextualize: false },

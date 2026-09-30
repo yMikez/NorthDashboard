@@ -80,6 +80,11 @@ export class EvalWindowError extends Error {}
 export function normalizeEvalConfig(input: EvalConfigInput = {}): { ok: true; value: EvalConfig } | { ok: false; error: string } {
   const model = input.model === undefined ? ANTHROPIC_MODEL : typeof input.model === 'string' ? input.model.trim() : '';
   if (!/^claude-[a-z0-9.-]{2,60}$/.test(model)) return { ok: false, error: `model inválido: "${String(input.model)}"` };
+  // Sem preço em chatPricing o custo do caso vira null, soma como 0 e o teto
+  // CHAT_EVAL_MAX_USD nunca dispara (rodada sem limite de gasto).
+  if (roundsCostUsd([{ model, usage: { input_tokens: 0, output_tokens: 0, cache_read_input_tokens: 0, cache_creation_input_tokens: 0 } }]) == null) {
+    return { ok: false, error: `model sem preço em chatPricing: "${model}" — o teto de custo do eval não funcionaria` };
+  }
   const effort = (input.effort ?? ANTHROPIC_EFFORT) as ChatEffort;
   if (!EFFORTS.includes(effort)) return { ok: false, error: `effort inválido — válidos: ${EFFORTS.join(', ')}` };
   const list = (v: unknown, what: string): string[] | string => {
@@ -250,7 +255,8 @@ export async function resolveLens(lens: Lens, exec: Exec, now: Date): Promise<Re
       });
       const label = labels[best];
       if (!label) throw new SpecError('dominant sem rótulo pra entrada vencedora');
-      return { items: [label.split('|')], list: false };
+      const rivals = labels.filter((_, i) => i !== best).flatMap((l) => l.split('|'));
+      return { items: [label.split('|')], list: false, rivals };
     }
   }
 }

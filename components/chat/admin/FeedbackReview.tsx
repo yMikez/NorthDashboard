@@ -53,8 +53,9 @@ const feedbackKey = (f: FeedbackItem) => f.id;
 
 function feedbackUrl(rating: RatingFilter, status: string): string {
   const q = new URLSearchParams();
-  if (rating !== 'all') q.set('rating', rating);
-  if (status !== 'all') q.set('status', status);
+  // 'all' vai explícito: sem o parâmetro a rota aplica o default (👎 em aberto).
+  q.set('rating', rating);
+  q.set('status', status);
   const qs = q.toString();
   return `/api/admin/chat-quality/feedback${qs ? `?${qs}` : ''}`;
 }

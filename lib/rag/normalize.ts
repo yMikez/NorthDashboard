@@ -29,7 +29,13 @@ export function normalizeText(raw: string, opts: NormalizeOptions = {}): string 
   }
   t = t
     .split('\n')
-    .map((l) => l.replace(/[ \t]+$/, ''))
+    // Laço em vez de /[ \t]+$/: a regex é quadrática numa linha com um trecho
+    // longo de espaços que NÃO está no fim ("a" + 1M espaços + "x" = minutos).
+    .map((l) => {
+      let end = l.length;
+      while (end > 0 && (l.charCodeAt(end - 1) === 32 || l.charCodeAt(end - 1) === 9)) end--;
+      return end === l.length ? l : l.slice(0, end);
+    })
     .join('\n');
   // 3+ linhas em branco viram 1 parágrafo — preserva a estrutura sem inflar.
   t = t.replace(/\n{3,}/g, '\n\n');
@@ -92,7 +98,10 @@ export function foldForMatch(s: string): string {
     .trim();
 }
 
-const EMAIL_RE = /[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/g;
+// Quantificadores LIMITADOS (RFC: local ≤ 64, domínio ≤ 253): com `+` a
+// varredura é quadrática num token longo sem "@" (trecho de código/PDF de
+// 100k chars = segundos de event loop travado por trecho indexado).
+const EMAIL_RE = /[A-Za-z0-9._%+-]{1,64}@[A-Za-z0-9.-]{1,253}\.[A-Za-z]{2,24}/g;
 const IPV4_RE = /\b(?:(?:25[0-5]|2[0-4]\d|1?\d?\d)\.){3}(?:25[0-5]|2[0-4]\d|1?\d?\d)\b/g;
 // Candidato a telefone: dígitos com separadores de telefone (espaço, ponto,
 // hífen, parênteses, +). Vírgula NÃO entra — "12,345,678.90" é dinheiro.

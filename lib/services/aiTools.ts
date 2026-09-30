@@ -400,7 +400,7 @@ const CORE_TOOLS: Anthropic.Tool[] = [
                     format: {
                       type: 'string',
                       enum: ['currency', 'percent', 'fraction', 'number', 'text'],
-                      description: 'currency = US$; percent = número JÁ em pontos percentuais (12.3 → "12.3%"; passe *Pct e screenCards assim); fraction = 0–1 (0.123 → "12.3%"; passe *Rate assim); number; text.',
+                      description: 'currency = US$; percent = número JÁ em pontos percentuais (12.3 → "12.3%"; campos com unidade pp em _meta.units, deltaPct/deltaPp do compare_periods e screenCards); fraction = 0–1 (0.123 → "12.3%"; campos com unidade fraction em _meta.units — *Rate, takeRate, commissionPct, upsellLiftPct, fePct/aovPct/revenuePct, dropPct, deltas.*.pct do get_overview). Siga _meta.units, não o nome do campo; number; text.',
                     },
                   },
                   required: ['key', 'label'],

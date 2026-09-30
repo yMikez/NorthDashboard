@@ -256,6 +256,7 @@ function gradeFact(fact: FactExpectation, answer: string, answerNorm: string, nu
 
   if (fact.kind === 'text' || available.some((l) => l.value!.list)) {
     // Entidade/ranking: todos os itens de ALGUMA lente, na ordem se pedido.
+    let rivalFirst: string | null = null;
     for (const lens of available) {
       const cands = [lens.value!, ...(lens.after ? [lens.after] : [])];
       for (const cand of cands) {
@@ -268,17 +269,26 @@ function gradeFact(fact: FactExpectation, answer: string, answerNorm: string, nu
               return n ? n.index : null;
             });
         if (positions.every((p) => p != null)) {
+          // Veredito (dominant): o rótulo perdedor citado ANTES do vencedor é
+          // resposta errada — "Foi VOLUME…, enquanto o AOV ficou estável"
+          // cita os dois, mas o veredito é volume.
+          const firstAt = Math.min(...(positions as number[]));
+          const rivalAt = cand.rivals?.length ? textPositions(answerNorm, [cand.rivals])[0] : null;
+          if (rivalAt != null && rivalAt < firstAt) {
+            rivalFirst = `cita ${cand.rivals!.join('/')} antes de ${cand.items[0].map(String).join('/')}`;
+            continue;
+          }
           const checks: CheckResult[] = [{ id, status: 'pass', critical: true, detail: `lente ${lens.name}` }];
           if (fact.ordered && positions.length > 1) {
             const inOrder = positions.every((p, i) => i === 0 || (p as number) > (positions[i - 1] as number));
             checks.push({ id: `order:${fact.label}`, status: inOrder ? 'pass' : 'fail', critical: false, detail: inOrder ? undefined : 'itens fora da ordem esperada' });
           }
-          return { checks, passed: true, firstAt: Math.min(...(positions as number[])) };
+          return { checks, passed: true, firstAt };
         }
       }
     }
     return {
-      checks: [{ id, status: moved ? 'inconclusive' : 'fail', critical: true, detail: `esperado ${describeExpected(fact)}` }],
+      checks: [{ id, status: moved ? 'inconclusive' : 'fail', critical: true, detail: `esperado ${describeExpected(fact)}${rivalFirst ? ` — ${rivalFirst}` : ''}` }],
       passed: false,
       firstAt: null,
     };
