@@ -161,6 +161,18 @@ function checkGlobals() {
 }
 checkGlobals();
 
+// A nav do /chat (Next) é GERADA da Sidebar da SPA — se a sidebar mudou e o
+// arquivo gerado não, o chat voltaria a mostrar um menu diferente.
+{
+  const { buildChatNav, OUT } = await import('./gen-chat-nav.mjs');
+  const { readFileSync, existsSync } = await import('node:fs');
+  const cur = existsSync(OUT) ? readFileSync(OUT, 'utf8').replace(/\r\n/g, '\n') : '';
+  if (cur !== buildChatNav()) {
+    console.error(`[build-spa] ${OUT} desatualizado em relação à Sidebar da SPA — rode: node scripts/gen-chat-nav.mjs`);
+    process.exit(1);
+  }
+}
+
 if (process.argv.includes('--watch')) {
   const ctx = await context(options);
   await ctx.watch();

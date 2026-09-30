@@ -1,142 +1,159 @@
-// Nav esquerdo igual ao da SPA legacy (.side em dashboard.css).
-// Renderizado dentro do /chat pra dar sensação de continuidade — clicar
-// em qualquer item leva pra rota SPA (full-page nav via <a href>).
+// Nav esquerda do /chat — espelho da Sidebar da SPA (public/src/shell.jsx).
 //
-// Itens em sync com public/src/shell.jsx#Sidebar. Apenas o item 'chat'
-// é "interno" ao Next.js native; resto vai pro SPA legacy.
+// O /chat é rota Next e não enxerga os globals da SPA; a lista de itens e o
+// desenho dos ícones vêm de navConfig.generated.ts, GERADO da própria
+// Sidebar (scripts/gen-chat-nav.mjs; o build-spa confere). Antes era uma
+// cópia à mão e ficou para trás: sem Reembolsos/CRM/Captação/Lucro real,
+// logo antigo, ícones de outro set e sem o trilho recolhido.
+//
+// Clicar em qualquer item leva pra rota da SPA (full-page nav via <a href>);
+// só o 'chat' é desta rota. Mesmas classes .side* de dashboard.css, mesma
+// chave 'ns-side-collapsed' do recolhido.
 
 'use client';
 
 import * as React from 'react';
-import {
-  LayoutDashboard,
-  BarChart3,
-  TrendingDown,
-  Trophy,
-  Package,
-  Receipt,
-  Plug,
-  Wallet,
-  AlertTriangle,
-  Sparkles,
-  UserPlus,
-  LogOut,
-} from 'lucide-react';
 import type { ChatUser } from '@/types/chat';
+import { NAV_GROUPS, NAV_IA_GROUP, NAV_ADMIN_GROUP, type NavGroup } from './navConfig.generated';
+import { NsIcon } from './NsIcon';
 
-interface NavItem {
-  id: string;
-  label: string;
-  href: string;
-  icon: React.ComponentType<{ size?: number | string; className?: string }>;
+const COLLAPSED_KEY = 'ns-side-collapsed';
+
+/** Mesmo valor do localStorage num cookie, pro servidor renderizar certo. */
+function writeCollapsedCookie(v: boolean) {
+  document.cookie = `${COLLAPSED_KEY}=${v ? '1' : '0'}; path=/; max-age=31536000; samesite=lax`;
 }
 
-interface NavGroup {
-  label: string;
-  items: NavItem[];
-}
-
-const GROUPS: NavGroup[] = [
-  {
-    label: 'Análise',
-    items: [
-      { id: 'overview', label: 'Visão geral', href: '/overview', icon: LayoutDashboard },
-      { id: 'funnel', label: 'Funil', href: '/funnel', icon: BarChart3 },
-      { id: 'custos', label: 'Custos', href: '/custos', icon: TrendingDown },
-    ],
-  },
-  {
-    label: 'Afiliados',
-    items: [
-      { id: 'leaderboard', label: 'Afiliados', href: '/leaderboard', icon: Trophy },
-      { id: 'affiliate-analysis', label: 'Análise', href: '/affiliate-analysis', icon: BarChart3 },
-    ],
-  },
-  {
-    label: 'Catálogo',
-    items: [
-      { id: 'products', label: 'Produtos', href: '/products', icon: Package },
-      { id: 'transactions', label: 'Transações', href: '/transactions', icon: Receipt },
-    ],
-  },
-  {
-    label: 'Sistema',
-    items: [
-      { id: 'platforms', label: 'Plataformas', href: '/platforms', icon: Plug },
-      { id: 'costs', label: 'Fulfillment', href: '/costs', icon: Wallet },
-      { id: 'health', label: 'Saúde do dado', href: '/health', icon: AlertTriangle },
-    ],
-  },
-  {
-    label: 'Admin',
-    items: [
-      { id: 'chat', label: 'Análise (IA)', href: '/chat', icon: Sparkles },
-      { id: 'users', label: 'Usuários', href: '/users', icon: UserPlus },
-    ],
-  },
-];
-
-export function DashboardNav({ user, activeId = 'chat' }: { user: ChatUser; activeId?: string }) {
+export function DashboardNav({
+  user,
+  activeId = 'chat',
+  open = false,
+  onClose,
+  linkQuery = '',
+  initialCollapsed = false,
+}: {
+  user: ChatUser;
+  activeId?: string;
+  /** Drawer do mobile (≤820px) aberto. */
+  open?: boolean;
+  onClose?: () => void;
+  /** Filtros atuais no formato da SPA — os links levam junto (voltar pra SPA não zera o filtro). */
+  linkQuery?: string;
+  /** Recolhido lido do cookie no servidor (page.tsx) — o HTML já sai certo. */
+  initialCollapsed?: boolean;
+}) {
+  // Mesma regra da SPA: admin vê tudo; membro só as abas liberadas; o chat
+  // IA é de todo usuário logado (grupo injetado DEPOIS do filtro).
   const isAdmin = user.role === 'ADMIN';
-  const groups = isAdmin ? GROUPS : GROUPS.filter((g) => g.label !== 'Admin');
+  const allowed = new Set(user.allowedTabs ?? []);
+  const groups: NavGroup[] = isAdmin
+    ? [...NAV_GROUPS, NAV_IA_GROUP, NAV_ADMIN_GROUP]
+    : [
+        ...NAV_GROUPS.map((g) => ({ ...g, items: g.items.filter((it) => allowed.has(it.id)) })).filter(
+          (g) => g.items.length > 0,
+        ),
+        NAV_IA_GROUP,
+      ];
+
+  // Recolhido persistido (trilho de 64px). O servidor lê o cookie
+  // 'ns-side-collapsed' (page.tsx), então o HTML já nasce no estado certo —
+  // ler só o localStorage depois da hidratação pintava a nav aberta e a
+  // animava fechando. O layout effect só reconcilia quem recolheu antes do
+  // cookie existir (localStorage é a fonte que a SPA sempre gravou).
+  const [collapsed, setCollapsed] = React.useState(initialCollapsed);
+  React.useLayoutEffect(() => {
+    try {
+      const stored = localStorage.getItem(COLLAPSED_KEY) === '1';
+      if (stored !== initialCollapsed) {
+        setCollapsed(stored);
+        writeCollapsedCookie(stored);
+      }
+    } catch {
+      /* noop */
+    }
+  }, [initialCollapsed]);
+  function toggleCollapse() {
+    const next = !collapsed;
+    setCollapsed(next);
+    try {
+      localStorage.setItem(COLLAPSED_KEY, next ? '1' : '0');
+    } catch {
+      /* noop */
+    }
+    writeCollapsedCookie(next);
+  }
 
   return (
-    <aside className="side">
-      <div className="side-logo">
-        {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img src="/assets/logo-mark-dark.svg" alt="" className="logo-mark logo-dark" style={{ width: 32, height: 32 }} />
-        {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img src="/assets/logo-mark-light.svg" alt="" className="logo-mark logo-light" style={{ width: 32, height: 32 }} />
-        <div className="wm" style={{ width: 71, fontSize: 24 }}>
-          north<em>scale</em>
-        </div>
-      </div>
-
-      {groups.map((g) => (
-        <div key={g.label}>
-          <div className="side-group-label">{g.label}</div>
-          <nav className="side-nav">
-            {g.items.map((it) => {
-              const Icon = it.icon;
-              const active = it.id === activeId;
-              return (
-                <a key={it.id} href={it.href} className={`side-item ${active ? 'is-active' : ''}`}>
-                  <Icon size={15} />
-                  <span>{it.label}</span>
-                </a>
-              );
-            })}
-          </nav>
-        </div>
-      ))}
-
-      <div className="side-foot">
-        <div
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            padding: '0 6px',
-            fontSize: 11,
-            color: 'var(--fg5)',
-          }}
+    <>
+      {/* Véu do drawer mobile — só existe no DOM enquanto aberto (≤820px). */}
+      {open && <div className="side-backdrop" onClick={onClose} />}
+      <aside className={'side ' + (collapsed ? 'is-collapsed ' : '') + (open ? 'is-open' : '')}>
+        <button
+          type="button"
+          className="side-collapse"
+          onClick={toggleCollapse}
+          title={collapsed ? 'Expandir menu' : 'Recolher menu'}
+          aria-label="Recolher/expandir menu"
         >
-          <span>v2.4.1 · prod</span>
-          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, color: 'var(--success)' }}>
-            <span
-              style={{
-                width: 6,
-                height: 6,
-                borderRadius: '50%',
-                background: 'var(--success)',
-              }}
-            />
-            Live
-          </span>
+          <NsIcon name="chevron-right" size={12} className="side-collapse-icon" />
+        </button>
+
+        {/* Logo completo (nome + símbolo) — arquivo fixo do Manual de Marca,
+            mesmo da SPA. Trilho recolhido: ícone de app. */}
+        <div className="side-logo">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src="/assets/brand/logo-azul-preto.svg" alt="NorthScale" className="ns-logotype for-light" />
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src="/assets/brand/logo-azulclaro-branco.svg" alt="NorthScale" className="ns-logotype for-dark" />
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src="/assets/brand/app-icon-quadrado.svg" alt="NorthScale" className="ns-appicon" />
         </div>
-        <UserChip user={user} />
-      </div>
-    </aside>
+
+        {groups.map((g) => (
+          <div key={g.label}>
+            <div className="side-group-label">{g.label}</div>
+            <nav className="side-nav">
+              {g.items.map((it) => {
+                const active = it.id === activeId;
+                return (
+                  <a
+                    key={it.id}
+                    href={'/' + it.id + (linkQuery ? '?' + linkQuery : '')}
+                    className={`side-item ${active ? 'is-active' : ''}`}
+                    aria-current={active ? 'page' : undefined}
+                    title={collapsed ? it.label : undefined}
+                  >
+                    <NsIcon name={it.icon} size={15} />
+                    <span className="side-item-label">{it.label}</span>
+                  </a>
+                );
+              })}
+            </nav>
+          </div>
+        ))}
+
+        <div className="side-foot">
+          <div
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              padding: '0 6px',
+              fontFamily: 'var(--f-mono)',
+              fontSize: 10,
+              color: 'var(--fg5)',
+            }}
+          >
+            <span>v2.4.1 · prod</span>
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, color: 'var(--success)' }}>
+              <span style={{ width: 6, height: 6, borderRadius: '50%', background: 'var(--success)' }} />
+              Ao vivo
+            </span>
+          </div>
+          <UserChip user={user} />
+        </div>
+      </aside>
+    </>
   );
 }
 
@@ -160,6 +177,7 @@ function UserChip({ user }: { user: ChatUser }) {
       .slice(0, 2)
       .map((p) => p[0]?.toUpperCase())
       .join('') || '?';
+  const tabs = user.allowedTabs?.length ?? 0;
 
   async function logout() {
     try {
@@ -173,6 +191,7 @@ function UserChip({ user }: { user: ChatUser }) {
   return (
     <div ref={ref} style={{ position: 'relative' }}>
       <button
+        type="button"
         className="user-chip"
         onClick={() => setOpen((v) => !v)}
         style={{
@@ -187,7 +206,9 @@ function UserChip({ user }: { user: ChatUser }) {
         <div className="av">{initials}</div>
         <div className="who">
           <span className="nm">{display}</span>
-          <span className="rl">{user.role === 'ADMIN' ? 'ADMIN · acesso total' : 'MEMBER'}</span>
+          <span className="rl">
+            {user.role === 'ADMIN' ? 'Admin · acesso total' : `Member · ${tabs} ${tabs === 1 ? 'aba' : 'abas'}`}
+          </span>
         </div>
       </button>
       {open && (
@@ -202,31 +223,41 @@ function UserChip({ user }: { user: ChatUser }) {
             borderRadius: 8,
             padding: 4,
             zIndex: 30,
-            boxShadow: 'var(--shadow-md)',
+            boxShadow: 'var(--shadow-lg)',
           }}
         >
-          <button
-            onClick={() => void logout()}
-            style={{
-              width: '100%',
-              textAlign: 'left',
-              padding: '8px 10px',
-              borderRadius: 4,
-              background: 'transparent',
-              border: 0,
-              cursor: 'pointer',
-              fontFamily: 'var(--f-mono)',
-              fontSize: 11,
-              color: 'var(--fg1)',
-              display: 'flex',
-              alignItems: 'center',
-              gap: 8,
-            }}
-          >
-            <LogOut size={12} /> Sair
-          </button>
+          <LogoutButton onClick={() => void logout()} />
         </div>
       )}
     </div>
+  );
+}
+
+function LogoutButton({ onClick }: { onClick: () => void }) {
+  const [hover, setHover] = React.useState(false);
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      onMouseEnter={() => setHover(true)}
+      onMouseLeave={() => setHover(false)}
+      style={{
+        width: '100%',
+        textAlign: 'left',
+        padding: '8px 10px',
+        borderRadius: 4,
+        background: hover ? 'var(--danger-bg)' : 'transparent',
+        border: 0,
+        cursor: 'pointer',
+        fontFamily: 'var(--f-mono)',
+        fontSize: 11,
+        color: hover ? 'var(--danger)' : 'var(--fg1)',
+        display: 'flex',
+        alignItems: 'center',
+        gap: 8,
+      }}
+    >
+      <NsIcon name="log-out" size={12} /> Sair
+    </button>
   );
 }

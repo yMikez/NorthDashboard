@@ -168,16 +168,16 @@ export default function LoginPage() {
         >
           <div style={{ marginBottom: 24 }}>
             <img
-              src="/assets/brand/logotipo-preto.svg"
+              src="/assets/brand/logo-azul-preto.svg"
               alt="NorthScale"
               className="ns-only-light"
-              style={{ height: 22, width: 'auto', display: 'block' }}
+              style={{ height: 32, width: 'auto', maxWidth: '100%', display: 'block' }}
             />
             <img
-              src="/assets/brand/logotipo-branco.svg"
+              src="/assets/brand/logo-azulclaro-branco.svg"
               alt="NorthScale"
               className="ns-only-dark"
-              style={{ height: 22, width: 'auto', display: 'block' }}
+              style={{ height: 32, width: 'auto', maxWidth: '100%', display: 'block' }}
             />
           </div>
 

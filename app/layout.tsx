@@ -25,7 +25,9 @@ const themeBootstrap = `
 
 export default function RootLayout({ children }: { children: ReactNode }) {
   return (
-    <html lang="pt-BR" data-theme="light">
+    // suppressHydrationWarning: o bootstrap acima troca data-theme ANTES da
+    // hidratação (é o objetivo dele) — sem isso o React acusa divergência.
+    <html lang="pt-BR" data-theme="light" suppressHydrationWarning>
       <head>
         <script dangerouslySetInnerHTML={{ __html: themeBootstrap }} />
       </head>

@@ -266,7 +266,7 @@ body {
   font-feature-settings: 'tnum' 1;
 }
 
-h1, h2, h3, h4, h5, h6 {
+h1:not(:where([data-app-scope="chat"] *)), h2:not(:where([data-app-scope="chat"] *)), h3:not(:where([data-app-scope="chat"] *)), h4:not(:where([data-app-scope="chat"] *)), h5:not(:where([data-app-scope="chat"] *)), h6:not(:where([data-app-scope="chat"] *)) {
   font-family: var(--f-display);
   color: var(--fg1);
   font-weight: 700;
@@ -275,7 +275,7 @@ h1, h2, h3, h4, h5, h6 {
   margin: 0;
 }
 
-h1 {
+h1:not(:where([data-app-scope="chat"] *)) {
   font-size: var(--t-hero-size);
   line-height: var(--t-hero-lh);
   letter-spacing: var(--t-hero-tracking);
@@ -288,18 +288,18 @@ h1 em, h2 em, h3 em {
   font-weight: inherit;
 }
 
-h2 {
+h2:not(:where([data-app-scope="chat"] *)) {
   font-size: clamp(32px, 5vw, 52px);
   font-variation-settings: var(--fvs-display);
 }
 
-h3 {
+h3:not(:where([data-app-scope="chat"] *)) {
   font-size: var(--t-display-sm-size);
   letter-spacing: -0.02em;
   font-variation-settings: var(--fvs-h3);
 }
 
-p {
+p:not(:where([data-app-scope="chat"] *)) {
   margin: 0 0 var(--s-3);
   font-size: var(--t-body-md-size);
   line-height: 1.6;
@@ -309,23 +309,23 @@ p {
 strong, b { font-weight: 600; color: var(--fg1); }
 small { font-size: var(--t-body-sm-size); color: var(--fg4); }
 
-code, pre, kbd, samp {
+code:not(:where([data-app-scope="chat"] *)), pre:not(:where([data-app-scope="chat"] *)), kbd:not(:where([data-app-scope="chat"] *)), samp:not(:where([data-app-scope="chat"] *)) {
   font-family: var(--f-code);
   font-size: var(--t-mono-tag-size);
 }
-code {
+code:not(:where([data-app-scope="chat"] *)) {
   background: var(--accent-soft);
   color: var(--glow-cyan);
   padding: 2px 6px;
   border-radius: var(--r-sm);
 }
 
-a {
+a:not(:where([data-app-scope="chat"] *)) {
   color: var(--glow-cyan);
   text-decoration: none;
   transition: color var(--dur-base) var(--ease-smooth);
 }
-a:hover { color: var(--fg1); }
+a:hover:not(:where([data-app-scope="chat"] *)) { color: var(--fg1); }
 
 hr {
   border: none;

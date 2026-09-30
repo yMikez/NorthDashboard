@@ -86,6 +86,9 @@ function Sidebar({ active, onNav, user, open, onClose }) {
     const next = !collapsed;
     setCollapsed(next);
     try { localStorage.setItem('ns-side-collapsed', next ? '1' : '0'); } catch (e) {}
+    // Cookie com o mesmo valor: o /chat (renderizado no servidor) lê e já
+    // desenha a nav recolhida, sem abrir e fechar na frente do usuário.
+    document.cookie = 'ns-side-collapsed=' + (next ? '1' : '0') + '; path=/; max-age=31536000; samesite=lax';
   }
   return (
     <>
@@ -100,13 +103,14 @@ function Sidebar({ active, onNav, user, open, onClose }) {
       >
         <Icon name="chevron-right" size={12} className="side-collapse-icon"/>
       </button>
-      {/* Manual de Marca: o logotipo é arquivo fixo — não se recompõe com
-          fonte. E abaixo de 128 px de globo usa-se o logotipo SEM símbolo:
-          por isso a sidebar leva só o nome, e o trilho recolhido leva o
-          ícone de app (desenhado para tamanho pequeno), nunca o globo. */}
+      {/* Manual de Marca: o logo é arquivo fixo — não se recompõe com fonte.
+          Sidebar leva o logo COMPLETO (nome + símbolo, pedido do dono): o
+          globo dessa assinatura é o simplificado, o mesmo do ícone de app.
+          Trilho recolhido: só o ícone de app. Espelho em
+          components/chat/DashboardNav.tsx (a nav do /chat). */}
       <div className="side-logo">
-        <img src="/assets/brand/logotipo-preto.svg" alt="NorthScale" className="ns-logotype for-light"/>
-        <img src="/assets/brand/logotipo-branco.svg" alt="NorthScale" className="ns-logotype for-dark"/>
+        <img src="/assets/brand/logo-azul-preto.svg" alt="NorthScale" className="ns-logotype for-light"/>
+        <img src="/assets/brand/logo-azulclaro-branco.svg" alt="NorthScale" className="ns-logotype for-dark"/>
         <img src="/assets/brand/app-icon-quadrado.svg" alt="NorthScale" className="ns-appicon"/>
       </div>
 

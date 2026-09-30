@@ -110,12 +110,15 @@ export interface EntityRef {
 
 // ---------------- Filters (top bar) ----------------
 
+// Mesmos filtros (e mesma codificação na URL) da FilterBar da SPA.
 export interface FilterState {
+  /** Dias civis BRT, inclusivos (YYYY-MM-DD) — ver lib/shared/datePresets. */
   period: { preset: string; start: string; end: string };
-  platforms: string[];        // 'clickbank' | 'digistore24'
-  products: string[];         // externalIds
-  countries: string[];        // ISO codes
+  platforms: string[];        // slugs: clickbank, digistore24, buygoods…
   families: string[];         // NeuroMindPro, GlycoPulse, etc
+  countries: string[];        // ISO codes
+  stages: string[];           // front | upsell | downsell | recuperacao (ids da SPA)
+  affiliates: string[];       // affiliate_id do NorthScale Afiliados
 }
 
 // ---------------- SSE events do /api/chat ----------------
@@ -136,4 +139,6 @@ export interface ChatUser {
   email: string;
   name: string | null;
   role: string;
+  /** Abas liberadas (membro) — a nav esquerda mostra só essas, igual à SPA. */
+  allowedTabs?: string[];
 }

@@ -1,9 +1,8 @@
 'use client';
 
 import * as React from 'react';
-import { Sparkles } from 'lucide-react';
-import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
+import { NsIcon } from './NsIcon';
 import { UserMessage } from './UserMessage';
 import { AssistantMessage } from './AssistantMessage';
 import type { Message } from '@/types/chat';
@@ -79,37 +78,68 @@ export function MessageList({
   );
 }
 
+/**
+ * Tecla modificadora do sistema: ⌘ no Mac, Ctrl no resto. O servidor não
+ * sabe o SO, então o primeiro render (SSR e hidratação) sai sempre com
+ * "Ctrl" e só depois da montagem troca pra ⌘ — markup igual nos dois lados.
+ */
+function useModKeyLabel(): (key: string) => string {
+  const [isMac, setIsMac] = React.useState(false);
+  React.useEffect(() => {
+    const nav = navigator as Navigator & { userAgentData?: { platform?: string } };
+    const platform = nav.userAgentData?.platform || nav.platform || nav.userAgent || '';
+    setIsMac(/mac|iphone|ipad|ipod/i.test(platform));
+  }, []);
+  return React.useCallback((key: string) => (isMac ? `⌘${key}` : `Ctrl+${key}`), [isMac]);
+}
+
+function Kbd({ children }: { children: React.ReactNode }) {
+  return (
+    <kbd className="inline-flex items-center rounded-sm border border-border bg-card px-1.5 text-[11px] leading-[18px] font-medium text-foreground font-[family-name:var(--f-body)]">
+      {children}
+    </kbd>
+  );
+}
+
 export function EmptyState({ onPickPrompt }: { onPickPrompt?: (q: string) => void } = {}) {
+  const mod = useModKeyLabel();
+
   return (
     // min-h-0 garante que o flex-1 respeita o limite do main flex column.
     <div className="flex-1 min-h-0 overflow-y-auto">
-      <div className="max-w-2xl mx-auto px-6 pt-20 pb-8 text-center">
-        <div className="w-14 h-14 mx-auto rounded-lg flex items-center justify-center mb-5 relative bg-muted/60 border border-border">
-          <Sparkles className="w-7 h-7 text-primary/80" />
+      <div className="max-w-2xl mx-auto px-4 sm:px-6 pt-10 sm:pt-20 pb-8 text-center">
+        <div className="w-14 h-14 mx-auto rounded-lg flex items-center justify-center mb-5 bg-card border border-border">
+          <NsIcon name="ns-insights" size={28} className="text-ring" />
         </div>
-        <h1 className="text-3xl font-semibold mb-2 tracking-tight">
+        {/* DS1: título de página 28/36 bold, tracking -0.01em; complemento
+            em tom secundário, sem itálico (igual ao .top-h1 em da SPA). */}
+        <h2 className="text-[28px] leading-9 font-bold tracking-[-0.01em] text-foreground mb-2">
           Análise <em className="not-italic text-muted-foreground font-medium">com IA</em>
-        </h1>
-        <p className="text-sm text-muted-foreground mb-8 max-w-md mx-auto leading-relaxed">
-          Pergunte qualquer coisa sobre seus dados de afiliados, vendas, funil e
-          performance por plataforma. Respostas tipadas e sempre derivadas dos
-          dados reais do dashboard.
+        </h2>
+        <p className="text-sm leading-[22px] text-muted-foreground mb-8 max-w-md mx-auto">
+          Pergunte sobre afiliados, vendas, funil e desempenho por plataforma.
+          As respostas usam os mesmos dados do dashboard.
         </p>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 mt-6">
           {SUGGESTED_PROMPTS.map((p) => (
             <button
               key={p}
+              type="button"
               onClick={() => onPickPrompt?.(p)}
-              className="nx-glass-card rounded-lg py-3 px-4 text-left text-xs leading-relaxed text-foreground hover:border-ring transition-colors"
+              className="nx-glass-card rounded-lg min-h-11 py-3 px-4 text-left text-sm leading-[22px] text-foreground hover:border-ring transition-colors"
             >
               {p}
             </button>
           ))}
         </div>
 
-        <p className="text-[11px] text-muted-foreground mt-10">
-          Cmd+J nova conversa · Cmd+K buscar · Cmd+Enter enviar · Esc fechar
+        {/* Atalhos de teclado: some em tela de toque (não há Ctrl/⌘ lá). */}
+        <p className="text-xs leading-[18px] text-muted-foreground mt-10 flex flex-wrap items-center justify-center gap-x-3 gap-y-1.5 [@media(pointer:coarse)]:hidden">
+          <span><Kbd>{mod('J')}</Kbd> nova conversa</span>
+          <span><Kbd>{mod('K')}</Kbd> buscar conversas</span>
+          <span><Kbd>Enter</Kbd> enviar</span>
+          <span><Kbd>Shift+Enter</Kbd> nova linha</span>
         </p>
       </div>
     </div>

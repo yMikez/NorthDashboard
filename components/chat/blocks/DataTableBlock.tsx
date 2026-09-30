@@ -1,10 +1,18 @@
 'use client';
 
 import * as React from 'react';
-import { Download, ArrowUp, ArrowDown } from 'lucide-react';
-import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/ui-utils';
+import { NsIcon } from '../NsIcon';
 import type { DataTableBlock as TableData } from '@/types/chat';
+
+type Column = TableData['columns'][number];
+
+const NUMERIC_FORMATS = new Set<Column['format']>(['currency', 'percent', 'number']);
+
+/** DS1: texto à esquerda, números à direita — a menos que o bloco diga outra coisa. */
+function alignOf(c: Column): 'left' | 'right' | 'center' {
+  return c.align ?? (NUMERIC_FORMATS.has(c.format) ? 'right' : 'left');
+}
 
 export function DataTableBlock({ block }: { block: TableData }) {
   const [sortKey, setSortKey] = React.useState<string | null>(null);
@@ -52,41 +60,55 @@ export function DataTableBlock({ block }: { block: TableData }) {
   return (
     <section className="nx-glass-card rounded-lg">
       {(block.title || block.exportable) && (
-        <header className="px-4 py-2 border-b border-[color:var(--glass-border)] flex items-center justify-between">
-          {block.title && <h3 className="text-sm font-semibold">{block.title}</h3>}
+        <header className="px-4 py-2 min-h-[52px] border-b border-border flex items-center justify-between gap-3">
+          {block.title && <h3 className="text-sm font-semibold text-foreground">{block.title}</h3>}
           {block.exportable && (
-            <Button variant="outline" size="sm" onClick={exportCsv} className="h-7 gap-1.5 text-xs">
-              <Download className="w-3 h-3" /> CSV
-            </Button>
+            // Mesmo botão "Exportar CSV" das tabelas da SPA (.btn.btn-ghost).
+            <button type="button" className="btn btn-ghost ml-auto shrink-0" onClick={exportCsv}>
+              <NsIcon name="download" size={12} /> Exportar CSV
+            </button>
           )}
         </header>
       )}
       <div className="overflow-x-auto">
-        <table className="w-full text-xs">
+        {/* DS1 (.tbl da SPA): cabeçalho 12 px medium no tom secundário,
+            linha 44 px, corpo 14/22, números à direita em Montserrat. */}
+        <table className="w-full border-collapse text-sm tabular-nums">
           <thead>
-            <tr className="text-[10px] text-muted-foreground font-mono border-b border-border">
-              {block.columns.map((c) => (
-                <th
-                  key={c.key}
-                  onClick={() => clickSort(c.key)}
-                  className={cn(
-                    'px-3 py-2 font-medium cursor-pointer hover:text-foreground select-none',
-                    c.align === 'right' && 'text-right',
-                    c.align === 'center' && 'text-center',
-                    !c.align && 'text-left',
-                  )}
-                >
-                  <span className="inline-flex items-center gap-1">
-                    {c.label}
-                    {sortKey === c.key &&
-                      (sortDir === 'asc' ? (
-                        <ArrowUp className="w-3 h-3" />
-                      ) : (
-                        <ArrowDown className="w-3 h-3" />
-                      ))}
-                  </span>
-                </th>
-              ))}
+            <tr className="border-b border-border">
+              {block.columns.map((c) => {
+                const align = alignOf(c);
+                const active = sortKey === c.key;
+                return (
+                  <th
+                    key={c.key}
+                    scope="col"
+                    aria-sort={active ? (sortDir === 'asc' ? 'ascending' : 'descending') : undefined}
+                    className={cn(
+                      'p-0 text-xs font-medium text-muted-foreground whitespace-nowrap',
+                      align === 'right' && 'text-right',
+                      align === 'center' && 'text-center',
+                      align === 'left' && 'text-left',
+                    )}
+                  >
+                    <button
+                      type="button"
+                      onClick={() => clickSort(c.key)}
+                      className={cn(
+                        'w-full inline-flex items-center gap-1 px-3 py-2.5 font-medium hover:text-foreground select-none transition-colors',
+                        align === 'right' && 'justify-end',
+                        align === 'center' && 'justify-center',
+                        active && 'text-foreground',
+                      )}
+                    >
+                      {c.label}
+                      {active && (
+                        <NsIcon name={sortDir === 'asc' ? 'arrow-up' : 'arrow-down'} size={12} />
+                      )}
+                    </button>
+                  </th>
+                );
+              })}
             </tr>
           </thead>
           <tbody>
@@ -94,24 +116,31 @@ export function DataTableBlock({ block }: { block: TableData }) {
               <tr
                 key={i}
                 className={cn(
-                  'border-b border-border last:border-0 hover:bg-accent/30 transition-colors',
+                  'border-b border-border last:border-0 hover:bg-accent transition-colors',
                   r._highlight === 'success' && 'bg-success/5',
                   r._highlight === 'warning' && 'bg-warning/5',
-                  r._highlight === 'danger' && 'bg-destructive/5',
+                  r._highlight === 'danger' && 'bg-danger/5',
                 )}
               >
-                {block.columns.map((c) => (
-                  <td
-                    key={c.key}
-                    className={cn(
-                      'px-3 py-2 tabular-nums',
-                      c.align === 'right' && 'text-right',
-                      c.align === 'center' && 'text-center',
-                    )}
-                  >
-                    {formatCell(r[c.key], c.format)}
-                  </td>
-                ))}
+                {block.columns.map((c) => {
+                  const align = alignOf(c);
+                  const numeric = NUMERIC_FORMATS.has(c.format) || typeof r[c.key] === 'number';
+                  return (
+                    <td
+                      key={c.key}
+                      className={cn(
+                        'h-11 px-3 py-[11px] leading-[22px] text-foreground',
+                        align === 'right' && 'text-right',
+                        align === 'center' && 'text-center',
+                        numeric && 'font-mono font-medium whitespace-nowrap',
+                        // DS1 (decisão do produto): dinheiro sempre verde.
+                        c.format === 'currency' && typeof r[c.key] === 'number' && 'text-[color:var(--money)]',
+                      )}
+                    >
+                      {formatCell(r[c.key], c.format)}
+                    </td>
+                  );
+                })}
               </tr>
             ))}
             {rows.length === 0 && (
@@ -133,7 +162,8 @@ function formatCell(v: unknown, format?: 'currency' | 'percent' | 'number' | 'te
   if (typeof v === 'number') {
     if (format === 'currency') return v.toLocaleString('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 2 });
     if (format === 'percent') return (v <= 1 ? v * 100 : v).toFixed(1) + '%';
-    if (format === 'number') return v.toLocaleString('pt-BR');
+    // DS1 (decisão do produto): números no padrão americano, igual à SPA (fmtInt en-US).
+    if (format === 'number') return v.toLocaleString('en-US');
     return String(v);
   }
   return String(v);

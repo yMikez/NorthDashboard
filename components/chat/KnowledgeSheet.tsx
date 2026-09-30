@@ -3,18 +3,20 @@
 // permite criar/editar/excluir/toggle on-off. Entries `enabled` são
 // injetadas no system prompt do AI a cada conversa (cache 60s no service).
 //
-// Apenas ADMIN tem acesso aos endpoints `/api/admin/knowledge` — não-admin
-// vê o botão mas recebe 403 ao tentar abrir. UI mostra mensagem de erro.
+// Apenas ADMIN tem acesso aos endpoints `/api/admin/knowledge` — o gatilho
+// só aparece pra admin (ChatShell/Sidebar). Erro da API vira estado de
+// falha (ns-readstate da SPA).
 
 'use client';
 
 import * as React from 'react';
-import { Plus, Trash2, Save, X, FileText } from 'lucide-react';
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from '@/components/ui/sheet';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { ScrollArea } from '@/components/ui/scroll-area';
+import { cn } from '@/lib/ui-utils';
+import { NsIcon } from './NsIcon';
 
 interface KnowledgeEntry {
   id: string;
@@ -35,6 +37,13 @@ interface DraftEntry {
 
 const EMPTY_DRAFT: DraftEntry = { title: '', content: '', enabled: true };
 
+// DS1: controle 36px, 44px em toque (botão de ícone: 40px, como a SPA).
+const TOUCH_TEXT = '[@media(pointer:coarse)]:min-h-11';
+const TOUCH_ICON = '[@media(pointer:coarse)]:min-h-10 [@media(pointer:coarse)]:min-w-10';
+// Campo do DS1: superfície, limite de controle (--input = border-strong) e
+// foco de 2px (1px de borda no acento + 1px de anel).
+const FIELD = 'bg-card text-sm shadow-none focus-visible:ring-1 focus-visible:border-ring';
+
 export function KnowledgeSheet({
   open,
   onOpenChange,
@@ -49,6 +58,9 @@ export function KnowledgeSheet({
   const [draft, setDraft] = React.useState<DraftEntry>(EMPTY_DRAFT);
   const [creatingNew, setCreatingNew] = React.useState(false);
   const [saving, setSaving] = React.useState(false);
+  const errorId = React.useId();
+  const titleFieldId = React.useId();
+  const contentFieldId = React.useId();
 
   // Load list on open.
   React.useEffect(() => {
@@ -166,110 +178,155 @@ export function KnowledgeSheet({
   }
 
   const editing = editingId != null || creatingNew;
+  const activeCount = entries.filter((e) => e.enabled).length;
+  // Erro de validação aponta pro campo vazio (DS1: erro ligado ao campo).
+  const titleInvalid = editing && error != null && !draft.title.trim();
+  const contentInvalid = editing && error != null && !draft.content.trim();
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent side="right" className="w-[520px] sm:max-w-[520px] flex flex-col">
-        <SheetHeader>
+      <SheetContent side="right" className="w-full sm:w-[520px] sm:max-w-[520px] flex flex-col">
+        <SheetHeader className="pr-8">
           <SheetTitle className="flex items-center gap-2">
-            <FileText className="w-4 h-4 text-primary" /> Base de conhecimento
+            <NsIcon name="book-open" className="shrink-0 text-ring" /> Base de conhecimento
           </SheetTitle>
-          <SheetDescription className="text-xs leading-relaxed">
-            Cada entrada ligada vira parte do system prompt do AI em todas as conversas.
-            Use pra ensinar regras de negócio, glossários, padrões da operação. Entradas
-            marcadas <span className="text-primary">memória IA</span> foram extraídas
+          <SheetDescription className="leading-relaxed">
+            Cada entrada ligada vira parte do system prompt da IA em todas as conversas.
+            Use pra ensinar regras de negócio, glossários e padrões da operação. Entradas
+            marcadas <span className="text-ring">memória IA</span> foram extraídas
             automaticamente de conversas — desligue ou apague se ficarem ruins.
           </SheetDescription>
         </SheetHeader>
 
         {error && (
-          <div className="bg-destructive/10 border border-destructive/40 text-destructive text-xs rounded-md p-2 mt-2">
-            {error}
+          <div id={errorId} className="ns-readstate is-falha" role="alert">
+            <NsIcon name="alert-triangle" />
+            <div className="ns-readstate-body">{error}</div>
           </div>
         )}
 
         {editing ? (
-          <div className="flex-1 flex flex-col gap-3 mt-2 overflow-hidden">
-            <Input
-              autoFocus
-              placeholder="Título (ex: Glossário Digistore)"
-              value={draft.title}
-              onChange={(e) => setDraft((d) => ({ ...d, title: e.target.value }))}
-            />
-            <Textarea
-              placeholder="Conteúdo em markdown. Vai literal pro system prompt da IA."
-              value={draft.content}
-              onChange={(e) => setDraft((d) => ({ ...d, content: e.target.value }))}
-              className="flex-1 resize-none font-mono text-xs"
-              rows={20}
-            />
-            <label className="flex items-center gap-2 text-xs cursor-pointer">
+          <div className="flex-1 flex flex-col gap-3 min-h-0">
+            <div className="flex flex-col gap-1.5">
+              <label htmlFor={titleFieldId} className="text-xs font-medium text-muted-foreground">
+                Título
+              </label>
+              <Input
+                id={titleFieldId}
+                autoFocus
+                placeholder="Ex.: Glossário Digistore"
+                value={draft.title}
+                onChange={(e) => setDraft((d) => ({ ...d, title: e.target.value }))}
+                aria-invalid={titleInvalid || undefined}
+                aria-describedby={titleInvalid ? errorId : undefined}
+                className={cn(FIELD, 'h-9', TOUCH_TEXT)}
+              />
+            </div>
+            <div className="flex-1 flex flex-col gap-1.5 min-h-0">
+              <label htmlFor={contentFieldId} className="text-xs font-medium text-muted-foreground">
+                Conteúdo (markdown, vai literal pro system prompt)
+              </label>
+              {/* Editor de código/markdown: monoespaçada do sistema (--f-code),
+                  não a Montserrat de dados que o font-mono vira no chat. */}
+              <Textarea
+                id={contentFieldId}
+                placeholder={'Ex.: ## Glossário\n- FE: venda de front-end…'}
+                value={draft.content}
+                onChange={(e) => setDraft((d) => ({ ...d, content: e.target.value }))}
+                aria-invalid={contentInvalid || undefined}
+                aria-describedby={contentInvalid ? errorId : undefined}
+                className={cn(FIELD, 'flex-1 min-h-[240px] resize-none text-[13px] leading-5 font-[family-name:var(--f-code)]')}
+                rows={20}
+                spellCheck={false}
+              />
+            </div>
+            <label className={cn('flex items-center gap-2 min-h-9 text-sm cursor-pointer select-none', TOUCH_TEXT)}>
               <input
                 type="checkbox"
                 checked={draft.enabled}
                 onChange={(e) => setDraft((d) => ({ ...d, enabled: e.target.checked }))}
-                className="accent-primary"
+                className="h-4 w-4 shrink-0 accent-primary"
               />
               Ativa (será injetada no system prompt)
             </label>
-            <div className="flex justify-end gap-2 mt-1">
-              <Button variant="ghost" size="sm" onClick={cancelEdit} disabled={saving}>
-                <X className="w-3.5 h-3.5" /> Cancelar
+            <div className="flex justify-end gap-2">
+              <Button variant="ghost" onClick={cancelEdit} disabled={saving} className={TOUCH_TEXT}>
+                <NsIcon name="x" /> Cancelar
               </Button>
-              <Button size="sm" onClick={save} disabled={saving}>
-                <Save className="w-3.5 h-3.5" /> {saving ? 'Salvando...' : 'Salvar'}
+              {/* Processando: mantém a largura e bloqueia reenvio (DS1). */}
+              <Button onClick={save} disabled={saving} aria-busy={saving || undefined} className={cn('min-w-[112px]', TOUCH_TEXT)}>
+                <NsIcon name={saving ? 'loader' : 'save'} className={saving ? 'motion-safe:animate-spin' : undefined} />{' '}
+                {saving ? 'Salvando…' : 'Salvar'}
               </Button>
             </div>
           </div>
         ) : (
           <>
-            <div className="flex items-center justify-between mt-2 mb-1">
+            <div className="flex items-center justify-between gap-2">
               <span className="text-xs text-muted-foreground">
-                {entries.length} {entries.length === 1 ? 'entrada' : 'entradas'}
-                {entries.filter((e) => e.enabled).length !== entries.length && (
-                  <> · {entries.filter((e) => e.enabled).length} ativas</>
+                <span className="font-mono tabular-nums">{entries.length}</span>{' '}
+                {entries.length === 1 ? 'entrada' : 'entradas'}
+                {activeCount !== entries.length && (
+                  <>
+                    {' · '}
+                    <span className="font-mono tabular-nums">{activeCount}</span>{' '}
+                    {activeCount === 1 ? 'ativa' : 'ativas'}
+                  </>
                 )}
               </span>
-              <Button size="sm" onClick={startNew}>
-                <Plus className="w-3.5 h-3.5" /> Nova entrada
+              <Button onClick={startNew} className={TOUCH_TEXT}>
+                <NsIcon name="plus" /> Nova entrada
               </Button>
             </div>
 
             <ScrollArea className="flex-1 -mx-2 px-2">
               {status === 'loading' && (
-                <div className="text-xs text-muted-foreground p-4 text-center">Carregando...</div>
+                <div className="ns-readstate is-carregando" role="status">
+                  <NsIcon name="loader" />
+                  <div className="ns-readstate-body">Carregando…</div>
+                </div>
               )}
               {status === 'idle' && entries.length === 0 && (
-                <div className="text-xs text-muted-foreground p-6 text-center leading-relaxed">
-                  Nenhuma entrada ainda.<br />
-                  Clique "Nova entrada" pra adicionar um bloco de conhecimento.
+                <div className="ns-readstate is-vazio" role="status">
+                  <NsIcon name="info" />
+                  <div>
+                    <strong>Nenhuma entrada ainda.</strong>
+                    <div className="ns-readstate-body">
+                      Use “Nova entrada” pra adicionar um bloco de conhecimento.
+                    </div>
+                  </div>
                 </div>
               )}
               <div className="space-y-2 pb-3">
                 {entries.map((entry) => (
-                  <div
-                    key={entry.id}
-                    className="border border-border rounded-md p-3 hover:bg-accent/30 transition-colors"
-                  >
+                  <div key={entry.id} className="border border-border rounded-lg bg-card p-3">
                     <div className="flex items-start gap-2">
                       <button
                         type="button"
+                        role="switch"
+                        aria-checked={entry.enabled}
                         onClick={() => toggleEnabled(entry)}
-                        className={
-                          'shrink-0 w-3 h-3 rounded-full border mt-1.5 ' +
-                          (entry.enabled
-                            ? 'bg-primary border-primary'
-                            : 'bg-transparent border-muted-foreground')
-                        }
-                        aria-label={entry.enabled ? 'Desativar' : 'Ativar'}
+                        className={cn(
+                          'shrink-0 -ml-1 -mt-0.5 grid h-7 w-7 place-items-center rounded-md transition-colors hover:bg-accent',
+                          TOUCH_ICON,
+                        )}
+                        aria-label={`Entrada "${entry.title}" ativa`}
                         title={entry.enabled ? 'Ativa — clique pra desligar' : 'Inativa — clique pra ligar'}
-                      />
+                      >
+                        <span
+                          aria-hidden
+                          className={cn(
+                            'block h-3 w-3 rounded-full border',
+                            entry.enabled ? 'bg-ring border-ring' : 'bg-transparent border-input',
+                          )}
+                        />
+                      </button>
                       <div className="flex-1 min-w-0">
-                        <div className="text-sm font-medium truncate flex items-center gap-2">
+                        <div className="text-sm font-medium text-foreground truncate flex items-center gap-2">
                           <span className="truncate">{entry.title}</span>
                           {entry.source === 'auto' && (
                             <span
-                              className="shrink-0 text-[11px] font-medium px-1.5 py-0.5 rounded-sm bg-accent text-ring border border-ring/30"
+                              className="shrink-0 text-xs font-medium px-1.5 py-0.5 rounded-sm bg-accent text-ring border border-ring/30"
                               title="Memória extraída automaticamente de uma conversa"
                             >
                               memória IA
@@ -281,17 +338,25 @@ export function KnowledgeSheet({
                         </div>
                       </div>
                       <div className="flex gap-1 shrink-0">
-                        <Button variant="ghost" size="icon-sm" onClick={() => startEdit(entry)} aria-label="Editar">
-                          <FileText className="w-3.5 h-3.5" />
+                        <Button
+                          variant="ghost"
+                          size="icon-sm"
+                          onClick={() => startEdit(entry)}
+                          aria-label={`Editar "${entry.title}"`}
+                          title="Editar"
+                          className={cn('text-muted-foreground hover:text-foreground', TOUCH_ICON)}
+                        >
+                          <NsIcon name="edit" />
                         </Button>
                         <Button
                           variant="ghost"
                           size="icon-sm"
                           onClick={() => deleteEntry(entry)}
-                          aria-label="Excluir"
-                          className="text-destructive hover:text-destructive"
+                          aria-label={`Excluir "${entry.title}"`}
+                          title="Excluir"
+                          className={cn('text-destructive hover:text-destructive hover:bg-destructive/10', TOUCH_ICON)}
                         >
-                          <Trash2 className="w-3.5 h-3.5" />
+                          <NsIcon name="trash" />
                         </Button>
                       </div>
                     </div>

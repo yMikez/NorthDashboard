@@ -22,6 +22,9 @@ import type { ChartBlock as ChartData } from '@/types/chat';
 // hsl(): lá os tokens são hex.
 const PALETTE = ['var(--chart-1)', 'var(--chart-2)', 'var(--chart-3)', 'var(--chart-4)', 'var(--chart-5)'];
 
+// Eixos: rótulo auxiliar em Montserrat (fonte de dados do DS1), tom secundário.
+const TICK = { fontSize: 11, fill: 'hsl(var(--muted-foreground))', fontFamily: 'var(--f-mono)' };
+
 export function ChartBlock({ block }: { block: ChartData }) {
   const merged = React.useMemo(() => mergeSeries(block.series), [block.series]);
   const seriesNames = block.series.map((s) => s.name);
@@ -29,8 +32,8 @@ export function ChartBlock({ block }: { block: ChartData }) {
   return (
     <section className="nx-glass-card rounded-lg">
       {block.title && (
-        <header className="px-4 py-2 border-b border-[color:var(--glass-border)]">
-          <h3 className="text-sm font-semibold">{block.title}</h3>
+        <header className="px-4 py-2.5 border-b border-border">
+          <h3 className="text-sm font-semibold text-foreground">{block.title}</h3>
         </header>
       )}
       <div className="p-3 h-[260px]">
@@ -50,17 +53,19 @@ function renderChart(
   const common = (
     <>
       <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--cx-border))" />
-      <XAxis dataKey="x" tick={{ fontSize: 10, fill: 'hsl(var(--muted-foreground))' }} />
-      <YAxis tick={{ fontSize: 10, fill: 'hsl(var(--muted-foreground))' }} />
+      <XAxis dataKey="x" tick={TICK} />
+      <YAxis tick={TICK} />
       <Tooltip
         contentStyle={{
           background: 'hsl(var(--popover))',
+          color: 'hsl(var(--popover-foreground))',
           border: '1px solid hsl(var(--cx-border))',
           borderRadius: 6,
-          fontSize: 11,
+          fontSize: 12,
         }}
+        labelStyle={{ color: 'hsl(var(--muted-foreground))' }}
       />
-      <Legend wrapperStyle={{ fontSize: 10 }} />
+      <Legend wrapperStyle={{ fontSize: 12 }} />
     </>
   );
 

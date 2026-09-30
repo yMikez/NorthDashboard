@@ -6590,7 +6590,21 @@ function ChatWidget({ user }) {
               <div style={{ fontSize: 11, color: 'var(--fg5)' }}>Especialista em analytics nutra DR</div>
             </div>
             <a
-              href="/chat"
+              href={(() => {
+                // Mesma conversa + filtros atuais na página inteira.
+                const p = new URLSearchParams(location.search);
+                if (conversationId) p.set('c', conversationId);
+                const qs = p.toString();
+                return '/chat' + (qs ? '?' + qs : '');
+              })()}
+              // Recalcula no clique: o App grava os filtros na URL num efeito
+              // DEPOIS deste render, então o href do render fica um passo atrás.
+              onClick={(e) => {
+                const p = new URLSearchParams(location.search);
+                if (conversationId) p.set('c', conversationId);
+                const qs = p.toString();
+                e.currentTarget.href = '/chat' + (qs ? '?' + qs : '');
+              }}
               title="Abrir em página inteira"
               style={{ color: 'var(--fg4)', padding: 4, textDecoration: 'none' }}
             >

@@ -33,30 +33,57 @@ import type {
   FilterState,
   Message,
 } from '@/types/chat';
+import { brtRangeForPreset, spaCustomRange } from '@/lib/shared/datePresets';
 
-const INITIAL_FILTERS: FilterState = (() => {
-  const end = new Date();
-  const start = new Date(end.getTime() - 30 * 24 * 3600 * 1000);
+/** Filtros padrão = os da SPA sem querystring: 30 dias BRT, sem recorte. */
+export function defaultFilters(): FilterState {
+  const r = brtRangeForPreset('30d');
   return {
-    period: {
-      preset: '30d',
-      start: start.toISOString().slice(0, 10),
-      end: end.toISOString().slice(0, 10),
-    },
+    period: { preset: r.preset, start: r.start, end: r.end },
     platforms: [],
-    products: [],
-    countries: [],
     families: [],
+    countries: [],
+    stages: [],
+    affiliates: [],
   };
-})();
+}
 
-export function ChatShell({ user }: { user: ChatUser }) {
+/** Querystring no formato da SPA (public/src/app.jsx) — vai e volta entre as duas. */
+export function filtersToQuery(f: FilterState): URLSearchParams {
+  const p = new URLSearchParams();
+  if (f.period.preset !== '30d') p.set('range', f.period.preset);
+  if (f.period.preset === 'custom') {
+    p.set('from', f.period.start);
+    p.set('to', f.period.end);
+  }
+  if (f.platforms.length) p.set('plat', f.platforms.join(','));
+  if (f.families.length) p.set('fam', f.families.join(','));
+  if (f.countries.length) p.set('co', f.countries.join(','));
+  if (f.stages.length) p.set('st', f.stages.join(','));
+  if (f.affiliates.length) p.set('aff', f.affiliates.join(','));
+  return p;
+}
+
+export function ChatShell({
+  user,
+  initialFilters,
+  initialConversationId = null,
+  initialNavCollapsed = false,
+}: {
+  user: ChatUser;
+  /** Filtros que vieram da SPA pela URL (page.tsx). */
+  initialFilters?: FilterState;
+  /** ?c=<id> — reabre a conversa (F5, link copiado, "abrir em página inteira"). */
+  initialConversationId?: string | null;
+  /** Nav esquerda recolhida (cookie 'ns-side-collapsed' lido no servidor). */
+  initialNavCollapsed?: boolean;
+}) {
   const [collapsed, setCollapsed] = React.useState(false);
   const [conversations, setConversations] = React.useState<Conversation[]>([]);
   const [folders, setFolders] = React.useState<ChatFolder[]>([]);
   // Pasta "ativa" — conversa NOVA nasce nela (folderId no 1º sendMessage).
   const [activeFolderId, setActiveFolderId] = React.useState<string | null>(null);
-  const [selectedId, setSelectedId] = React.useState<string | null>(null);
+  const [selectedId, setSelectedId] = React.useState<string | null>(initialConversationId);
   const [messages, setMessages] = React.useState<Message[]>([]);
   const [input, setInput] = React.useState('');
   const [streaming, setStreaming] = React.useState(false);
@@ -64,23 +91,34 @@ export function ChatShell({ user }: { user: ChatUser }) {
     content: string;
     tools: { name: string; id: string }[];
   } | null>(null);
-  const [filters, setFilters] = React.useState<FilterState>(INITIAL_FILTERS);
+  const [filters, setFilters] = React.useState<FilterState>(() => initialFilters ?? defaultFilters());
   const [syncStatus, setSyncStatus] = React.useState<SyncStatus>('live');
-  const [theme, setTheme] = React.useState<ThemeMode>(() => {
-    if (typeof document === 'undefined') return 'dark';
-    const stored = (() => {
-      try {
-        return localStorage.getItem('ns-theme');
-      } catch {
-        return null;
-      }
-    })();
-    const fromHtml = document.documentElement.getAttribute('data-theme');
-    return (stored ?? fromHtml) === 'light' ? 'light' : 'dark';
-  });
-  const [model, setModel] = React.useState('claude-opus-4-5');
+  // Tema: quem manda é o data-theme que o bootstrap de app/layout.tsx já pôs
+  // no <html> (mesma chave 'ns-theme' e mesmo default claro da SPA). O
+  // estado só espelha pra desenhar o botão; lido antes da pintura. Grava no
+  // localStorage SÓ quando o usuário clica — gravar ao montar (como antes)
+  // fixava 'dark' no navegador de quem nunca tinha escolhido e o dash
+  // inteiro ficava escuro depois de abrir o chat.
+  const [theme, setTheme] = React.useState<ThemeMode>('light');
+  React.useLayoutEffect(() => {
+    setTheme(document.documentElement.getAttribute('data-theme') === 'dark' ? 'dark' : 'light');
+  }, []);
+  function toggleTheme() {
+    const next: ThemeMode = document.documentElement.getAttribute('data-theme') === 'dark' ? 'light' : 'dark';
+    document.documentElement.setAttribute('data-theme', next);
+    try {
+      localStorage.setItem('ns-theme', next);
+    } catch {
+      /* noop */
+    }
+    setTheme(next);
+  }
   const [drawerEntity, setDrawerEntity] = React.useState<EntityRef | null>(null);
   const [knowledgeOpen, setKnowledgeOpen] = React.useState(false);
+  // Drawer da nav no mobile (≤820px) — aberto pelo hambúrguer do TopBar.
+  const [navOpen, setNavOpen] = React.useState(false);
+  // Lista de conversas como drawer no mobile (≤820px).
+  const [convOpen, setConvOpen] = React.useState(false);
   const abortRef = React.useRef<AbortController | null>(null);
 
   // ---- Initial load ----
@@ -94,24 +132,36 @@ export function ChatShell({ user }: { user: ChatUser }) {
       const [list, folderList] = await Promise.all([listConversations(), listFolders()]);
       setConversations(list);
       setFolders(folderList);
+      // "Atualizar" é o retry do "Falha ao sincronizar": sucesso limpa o erro
+      // (sem mexer no 'syncing' de uma resposta em andamento).
+      setSyncStatus((s) => (s === 'error' ? 'live' : s));
     } catch (err) {
       console.error('refreshConversations', err);
       setSyncStatus('error');
     }
   }
 
-  // ---- Theme ----
-  // Sync com a SPA legada: data-theme no <html> alimenta tanto o chat
-  // (via globals.css) quanto a dashboard.css. localStorage 'ns-theme'
-  // mantém a escolha entre rotas/sessões.
+  // ---- URL: filtros (formato da SPA) + conversa aberta (?c=) ----
+  // replaceState: trocar filtro/conversa não suja o histórico do Voltar.
+  // Filtros da SPA que o chat não usa (funil 'of', comparar 'cmp') passam
+  // direto — voltar pra SPA pela nav não pode perdê-los.
+  const [passthrough, setPassthrough] = React.useState<[string, string][]>([]);
+  React.useLayoutEffect(() => {
+    const q = new URLSearchParams(location.search);
+    setPassthrough(['of', 'cmp'].flatMap((k) => (q.get(k) ? [[k, q.get(k) as string] as [string, string]] : [])));
+  }, []);
+  const filterQuery = (() => {
+    const p = filtersToQuery(filters);
+    for (const [k, v] of passthrough) p.set(k, v);
+    return p.toString();
+  })();
   React.useEffect(() => {
-    document.documentElement.setAttribute('data-theme', theme);
-    try {
-      localStorage.setItem('ns-theme', theme);
-    } catch {
-      /* noop */
-    }
-  }, [theme]);
+    const p = new URLSearchParams(filterQuery);
+    if (selectedId) p.set('c', selectedId);
+    const qs = p.toString();
+    const next = '/chat' + (qs ? '?' + qs : '');
+    if (location.pathname + location.search !== next) history.replaceState(null, '', next);
+  }, [filterQuery, selectedId]);
 
   // ---- Conversation load ----
   React.useEffect(() => {
@@ -125,7 +175,13 @@ export function ChatShell({ user }: { user: ChatUser }) {
         const { messages: msgs } = await getConversation(selectedId);
         if (!cancelled) setMessages(msgs);
       } catch (err) {
-        if (!cancelled) console.error('getConversation', err);
+        if (cancelled) return;
+        console.error('getConversation', err);
+        // ?c= de conversa apagada (404) ou de outro usuário (403): abre uma
+        // nova em vez de ficar numa tela vazia com o id preso na URL. Falha
+        // transitória (rede, 5xx, 401) mantém a seleção e a URL.
+        if (/ 40[34]$/.test(err instanceof Error ? err.message : '')) setSelectedId(null);
+        else setSyncStatus('error');
       }
     })();
     return () => {
@@ -142,8 +198,20 @@ export function ChatShell({ user }: { user: ChatUser }) {
         startNew();
       } else if (mod && e.key.toLowerCase() === 'k') {
         e.preventDefault();
-        const search = document.querySelector<HTMLInputElement>('[data-chat-search]');
-        search?.focus();
+        const visible = () =>
+          Array.from(document.querySelectorAll<HTMLInputElement>('[data-chat-search]')).find(
+            (el) => el.offsetParent !== null,
+          );
+        const search = visible();
+        if (search) search.focus();
+        else {
+          // Coluna recolhida no desktop: expande (abrir o drawer ali só piscava
+          // — o Sidebar o fecha ≥821px). ≤820px a lista é drawer: abre.
+          // Nos dois casos foca quando montar.
+          if (window.matchMedia('(min-width: 821px)').matches) setCollapsed(false);
+          else setConvOpen(true);
+          window.setTimeout(() => visible()?.focus(), 120);
+        }
       } else if (e.key === 'Escape' && drawerEntity) {
         setDrawerEntity(null);
       }
@@ -187,10 +255,36 @@ export function ChatShell({ user }: { user: ChatUser }) {
     let received: Block[] | null = null;
     let truncated = false;
 
+    // Os filtros da barra valem pra resposta: viram o bloco "Estado da UI" do
+    // system e o período default das tools (antes nunca eram enviados — a
+    // barra era só enfeite).
+    // Personalizado segue a convenção da SPA (dias UTC) pra o chat responder
+    // sobre a MESMA janela da tela de onde o usuário veio.
+    const range =
+      filters.period.preset === 'custom'
+        ? spaCustomRange(filters.period.start, filters.period.end)
+        : brtRangeForPreset(filters.period.preset);
+    const uiState = {
+      route: 'chat',
+      preset: range.preset,
+      startDate: range.start,
+      endDate: range.end,
+      startAt: range.startAt,
+      endAt: range.endAt,
+      platforms: filters.platforms,
+      families: filters.families,
+      countries: filters.countries,
+      stages: filters.stages,
+      // affiliates fica de fora: nenhuma tool do chat aplica affiliate_id, e
+      // listá-lo no "Estado da UI" fazia a IA achar que o número estava
+      // filtrado. O valor segue só na URL, pra voltar pra SPA.
+    };
+
     await sendMessage(
       {
         conversationId: selectedId,
         message: text,
+        uiState,
         // Conversa NOVA nasce na pasta ativa; conversas existentes ignoram.
         folderId: selectedId ? undefined : activeFolderId,
       },
@@ -407,12 +501,19 @@ export function ChatShell({ user }: { user: ChatUser }) {
   const isAdmin = user.role === 'ADMIN';
 
   // h-full = preenche o wrapper fixed do layout (100vh ancorado).
-  // grid-rows-[100%] força a única row implícita a respeitar 100% da
-  // altura do grid container — evita que filhos com height: 100vh
-  // (como .side sticky) inflem a row.
+  // Linha flex (não grid de colunas fixas): a nav mede a si mesma (232px,
+  // 64px recolhida) e, no mobile (≤820px), vira drawer position:fixed — sai
+  // do fluxo sem deixar coluna vazia, como na SPA.
   return (
-    <div className="grid grid-cols-[232px_auto_1fr] grid-rows-[100%] h-full overflow-hidden nx-chat-bg text-foreground relative">
-      <DashboardNav user={user} activeId="chat" />
+    <div className="flex h-full overflow-hidden nx-chat-bg text-foreground relative">
+      <DashboardNav
+        user={user}
+        activeId="chat"
+        open={navOpen}
+        onClose={() => setNavOpen(false)}
+        linkQuery={filterQuery}
+        initialCollapsed={initialNavCollapsed}
+      />
 
       <Sidebar
         collapsed={collapsed}
@@ -421,9 +522,17 @@ export function ChatShell({ user }: { user: ChatUser }) {
         folders={folders}
         activeFolderId={activeFolderId}
         selectedId={selectedId}
-        onSelect={setSelectedId}
+        onSelect={(id) => {
+          setSelectedId(id);
+          setConvOpen(false);
+        }}
         onSelectFolder={setActiveFolderId}
-        onNew={startNew}
+        onNew={() => {
+          startNew();
+          setConvOpen(false);
+        }}
+        mobileOpen={convOpen}
+        onMobileOpenChange={setConvOpen}
         onRename={handleRenameConv}
         onTogglePin={handleTogglePin}
         onExport={handleExport}
@@ -438,27 +547,42 @@ export function ChatShell({ user }: { user: ChatUser }) {
 
       {isAdmin && <KnowledgeSheet open={knowledgeOpen} onOpenChange={setKnowledgeOpen} />}
 
-      <main className="relative z-[1] flex flex-col h-full overflow-hidden">
+      <main className="relative z-[1] flex flex-col h-full overflow-hidden flex-1 min-w-0">
         <TopBar
+          onMenu={() => setNavOpen(true)}
           title={currentConv?.title ?? null}
           onRenameTitle={handleRenameTitle}
           filters={filters}
           onChangeFilters={setFilters}
           syncStatus={syncStatus}
           onRefresh={() => void refreshConversations()}
+          canExport={selectedId != null}
           onExport={() => selectedId && handleExport(selectedId)}
-          onShare={() => {
-            if (!selectedId) return;
-            void navigator.clipboard.writeText(window.location.origin + '/chat?c=' + selectedId);
+          onCopyLink={async () => {
+            if (!selectedId) return false;
+            // Link = esta conversa + os filtros atuais. Só o dono abre
+            // (conversas são individuais).
+            const p = new URLSearchParams(filterQuery);
+            p.set('c', selectedId);
+            try {
+              await navigator.clipboard.writeText(window.location.origin + '/chat?' + p.toString());
+              return true;
+            } catch {
+              return false;
+            }
           }}
           theme={theme}
-          onToggleTheme={() => setTheme((t) => (t === 'dark' ? 'light' : 'dark'))}
+          onToggleTheme={toggleTheme}
+          onOpenConversations={() => setConvOpen(true)}
         />
 
-        {messages.length === 0 && !streaming ? (
+        {messages.length === 0 && !streaming && !selectedId ? (
           <EmptyState onPickPrompt={(q) => setInput(q)} />
         ) : (
           <MessageList
+            // Conversa aberta (?c=, clique na lista) ainda carregando: área
+            // vazia em vez do hero de "nova conversa" piscando.
+            emptyState={<div className="flex-1 min-h-0" aria-busy="true" />}
             messages={messages}
             streaming={streaming}
             streamingPartial={streamPartial}
@@ -476,8 +600,6 @@ export function ChatShell({ user }: { user: ChatUser }) {
           onSubmit={() => void handleSend()}
           onStop={handleStop}
           streaming={streaming}
-          model={model}
-          onChangeModel={setModel}
         />
       </main>
 

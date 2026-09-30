@@ -1691,10 +1691,10 @@ body { overflow-x: hidden; }
 .tbl tbody tr:hover { background: color-mix(in oklab, var(--accent) 5%, transparent); }
 
 /* ---------- Inputs ---------- */
-input, select, textarea {
+input:not(:where([data-app-scope="chat"] *)), select:not(:where([data-app-scope="chat"] *)), textarea:not(:where([data-app-scope="chat"] *)) {
   border-radius: var(--r-md);
 }
-input:focus, select:focus, textarea:focus {
+input:focus:not(:where([data-app-scope="chat"] *)), select:focus:not(:where([data-app-scope="chat"] *)), textarea:focus:not(:where([data-app-scope="chat"] *)) {
   outline: 2px solid var(--accent);
   outline-offset: 0;
 }
@@ -1726,7 +1726,7 @@ input:focus, select:focus, textarea:focus {
 .app:has(.side.is-collapsed) { grid-template-columns: 64px 1fr; }
 .side.is-collapsed { padding: 14px 8px 16px; }
 /* Recolhido: botão sai do canto e vira o primeiro item do trilho, centrado. */
-.side.is-collapsed .side-collapse { position: static; margin: 0 auto 8px; }
+.side.is-collapsed .side-collapse { position: static; margin: 0 auto 8px; flex-shrink: 0; }
 .side.is-collapsed .wm,
 .side.is-collapsed .side-item-label,
 .side.is-collapsed .side-item .cnt,
@@ -2048,7 +2048,10 @@ body { background: var(--bg); color: var(--fg3); }
   padding: 18px 12px 14px;
 }
 .side-logo { padding: 6px 10px 18px; gap: 10px; }
-.side-logo .ns-logotype { height: 18px; width: auto; display: block; }
+/* Logo completo (nome + globo, 7,16:1). 160 px de largura deixa folga para o
+   botão de recolher (absoluto: top 16, right 10) MESMO quando a .side rola —
+   a barra fina (~10 px no Windows) empurra o botão 10 px pra esquerda. */
+.side-logo .ns-logotype { width: 160px; max-width: 100%; height: auto; display: block; }
 .side-logo .ns-appicon { width: 28px; height: 28px; display: none; border-radius: 6px; }
 [data-theme="light"] .side-logo .ns-logotype.for-dark,
 :root:not([data-theme="light"]) .side-logo .ns-logotype.for-light { display: none; }
@@ -2178,13 +2181,13 @@ body { background: var(--bg); color: var(--fg3); }
 .chip .cnt { font-family: var(--f-mono); font-size: 12px; color: var(--fg5); }
 
 /* ---------- Campos (DS1: rótulo visível, borda de controle) ---------- */
-input:not([type="checkbox"]):not([type="radio"]):not([type="range"]), select, textarea {
+input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not(:where([data-app-scope="chat"] *)), select:not(:where([data-app-scope="chat"] *)), textarea:not(:where([data-app-scope="chat"] *)) {
   font-family: var(--f-body); font-size: 14px; color: var(--fg1);
   background: var(--bg-raised);
   border: 1px solid var(--border-strong);
   border-radius: var(--r-md);
 }
-input:not([type="checkbox"]):not([type="radio"]):not([type="range"]), select { min-height: var(--ctl-h); }
+input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not(:where([data-app-scope="chat"] *)), select:not(:where([data-app-scope="chat"] *)) { min-height: var(--ctl-h); }
 input::placeholder, textarea::placeholder { color: var(--fg5); opacity: 1; }
 input[type="checkbox"], input[type="radio"] { accent-color: var(--cta); width: 16px; height: 16px; }
 
@@ -2342,6 +2345,12 @@ input[type="checkbox"], input[type="radio"] { accent-color: var(--cta); width: 1
 [data-theme="light"] .top-actions .btn-ghost:hover {
   background: var(--bg-hover); border-color: var(--accent); color: var(--accent);
 }
+/* Desabilitado não reage ao hover — antes ganhava a cor de destaque e
+   parecia clicável (ex.: Exportar sem conversa aberta). */
+.btn-ghost:disabled:hover, .btn-ghost[aria-disabled="true"]:hover,
+[data-theme="light"] .top-actions .btn-ghost:disabled:hover {
+  background: var(--bg-raised); border-color: var(--border); color: var(--fg1);
+}
 
 /* Cartão = superfície + borda; hover não sobe nem ganha sombra */
 .prod-card, .ph-card { border-radius: var(--r-lg); box-shadow: none; }
@@ -2394,7 +2403,7 @@ input[type="checkbox"], input[type="radio"] { accent-color: var(--cta); width: 1
 /* Campos: 13 inputs têm outline:'none' INLINE (busca, chat, filtros) — e
    estilo inline vence CSS. !important aqui é a exceção justificada: sem
    ele, quem navega por teclado não sabe em qual campo está. */
-input:focus-visible, textarea:focus-visible, select:focus-visible {
+input:focus-visible:not(:where([data-app-scope="chat"] *)), textarea:focus-visible:not(:where([data-app-scope="chat"] *)), select:focus-visible:not(:where([data-app-scope="chat"] *)) {
   outline: 2px solid var(--accent) !important;
   outline-offset: 1px !important;
 }

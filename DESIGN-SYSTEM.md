@@ -86,6 +86,19 @@ O `/chat` carrega as duas folhas: `colors_and_type.css` (hex) e `app/chat/global
 (`--cx-border`, `--cx-accent`, `--cx-success`, `--cx-warning`, `--cx-danger`). Token HSL novo
 no chat: nunca reutilizar um nome de `colors_and_type.css`.
 
+- **Casca igual à da SPA.** Nav, topo e filtros do chat usam as MESMAS classes da SPA
+  (`.side`, `.top`, `.filters`, `.select-btn`…). A nav é **gerada** da Sidebar da SPA
+  (`node scripts/gen-chat-nav.mjs` → `components/chat/navConfig.generated.ts`); o build
+  quebra se ficar desatualizada. Ícone no chat é `<NsIcon>` (mesmo set e traço 1.6), nunca
+  lucide direto.
+- **Regra de elemento da SPA não entra no chat.** Seletores de elemento em
+  `dashboard.css`/`colors_and_type.css` (`input`, `p`, `a`, `h1`…) levam
+  `:not(:where([data-app-scope="chat"] *))`; portal do Radix leva `data-app-scope="chat"`.
+  Regra de elemento nova nessas folhas: mesma guarda.
+- **Estado compartilhado:** tema só é gravado no clique (`ns-theme`); recolhido da nav vai
+  em localStorage **e** cookie `ns-side-collapsed` (o servidor do chat precisa saber);
+  filtros viajam na URL com a codificação da SPA (`range/from/to/plat/fam/co/st/aff`).
+
 ## 4. Tipografia
 
 | Papel | Fonte | Onde |

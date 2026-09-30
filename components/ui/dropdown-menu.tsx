@@ -2,7 +2,7 @@
 
 import * as React from 'react';
 import * as DropdownMenuPrimitive from '@radix-ui/react-dropdown-menu';
-import { Check, ChevronRight, Circle } from 'lucide-react';
+import { NsIcon } from '@/components/chat/NsIcon';
 import { cn } from '@/lib/ui-utils';
 
 export const DropdownMenu = DropdownMenuPrimitive.Root;
@@ -26,7 +26,7 @@ export const DropdownMenuSubTrigger = React.forwardRef<
     {...props}
   >
     {children}
-    <ChevronRight className="ml-auto" />
+    <NsIcon name="chevron-right" size={16} className="ml-auto" />
   </DropdownMenuPrimitive.SubTrigger>
 ));
 DropdownMenuSubTrigger.displayName = DropdownMenuPrimitive.SubTrigger.displayName;
@@ -36,6 +36,7 @@ export const DropdownMenuSubContent = React.forwardRef<
   React.ComponentPropsWithoutRef<typeof DropdownMenuPrimitive.SubContent>
 >(({ className, ...props }, ref) => (
   <DropdownMenuPrimitive.SubContent
+    data-app-scope="chat"
     ref={ref}
     className={cn(
       'z-50 min-w-[8rem] overflow-hidden rounded-md border border-border bg-popover p-1 text-popover-foreground shadow-lg',
@@ -53,6 +54,9 @@ export const DropdownMenuContent = React.forwardRef<
 >(({ className, sideOffset = 4, ...props }, ref) => (
   <DropdownMenuPrimitive.Portal>
     <DropdownMenuPrimitive.Content
+      // Portal fora do wrapper do chat: marca o escopo pra herdar fonte/cor
+      // do chat e escapar das regras de elemento da SPA.
+      data-app-scope="chat"
       ref={ref}
       sideOffset={sideOffset}
       className={cn(
@@ -99,7 +103,7 @@ export const DropdownMenuCheckboxItem = React.forwardRef<
   >
     <span className="absolute left-2 flex h-3.5 w-3.5 items-center justify-center">
       <DropdownMenuPrimitive.ItemIndicator>
-        <Check className="h-4 w-4" />
+        <NsIcon name="check" size={16} />
       </DropdownMenuPrimitive.ItemIndicator>
     </span>
     {children}
@@ -121,7 +125,7 @@ export const DropdownMenuRadioItem = React.forwardRef<
   >
     <span className="absolute left-2 flex h-3.5 w-3.5 items-center justify-center">
       <DropdownMenuPrimitive.ItemIndicator>
-        <Circle className="h-2 w-2 fill-current" />
+        <NsIcon name="circle" size={8} className="fill-current" />
       </DropdownMenuPrimitive.ItemIndicator>
     </span>
     {children}

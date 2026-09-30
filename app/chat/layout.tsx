@@ -1,19 +1,24 @@
 // Layout do redesign do /chat.
 //
 // CSS chain:
-//   1. /styles/dashboard.css   — define vars (--fg1, --bg, etc) + .side,
-//      .side-item, .user-chip, font-faces da SPA legacy. Permite o
-//      DashboardNav renderizar com look idêntico ao resto do app.
-//   2. ./globals.css           — Tailwind + tokens shadcn (HSL). Escopado
-//      no wrapper [data-app-scope='chat'] pra não vazar.
+//   1. ./globals.css (import) — Tailwind + tokens shadcn (HSL, prefixo --cx-
+//      nos nomes que colidiam). Vai no <head>.
+//   2. /styles/colors_and_type.css + /styles/dashboard.css (<link> abaixo) —
+//      tokens DS1 e as classes da casca da SPA (.side, .top, .filters,
+//      .chip…), pra nav/topo/filtros terem o MESMO visual do resto do app.
 //
-// Ordem importa: Tailwind layers vencem onde houver colisão de classe.
+// Ordem importa, e ao contrário do que parece: os <link> sem 'precedence'
+// ficam no <body>, DEPOIS do globals.css, e ganham empate de especificidade
+// (o @layer do Tailwind 3 compila pra CSS sem camada). Por isso as regras de
+// ELEMENTO da SPA (input, p, a, h1…) levam :not(:where([data-app-scope=chat] *))
+// e não tocam no chat; e os portais do Radix (menus, tooltips, sheet) levam
+// data-app-scope="chat" pra entrar no mesmo escopo.
 
 import type { ReactNode } from 'react';
 import './globals.css';
 
 export const metadata = {
-  title: 'Análise IA · Northscale',
+  title: 'Análise (IA) · NorthScale',
 };
 
 export default function ChatLayout({ children }: { children: ReactNode }) {

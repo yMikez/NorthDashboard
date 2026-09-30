@@ -226,7 +226,9 @@ function App({ user }) {
     // SPA não renderiza mais o ChatPage inline — full-page nav garante que
     // o usuário vê a UI nova com layout integrado (dashboard nav + chat).
     if (route === 'chat') {
-      window.location.href = '/chat';
+      // Leva os filtros atuais (mesma codificação) — o chat abre no mesmo
+      // recorte e os links da nav dele devolvem esses filtros pra SPA.
+      window.location.href = '/chat' + location.search;
       return;
     }
     setDrawerAff(null);
