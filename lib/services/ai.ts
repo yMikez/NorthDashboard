@@ -66,37 +66,44 @@ function formatBrt(d: Date): { date: string; datetime: string } {
 }
 
 /**
- * System prompt em 3 blocos pra maximizar prompt cache:
- *   1. ESTÁVEL (persona/regras/contexto/tools) — cache ephemeral; só muda
- *      em deploy. Antes o timestamp minuto-a-minuto vivia DENTRO do bloco
- *      cacheado e invalidava o cache a cada request — era o principal
- *      motivo de latência/custo do chat.
- *   2. KNOWLEDGE — cache ephemeral próprio: um fato novo salvo pela
- *      memória automática invalida só este bloco, não o estável.
- *   3. DINÂMICO (agora em BRT + estado da UI) — SEM cache_control, fica
- *      fora do prefixo cacheado de propósito.
+ * System prompt em 2 blocos, ambos no prefixo cacheado:
+ *   1. ESTÁVEL (persona/método/glossário/tools/skills) — só muda em deploy.
+ *   2. BASE FIXA (entradas pinned do admin + índice da base pesquisável) —
+ *      só muda quando o admin edita (memória automática não entra mais aqui).
+ *
+ * O que muda a cada minuto (agora em BRT, âncoras de calendário, estado da
+ * UI) NÃO fica no system: vai como bloco de texto NA mensagem do usuário
+ * (buildTurnContext), persistido em Message.turnContext. Assim o histórico
+ * reconstruído é byte-idêntico entre turnos e o cache cobre a conversa
+ * inteira — antes o bloco dinâmico ficava ANTES das mensagens e o histórico
+ * era cobrado cheio a cada pergunta.
  */
-export function systemBlocks(
-  currentDate: Date,
-  knowledgeBlock = '',
-  uiStateText = '',
-): Anthropic.TextBlockParam[] {
-  const { date: dt, datetime: now } = formatBrt(currentDate);
+export function systemBlocks(knowledgeBlock = ''): Anthropic.TextBlockParam[] {
   const blocks: Anthropic.TextBlockParam[] = [
     { type: 'text', text: STABLE_PROMPT, cache_control: { type: 'ephemeral' } },
   ];
   if (knowledgeBlock.trim()) {
     blocks.push({
       type: 'text',
-      text: `# Base de conhecimento (admin)\nInformação adicional fornecida pelo admin do dashboard. Use como contexto autoritativo — preferir aos seus chutes sempre que cobrir o tópico.\n\n${knowledgeBlock}`,
+      text: `# Base de conhecimento (admin)\nInformação fixa fornecida pelo admin do dashboard. Precedência: definições deste system > base do admin > memórias.\n\n${knowledgeBlock}`,
       cache_control: { type: 'ephemeral' },
     });
   }
-  blocks.push({
-    type: 'text',
-    text: `Agora em BRT: ${now} (data: ${dt}).${uiStateText}`,
-  });
   return blocks;
+}
+
+/**
+ * Contexto do turno — vai no INÍCIO da mensagem do usuário (e é persistido
+ * com ela). `uiStateText` = bloco "# Estado da UI" já sanitizado.
+ */
+export function buildTurnContext(now: Date, uiStateText = ''): string {
+  const { date: dt, datetime: at } = formatBrt(now);
+  return `<contexto_do_turno>\nAgora em BRT: ${at} (data: ${dt}).${uiStateText}\n</contexto_do_turno>`;
+}
+
+/** Texto do prompt estável — a telemetria faz hash (qualidade × versão do prompt). */
+export function stablePromptText(): string {
+  return STABLE_PROMPT;
 }
 
 const STABLE_PROMPT = `Você é o analista sênior de dados do NorthScale — o dashboard de operação de um vendedor de nutra (marketing direct-response) que agrega vendas de ClickBank, Digistore24, BuyGoods, Cartpanda e JVZoo, mais call center (Tauk e Logicall), recuperação por SMS, custos/fulfillment e reembolsos por coorte. Você lê EXATAMENTE os mesmos dados que as abas do dashboard mostram: cada tool chama a mesma função que alimenta a tela.
@@ -111,7 +118,7 @@ const STABLE_PROMPT = `Você é o analista sênior de dados do NorthScale — o 
 - Sugira ações concretas quando o dado sustenta ("pausar X", "investigar Y", "renegociar CPA de Z").
 
 # Período e filtros
-- Usuário e operação estão no Brasil (BRT = UTC-3, sem horário de verão). "Hoje", "ontem", "esta semana" são em BRT; a data/hora BRT atual está no fim deste system. Nunca infira UTC.
+- Usuário e operação estão no Brasil (BRT = UTC-3, sem horário de verão). "Hoje", "ontem", "esta semana" são em BRT; a data/hora BRT atual está em <contexto_do_turno>, no início de cada mensagem do usuário. Nunca infira UTC.
 - Se a pergunta não diz período, use o período que o usuário está VENDO (bloco "Estado da UI"). Sem estado da UI, últimos 30 dias. Se você omitir start_date/end_date numa tool, o servidor aplica exatamente o intervalo da tela — então omita quando quiser "o que está na tela". Se informar só start_date, o fim é "agora"; se informar só end_date, o início é o da tela (ou 30 dias antes).
 - Filtros da UI (plataformas, famílias, etapas, países) valem como default pra perguntas dêiticas ("aqui", "esse período", "esses afiliados", "por que caiu?"). Pra perguntas gerais ("quanto vendemos em agosto?") herde só o período, não os outros filtros — a menos que o usuário peça.
 
@@ -163,4 +170,4 @@ Formatos: KPI \`value\` sempre formatado pra UI ("$ 154.318" não 154318.42). Ta
 Se as tools disponíveis NÃO cobrem o dado pedido, diga claramente que esse dado não está disponível no dashboard — NUNCA estime ou invente números. Resposta confiante e errada é pior que "não tenho esse dado". Se uma tool devolver \`error\`, diga o que falhou e tente um caminho alternativo (outro período, outra tool) antes de desistir.
 
 # Estado da UI
-Quando presente, o bloco "Estado da UI" no fim deste system diz o que o usuário está vendo AGORA (aba, período, filtros ativos). Use-o pra interpretar perguntas dêiticas e como default de período/filtros quando a pergunta não especificar.`;
+Quando presente, o bloco "Estado da UI" (dentro de <contexto_do_turno>, no início da mensagem do usuário) diz o que o usuário está vendo AGORA (aba, período, filtros ativos). Use-o pra interpretar perguntas dêiticas e como default de período/filtros quando a pergunta não especificar.`;

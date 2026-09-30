@@ -1,6 +1,9 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   output: 'standalone',
+  // Leitores de arquivo (anexos/RAG) rodam só no servidor e carregam
+  // workers/assets próprios — fora do bundle, rastreados no standalone.
+  serverExternalPackages: ['unpdf', 'mammoth', 'read-excel-file', '@cantoo/pdf-lib', 'papaparse', 'turndown', 'image-size'],
   // Pretty URLs for the SPA. Each known route is rewritten to the static
   // index.html so the React app boots and reads the path to decide which
   // page to show. Keeps the SPA on a single bundle without exposing

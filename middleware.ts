@@ -92,5 +92,8 @@ export function middleware(req: NextRequest) {
 }
 
 export const config = {
-  matcher: ['/((?!_next/static|_next/image).*)'],
+  // /api/ fora do matcher: o middleware não faz nada lá (PUBLIC_PREFIXES) e,
+  // passando por ele, o Next clona o corpo do POST com teto de 10 MB — upload
+  // de anexo maior chegava CORTADO no handler, sem erro (somas erradas).
+  matcher: ['/((?!_next/static|_next/image|api/).*)'],
 };

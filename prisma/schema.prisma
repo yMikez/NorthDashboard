@@ -696,17 +696,19 @@ model NetworkContract {
 // ============================================================
 
 model Conversation {
-  id        String      @id @default(cuid())
-  userId    String
-  user      User        @relation("ConversationsByUser", fields: [userId], references: [id], onDelete: Cascade)
-  title     String? // auto-gerado do primeiro user message (truncado)
+  id          String       @id @default(cuid())
+  userId      String
+  user        User         @relation("ConversationsByUser", fields: [userId], references: [id], onDelete: Cascade)
+  title       String? // auto-gerado do primeiro user message (truncado)
   // Pasta/projeto (opcional). Deletar a pasta NÃO deleta as conversas —
   // elas voltam pra raiz (SetNull).
-  folderId  String?
-  folder    ChatFolder? @relation(fields: [folderId], references: [id], onDelete: SetNull)
-  createdAt DateTime    @default(now())
-  updatedAt DateTime    @updatedAt
-  messages  Message[]
+  folderId    String?
+  folder      ChatFolder?  @relation(fields: [folderId], references: [id], onDelete: SetNull)
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+  messages    Message[]
+  // Anexos da conversa (KbDocument scope=CONVERSATION) — somem junto.
+  kbDocuments KbDocument[]
 
   @@index([userId, updatedAt])
   @@index([folderId])
@@ -729,9 +731,9 @@ model ChatFolder {
 // metadata pra renderizar no UI ([{name, input, result}]). content
 // armazena a resposta final em texto markdown.
 model Message {
-  id             String       @id @default(cuid())
+  id             String         @id @default(cuid())
   conversationId String
-  conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  conversation   Conversation   @relation(fields: [conversationId], references: [id], onDelete: Cascade)
   role           String // 'user' | 'assistant'
   content        String
   toolUses       Json?
@@ -739,7 +741,18 @@ model Message {
   // Null pra mensagens em texto puro (markdown via `content`). Array de
   // Block discriminated union em types/chat.ts.
   blocks         Json?
-  createdAt      DateTime     @default(now())
+  // Citações da resposta (search_knowledge / anexos): [{n, source, title,
+  // citedText, documentId, chunkId, page}] — os marcadores [[cite:n]] no
+  // content apontam pra cá.
+  citations      Json?
+  // Contexto do turno (agora em BRT + estado da UI) no momento da pergunta.
+  // Vai NA mensagem do usuário (não no system) e é persistido pra que o
+  // histórico reconstruído seja idêntico entre turnos (prompt cache).
+  turnContext    String?
+  createdAt      DateTime       @default(now())
+  attachments    KbDocument[]
+  turnLog        ChatTurnLog?
+  feedback       ChatFeedback[]
 
   @@index([conversationId, createdAt])
 }
@@ -749,20 +762,266 @@ model Message {
 // Mantemos a tabela pequena (~10-30 entries esperados) pra não estourar
 // o token budget — não tem retrieval, é tudo embedded.
 model KnowledgeEntry {
-  id        String   @id @default(cuid())
-  title     String // "Regras de payout Digistore", "Glossário CB", etc.
-  content   String // markdown — vai literal pro system prompt
-  enabled   Boolean  @default(true)
+  id         String   @id @default(cuid())
+  title      String // "Regras de payout Digistore", "Glossário CB", etc.
+  content    String // markdown — vai literal pro system prompt
+  enabled    Boolean  @default(true)
   // 'manual' = criada pelo admin no painel. 'auto' = extraída pela IA
   // de conversas do chat (memória persistente cross-chat).
-  source    String   @default("manual")
+  source     String   @default("manual")
   // Ordem de exibição/injeção no prompt. Menor = primeiro.
-  sortOrder Int      @default(0)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  sortOrder  Int      @default(0)
+  // pinned = vai inteira no system (com teto de tamanho); false = só entra
+  // pela busca (search_knowledge). Memória automática nasce pinned=false.
+  pinned     Boolean  @default(true)
+  // active | pending (memória sugerida aguardando o admin) | rejected
+  status     String   @default("active")
+  // Memória automática: trecho LITERAL do usuário que sustenta o fato, e a
+  // confiança do extrator — o admin aprova vendo a evidência.
+  evidence   String?
+  confidence Float?
+  hitCount   Int      @default(0)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
 
   @@index([enabled, sortOrder])
   @@index([source, createdAt])
+  @@index([status, createdAt])
+}
+
+// ── RAG: base de conhecimento pesquisável + anexos do chat ────────────────
+// Um documento é da base GLOBAL (docs do repo, entradas do admin, memórias
+// aprovadas) ou de UMA conversa (anexo do usuário). O texto vira trechos
+// (KbChunk) indexados por busca textual do Postgres (tsvector ns_pt +
+// ns_simple, GIN) e trigram no rótulo; embedding denso é opcional
+// (VOYAGE_API_KEY). Sem pgvector — o denso, quando ligado, é cosseno no app.
+enum KbScope {
+  GLOBAL
+  CONVERSATION
+}
+
+enum KbDocStatus {
+  PENDING
+  PROCESSING
+  READY
+  FAILED
+  EXPIRED
+}
+
+model KbDocument {
+  id              String        @id @default(cuid())
+  scope           KbScope
+  // autor (GLOBAL) ou dono (anexo) — anexo só é lido pelo dono
+  userId          String?
+  conversationId  String?
+  conversation    Conversation? @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  // mensagem do usuário que levou o anexo
+  messageId       String?
+  message         Message?      @relation(fields: [messageId], references: [id], onDelete: SetNull)
+  // policy | reference | snapshot | playbook | memory | knowledge_entry | attachment
+  kind            String
+  // repo_md | upload | knowledge_entry | chat_memory | attachment
+  sourceType      String
+  // 'docs/kb/cohort.md' | KnowledgeEntry.id | null (upload)
+  sourceRef       String?
+  title           String
+  // 1 linha pro índice da base no prompt
+  description     String?
+  mimeType        String
+  fileName        String?
+  byteSize        Int?
+  pageCount       Int?
+  tokenEstimate   Int?
+  // sha256 do texto normalizado — seed/reindex só mexe no que mudou
+  contentHash     String
+  version         Int           @default(1)
+  status          KbDocStatus   @default(PENDING)
+  error           String?
+  enabled         Boolean       @default(true)
+  // inline (vai inteiro pro modelo) | indexed (busca/leitura por páginas) | table (query determinística)
+  deliveryMode    String        @default("indexed")
+  // "fatos válidos em" — snapshot datado é rebaixado na busca
+  effectiveDate   DateTime?
+  hitCount        Int           @default(0)
+  lastRetrievedAt DateTime?
+  // texto completo normalizado (docs de texto / leitura por seção)
+  text            String?
+  meta            Json?
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+  chunks          KbChunk[]
+  file            KbFile?
+  table           KbTable?
+
+  @@unique([scope, sourceType, sourceRef])
+  @@index([scope, status, enabled])
+  @@index([conversationId])
+  @@index([messageId])
+  @@index([userId, createdAt])
+}
+
+// Bytes originais (≤ 25 MB) fora da tabela quente — excluir do pg_dump.
+model KbFile {
+  documentId String     @id
+  document   KbDocument @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  data       Bytes
+  sha256     String
+  createdAt  DateTime   @default(now())
+}
+
+model KbChunk {
+  id             String                   @id @default(cuid())
+  documentId     String
+  document       KbDocument               @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  docVersion     Int
+  ordinal        Int
+  // desnormalizado pro filtro de escopo da busca
+  scope          KbScope
+  conversationId String?
+  // "Título › H1 › H2" — peso A na busca e trigram
+  label          String
+  headingPath    String                   @default("")
+  pageStart      Int?
+  pageEnd        Int?
+  content        String
+  // Contextual Retrieval: 1–2 frases situando o trecho no documento
+  context        String?
+  tokenCount     Int
+  // preenchidos por SQL na indexação (to_tsvector('ns_pt'|'ns_simple', …))
+  tsvPt          Unsupported("tsvector")?
+  tsvSimple      Unsupported("tsvector")?
+  // Float32 LE L2-normalizado (opcional, VOYAGE_API_KEY)
+  embedding      Bytes?
+  embeddingModel String?
+  createdAt      DateTime                 @default(now())
+
+  @@unique([documentId, docVersion, ordinal])
+  @@index([scope, conversationId])
+  @@index([tsvPt], type: Gin)
+  @@index([tsvSimple], type: Gin)
+  @@index([label(ops: raw("gin_trgm_ops"))], type: Gin)
+}
+
+// Planilhas/CSV parseados pra query determinística (query_attachment_table).
+model KbTable {
+  documentId String     @id
+  document   KbDocument @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  // [{name, headerRow, rowCount, columns:[{key,label,type,pii,stats}]}]
+  sheets     Json
+  // gzip(JSON { [sheet]: rows[] })
+  data       Bytes
+}
+
+// ── Qualidade da IA: telemetria por turno, feedback e avaliação ───────────
+model ChatTurnLog {
+  id                String   @id @default(cuid())
+  messageId         String?  @unique
+  message           Message? @relation(fields: [messageId], references: [id], onDelete: SetNull)
+  conversationId    String?
+  userId            String?
+  evalRunId         String?
+  createdAt         DateTime @default(now())
+  model             String
+  effort            String
+  // sha256(prompt estável + tools) — correlaciona qualidade com versão do prompt
+  promptVersion     String
+  knowledgeHash     String?
+  status            String // ok | max_tokens | refusal | aborted | error
+  rounds            Int
+  toolCalls         Int
+  toolErrors        Int      @default(0)
+  truncatedResults  Int      @default(0)
+  forcedFinal       Boolean  @default(false)
+  usedBlocks        Boolean  @default(false)
+  ungroundedNumbers Int      @default(0)
+  error             String?
+  inputTokens       Int      @default(0)
+  outputTokens      Int      @default(0)
+  cacheReadTokens   Int      @default(0)
+  cacheWriteTokens  Int      @default(0)
+  costUsd           Float?
+  ttftMs            Int?
+  latencyMs         Int
+  toolMs            Int      @default(0)
+  contextCharsPeak  Int      @default(0)
+  // rodadas + tools (sem resultado bruto, sem PII)
+  trace             Json
+
+  @@index([createdAt])
+  @@index([userId, createdAt])
+  @@index([promptVersion, createdAt])
+}
+
+model ChatFeedback {
+  id        String   @id @default(cuid())
+  messageId String
+  message   Message  @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  userId    String
+  // +1 | -1
+  rating    Int
+  // numero_errado | periodo_errado | filtro_errado | nao_respondeu | inventou | lento | formato | outro
+  reasons   String[]
+  comment   String?
+  // "o certo era $ 12.345 (aba Custos)"
+  expected  String?
+  // consentimento explícito: o admin pode ler pergunta + resposta
+  shared    Boolean  @default(true)
+  // open | triaged | golden | fixed | wontfix
+  status    String   @default("open")
+  adminNote String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([messageId, userId])
+  @@index([rating, status, createdAt])
+}
+
+model ChatEvalCase {
+  id               String   @id @default(cuid())
+  slug             String   @unique
+  category         String
+  // GoldenCase (lib/chat/eval/spec.ts) — perguntas, UI, fatos esperados
+  spec             Json
+  enabled          Boolean  @default(true)
+  sourceFeedbackId String?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+}
+
+model ChatEvalRun {
+  id         String           @id @default(cuid())
+  // running | done | failed
+  status     String
+  trigger    String // cli | admin
+  createdBy  String?
+  // {model, effort, cases[], reps, knowledge: on|off}
+  config     Json
+  summary    Json?
+  costUsd    Float?
+  startedAt  DateTime         @default(now())
+  finishedAt DateTime?
+  results    ChatEvalResult[]
+
+  @@index([startedAt])
+}
+
+model ChatEvalResult {
+  id        String      @id @default(cuid())
+  runId     String
+  run       ChatEvalRun @relation(fields: [runId], references: [id], onDelete: Cascade)
+  caseSlug  String
+  rep       Int         @default(0)
+  // pass | fail | partial | inconclusive | error | truncated | refusal
+  status    String
+  score     Float
+  checks    Json
+  answer    String
+  trace     Json?
+  usage     Json?
+  latencyMs Int?
+  createdAt DateTime    @default(now())
+
+  @@index([runId])
 }
 
 // Audit trail genérico pra mudanças sensíveis em entidades de Network.

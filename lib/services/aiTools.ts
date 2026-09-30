@@ -44,6 +44,10 @@ import { getFunnelSequence } from './funnelSequence';
 import { validAnchor } from '../shared/affiliateAnalysisParams';
 import { isValidWindow } from './affiliateAnalysisCore';
 import { affiliateIdsParam, stagesParam } from '../shared/queryParams';
+import type { ToolContext, ToolModule } from '../ai/toolTypes';
+import { SKILL_TOOL_MODULE } from '../ai/skillTools';
+import { RAG_TOOL_MODULE } from '../rag/ragTools';
+import { ATTACHMENT_TOOL_MODULE } from '../rag/attachmentTools';
 import { db } from '../db';
 import { logger } from '../logger';
 
@@ -120,7 +124,7 @@ const WINDOW_PROPS: Record<string, JsonSchema> = {
   include_today: { type: 'boolean', description: 'Sem anchor: fecha a janela em HOJE (dia parcial) em vez de ontem. Default false.' },
 };
 
-export const TOOLS: Anthropic.Tool[] = [
+const CORE_TOOLS: Anthropic.Tool[] = [
   tool(
     'get_overview',
     'KPIs globais do dashboard no período: receita, pedidos, aprovação, refund, AOV, lucro estimado, top países, top afiliados, tipos de produto, série diária, heatmap por hora. Mesmos números da aba Visão Geral.',
@@ -378,6 +382,13 @@ export const TOOLS: Anthropic.Tool[] = [
 
 export const TERMINAL_TOOL = 'respond_with_blocks';
 
+// Pacotes de tools plugáveis (skills, RAG, anexos). Ordem FIXA: a lista de
+// tools faz parte do prefixo cacheado do prompt — mudar a ordem por request
+// invalidaria o cache.
+const TOOL_MODULES: ToolModule[] = [SKILL_TOOL_MODULE, RAG_TOOL_MODULE, ATTACHMENT_TOOL_MODULE];
+
+export const TOOLS: Anthropic.Tool[] = [...CORE_TOOLS, ...TOOL_MODULES.flatMap((m) => m.tools)];
+
 // ── Input / contexto ────────────────────────────────────────────────────
 
 export interface ToolInput {
@@ -410,14 +421,12 @@ export interface ToolInput {
 }
 
 /**
- * Contexto por request: o período que o usuário está vendo na UI. Vira o
- * default de start/end quando o modelo omite datas — assim "por que caiu
- * aqui?" consulta exatamente o que está na tela, não "últimos 30 dias".
+ * Contexto por request: o período que o usuário está vendo na UI (default de
+ * start/end quando o modelo omite datas — "por que caiu aqui?" consulta o que
+ * está na tela) + o que o turno do chat carrega (usuário, resultados, fontes,
+ * anexos). Definido em lib/ai/toolTypes.ts pros módulos de tools.
  */
-export interface ToolContext {
-  defaultStart?: Date;
-  defaultEnd?: Date;
-}
+export type { ToolContext } from '../ai/toolTypes';
 
 // BRT é UTC-3 fixo (sem horário de verão desde 2019). Operação fica
 // no Brasil; tudo que o modelo diz como "hoje", "ontem", "esta semana"
@@ -799,8 +808,13 @@ const HANDLERS: Record<string, Handler> = {
   },
 };
 
+const MODULE_HANDLERS: Record<string, Handler> = Object.assign(
+  {},
+  ...TOOL_MODULES.map((m) => m.handlers as Record<string, Handler>),
+);
+
 /** Nomes das tools que têm handler — usado pelos testes de cobertura. */
-export const HANDLED_TOOL_NAMES = Object.keys(HANDLERS);
+export const HANDLED_TOOL_NAMES = [...Object.keys(HANDLERS), ...Object.keys(MODULE_HANDLERS)];
 
 /**
  * Executor de tool calls. Recebe nome + input do tool_use block, devolve
@@ -809,7 +823,7 @@ export const HANDLED_TOOL_NAMES = Object.keys(HANDLERS);
  * consegue interpretar e contornar — nunca uma exceção que derrube o turno.
  */
 export async function executeTool(name: string, input: ToolInput, ctx: ToolContext = {}): Promise<unknown> {
-  const handler = HANDLERS[name];
+  const handler = HANDLERS[name] ?? MODULE_HANDLERS[name];
   if (!handler) return { error: `tool desconhecida: ${name}` };
   const startedAt = Date.now();
   try {
