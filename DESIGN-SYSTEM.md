@@ -36,28 +36,33 @@ Tomadas pelo dono do produto em 29/09/2026. Estão marcadas também no CSS.
 | Números | Padrão brasileiro | **Padrão americano** (`US$ 1,250.50`) | Operação em dólar, parceiros internacionais |
 | Densidade | Controle 44 px, linha ≥ 48 px | **Controle 36 px, linha 44 px**; 44 px em toque | Painel de operação com muita tabela |
 | Título de página | H3 40/48 | **H4 28/36** | Mesma razão — espaço vertical para o dado |
+| Claro | Superfície `#FFFFFF`, texto `#0D0D0D` | **Claro suave**: superfícies ~15% menos brilhantes, texto `#1A1E26` | O claro puro "doía na vista" (19,4:1, tela quase toda branca); o suave segue AAA (14,4:1) |
 
 ## 3. Cores
 
 Componentes usam **só `var(--token)`**. Os nomes históricos (`--fg1..5`, `--accent`,
 `--glow-cyan`, `--navy-*`) foram mantidos por compatibilidade; os valores são do DS1.
 
-### Claro (padrão) — valores do DS1
+### Claro (padrão) — "claro suave"
+
+Derivado do DS1 com menos brilho (decisão de 29/09/2026). Nenhuma superfície é branco puro;
+todo token de texto passa 4,5:1 no pior fundo (canvas e hover).
 
 | Token | Valor | Papel |
 | --- | --- | --- |
-| `--bg` | `#F4F5F7` | bg.canvas |
-| `--bg-raised` | `#FFFFFF` | bg.surface (cartões, tabelas) |
-| `--bg-hover` | `#EEF1FD` | bg.hover, seleção |
-| `--fg1` | `#0D0D0D` | text.primary |
-| `--fg4` | `#515766` | text.secondary |
-| `--fg5` | `#5F6890` | subtext.100 — o neutral.50 reprova como texto no canvas |
-| `--accent` / `--glow-cyan` | `#4260E6` | azul North: seleção, link, foco |
-| `--cta` / `--cta-hover` | `#4260E6` / `#1B22A7` | botão primário |
-| `--border` / `--border-strong` | `#D8DBE2` / `#6E7484` | divisor / limite de campo |
-| `--success` · `--warning` · `--danger` | `#167447` · `#87520B` · `#B42338` | tons de **texto** de feedback |
-| `--success-bg` · `--warning-bg` · `--danger-bg` | `#EAF7EF` · `#FFF5E5` · `#FDECEF` | fundos de feedback |
-| `--money` | `#167447` | dinheiro (success.text) |
+| `--bg` | `#E1E4EA` | canvas |
+| `--bg-raised` | `#ECEEF2` | painel, tabela, campo |
+| `--bg-elev` | `#F2F3F6` | popover, drawer, modal |
+| `--bg-hover` | `#DCE2F1` | hover, seleção |
+| `--fg1` | `#1A1E26` | texto principal (14,4:1 no painel) |
+| `--fg4` | `#4B5261` | secundário (6,2:1 no canvas) |
+| `--fg5` | `#535B7E` | terciário (5,2:1 no canvas) |
+| `--accent` / `--glow-cyan` | `#2E47BA` | azul de destaque como TEXTO (o `#4260E6` daria 4,1:1 no canvas suave) |
+| `--cta` / `--cta-hover` | `#4260E6` / `#1B22A7` | botão primário (branco em cima 5,19:1) |
+| `--border` / `--border-strong` | `#C9CED8` / `#666C7C` | divisor / limite de campo |
+| `--success` · `--warning` · `--danger` | `#12633D` · `#7B4A09` · `#A61F33` | tons de **texto** de feedback |
+| `--success-bg` · `--warning-bg` · `--danger-bg` | `#DCEBE2` · `#F1E6D3` · `#F2DEE2` | fundos de feedback |
+| `--money` | `#12633D` | dinheiro (sempre verde) |
 
 ### Escuro — derivado
 

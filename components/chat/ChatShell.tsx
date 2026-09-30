@@ -275,9 +275,9 @@ export function ChatShell({
       families: filters.families,
       countries: filters.countries,
       stages: filters.stages,
-      // affiliates fica de fora: nenhuma tool do chat aplica affiliate_id, e
-      // listá-lo no "Estado da UI" fazia a IA achar que o número estava
-      // filtrado. O valor segue só na URL, pra voltar pra SPA.
+      // affiliate_id do NorthScale Afiliados — o route.ts diz ao modelo em
+      // quais tools ele vale.
+      affiliates: filters.affiliates,
     };
 
     await sendMessage(

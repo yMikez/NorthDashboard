@@ -43,7 +43,7 @@ import { getAffiliateAnalysis, getAffiliateExplain, getAffiliateSequence } from 
 import { getFunnelSequence } from './funnelSequence';
 import { validAnchor } from '../shared/affiliateAnalysisParams';
 import { isValidWindow } from './affiliateAnalysisCore';
-import { stagesParam } from '../shared/queryParams';
+import { affiliateIdsParam, stagesParam } from '../shared/queryParams';
 import { db } from '../db';
 import { logger } from '../logger';
 
@@ -62,6 +62,15 @@ const DATE_PROPS: Record<string, JsonSchema> = {
   },
 };
 
+// Filtro "Afiliado" da tela = affiliate_id do NorthScale Afiliados
+// (Order.mappedAffiliateId). Só entra nas tools cujo serviço aplica o filtro
+// em TODOS os números (auditado tool a tool em 2026-09-29) — nas outras o
+// modelo diria "filtrado" sem estar.
+const AFFILIATE_PROP: JsonSchema = {
+  type: 'array', items: { type: 'string' },
+  description: 'Filtrar pelo afiliado do NorthScale Afiliados (affiliate_id — o mesmo do filtro "Afiliado" da tela; NÃO é o ID/nickname da conta na plataforma). Mantém só os pedidos atribuídos a esse(s) affiliate_id.',
+};
+
 const SCOPE_PROPS: Record<string, JsonSchema> = {
   platforms: {
     type: 'array', items: { type: 'string' },
@@ -78,6 +87,7 @@ const SCOPE_PROPS: Record<string, JsonSchema> = {
     items: { type: 'string', enum: ['FRONTEND', 'UPSELL', 'DOWNSELL', 'BUMP', 'SMS_RECOVERY'] },
     description: 'Filtrar etapa do funil (productType). Vazio = todas.',
   },
+  affiliate_ids: AFFILIATE_PROP,
 };
 
 /** window/anchor/include_today das tools de janela → opções dos serviços (ou erro pro modelo). */
@@ -125,6 +135,7 @@ export const TOOLS: Anthropic.Tool[] = [
     {
       ...DATE_PROPS,
       platforms: SCOPE_PROPS.platforms, countries: SCOPE_PROPS.countries, families: SCOPE_PROPS.families, products: SCOPE_PROPS.products,
+      affiliate_ids: AFFILIATE_PROP,
       search: { type: 'string', description: 'Filtra por trecho do nickname ou ID do afiliado (case-insensitive).' },
     },
   ),
@@ -172,8 +183,8 @@ export const TOOLS: Anthropic.Tool[] = [
   ),
   tool(
     'get_funnel',
-    'Funil de conversão por família: etapas (FE → Bump → UP1 → UP2 → UP3 → DW1 → DW2 → DW3) com take rate e receita. Inclui cross-sell por família (cross-sells contam no funil da família do FE). Mesmos números da aba Funil.',
-    { ...DATE_PROPS, platforms: SCOPE_PROPS.platforms, countries: SCOPE_PROPS.countries, families: SCOPE_PROPS.families, products: SCOPE_PROPS.products },
+    'Funil de conversão por família: etapas (FE → Bump → UP1 → UP2 → UP3 → DW1 → DW2 → DW3) com take rate e receita. Inclui cross-sell por família (cross-sells contam no funil da família do FE). Com affiliate_ids, conta as sessões cujo FE é do afiliado (igual à aba). Mesmos números da aba Funil.',
+    { ...DATE_PROPS, platforms: SCOPE_PROPS.platforms, countries: SCOPE_PROPS.countries, families: SCOPE_PROPS.families, products: SCOPE_PROPS.products, affiliate_ids: AFFILIATE_PROP },
   ),
   tool(
     'get_funnel_sequence',
@@ -182,6 +193,7 @@ export const TOOLS: Anthropic.Tool[] = [
       ...WINDOW_PROPS,
       count: { type: 'integer', description: 'Quantas janelas em sequência, 2 a 8 (default 3)' },
       platforms: SCOPE_PROPS.platforms, countries: SCOPE_PROPS.countries, families: SCOPE_PROPS.families, products: SCOPE_PROPS.products,
+      affiliate_ids: AFFILIATE_PROP,
     },
   ),
   tool(
@@ -192,7 +204,7 @@ export const TOOLS: Anthropic.Tool[] = [
   tool(
     'get_families',
     'Visão por família de produto: catálogo (SKUs por tipo), receita, pedidos, refund, funil por família. Mesmos números da aba Famílias.',
-    { ...DATE_PROPS, platforms: SCOPE_PROPS.platforms, countries: SCOPE_PROPS.countries, families: SCOPE_PROPS.families },
+    { ...DATE_PROPS, platforms: SCOPE_PROPS.platforms, countries: SCOPE_PROPS.countries, families: SCOPE_PROPS.families, affiliate_ids: AFFILIATE_PROP },
   ),
   tool(
     'get_platforms',
@@ -211,8 +223,8 @@ export const TOOLS: Anthropic.Tool[] = [
   ),
   tool(
     'get_profit_split',
-    'Lucro FRONT (vendas das plataformas) × BACK (recuperação por SMS, Tauk, Logicall) com custos, comissões e margem de cada fonte. Mesmos números do painel de lucro da Visão Geral.',
-    { ...DATE_PROPS, platforms: SCOPE_PROPS.platforms, countries: SCOPE_PROPS.countries, families: SCOPE_PROPS.families },
+    'Lucro FRONT (vendas das plataformas) × BACK (recuperação por SMS, Tauk, Logicall) com custos, comissões e margem de cada fonte. Com QUALQUER filtro de pedido (plataforma, país, família, afiliado) Tauk e Logicall saem do BACK — as vendas deles não têm essas dimensões (diga isso na resposta). Mesmos números do painel de lucro da Visão Geral.',
+    { ...DATE_PROPS, platforms: SCOPE_PROPS.platforms, countries: SCOPE_PROPS.countries, families: SCOPE_PROPS.families, affiliate_ids: AFFILIATE_PROP },
   ),
   tool(
     'get_costs_overview',
@@ -221,8 +233,8 @@ export const TOOLS: Anthropic.Tool[] = [
   ),
   tool(
     'get_fulfillment',
-    'Operação de envio: potes enviados, gasto, custo por pote, projeções now-relative, saúde do custo, por fornecedor (RedRock/ShipOffers) e por família. Mesmos números da aba Fulfillment.',
-    { ...DATE_PROPS, platforms: SCOPE_PROPS.platforms, countries: SCOPE_PROPS.countries, families: SCOPE_PROPS.families },
+    'Operação de envio: potes enviados, gasto, custo por pote, projeções now-relative, saúde do custo, por fornecedor (RedRock/ShipOffers) e por família. Mesmos números da aba Fulfillment (a aba não filtra por afiliado; aqui affiliate_ids restringe aos pedidos do afiliado).',
+    { ...DATE_PROPS, platforms: SCOPE_PROPS.platforms, countries: SCOPE_PROPS.countries, families: SCOPE_PROPS.families, affiliate_ids: AFFILIATE_PROP },
   ),
   tool(
     'get_refund_cohorts',
@@ -376,6 +388,7 @@ export interface ToolInput {
   families?: string[];
   products?: string[];
   stages?: string[];
+  affiliate_ids?: string[];
   external_id?: string;
   platform?: string;
   status?: string;
@@ -498,7 +511,18 @@ export function parseFilters(input: ToolInput, ctx: ToolContext = {}): MetricsFi
     productFamilies: strList(input.families),
     productExternalIds: strList(input.products),
     productTypes: stages ? stagesParam(stages.join(',')) : undefined,
+    mappedAffiliateIds: affiliateIdsArg(input),
   };
+}
+
+/** affiliate_ids validados como nas rotas (affiliateIdsParam: [A-Za-z0-9_-], dedup). */
+function affiliateIdsArg(input: ToolInput): string[] | undefined {
+  const raw = strList(input.affiliate_ids);
+  if (!raw) return undefined;
+  const ids = affiliateIdsParam(raw.join(','));
+  // Tudo inválido: sem erro o filtro sumiria e o TOTAL sairia como "do afiliado".
+  if (!ids) throw new ToolInputError(`affiliate_ids inválido (${raw.join(', ')}) — use o affiliate_id do NorthScale Afiliados (letras, dígitos, _ e -), não o nickname da plataforma`);
+  return ids;
 }
 
 // ── Encolhimento seguro do resultado ────────────────────────────────────
@@ -614,8 +638,11 @@ const HANDLERS: Record<string, Handler> = {
     // é throttled (60s) — pra IA isso causava respostas inconsistentes
     // (MV defasada vs dado real). Forçamos um refresh antes: chamadas de
     // IA não são frequentes, correção > latência.
-    await refreshDailyMetricsNow();
-    return getOverview(parseFilters(input, ctx), input.compare === true);
+    const filters = parseFilters(input, ctx);
+    // Com afiliado ou SKU o serviço lê direto da Order (a MV não tem essas
+    // dimensões) — o refresh forçado seria só espera.
+    if (!filters.mappedAffiliateIds?.length && !filters.productExternalIds?.length) await refreshDailyMetricsNow();
+    return getOverview(filters, input.compare === true);
   },
   async get_affiliates(input, ctx) {
     // A aba Afiliados NÃO aplica o filtro de etapa — aqui também não, senão
@@ -626,7 +653,11 @@ const HANDLERS: Record<string, Handler> = {
     const q = typeof input.search === 'string' ? input.search.trim().toLowerCase() : '';
     // Sparkline (30 pontos/afiliado) só serve pra UI — fora do payload do
     // modelo. Sem corte de linhas: o modelo vê TODOS os afiliados.
+    // Com affiliate_ids o serviço devolve TODAS as contas (as de fora zeradas);
+    // pro modelo só interessam as que têm pedido no recorte.
+    const byAffiliate = !!filters.mappedAffiliateIds?.length;
     const affiliates = data.affiliates
+      .filter((a) => !byAffiliate || a.allOrders > 0)
       .filter((a) => !q || String(a.externalId ?? '').toLowerCase().includes(q) || String(a.nickname ?? '').toLowerCase().includes(q))
       .map((a) => {
         const { sparkline: _sparkline, ...rest } = a as Record<string, unknown> & { sparkline?: unknown };
@@ -700,6 +731,7 @@ const HANDLERS: Record<string, Handler> = {
       ...w, count: countArg(input),
       platformSlugs: strList(input.platforms), countries: strList(input.countries),
       productFamilies: strList(input.families), productExternalIds: strList(input.products),
+      mappedAffiliateIds: affiliateIdsArg(input),
     });
   },
   async get_products(input, ctx) {
@@ -725,20 +757,20 @@ const HANDLERS: Record<string, Handler> = {
   },
   async get_profit_split(input, ctx) {
     const f = parseFilters(input, ctx);
-    return getProfitSplit({ startDate: f.startDate, endDate: f.endDate, platformSlugs: f.platformSlugs, productFamilies: f.productFamilies, countries: f.countries });
+    return getProfitSplit({ startDate: f.startDate, endDate: f.endDate, platformSlugs: f.platformSlugs, productFamilies: f.productFamilies, countries: f.countries, mappedAffiliateIds: f.mappedAffiliateIds });
   },
   async get_costs_overview(input, ctx) {
     return getCostsOverview(parseFilters(input, ctx));
   },
   async get_fulfillment(input, ctx) {
     const f = parseFilters(input, ctx);
-    return getFulfillment({ startDate: f.startDate, endDate: f.endDate, platformSlugs: f.platformSlugs, countries: f.countries, productFamilies: f.productFamilies });
+    return getFulfillment({ startDate: f.startDate, endDate: f.endDate, platformSlugs: f.platformSlugs, countries: f.countries, productFamilies: f.productFamilies, mappedAffiliateIds: f.mappedAffiliateIds });
   },
   async get_refund_cohorts(input, ctx) {
     const f = parseFilters(input, ctx);
     const horizon = Math.trunc(Number(input.horizon) || 30);
     return getRefundCohorts(
-      { startDate: f.startDate, endDate: f.endDate, platformSlugs: f.platformSlugs, productFamilies: f.productFamilies, productExternalIds: f.productExternalIds, productTypes: f.productTypes, countries: f.countries },
+      { startDate: f.startDate, endDate: f.endDate, platformSlugs: f.platformSlugs, productFamilies: f.productFamilies, productExternalIds: f.productExternalIds, productTypes: f.productTypes, countries: f.countries, mappedAffiliateIds: f.mappedAffiliateIds },
       horizon,
     );
   },

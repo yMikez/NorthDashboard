@@ -196,40 +196,47 @@
    TEMA CLARO — padrão do produto; valores exatos do DS1
    ============================================================ */
 [data-theme="light"] {
-  --glow-cyan:     #4260E6;   /* azul North como texto: 4,76:1 no canvas */
+  /* CLARO SUAVE (2026-09-29, pedido do dono: "o claro dói na vista").
+     O DS1 puro (superfície #FFFFFF + texto #0D0D0D = 19,4:1) ofuscava: a
+     tela é quase toda painel branco. Aqui as superfícies perdem ~15% de
+     brilho, o texto principal desce pra #1A1E26 (14,4:1 no painel — segue
+     acima do AAA 7:1) e TODO token de texto passa 4,5:1 no pior fundo
+     (canvas/hover). O azul North #4260E6 fica pro botão (branco em cima
+     5,19:1); como TEXTO ele daria 4,1:1 no canvas suave, então o texto de
+     destaque usa #2E47BA (passa até sobre o próprio tint de 18% numa linha em hover). */
+  --glow-cyan:     #2E47BA;   /* azul de texto/destaque: 5,9:1 no pior fundo; 4,55:1 no próprio tint 18% */
   --glow-electric: #8FA3F2;
 
-  --bg:         #F4F5F7;      /* bg.canvas */
-  --bg-deep:    #E9EBEF;
-  --bg-raised:  #FFFFFF;      /* bg.surface */
-  --bg-elev:    #FFFFFF;
-  --bg-hover:   #EEF1FD;      /* bg.hover */
-  --bg-subtle:  #FAFAFA;      /* bg.subtle */
+  --bg:         #E1E4EA;      /* canvas (era #F4F5F7) */
+  --bg-deep:    #D6DAE2;
+  --bg-raised:  #ECEEF2;      /* painel/tabela (era #FFFFFF) */
+  --bg-elev:    #F2F3F6;      /* popover/drawer/modal — o mais claro, sem ser branco */
+  --bg-hover:   #DCE2F1;
+  --bg-subtle:  #E6E9EE;
 
-  --fg1: #0D0D0D;             /* text.primary */
-  --fg2: #262A33;
-  --fg3: #3A3F4C;
-  --fg4: #515766;             /* text.secondary — 7,23:1 */
-  --fg5: #5F6890;             /* subtext.100 — o neutral.50 reprova no canvas (4,28) */
+  --fg1: #1A1E26;             /* texto principal (era #0D0D0D) */
+  --fg2: #2A2F3A;
+  --fg3: #3A404D;
+  --fg4: #4B5261;             /* secundário — 6,2:1 no canvas */
+  --fg5: #535B7E;             /* terciário — 5,3:1 no canvas */
 
-  /* feedback: tons de TEXTO do DS1 (AA sobre superfície clara) */
-  --success: #167447;
-  --warning: #87520B;
-  --danger:  #B42338;
-  --money:   #167447;         /* dinheiro SEMPRE verde — success.text, 5,3:1 */
-  --hot:     #87520B;
-  --success-bg: #EAF7EF;
-  --warning-bg: #FFF5E5;
-  --danger-bg:  #FDECEF;
-  /* azul claro (#8FA3F2, 2,4:1) e âmbar base (#F5A623, 1,9:1) reprovam no
-     branco — no claro as séries usam os tons escuros do próprio DS1 */
-  --chart-1: #4260E6;  --chart-2: #167447;  --chart-3: #87520B;
+  /* feedback: tons de TEXTO, escurecidos pro fundo suave (≥ 5,2:1) */
+  --success: #12633D;
+  --warning: #7B4A09;
+  --danger:  #A61F33;
+  --money:   #12633D;         /* dinheiro SEMPRE verde */
+  --hot:     #7B4A09;
+  --success-bg: #DCEBE2;
+  --warning-bg: #F1E6D3;
+  --danger-bg:  #F2DEE2;
+  /* séries: tons escuros (a cor da série às vezes vira texto — ≥ 4,5:1) */
+  --chart-1: #2E47BA;  --chart-2: #12633D;  --chart-3: #744608;
   --chart-4: #1B22A7;  --chart-5: #515766;
 
-  --border-soft:   #E9EBEF;
-  --border:        #D8DBE2;   /* border.subtle */
-  --border-strong: #6E7484;   /* border.control */
-  --accent-soft:   #EEF1FD;
+  --border-soft:   #D6DAE1;
+  --border:        #C9CED8;   /* divisor — separa painel do canvas */
+  --border-strong: #666C7C;   /* limite de campo: 4,1:1 no canvas */
+  --accent-soft:   #DCE2F1;
 
   --shadow-sm: 0 1px 2px rgba(13, 13, 13, 0.05);
   --shadow-md: 0 1px 2px rgba(13, 13, 13, 0.04), 0 4px 12px rgba(13, 13, 13, 0.06);

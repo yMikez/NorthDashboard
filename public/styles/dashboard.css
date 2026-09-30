@@ -2345,6 +2345,15 @@ input[type="checkbox"], input[type="radio"] { accent-color: var(--cta); width: 1
 [data-theme="light"] .top-actions .btn-ghost:hover {
   background: var(--bg-hover); border-color: var(--accent); color: var(--accent);
 }
+/* Claro suave: selos de plataforma planos e legíveis (o CB antigo dava 3,1:1). */
+[data-theme="light"] .plat-d24 { background: color-mix(in srgb, #8B7FFF 16%, transparent); color: #4638A8; box-shadow: none; }
+[data-theme="light"] .plat-cb  { background: color-mix(in srgb, #5BC8FF 16%, transparent); color: #0B5A8C; box-shadow: none; }
+[data-theme="light"] .plat-bg  { background: color-mix(in srgb, #22C55E 16%, transparent); color: #11602F; box-shadow: none; }
+[data-theme="light"] .plat-cp  { background: color-mix(in srgb, #F59E0B 16%, transparent); color: #794708; box-shadow: none; }
+[data-theme="light"] .plat-jvz { background: color-mix(in srgb, #F43F5E 16%, transparent); color: #9A1236; box-shadow: none; }
+[data-theme="light"] .hbar .flag { background: var(--bg-elev); }
+[data-theme="light"] .top-crumb .sep { color: var(--fg5); }
+
 /* Desabilitado não reage ao hover — antes ganhava a cor de destaque e
    parecia clicável (ex.: Exportar sem conversa aberta). */
 .btn-ghost:disabled:hover, .btn-ghost[aria-disabled="true"]:hover,

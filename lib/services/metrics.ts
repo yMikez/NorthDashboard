@@ -2991,6 +2991,9 @@ export async function getAffiliateDetail(
         affiliateId: aff.id,
         productType: 'FRONTEND',
         orderedAt: { gte: filters.startDate, lte: filters.endDate },
+        // Afiliado (sistema) é dimensão de SESSÃO: só as FEs mapeadas pra ele
+        // (mesma régua de feSessionStats) — senão o atribuído ignora o filtro.
+        ...(filters.mappedAffiliateIds?.length ? { mappedAffiliateId: { in: filters.mappedAffiliateIds } } : {}),
       },
       select: {
         parentExternalId: true,

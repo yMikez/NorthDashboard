@@ -56,6 +56,8 @@ interface RequestBody {
     families?: string[];
     stages?: string[];
     countries?: string[];
+    // affiliate_id do NorthScale Afiliados (filtro "Afiliado" da SPA/chat).
+    affiliates?: string[];
   };
 }
 
@@ -77,6 +79,18 @@ function uiStateText(ui: RequestBody['uiState']): string {
   for (const [label, v] of lists) {
     const a = arr(v);
     if (a.length) parts.push(`${label}: ${a.join(', ')}`);
+  }
+  const aff = arr(ui.affiliates);
+  if (aff.length) {
+    // Só algumas tools aplicam o filtro — o modelo precisa saber onde ele
+    // vale pra não dizer "filtrado" num número que não está.
+    parts.push(
+      'afiliado (affiliate_id NorthScale): ' + aff.join(', ') +
+        ' — como os outros filtros da UI, vale como default só em perguntas dêiticas (em perguntas gerais não herde); nelas passe em affiliate_ids nas tools que aceitam (visão geral, afiliados, detalhe, funil, funil por janelas, ' +
+        'produtos, famílias, plataformas, transações, lucro front×back, custos, fulfillment, coortes de reembolso). ' +
+        'Call center, recuperação, SMS, saúde e as análises por janela de afiliados NÃO filtram por afiliado — ' +
+        'se usar alguma delas, diga que o número é do total.',
+    );
   }
   return parts.length
     ? `\n\n# Estado da UI (o que o usuário está vendo agora)\n${parts.join(' · ')}`

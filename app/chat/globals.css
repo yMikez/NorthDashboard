@@ -11,7 +11,7 @@
    [data-theme] no <html>, o mesmo gatilho da SPA legada, então o toggle
    daqui propaga pro resto do app.
 
-   - CLARO: valores exatos do DS1.
+   - CLARO: "claro suave" derivado do DS1 (mesmos valores de colors_and_type.css).
    - ESCURO: DERIVADO dos neutros e do azul claro do DS1 (o DS1 é só
      claro); contraste medido. Azul North #4260E6 segue como FUNDO de
      botão nos dois temas; em fundo escuro o acento de texto/foco é o
@@ -68,36 +68,38 @@
   }
 
   [data-theme='light'] {
-    /* bg.canvas (#F4F5F7), text.primary (#0D0D0D) */
-    --background: 220 15.8% 96.3%;
-    --foreground: 0 0% 5.1%;
-    /* bg.surface (#FFFFFF) */
-    --card: 0 0% 100%;
-    --card-foreground: 0 0% 5.1%;
-    --popover: 0 0% 100%;
-    --popover-foreground: 0 0% 5.1%;
-    /* azul North (#4260E6) */
+    /* CLARO SUAVE — mesmos valores de colors_and_type.css (ver o porquê lá).
+       canvas (#E1E4EA), texto principal (#1A1E26) */
+    --background: 220 17.6% 90%;
+    --foreground: 220 18.8% 12.5%;
+    /* painel (#ECEEF2) — era branco puro */
+    --card: 220 18.7% 93.7%;
+    --card-foreground: 220 18.8% 12.5%;
+    /* popover/drawer (#F2F3F6) */
+    --popover: 225 18.2% 95.7%;
+    --popover-foreground: 220 18.8% 12.5%;
+    /* azul North (#4260E6) só como FUNDO de ação; branco em cima = 5,19:1 */
     --primary: 229 76.6% 58%;
     --primary-foreground: 0 0% 100%;
-    /* bg.hover / seleção (#EEF1FD) */
-    --secondary: 228 78.9% 96.3%;
-    --secondary-foreground: 0 0% 5.1%;
-    /* muted = canvas (#F4F5F7); text.secondary (#515766, 7,23:1) */
-    --muted: 220 15.8% 96.3%;
-    --muted-foreground: 222.9 11.5% 35.9%;
-    --cx-accent: 228 78.9% 96.3%;
-    --accent-foreground: 0 0% 5.1%;
-    /* error.text (#B42338); branco em cima = 6,5:1 */
-    --destructive: 351.3 67.4% 42.2%;
+    /* hover / seleção (#DCE2F1) */
+    --secondary: 222.9 42.9% 90.4%;
+    --secondary-foreground: 220 18.8% 12.5%;
+    /* muted = canvas; texto secundário (#4B5261, 6,2:1) */
+    --muted: 220 17.6% 90%;
+    --muted-foreground: 220.9 12.8% 33.7%;
+    --cx-accent: 222.9 42.9% 90.4%;
+    --accent-foreground: 220 18.8% 12.5%;
+    /* erro (#A61F33); branco em cima ≥ 6:1 */
+    --destructive: 351.1 68.5% 38.6%;
     --destructive-foreground: 0 0% 100%;
-    /* border.subtle (#D8DBE2) e border.control (#6E7484) */
-    --cx-border: 222 14.7% 86.7%;
-    --input: 223.6 9.1% 47.5%;
-    --ring: 229 76.6% 58%;
-    /* feedback: tons de texto do DS1 (AA sobre superfície clara) */
-    --cx-success: 151.3 68.1% 27.1%;
-    --cx-warning: 34.4 84.9% 28.6%;
-    --cx-danger: 351.3 67.4% 42.2%;
+    /* divisor (#C9CED8) e limite de campo (#666C7C) */
+    --cx-border: 220 16.1% 81.8%;
+    --input: 223.6 9.7% 44.3%;
+    /* texto de destaque / foco (#2E47BA) — o #4260E6 daria 4,1:1 no canvas suave */
+    --ring: 229.3 60.3% 45.5%;
+    --cx-success: 151.9 69.2% 22.9%;
+    --cx-warning: 34.2 86.4% 25.9%;
+    --cx-danger: 351.1 68.5% 38.6%;
   }
 
   /* Escopo: aplica color/background/font no wrapper do chat pra não

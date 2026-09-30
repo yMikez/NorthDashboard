@@ -64,6 +64,8 @@ export interface FulfillmentFilters {
   platformSlugs?: string[];
   countries?: string[];
   productFamilies?: string[];
+  /** affiliate_id do NorthScale Afiliados (Order.mappedAffiliateId) — usado pela IA; a aba não manda. */
+  mappedAffiliateIds?: string[];
 }
 
 export interface FulfillmentKpis {
@@ -492,6 +494,9 @@ export async function getFulfillment(filters: FulfillmentFilters): Promise<Fulfi
     ...(filters.platformSlugs?.length ? { platform: { slug: { in: filters.platformSlugs } } } : {}),
     ...(filters.countries?.length ? { country: { in: filters.countries } } : {}),
     ...(filters.productFamilies?.length ? { product: { family: { in: filters.productFamilies } } } : {}),
+    // Mesmo where nas 3 consultas (período, anterior, janela da previsão) —
+    // os números do afiliado ficam coerentes entre si.
+    ...(filters.mappedAffiliateIds?.length ? { mappedAffiliateId: { in: filters.mappedAffiliateIds } } : {}),
   };
 
   const [periodOrders, prevAgg, windowOrders, familyCosts] = await Promise.all([

@@ -177,7 +177,9 @@ function App({ user }) {
         families: Array.from(filters.families || []),
         stages: Array.from(filters.stages || []),
         countries: Array.from(filters.countries || []),
-        affiliates: Array.from(filters.affiliates || []),
+        // Só nas rotas cujas abas aplicam o filtro (ROUTES_WITH_AFFILIATE, shell.jsx):
+        // fora delas o chip some e a tela não filtra — a IA também não pode.
+        affiliates: ROUTES_WITH_AFFILIATE.has(hashState.route) ? Array.from(filters.affiliates || []) : [],
       };
     } catch (e) { /* nunca quebra o render por causa do chat */ }
   }, [filters, hashState.route]);

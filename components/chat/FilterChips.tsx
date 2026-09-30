@@ -605,10 +605,9 @@ export function FilterChips({ filters, onChange }: FilterChipsProps) {
       })),
     [opts],
   );
-  // O /api/chat não aplica affiliate_id (parseFilters não preenche
-  // mappedAffiliateIds) — como a SPA fora de ROUTES_WITH_AFFILIATE, o seletor
-  // não aparece; o valor só viaja na URL de volta pra SPA.
-  const showAffiliate = false;
+  // A IA aplica o affiliate_id nas tools de pedido (aiTools.ts AFFILIATE_PROP);
+  // como na SPA, o seletor só aparece quando há afiliado mapeado ou um já escolhido.
+  const showAffiliate = affiliateOpts.length > 0 || filters.affiliates.length > 0;
 
   return (
     <div

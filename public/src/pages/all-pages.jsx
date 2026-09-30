@@ -228,7 +228,7 @@ function FunnelPage({ filters }) {
                     : s.takeRate > 0.25 ? 'var(--success)'
                     : s.takeRate > 0.12 ? 'var(--warning)'
                     : s.takeRate > 0   ? 'var(--danger)'
-                    : 'var(--navy-400)';
+                    : 'var(--fg4)';
                   return (
                     <tr key={s.id}>
                       <td>{s.label}{isFE && <span style={{ marginLeft: 8, fontSize: 10, color: 'var(--fg5)', fontFamily: 'var(--f-mono)' }}>Baseline</span>}</td>
@@ -279,7 +279,7 @@ function FunnelPage({ filters }) {
                   </div>
                   <div style={{
                     textAlign: 'right', fontFamily: 'var(--f-mono)', fontSize: 11,
-                    color: liftPct != null && liftPct > 0 ? 'var(--success)' : 'var(--navy-400)',
+                    color: liftPct != null && liftPct > 0 ? 'var(--success)' : 'var(--fg4)',
                   }}>
                     {liftPct != null ? `+${(liftPct * 100).toFixed(0)}%` : '—'}
                   </div>
@@ -1147,7 +1147,7 @@ function RefundCohortsPage({ filters }) {
       const t = Math.round((1 - p / MID) * 55);
       return `color-mix(in oklab, var(--success) ${t}%, transparent)`;
     }
-    const t = Math.round(Math.min(1, (p - MID) / MID) * 65);
+    const t = Math.round(Math.min(1, (p - MID) / MID) * 55);
     return `color-mix(in oklab, var(--danger) ${t}%, transparent)`;
   }
 
@@ -2256,7 +2256,7 @@ function pageStateStyle(state) {
   if (s === 'gray' || s === 'grey') {
     return { bg: 'color-mix(in srgb, var(--fg5) 18%, transparent)', fg: 'var(--fg3)', border: 'color-mix(in srgb, var(--fg5) 45%, transparent)' };
   }
-  return { bg: 'color-mix(in oklab, var(--accent) 18%, transparent)', fg: 'var(--glow-cyan)', border: 'color-mix(in oklab, var(--accent) 45%, transparent)' };
+  return { bg: 'color-mix(in oklab, var(--accent) 10%, transparent)', fg: 'var(--glow-cyan)', border: 'color-mix(in oklab, var(--accent) 45%, transparent)' };
 }
 
 // Rótulo amigável: "black2"→"Black 2", "white"→"White", senão o que veio com inicial maiúscula.

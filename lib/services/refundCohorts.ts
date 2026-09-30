@@ -40,6 +40,8 @@ export interface RefundCohortFilters {
   productExternalIds?: string[];
   productTypes?: string[];
   countries?: string[];
+  /** affiliate_id do NorthScale Afiliados (Order.mappedAffiliateId) — usado pela IA; a aba não manda. */
+  mappedAffiliateIds?: string[];
 }
 
 export interface CohortCell {
@@ -139,6 +141,11 @@ export async function getRefundCohorts(
   }
   if (filters.productTypes?.length) {
     conds.push(Prisma.sql`o."productType" = ANY(${filters.productTypes}::"ProductType"[])`);
+  }
+  // whereSql é o mesmo da base e dos eventos: numerador e denominador do
+  // afiliado saem do mesmo recorte.
+  if (filters.mappedAffiliateIds?.length) {
+    conds.push(Prisma.sql`o."mappedAffiliateId" = ANY(${filters.mappedAffiliateIds})`);
   }
   const whereSql = Prisma.join(conds, ' AND ');
   const saleDay = BRT_DAY(Prisma.sql`o."orderedAt"`);

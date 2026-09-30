@@ -26,6 +26,14 @@ describe('TOOLS — catálogo', () => {
     }
   });
 
+  it('affiliate_ids SÓ nas tools cujo serviço filtra tudo por afiliado (auditado) — nas outras a IA diria filtrado sem estar', () => {
+    const withAff = TOOLS.filter((t) => 'affiliate_ids' in ((t.input_schema as { properties?: object }).properties ?? {})).map((t) => t.name).sort();
+    expect(withAff).toEqual([
+      'get_affiliate_detail', 'get_affiliates', 'get_costs_overview', 'get_families', 'get_fulfillment', 'get_funnel',
+      'get_funnel_sequence', 'get_orders', 'get_overview', 'get_platforms', 'get_products', 'get_profit_split', 'get_refund_cohorts',
+    ]);
+  });
+
   it('datas NÃO são obrigatórias (default = período da UI)', () => {
     for (const t of TOOLS) {
       const req = (t.input_schema as { required?: string[] }).required ?? [];
@@ -79,6 +87,13 @@ describe('parseFilters', () => {
     expect(f.productTypes).toEqual(['FRONTEND', 'UPSELL']);
     expect(f.platformSlugs).toBeUndefined();
     expect(f.productExternalIds).toEqual(['NSNMP6']);
+  });
+
+  it('affiliate_ids vira mappedAffiliateIds, com a mesma higiene das rotas (sem lixo, sem duplicado)', () => {
+    const f = parseFilters({ affiliate_ids: ['cm1abc', 'cm1abc', 'x; drop', ' cm2xyz '] });
+    expect(f.mappedAffiliateIds).toEqual(['cm1abc', 'cm2xyz']);
+    expect(parseFilters({ affiliate_ids: [] }).mappedAffiliateIds).toBeUndefined();
+    expect(parseFilters({}).mappedAffiliateIds).toBeUndefined();
   });
 
   it('data inválida vira erro legível (não Date inválida silenciosa)', () => {
