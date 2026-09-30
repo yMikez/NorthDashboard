@@ -6,13 +6,13 @@
 // (INGEST_SECRET) pra poder ser chamado via curl em produção sem login.
 //
 // O efeito é imediato no chat: getKnowledgePromptBlock invalida cache
-// quando o conteúdo muda, e o systemPrompt() inclui os entries enabled
-// na próxima chamada de IA.
+// quando o conteúdo muda, o system inclui as entradas fixas na próxima
+// chamada de IA, e o espelho na base pesquisável é ressincronizado.
 
 import { NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { checkIngestSecret } from '@/lib/ingest/auth';
-import { invalidateKnowledgeCache } from '@/lib/services/knowledge';
+import { invalidateKnowledgeCache, syncKnowledgeEntry } from '@/lib/services/knowledge';
 import { logger } from '@/lib/logger';
 
 export const runtime = 'nodejs';
@@ -131,6 +131,9 @@ export async function POST(req: Request) {
       upsertEntry(GLOSSARY_TITLE, GLOSSARY_CONTENT, 10),
       upsertEntry(VISITOR_LIMITATION_TITLE, VISITOR_LIMITATION_CONTENT, 11),
     ]);
+    // Inclusive as 'unchanged': na primeira vez depois do RAG o espelho
+    // ainda não existe (sem mudança real, o sync é no-op pelo hash).
+    for (const r of results) await syncKnowledgeEntry(r.id);
     invalidateKnowledgeCache();
     return NextResponse.json({ ok: true, results });
   } catch (err) {

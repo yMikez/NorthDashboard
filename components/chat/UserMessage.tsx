@@ -8,14 +8,18 @@ import {
   DropdownMenuContent,
   DropdownMenuItem,
 } from '@/components/ui/dropdown-menu';
+import type { AttachmentDTO } from '@/types/chat';
+import { MessageAttachmentChips } from './AttachmentChips';
 import { NsIcon } from './NsIcon';
 
 interface UserMessageProps {
   content: string;
+  /** Anexos enviados com a pergunta — chips acima da bolha, cada um baixa o original. */
+  attachments?: AttachmentDTO[];
   onEdit?: (next: string) => void;
 }
 
-export function UserMessage({ content, onEdit }: UserMessageProps) {
+export function UserMessage({ content, attachments, onEdit }: UserMessageProps) {
   const [editing, setEditing] = React.useState(false);
   const [draft, setDraft] = React.useState(content);
 
@@ -45,6 +49,9 @@ export function UserMessage({ content, onEdit }: UserMessageProps) {
   return (
     <div className="group flex justify-end px-4 sm:px-6 py-3">
       <div className="max-w-[80%] relative">
+        {attachments && attachments.length > 0 && (
+          <MessageAttachmentChips items={attachments} className="justify-end mb-2" />
+        )}
         {editing ? (
           // Mesma casca do composer: borda de campo e foco (focus-within)
           // no wrapper .nx-input-field; o textarea não tem caixa própria.

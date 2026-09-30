@@ -2,12 +2,16 @@
 
 import * as React from 'react';
 import { cn } from '@/lib/ui-utils';
+import { formatCell } from '@/lib/chat/format';
 import { NsIcon } from '../NsIcon';
 import type { DataTableBlock as TableData } from '@/types/chat';
 
 type Column = TableData['columns'][number];
 
-const NUMERIC_FORMATS = new Set<Column['format']>(['currency', 'percent', 'number']);
+// formatCell é a MESMA função do servidor (histórico/eval): percent = pontos
+// percentuais, fraction = 0–1. A heurística antiga (v ≤ 1 → ×100) mostrava
+// um chargeback de 0.8% como "80.0%".
+const NUMERIC_FORMATS = new Set<Column['format']>(['currency', 'percent', 'fraction', 'number']);
 
 /** DS1: texto à esquerda, números à direita — a menos que o bloco diga outra coisa. */
 function alignOf(c: Column): 'left' | 'right' | 'center' {
@@ -155,18 +159,6 @@ export function DataTableBlock({ block }: { block: TableData }) {
       </div>
     </section>
   );
-}
-
-function formatCell(v: unknown, format?: 'currency' | 'percent' | 'number' | 'text'): string {
-  if (v == null) return '—';
-  if (typeof v === 'number') {
-    if (format === 'currency') return v.toLocaleString('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 2 });
-    if (format === 'percent') return (v <= 1 ? v * 100 : v).toFixed(1) + '%';
-    // DS1 (decisão do produto): números no padrão americano, igual à SPA (fmtInt en-US).
-    if (format === 'number') return v.toLocaleString('en-US');
-    return String(v);
-  }
-  return String(v);
 }
 
 function csvEscape(s: string): string {

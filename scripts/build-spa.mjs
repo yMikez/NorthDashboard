@@ -173,6 +173,18 @@ checkGlobals();
   }
 }
 
+// Skills do chat IA (playbooks + famílias canônicas) também são GERADAS —
+// playbook editado sem regerar = a IA carregaria o texto velho.
+{
+  const { buildChatSkills, OUT } = await import('./gen-chat-skills.mjs');
+  const { readFileSync, existsSync } = await import('node:fs');
+  const cur = existsSync(OUT) ? readFileSync(OUT, 'utf8').replace(/\r\n/g, '\n') : '';
+  if (cur !== buildChatSkills()) {
+    console.error(`[build-spa] ${OUT} desatualizado em relação a lib/chat/skills/*.md — rode: node scripts/gen-chat-skills.mjs`);
+    process.exit(1);
+  }
+}
+
 if (process.argv.includes('--watch')) {
   const ctx = await context(options);
   await ctx.watch();

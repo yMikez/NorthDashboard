@@ -1,11 +1,12 @@
-// PATCH /api/admin/knowledge/[id] — atualiza campos parciais.
+// PATCH /api/admin/knowledge/[id] — atualiza campos parciais (inclui `pinned`).
 // DELETE                          — remove a entry.
+// As duas ressincronizam o espelho da entrada na base pesquisável.
 
 import { NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { requireAdmin } from '@/lib/auth/guard';
 import { logger } from '@/lib/logger';
-import { invalidateKnowledgeCache } from '@/lib/services/knowledge';
+import { invalidateKnowledgeCache, syncKnowledgeEntry } from '@/lib/services/knowledge';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -18,14 +19,14 @@ export async function PATCH(
   if (!auth.ok) return auth.response;
   const { id } = await params;
 
-  let body: { title?: unknown; content?: unknown; enabled?: unknown; sortOrder?: unknown };
+  let body: { title?: unknown; content?: unknown; enabled?: unknown; sortOrder?: unknown; pinned?: unknown };
   try {
     body = await req.json();
   } catch {
     return NextResponse.json({ error: 'invalid json' }, { status: 400 });
   }
 
-  const data: { title?: string; content?: string; enabled?: boolean; sortOrder?: number } = {};
+  const data: { title?: string; content?: string; enabled?: boolean; sortOrder?: number; pinned?: boolean } = {};
   if (typeof body.title === 'string') {
     const t = body.title.trim();
     if (!t) return NextResponse.json({ error: 'title cannot be empty' }, { status: 400 });
@@ -39,14 +40,25 @@ export async function PATCH(
   }
   if (typeof body.enabled === 'boolean') data.enabled = body.enabled;
   if (typeof body.sortOrder === 'number') data.sortOrder = body.sortOrder;
+  if (typeof body.pinned === 'boolean') data.pinned = body.pinned;
 
   if (Object.keys(data).length === 0) {
     return NextResponse.json({ error: 'no changes' }, { status: 400 });
   }
 
+  // Memória automática nunca vai fixa no prompt (decisão do dono): é a fonte
+  // de menor autoridade e entra só pela busca, depois de aprovada.
+  if (data.pinned === true) {
+    const current = await db.knowledgeEntry.findUnique({ where: { id }, select: { source: true } });
+    if (current?.source === 'auto') {
+      return NextResponse.json({ error: 'memória automática não pode ser fixada no prompt' }, { status: 400 });
+    }
+  }
+
   try {
     const entry = await db.knowledgeEntry.update({ where: { id }, data });
     invalidateKnowledgeCache();
+    await syncKnowledgeEntry(id).catch((err) => logger.warn({ err, id }, 'knowledge sync failed'));
     return NextResponse.json({ entry });
   } catch (err) {
     logger.error({ err, id }, 'knowledge patch failed');
@@ -65,6 +77,7 @@ export async function DELETE(
   try {
     await db.knowledgeEntry.delete({ where: { id } });
     invalidateKnowledgeCache();
+    await syncKnowledgeEntry(id).catch((err) => logger.warn({ err, id }, 'knowledge sync failed'));
     return NextResponse.json({ ok: true });
   } catch (err) {
     logger.error({ err, id }, 'knowledge delete failed');

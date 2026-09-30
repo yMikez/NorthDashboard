@@ -28,6 +28,7 @@ export interface ChatFolder {
 export interface ToolUseRecord {
   name: string;
   input?: unknown;
+  /** Persistido pelo motor: {ok?, bytes?, error?, truncated?, ref?} — `error` pinta o chip. */
   result?: unknown;
 }
 
@@ -39,6 +40,99 @@ export interface Message {
   blocks?: Block[];
   createdAt: string;
   truncated?: boolean;   // resposta cortada por max_tokens (evento SSE `truncated`)
+  /** Anexos que a mensagem do usuário levou (GET da conversa / chips enviados). */
+  attachments?: AttachmentDTO[];
+  /** Fontes da resposta — os marcadores ` [[cite:n]]` do content apontam pra cá. */
+  citations?: Citation[] | null;
+  /** Voto do usuário atual nesta resposta (GET da conversa). */
+  feedback?: MessageFeedback | null;
+}
+
+// ---------------- Citações (RAG / anexos) ----------------
+
+/**
+ * Fonte citada numa resposta. O número `n` é estável dentro da mensagem: o
+ * texto traz ` [[cite:n]]` e a UI troca pelo chip. `citedText` é snapshot do
+ * trecho — continua legível mesmo se o documento mudar depois.
+ */
+export interface Citation {
+  n: number;
+  /** `kb:<docId>@v<ver>#<ordinal>` | `anexo:<docId>` | `anexo:<docId>#p<page>`. */
+  source: string;
+  kind: 'kb' | 'attachment';
+  title: string;
+  /** Rótulo curto: "Cohort.md › Censura" / "extrato.pdf, p. 3". */
+  label?: string;
+  documentId?: string;
+  chunkId?: string;
+  page?: number | null;
+  citedText: string[];
+  updatedAt?: string;
+}
+
+// ---------------- Anexos ----------------
+
+// EXPIRED existe no banco (KbDocStatus): retenção venceu ou o anexo foi
+// removido — a UI mostra o chip esmaecido em vez de um link que daria 404.
+export type AttachmentStatus = 'PENDING' | 'PROCESSING' | 'READY' | 'FAILED' | 'EXPIRED';
+export type AttachmentKind = 'pdf' | 'image' | 'table' | 'text' | 'docx';
+export type AttachmentDeliveryMode = 'inline' | 'indexed' | 'table';
+
+/** Metadados de um anexo (POST/GET /api/chat/attachments e GET da conversa). */
+export interface AttachmentDTO {
+  id: string;
+  fileName: string;
+  mimeType: string;
+  byteSize: number;
+  pageCount: number | null;
+  status: AttachmentStatus;
+  /** Mensagem PT-BR quando FAILED. */
+  error: string | null;
+  kind: AttachmentKind;
+  deliveryMode: AttachmentDeliveryMode;
+  /** null = rascunho (enviado antes da 1ª mensagem da conversa). */
+  conversationId: string | null;
+  messageId: string | null;
+  createdAt: string;
+  meta?: {
+    rows?: number;
+    sheets?: string[];
+    columns?: string[];
+    width?: number;
+    height?: number;
+  };
+}
+
+// ---------------- Feedback (👍/👎) ----------------
+
+export type FeedbackRating = 1 | -1;
+
+export type FeedbackReason =
+  | 'numero_errado'
+  | 'periodo_errado'
+  | 'filtro_errado'
+  | 'nao_respondeu'
+  | 'inventou'
+  | 'lento'
+  | 'formato'
+  | 'outro';
+
+/** O que o GET da conversa devolve do voto do usuário atual. */
+export interface MessageFeedback {
+  rating: FeedbackRating;
+  reasons: FeedbackReason[];
+  comment: string | null;
+}
+
+/** Body do POST /api/chat/messages/[id]/feedback. */
+export interface FeedbackInput {
+  rating: FeedbackRating;
+  reasons?: FeedbackReason[];
+  comment?: string;
+  /** "qual seria a resposta certa?" */
+  expected?: string;
+  /** Consentimento explícito: o admin pode ler pergunta + resposta. */
+  shared?: boolean;
 }
 
 // ---------------- Blocks (Phase 2) ----------------
@@ -77,7 +171,9 @@ export interface InsightsBlock {
 export interface DataTableBlock {
   type: 'table';
   title?: string;
-  columns: Array<{ key: string; label: string; align?: 'left' | 'right' | 'center'; format?: 'currency' | 'percent' | 'number' | 'text' }>;
+  // percent = PONTOS PERCENTUAIS (12.3 → "12.3%"); fraction = 0–1 (0.123 → "12.3%").
+  // Contrato em lib/chat/format.ts (mesma função no servidor e na UI).
+  columns: Array<{ key: string; label: string; align?: 'left' | 'right' | 'center'; format?: 'currency' | 'percent' | 'fraction' | 'number' | 'text' }>;
   rows: Array<Record<string, unknown> & {
     _highlight?: 'success' | 'warning' | 'danger';
     _sparkline?: number[];
@@ -123,14 +219,27 @@ export interface FilterState {
 
 // ---------------- SSE events do /api/chat ----------------
 
+/** Fim de uma tool (SSE `tool_use_result`): `ok=false` pinta o chip de erro. */
+export interface ToolUseResultEvent {
+  name: string;
+  id: string;
+  ok?: boolean;
+  bytes?: number;
+  truncated?: boolean;
+  ms?: number;
+}
+
 export type StreamEvent =
   | { type: 'conversation'; id: string }
-  | { type: 'token'; text: string }
+  | { type: 'token'; text: string }            // pode trazer ` [[cite:n]]`
   | { type: 'tool_use_start'; name: string; id: string }
-  | { type: 'tool_use_result'; name: string; id: string }
+  | ({ type: 'tool_use_result' } & ToolUseResultEvent)
+  | { type: 'citation'; citation: Citation }   // chega ANTES do marcador no texto
   | { type: 'blocks'; blocks: Block[] }       // Phase 2
   | { type: 'truncated'; reason: string }     // resposta estourou max_tokens
-  | { type: 'done'; conversationId: string }
+  // messageId = resposta persistida (o 👍/👎 grava contra ele). Opcional só
+  // por compatibilidade com servidor antigo — sem ele o voto fica desabilitado.
+  | { type: 'done'; conversationId: string; messageId?: string }
   | { type: 'error'; message: string }
   | { type: 'rate_limited'; message: string; retryAfterSeconds: number };
 

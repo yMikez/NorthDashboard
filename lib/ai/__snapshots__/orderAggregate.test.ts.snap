@@ -1,0 +1,61 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`SQL builder > snapshot: só fragmentos da whitelist, valores como parâmetros 1`] = `
+"SELECT to_char(((o."orderedAt") AT TIME ZONE 'UTC') AT TIME ZONE 'America/Sao_Paulo', 'YYYY-MM-DD') AS "g0",
+  pl."slug" AS "g1",
+  COUNT(*)::int AS "rows",
+  COUNT(*) FILTER (WHERE NOT (pl."slug" = ANY($1) AND o."status" IN ('REFUNDED', 'CHARGEBACK')))::int AS "real_orders",
+  COUNT(*) FILTER (WHERE o."status" = 'APPROVED')::int AS "approved",
+  COUNT(*) FILTER (WHERE o."status" = 'REFUNDED')::int AS "refunds",
+  COUNT(*) FILTER (WHERE o."status" = 'CHARGEBACK')::int AS "chargebacks",
+  COALESCE(SUM(o."grossAmountUsd") FILTER (WHERE o."status" = 'APPROVED'), 0)::float8 AS "gross_approved",
+  COALESCE(SUM(COALESCE(o."originalGrossUsd", ABS(o."grossAmountUsd"))), 0)::float8 AS "gross_original",
+  COALESCE(SUM(o."netAmountUsd") FILTER (WHERE o."status" = 'APPROVED'), 0)::float8 AS "net",
+  COALESCE(SUM(o."cpaPaidUsd"), 0)::float8 AS "cpa",
+  COALESCE(SUM(o."cogsUsd"), 0)::float8 AS "cogs",
+  COALESCE(SUM(o."fulfillmentUsd"), 0)::float8 AS "fulfillment",
+  COALESCE(SUM(CASE WHEN o."status" IN ('REFUNDED', 'CHARGEBACK') THEN
+    CASE WHEN pl."slug" = ANY($2) THEN ABS(o."grossAmountUsd")
+         ELSE LEAST(ABS(o."grossAmountUsd"), ABS(COALESCE(o."originalGrossUsd", o."grossAmountUsd"))) END
+  END), 0)::float8 AS "refunded_usd"
+FROM "Order" o
+JOIN "Platform" pl ON pl."id" = o."platformId"
+JOIN "Product" pr ON pr."id" = o."productId"
+WHERE o."orderedAt" >= $3 AND o."orderedAt" <= $4
+  AND pl."slug" = ANY($5)
+  AND o."country" = ANY($6)
+  AND pr."family" = ANY($7)
+  AND o."productType" = ANY($8::"ProductType"[])
+  AND o."mappedAffiliateId" = ANY($9)
+  AND o."status" = ANY($10::"OrderStatus"[])
+GROUP BY 1, 2
+LIMIT $11"
+`;
+
+exports[`SQL builder > snapshot: só fragmentos da whitelist, valores como parâmetros 2`] = `
+"WITH base AS (
+  SELECT o."status", o."productType", o."orderedAt", o."grossAmountUsd",
+         pr."family" AS "fam", pr."externalId" AS "sku", o."mappedAffiliateId" AS "maff",
+         
+  CASE WHEN pl."slug" = 'buygoods'
+       THEN pl."slug" || ':' || COALESCE(o."funnelSessionId", o."parentExternalId", o."externalId")
+       ELSE pl."slug" || ':' || COALESCE(o."parentExternalId", o."externalId")
+  END AS "skey",
+         to_char(((o."orderedAt") AT TIME ZONE 'UTC') AT TIME ZONE 'America/Sao_Paulo', 'YYYY-MM-DD') AS "g0", pl."slug" AS "g1"
+  FROM "Order" o
+  JOIN "Platform" pl ON pl."id" = o."platformId"
+JOIN "Product" pr ON pr."id" = o."productId"
+  WHERE o."orderedAt" >= $1 AND o."orderedAt" <= $2 AND pl."slug" = ANY($3) AND o."country" = ANY($4)
+),
+fe AS (
+  SELECT DISTINCT ON (b."skey") b."skey", b."g0", b."g1"
+  FROM base b
+  WHERE b."productType" = 'FRONTEND' AND b."status" = 'APPROVED' AND b."fam" = ANY($5) AND b."maff" = ANY($6)
+  ORDER BY b."skey", b."orderedAt"
+)
+SELECT fe."g0" AS "g0", fe."g1" AS "g1", COUNT(DISTINCT fe."skey")::int AS "fe_sessions",
+  COALESCE(SUM(b."grossAmountUsd") FILTER (WHERE b."status" = 'APPROVED'), 0)::float8 AS "session_revenue"
+FROM fe
+JOIN base b ON b."skey" = fe."skey"
+GROUP BY 1, 2"
+`;

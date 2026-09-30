@@ -34,6 +34,10 @@ export function formatCell(value: unknown, format?: CellFormat | string): string
     }
     case 'number':
       return NUM.format(value);
+    case 'text':
+      // Coluna de texto com número (ID, ano, SKU) sai como está — "2026",
+      // não "2,026".
+      return String(value);
     default:
       return NUM.format(value);
   }

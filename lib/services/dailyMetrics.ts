@@ -23,6 +23,11 @@ import type { MetricsFilters } from './metrics';
 const STALE_AFTER_MS = 60_000; // 1 minute
 
 let lastRefreshAt = 0;
+
+/** Último refresh da MV feito POR ESTE processo (null = nenhum desde o boot). */
+export function dailyMetricsLastRefreshAt(): Date | null {
+  return lastRefreshAt ? new Date(lastRefreshAt) : null;
+}
 let refreshInFlight: Promise<void> | null = null;
 let postIngestTimer: NodeJS.Timeout | null = null;
 

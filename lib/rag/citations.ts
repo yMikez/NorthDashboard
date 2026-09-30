@@ -69,10 +69,17 @@ export class SourceRegistry {
       case 'page_location':
       case 'char_location':
       case 'content_block_location': {
-        const m = (c.document_title ?? '').match(ATTACHMENT_TITLE_RE);
-        source = m ? `anexo:${m[1]}` : `doc:${c.document_title ?? c.document_index}`;
-        meta = this.known.get(source) ?? { kind: 'attachment', title: c.document_title ?? 'documento', documentId: m?.[1] };
-        if (c.type === 'page_location') page = c.start_page_number;
+        const title = c.document_title ?? '';
+        const m = title.match(ATTACHMENT_TITLE_RE);
+        source = m ? `anexo:${m[1]}` : `doc:${title || c.document_index}`;
+        meta = this.known.get(source) ?? { kind: 'attachment', title: title || 'documento', documentId: m?.[1] };
+        if (c.type === 'page_location') {
+          // Recorte de páginas (read_attachment visual) vem titulado
+          // "<nome> (p. A–B) — anexo <id>" e o modelo cita a página RELATIVA
+          // ao recorte: soma o deslocamento pra mostrar a página do original.
+          const slice = title.match(/\(p\. (\d+)(?:[–-]\d+)?\) — anexo /);
+          page = c.start_page_number + (slice ? Number(slice[1]) - 1 : 0);
+        }
         break;
       }
       default:

@@ -149,6 +149,39 @@ function storedResult(raw: unknown, serialized: string, ref?: string): StoredToo
   return out;
 }
 
+/**
+ * Chars que um resultado em BLOCOS ocupa no orçamento de contexto. Base64 de
+ * PDF/imagem NÃO conta pelo tamanho em bytes (1 MB de PDF = ~1,3M chars de
+ * base64, mas ~1.600 tokens por página pro modelo): estima pelo custo real.
+ */
+export function contentChars(content: unknown): number {
+  if (!Array.isArray(content)) return JSON.stringify(content ?? '').length;
+  let n = 0;
+  for (const b of content as Array<Record<string, unknown>>) {
+    const type = b?.type;
+    if (type === 'text') n += String(b.text ?? '').length;
+    else if (type === 'image') n += 8_000; // ~1.600 tokens × ~5 chars
+    else if (type === 'document') {
+      const src = b.source as { type?: string; data?: string } | undefined;
+      if (src?.type === 'text') n += String(src.data ?? '').length;
+      // PDF base64: ~0,2 char de contexto por char de base64, teto 250k por bloco
+      else n += Math.min(250_000, Math.ceil(String(src?.data ?? '').length * 0.2));
+    } else n += JSON.stringify(b ?? '').length;
+  }
+  return n;
+}
+
+/**
+ * `scope` de respond_with_blocks (período BRT + filtros + lente) vira a
+ * legenda "Base: …" no fim dos blocos — aparece ao vivo, persiste com a
+ * mensagem e volta no histórico, sem coluna nova.
+ */
+export function withScopeCaption(blocks: unknown[], scope: unknown): unknown[] {
+  const text = typeof scope === 'string' ? scope.trim().slice(0, 400) : '';
+  if (!text) return blocks;
+  return [...blocks, { type: 'markdown', content: `_Base: ${text.replace(/_/g, '\\_')}_` }];
+}
+
 function compactInput(input: unknown): unknown {
   try {
     const s = JSON.stringify(input ?? {});
@@ -317,7 +350,7 @@ export async function runChatTurn(input: TurnInput, ev: TurnEvents = {}): Promis
 
       // ── Terminal SOZINHA: confere os números e entrega ────────────────
       if (terminal && dataBlocks.length === 0) {
-        const tin = terminal.input as { blocks?: unknown; sources?: unknown };
+        const tin = terminal.input as { blocks?: unknown; sources?: unknown; scope?: unknown };
         const blocks = Array.isArray(tin?.blocks) ? (tin.blocks as unknown[]) : null;
         const report = blocks && grounding !== 'off' ? verifyBlockNumbers(blocks, store) : { unmatched: [], checked: 0 };
         if (report.unmatched.length && grounding === 'enforce' && groundingRetries === 0) {
@@ -335,7 +368,7 @@ export async function runChatTurn(input: TurnInput, ev: TurnEvents = {}): Promis
           continue;
         }
         result.ungrounded = report.unmatched;
-        result.blocks = blocks;
+        result.blocks = blocks ? withScopeCaption(blocks, tin?.scope) : null;
         if (Array.isArray(tin?.sources)) {
           for (const s of tin.sources) {
             if (typeof s !== 'string') continue;
@@ -348,7 +381,7 @@ export async function runChatTurn(input: TurnInput, ev: TurnEvents = {}): Promis
         }
         result.toolUses.push({ name: terminal.name, input: terminal.input, result: { ok: true } });
         ev.toolResult?.({ name: terminal.name, id: terminal.id, ok: true, bytes: 0, truncated: false, ms: 0 });
-        if (blocks) ev.blocks?.(blocks);
+        if (result.blocks) ev.blocks?.(result.blocks);
         break outer;
       }
 
@@ -379,7 +412,7 @@ export async function runChatTurn(input: TurnInput, ev: TurnEvents = {}): Promis
         if (input.captureRaw) result.raw!.push({ name: block.name, input: block.input, value: raw });
         if (isContentResult(raw)) {
           const content = raw.__content;
-          const size = JSON.stringify(content).length;
+          const size = contentChars(content);
           contextChars += size;
           result.toolUses.push({ name: block.name, input: block.input, result: { ok: true, bytes: size } });
           rt.tools.push({ name: block.name, id: block.id, input: compactInput(block.input), ms, bytes: size });
@@ -388,7 +421,7 @@ export async function runChatTurn(input: TurnInput, ev: TurnEvents = {}): Promis
         }
         const isErr = !!(raw && typeof raw === 'object' && (raw as { error?: unknown }).error);
         const ref = isErr ? undefined : store.put(block.name, block.input, raw);
-        const serialized = fitToolResult(ref ? withRef(raw, ref) : raw, cap);
+        const serialized = fitToolResult(ref ? withRef(raw, ref) : raw, cap, block.name);
         const stored = storedResult(raw, serialized, ref);
         if (stored.truncated) result.truncatedResults += 1;
         result.toolUses.push({ name: block.name, input: block.input, result: stored });

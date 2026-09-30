@@ -43,6 +43,12 @@ export interface ToolContext {
   attachments?: AttachmentRef[];
   now?: Date;
   signal?: AbortSignal;
+  /**
+   * Executa OUTRA tool com este mesmo contexto (ex.: compare_periods roda
+   * get_overview duas vezes). Preenchido por executeTool — módulos usam isto
+   * em vez de importar aiTools (evita import circular).
+   */
+  exec?: (name: string, input: Record<string, unknown>) => Promise<unknown>;
 }
 
 /**

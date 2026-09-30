@@ -1,6 +1,9 @@
 // GET    /api/chat/conversations/[id] — detalhes + mensagens da conversa.
+//        Cada mensagem traz `attachments` (AttachmentDTO — só metadados),
+//        `citations` (fontes dos marcadores [[cite:n]]) e `feedback` (o voto
+//        do usuário atual, ou null).
 // PATCH  — move pra pasta ({folderId} | null) e/ou renomeia ({title}).
-// DELETE — remove a conversa (cascade deleta messages).
+// DELETE — remove a conversa (cascade deleta messages e anexos).
 //
 // Aberto a qualquer usuário autenticado (2026-08-03). Privacidade: chats
 // são individuais — GET/PATCH exigem ser o DONO (nem admin lê chat alheio).
@@ -9,6 +12,8 @@
 import { NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { requireAuth } from '@/lib/auth/guard';
+import { ATTACHMENT_DTO_SELECT, toAttachmentDTO } from '@/lib/chat/attachmentDto';
+import { attachmentLiteMeta } from '@/lib/rag/attachments';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -21,16 +26,36 @@ export async function GET(
   if (!auth.ok) return auth.response;
   const { id } = await params;
 
+  const userId = auth.user.id;
   const conv = await db.conversation.findUnique({
     where: { id },
     include: {
-      messages: { orderBy: { createdAt: 'asc' } },
+      messages: {
+        orderBy: { createdAt: 'asc' },
+        include: {
+          // Anexo é do dono (userId) — o filtro repete a posse de propósito.
+          attachments: {
+            where: { userId, scope: 'CONVERSATION' },
+            orderBy: { createdAt: 'asc' },
+            select: ATTACHMENT_DTO_SELECT,
+          },
+          // Só o voto de QUEM está lendo (a conversa é individual, mas o
+          // modelo de feedback é por usuário).
+          feedback: {
+            where: { userId },
+            select: { rating: true, reasons: true, comment: true },
+            take: 1,
+          },
+        },
+      },
     },
   });
   if (!conv) return NextResponse.json({ error: 'not found' }, { status: 404 });
-  if (conv.userId !== auth.user.id) {
+  if (conv.userId !== userId) {
     return NextResponse.json({ error: 'forbidden' }, { status: 403 });
   }
+  // meta leve dos anexos numa query só (o completo carrega o texto do PDF).
+  const liteMeta = await attachmentLiteMeta(conv.messages.flatMap((m) => m.attachments.map((a) => a.id)));
 
   return NextResponse.json({
     conversation: {
@@ -40,14 +65,20 @@ export async function GET(
       createdAt: conv.createdAt.toISOString(),
       updatedAt: conv.updatedAt.toISOString(),
     },
-    messages: conv.messages.map((m) => ({
-      id: m.id,
-      role: m.role,
-      content: m.content,
-      toolUses: m.toolUses,
-      blocks: m.blocks,
-      createdAt: m.createdAt.toISOString(),
-    })),
+    messages: conv.messages.map((m) => {
+      const fb = m.feedback[0];
+      return {
+        id: m.id,
+        role: m.role,
+        content: m.content,
+        toolUses: m.toolUses,
+        blocks: m.blocks,
+        citations: Array.isArray(m.citations) ? m.citations : null,
+        attachments: m.attachments.map((a) => toAttachmentDTO(a, liteMeta.get(a.id))),
+        feedback: fb ? { rating: fb.rating, reasons: fb.reasons, comment: fb.comment } : null,
+        createdAt: m.createdAt.toISOString(),
+      };
+    }),
   });
 }
 

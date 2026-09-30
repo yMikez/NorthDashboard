@@ -1,6 +1,7 @@
 // Container principal do redesign do chat.
 // Layout: DashboardNav (SPA-style) + Sidebar conversas + Main chat + Drawer.
-// Estado de conversa, streaming, filtros, tema e atalhos vivem aqui.
+// Estado de conversa, streaming, filtros, tema, anexos do composer e atalhos
+// vivem aqui.
 
 'use client';
 
@@ -8,32 +9,297 @@ import * as React from 'react';
 import { DashboardNav } from './DashboardNav';
 import { Sidebar } from './Sidebar';
 import { TopBar, type SyncStatus, type ThemeMode } from './TopBar';
-import { MessageList, EmptyState } from './MessageList';
+import { MessageList, EmptyState, type StreamingPartial } from './MessageList';
 import { ChatInput } from './ChatInput';
 import { DetailDrawer } from './DetailDrawer';
 import { KnowledgeSheet } from './KnowledgeSheet';
+import { NsIcon } from './NsIcon';
+import type { LiveTool } from './AssistantMessage';
+import type { PendingAttachment } from './AttachmentChips';
 import {
+  AttachmentUploadError,
+  clearFeedback,
   createFolder,
+  deleteAttachment,
   deleteConversation,
   deleteFolder,
+  getAttachment,
   getConversation,
   listConversations,
   listFolders,
   moveConversation,
   renameConversation,
   renameFolder,
+  sendFeedback,
   sendMessage,
+  uploadAttachment,
 } from '@/lib/chat/client';
+import {
+  ATTACHMENT_MAX_BYTES,
+  ATTACHMENTS_PER_MESSAGE,
+  checkSize,
+  guessAttachmentKind,
+  rejectionNotice,
+  selectAttachments,
+} from '@/lib/chat/attachmentRules';
+import { upsertCitation } from '@/lib/chat/citeMarkers';
+import { prepareImageForUpload } from '@/lib/chat/imageResize';
 import type {
+  AttachmentDTO,
   Block,
   ChatFolder,
   ChatUser,
+  Citation,
   Conversation,
   EntityRef,
+  FeedbackInput,
   FilterState,
   Message,
+  MessageFeedback,
 } from '@/types/chat';
 import { brtRangeForPreset, spaCustomRange } from '@/lib/shared/datePresets';
+
+// ---------------- Anexos do composer ----------------
+
+const UPLOAD_CONCURRENCY = 2;
+const PROCESSING_POLL_MS = 1500;
+// O servidor marca FAILED o que passa de 15 min processando; o composer
+// desiste junto em vez de girar pra sempre.
+const PROCESSING_TIMEOUT_MS = 15 * 60_000;
+
+function isAbortError(err: unknown): boolean {
+  return (err as { name?: string } | null)?.name === 'AbortError';
+}
+
+/**
+ * Ciclo de vida dos anexos do composer: fila (2 uploads por vez) →
+ * redimensiona imagem no browser → upload XHR com progresso → polling
+ * enquanto o servidor processa → pronto | erro (retry). Remover cancela o
+ * upload e apaga o rascunho no servidor.
+ *
+ * @param conversationId vai no upload quando a conversa já existe
+ * @param sentInConversation anexos já enviados nesta conversa (limite de 20)
+ */
+function useComposerAttachments(conversationId: string | null, sentInConversation: number) {
+  const [items, setItems] = React.useState<PendingAttachment[]>([]);
+  const [notice, setNotice] = React.useState<string | null>(null);
+  // Espelho síncrono: add/take/remove leem o estado sem esperar o re-render
+  // (soltar e colar em sequência não pode furar o limite de 5).
+  const itemsRef = React.useRef<PendingAttachment[]>(items);
+  itemsRef.current = items;
+  const convRef = React.useRef(conversationId);
+  convRef.current = conversationId;
+  const sentRef = React.useRef(sentInConversation);
+  sentRef.current = sentInConversation;
+  const controllers = React.useRef(new Map<string, AbortController>());
+  const seq = React.useRef(0);
+
+  const patch = React.useCallback((localId: string, p: Partial<PendingAttachment>) => {
+    setItems((prev) => prev.map((it) => (it.localId === localId ? { ...it, ...p } : it)));
+  }, []);
+
+  const applyServer = React.useCallback(
+    (localId: string, att: AttachmentDTO) => {
+      switch (att.status) {
+        case 'READY':
+          patch(localId, { state: 'ready', attachment: att, error: undefined });
+          break;
+        case 'FAILED':
+          patch(localId, { state: 'error', attachment: att, error: att.error || 'Não foi possível processar o arquivo.' });
+          break;
+        case 'EXPIRED':
+          patch(localId, { state: 'error', attachment: att, error: 'O anexo expirou — envie de novo.' });
+          break;
+        default:
+          setItems((prev) =>
+            prev.map((it) =>
+              it.localId === localId
+                ? { ...it, state: 'processing', attachment: att, processingSince: it.processingSince ?? Date.now() }
+                : it,
+            ),
+          );
+      }
+    },
+    [patch],
+  );
+
+  const start = React.useCallback(
+    async (item: PendingAttachment) => {
+      const ctrl = new AbortController();
+      controllers.current.set(item.localId, ctrl);
+      patch(item.localId, { state: 'uploading', progress: 0, error: undefined, attachment: undefined, processingSince: undefined });
+      try {
+        // Decisão do dono: o servidor não decodifica imagem — quem reduz é o browser.
+        const file = item.kind === 'image' ? await prepareImageForUpload(item.file) : item.file;
+        if (ctrl.signal.aborted) return;
+        const tooBig = checkSize(file.size);
+        if (tooBig) {
+          patch(item.localId, { state: 'error', error: tooBig });
+          return;
+        }
+        const att = await uploadAttachment(file, {
+          conversationId: convRef.current,
+          signal: ctrl.signal,
+          onProgress: (f) => patch(item.localId, { progress: f }),
+        });
+        // Removido no instante em que o upload terminou: o rascunho não fica órfão.
+        if (ctrl.signal.aborted) {
+          void deleteAttachment(att.id).catch(() => undefined);
+          return;
+        }
+        applyServer(item.localId, att);
+      } catch (err) {
+        if (isAbortError(err)) return;
+        patch(item.localId, {
+          state: 'error',
+          error: err instanceof AttachmentUploadError ? err.message : 'Falha no envio — tente de novo.',
+        });
+      } finally {
+        controllers.current.delete(item.localId);
+      }
+    },
+    [patch, applyServer],
+  );
+
+  // Fila: no máximo UPLOAD_CONCURRENCY enviando ao mesmo tempo.
+  React.useEffect(() => {
+    const free = UPLOAD_CONCURRENCY - items.filter((it) => it.state === 'uploading').length;
+    if (free <= 0) return;
+    for (const it of items.filter((x) => x.state === 'queued').slice(0, free)) void start(it);
+  }, [items, start]);
+
+  // Polling de quem o servidor ainda está processando (arquivo grande).
+  const processingKey = items
+    .filter((it) => it.state === 'processing' && it.attachment)
+    .map((it) => it.attachment!.id)
+    .join(',');
+  React.useEffect(() => {
+    if (!processingKey) return;
+    let inFlight = false;
+    const timer = window.setInterval(async () => {
+      if (inFlight) return;
+      inFlight = true;
+      try {
+        for (const it of itemsRef.current) {
+          if (it.state !== 'processing' || !it.attachment) continue;
+          if (it.processingSince && Date.now() - it.processingSince > PROCESSING_TIMEOUT_MS) {
+            patch(it.localId, { state: 'error', error: 'O processamento demorou demais — tente de novo.' });
+            continue;
+          }
+          try {
+            applyServer(it.localId, await getAttachment(it.attachment.id));
+          } catch (err) {
+            if (err instanceof AttachmentUploadError && err.status === 404) {
+              patch(it.localId, { state: 'error', attachment: undefined, error: 'O anexo não existe mais — envie de novo.' });
+            }
+            // Rede/5xx: transitório — tenta no próximo ciclo.
+          }
+        }
+      } finally {
+        inFlight = false;
+      }
+    }, PROCESSING_POLL_MS);
+    return () => window.clearInterval(timer);
+  }, [processingKey, patch, applyServer]);
+
+  // Saiu da página: cancela o que está subindo (rascunho já salvo o servidor limpa em 24h).
+  React.useEffect(() => {
+    const map = controllers.current;
+    return () => {
+      for (const c of map.values()) c.abort();
+    };
+  }, []);
+
+  const add = React.useCallback((files: File[]) => {
+    const { accepted, rejected } = selectAttachments(files, itemsRef.current.length, sentRef.current);
+    setNotice(rejectionNotice(rejected));
+    if (!accepted.length) return;
+    const fresh: PendingAttachment[] = accepted.map((file) => ({
+      localId: `att-${Date.now()}-${++seq.current}`,
+      file,
+      name: file.name,
+      kind: guessAttachmentKind(file.name, file.type) ?? 'text',
+      state: 'queued',
+      progress: 0,
+    }));
+    itemsRef.current = [...itemsRef.current, ...fresh];
+    setItems((prev) => [...prev, ...fresh]);
+  }, []);
+
+  const retry = React.useCallback(
+    (localId: string) => {
+      const it = itemsRef.current.find((x) => x.localId === localId);
+      if (!it) return;
+      // Rascunho que falhou no servidor sai antes do reenvio (não ocupa a cota).
+      if (it.attachment) void deleteAttachment(it.attachment.id).catch(() => undefined);
+      patch(localId, { state: 'queued', progress: 0, error: undefined, attachment: undefined, processingSince: undefined });
+    },
+    [patch],
+  );
+
+  const remove = React.useCallback((localId: string) => {
+    const it = itemsRef.current.find((x) => x.localId === localId);
+    controllers.current.get(localId)?.abort();
+    if (it?.attachment) void deleteAttachment(it.attachment.id).catch(() => undefined);
+    itemsRef.current = itemsRef.current.filter((x) => x.localId !== localId);
+    setItems((prev) => prev.filter((x) => x.localId !== localId));
+  }, []);
+
+  /** Tira os prontos do composer (vão na mensagem); os com erro ficam pra retry. */
+  const takeReady = React.useCallback((): PendingAttachment[] => {
+    const ready = itemsRef.current.filter((it) => it.state === 'ready' && it.attachment);
+    if (ready.length) {
+      const ids = new Set(ready.map((r) => r.localId));
+      itemsRef.current = itemsRef.current.filter((it) => !ids.has(it.localId));
+      setItems((prev) => prev.filter((it) => !ids.has(it.localId)));
+    }
+    setNotice(null);
+    return ready;
+  }, []);
+
+  /** Envio recusado antes de começar: os rascunhos seguem válidos — voltam pro composer. */
+  const restore = React.useCallback((list: PendingAttachment[]) => {
+    if (!list.length) return;
+    itemsRef.current = [...list, ...itemsRef.current];
+    setItems((prev) => [...list, ...prev]);
+  }, []);
+
+  /** Nova conversa / outra conversa: rascunho não migra (o servidor recusaria). */
+  const discardAll = React.useCallback(() => {
+    for (const c of controllers.current.values()) c.abort();
+    controllers.current.clear();
+    for (const it of itemsRef.current) {
+      if (it.attachment) void deleteAttachment(it.attachment.id).catch(() => undefined);
+    }
+    itemsRef.current = [];
+    setItems([]);
+    setNotice(null);
+  }, []);
+
+  const dismissNotice = React.useCallback(() => setNotice(null), []);
+
+  return { items, notice, dismissNotice, add, retry, remove, takeReady, restore, discardAll };
+}
+
+/** Texto da pergunta enviada só com anexo — o mesmo default do POST /api/chat. */
+function attachmentOnlyText(n: number): string {
+  return n === 1 ? 'Analise o anexo.' : 'Analise os anexos.';
+}
+
+/** Drag de arquivo do sistema (não de texto/link selecionado na página). */
+function isFileDrag(e: { dataTransfer: DataTransfer | null }): boolean {
+  return !!e.dataTransfer && Array.from(e.dataTransfer.types).includes('Files');
+}
+
+/** Estado de um turno em curso — compartilhado entre o stream e Parar/Nova conversa. */
+interface TurnState {
+  /** Mensagem final já registrada (done, parada manual ou descarte). */
+  finalized: boolean;
+  /** O servidor aceitou o turno (evento `conversation`). */
+  started: boolean;
+  error: string | null;
+  rateLimited: string | null;
+}
 
 /** Filtros padrão = os da SPA sem querystring: 30 dias BRT, sem recorte. */
 export function defaultFilters(): FilterState {
@@ -87,10 +353,7 @@ export function ChatShell({
   const [messages, setMessages] = React.useState<Message[]>([]);
   const [input, setInput] = React.useState('');
   const [streaming, setStreaming] = React.useState(false);
-  const [streamPartial, setStreamPartial] = React.useState<{
-    content: string;
-    tools: { name: string; id: string }[];
-  } | null>(null);
+  const [streamPartial, setStreamPartial] = React.useState<StreamingPartial | null>(null);
   const [filters, setFilters] = React.useState<FilterState>(() => initialFilters ?? defaultFilters());
   const [syncStatus, setSyncStatus] = React.useState<SyncStatus>('live');
   // Tema: quem manda é o data-theme que o bootstrap de app/layout.tsx já pôs
@@ -120,6 +383,60 @@ export function ChatShell({
   // Lista de conversas como drawer no mobile (≤820px).
   const [convOpen, setConvOpen] = React.useState(false);
   const abortRef = React.useRef<AbortController | null>(null);
+  const turnRef = React.useRef<TurnState | null>(null);
+
+  // Anexos já enviados nesta conversa contam no limite de 20 por conversa.
+  const sentAttachments = messages.reduce((n, m) => n + (m.attachments?.length ?? 0), 0);
+  const uploads = useComposerAttachments(selectedId, sentAttachments);
+
+  // Arrastar arquivo sobre a área do chat: overlay + drop anexa. O contador
+  // de enter/leave existe porque cada filho do <main> dispara o par.
+  const dragDepth = React.useRef(0);
+  const [dragging, setDragging] = React.useState(false);
+  React.useEffect(() => {
+    // Arquivo solto FORA da área (nav, lista de conversas) faria o browser
+    // abrir o arquivo e sair do chat — bloqueia o default na janela toda.
+    function block(e: DragEvent) {
+      if (!isFileDrag(e)) return;
+      e.preventDefault();
+      if (e.type === 'drop') {
+        dragDepth.current = 0;
+        setDragging(false);
+      }
+    }
+    window.addEventListener('dragover', block);
+    window.addEventListener('drop', block);
+    return () => {
+      window.removeEventListener('dragover', block);
+      window.removeEventListener('drop', block);
+    };
+  }, []);
+  const dropZone = {
+    onDragEnter: (e: React.DragEvent) => {
+      if (!isFileDrag(e)) return;
+      e.preventDefault();
+      dragDepth.current += 1;
+      setDragging(true);
+    },
+    onDragOver: (e: React.DragEvent) => {
+      if (!isFileDrag(e)) return;
+      e.preventDefault();
+      e.dataTransfer.dropEffect = 'copy';
+    },
+    onDragLeave: (e: React.DragEvent) => {
+      if (!isFileDrag(e)) return;
+      dragDepth.current = Math.max(0, dragDepth.current - 1);
+      if (dragDepth.current === 0) setDragging(false);
+    },
+    onDrop: (e: React.DragEvent) => {
+      if (!isFileDrag(e)) return;
+      e.preventDefault();
+      dragDepth.current = 0;
+      setDragging(false);
+      const files = Array.from(e.dataTransfer.files);
+      if (files.length) uploads.add(files);
+    },
+  };
 
   // ---- Initial load ----
   React.useEffect(() => {
@@ -222,8 +539,10 @@ export function ChatShell({
 
   // ---- Actions ----
   function startNew() {
+    if (turnRef.current) turnRef.current.finalized = true;
     if (abortRef.current) abortRef.current.abort();
     abortRef.current = null;
+    uploads.discardAll();
     setSelectedId(null);
     setMessages([]);
     setInput('');
@@ -233,27 +552,43 @@ export function ChatShell({
 
   async function handleSend() {
     const text = input.trim();
-    if (!text || streaming) return;
+    if (streaming) return;
+    const pendingUpload = uploads.items.some(
+      (a) => a.state === 'queued' || a.state === 'uploading' || a.state === 'processing',
+    );
+    const readyCount = uploads.items.filter((a) => a.state === 'ready').length;
+    // Upload em andamento bloqueia: mandar sem ele perderia o arquivo em silêncio.
+    if (pendingUpload || (!text && readyCount === 0)) return;
+
+    const sent = uploads.takeReady();
+    const sentDocs = sent.map((a) => a.attachment!);
 
     const tempUser: Message = {
       id: 'temp-' + Date.now(),
       role: 'user',
-      content: text,
+      content: text || attachmentOnlyText(sentDocs.length),
       createdAt: new Date().toISOString(),
+      attachments: sentDocs.length ? sentDocs : undefined,
     };
     setMessages((prev) => [...prev, tempUser]);
     setInput('');
     setStreaming(true);
-    setStreamPartial({ content: '', tools: [] });
+    setStreamPartial({ content: '', tools: [], citations: [] });
     setSyncStatus('syncing');
 
     const controller = new AbortController();
     abortRef.current = controller;
+    const turn: TurnState = { finalized: false, started: false, error: null, rateLimited: null };
+    turnRef.current = turn;
 
     let acc = '';
-    const tools: { name: string; id: string }[] = [];
+    const tools: LiveTool[] = [];
+    // Mesma referência entre tokens (só muda quando chega fonte nova): o
+    // MarkdownBlock não recria os chips de citação a cada token.
+    let citations: Citation[] = [];
     let received: Block[] | null = null;
     let truncated = false;
+    const publish = () => setStreamPartial({ content: acc, tools: [...tools], citations });
 
     // Os filtros da barra valem pra resposta: viram o bloco "Estado da UI" do
     // system e o período default das tools (antes nunca eram enviados — a
@@ -287,21 +622,30 @@ export function ChatShell({
         uiState,
         // Conversa NOVA nasce na pasta ativa; conversas existentes ignoram.
         folderId: selectedId ? undefined : activeFolderId,
+        attachmentIds: sentDocs.map((a) => a.id),
       },
       {
         onConversation: ({ id }) => {
+          turn.started = true;
           setSelectedId(id);
         },
         onToken: ({ text: tk }) => {
           acc += tk;
-          setStreamPartial({ content: acc, tools: [...tools] });
+          publish();
         },
         onToolUseStart: ({ name, id }) => {
-          tools.push({ name, id });
-          setStreamPartial({ content: acc, tools: [...tools] });
+          tools.push({ name, id, status: 'running' });
+          publish();
         },
-        onToolUseResult: () => {
-          /* no-op for now */
+        onToolUseResult: ({ id, ok }) => {
+          const t = tools.find((x) => x.id === id);
+          if (!t) return;
+          t.status = ok === false ? 'error' : 'ok';
+          publish();
+        },
+        onCitation: (c) => {
+          citations = upsertCitation(citations, c);
+          publish();
         },
         onBlocks: ({ blocks }) => {
           received = blocks;
@@ -309,58 +653,69 @@ export function ChatShell({
         onTruncated: () => {
           truncated = true;
         },
-        onDone: ({ conversationId: cid }) => {
+        onDone: ({ conversationId: cid, messageId }) => {
+          if (turn.finalized) return;
+          turn.finalized = true;
+          // Erro no meio do turno: o servidor salvou o parcial com esta mesma
+          // nota — a tela fica igual ao que volta no F5.
+          const content = turn.error
+            ? `${acc}${acc ? '\n\n' : ''}⚠️ _A resposta foi interrompida por um erro: ${turn.error}_`
+            : acc;
           const final: Message = {
-            id: 'asst-' + Date.now(),
+            // Id real = voto 👍/👎 liga nesta resposta; sem ele (servidor
+            // antigo), id local e voto desabilitado.
+            id: messageId ?? 'asst-' + Date.now(),
             role: 'assistant',
-            content: acc,
-            toolUses: tools.map((t) => ({ name: t.name })),
+            content,
+            toolUses: toolRecords(tools),
             blocks: received ?? undefined,
+            citations: citations.length ? citations : null,
             createdAt: new Date().toISOString(),
             truncated: truncated || undefined,
           };
           setMessages((prev) => [...prev, final]);
           setStreamPartial(null);
           setStreaming(false);
-          setSyncStatus('live');
+          setSyncStatus(turn.error ? 'error' : 'live');
           void refreshConversations();
           if (cid && cid !== selectedId) setSelectedId(cid);
         },
         onError: ({ message }) => {
           console.error('chat stream error', message);
-          setStreaming(false);
-          setStreamPartial(null);
-          setSyncStatus('error');
-          setMessages((prev) => [
-            ...prev,
-            {
-              id: 'err-' + Date.now(),
-              role: 'assistant',
-              content: `⚠️ Erro: ${message}`,
-              createdAt: new Date().toISOString(),
-            },
-          ]);
+          turn.error = message;
         },
         onRateLimited: ({ message }) => {
-          setStreaming(false);
-          setStreamPartial(null);
-          setSyncStatus('error');
-          setMessages((prev) => [
-            ...prev,
-            {
-              id: 'rl-' + Date.now(),
-              role: 'assistant',
-              content: `🚫 ${message}`,
-              createdAt: new Date().toISOString(),
-            },
-          ]);
+          turn.rateLimited = message;
         },
       },
       controller.signal,
     );
+
+    // Stream acabou sem `done` (recusa antes de começar, limite de uso, queda
+    // de conexão). Parar/Nova conversa já fecharam o turno por conta própria.
+    if (turn.finalized) return;
+    turn.finalized = true;
+    setStreaming(false);
+    setStreamPartial(null);
+    setSyncStatus('error');
+    // Recusado antes de começar (400/429): o servidor não ligou os anexos —
+    // voltam pro composer pra reenviar ou remover.
+    if (!turn.started) uploads.restore(sent);
+    setMessages((prev) => [
+      ...prev,
+      turn.rateLimited != null
+        ? { id: 'rl-' + Date.now(), role: 'assistant', content: `🚫 ${turn.rateLimited}`, createdAt: new Date().toISOString() }
+        : {
+            id: 'err-' + Date.now(),
+            role: 'assistant',
+            content: `⚠️ Erro: ${turn.error ?? 'a conexão caiu antes do fim da resposta'}`,
+            createdAt: new Date().toISOString(),
+          },
+    ]);
   }
 
   function handleStop() {
+    if (turnRef.current) turnRef.current.finalized = true;
     abortRef.current?.abort();
     abortRef.current = null;
     setStreaming(false);
@@ -371,7 +726,8 @@ export function ChatShell({
           id: 'asst-' + Date.now(),
           role: 'assistant',
           content: streamPartial.content + '\n\n_[geração interrompida]_',
-          toolUses: streamPartial.tools.map((t) => ({ name: t.name })),
+          toolUses: toolRecords(streamPartial.tools),
+          citations: streamPartial.citations.length ? streamPartial.citations : null,
           createdAt: new Date().toISOString(),
         },
       ]);
@@ -396,6 +752,15 @@ export function ChatShell({
         `Não foi possível deletar a conversa.\n${err instanceof Error ? err.message : ''}`,
       );
     }
+  }
+
+  // Persiste o voto e espelha no estado (export e o voto sobrevivem a
+  // re-render). Rejeição sobe pro AssistantMessage, que desfaz o botão.
+  async function handleFeedback(messageId: string, input: FeedbackInput | null) {
+    let saved: MessageFeedback | null = null;
+    if (input) saved = await sendFeedback(messageId, input);
+    else await clearFeedback(messageId);
+    setMessages((prev) => prev.map((m) => (m.id === messageId ? { ...m, feedback: saved } : m)));
   }
 
   function handleRenameTitle(next: string) {
@@ -523,6 +888,7 @@ export function ChatShell({
         activeFolderId={activeFolderId}
         selectedId={selectedId}
         onSelect={(id) => {
+          if (id !== selectedId) uploads.discardAll();
           setSelectedId(id);
           setConvOpen(false);
         }}
@@ -547,7 +913,21 @@ export function ChatShell({
 
       {isAdmin && <KnowledgeSheet open={knowledgeOpen} onOpenChange={setKnowledgeOpen} />}
 
-      <main className="relative z-[1] flex flex-col h-full overflow-hidden flex-1 min-w-0">
+      <main className="relative z-[1] flex flex-col h-full overflow-hidden flex-1 min-w-0" {...dropZone}>
+        {dragging && (
+          // Só visual (o drop é no <main>); quem usa teclado anexa pelo clipe.
+          <div
+            aria-hidden
+            className="pointer-events-none absolute inset-2 z-30 flex flex-col items-center justify-center gap-2 rounded-lg border-2 border-dashed border-ring bg-background/90 text-center"
+          >
+            <NsIcon name="paperclip" size={28} className="text-ring" />
+            <p className="text-sm leading-[22px] font-semibold text-foreground">Solte para anexar</p>
+            <p className="px-4 text-xs leading-[18px] text-muted-foreground">
+              PDF, imagem, CSV/XLSX, DOCX, TXT/MD ou JSON · até {ATTACHMENT_MAX_BYTES / (1024 * 1024)} MB por arquivo ·{' '}
+              {ATTACHMENTS_PER_MESSAGE} por mensagem
+            </p>
+          </div>
+        )}
         <TopBar
           onMenu={() => setNavOpen(true)}
           title={currentConv?.title ?? null}
@@ -591,6 +971,7 @@ export function ChatShell({
               if (!lastUser) return;
               setInput(lastUser.content);
             }}
+            onFeedback={handleFeedback}
           />
         )}
 
@@ -600,6 +981,12 @@ export function ChatShell({
           onSubmit={() => void handleSend()}
           onStop={handleStop}
           streaming={streaming}
+          attachments={uploads.items}
+          onAddFiles={uploads.add}
+          onRetryAttachment={uploads.retry}
+          onRemoveAttachment={uploads.remove}
+          notice={uploads.notice}
+          onDismissNotice={uploads.dismissNotice}
         />
       </main>
 
@@ -610,4 +997,9 @@ export function ChatShell({
       />
     </div>
   );
+}
+
+/** Tools do stream → registro da mensagem (o estado de erro sobrevive no chip). */
+function toolRecords(tools: LiveTool[]): Message['toolUses'] {
+  return tools.map((t) => ({ name: t.name, result: { ok: t.status !== 'error' } }));
 }

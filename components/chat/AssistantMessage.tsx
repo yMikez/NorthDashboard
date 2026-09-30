@@ -3,19 +3,49 @@
 import * as React from 'react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/ui-utils';
+import { textForCopy } from '@/lib/chat/citeMarkers';
+import { storedToolStatus, toolChipLabel, type ToolChipStatus } from '@/lib/chat/toolLabels';
 import { NsIcon } from './NsIcon';
 import { BlockRenderer } from './blocks/BlockRenderer';
 import { MarkdownBlock } from './blocks/MarkdownBlock';
-import type { Block, ToolUseRecord } from '@/types/chat';
+import { SourcesFooter } from './SourcesFooter';
+import { FeedbackForm, type FeedbackFormValues } from './FeedbackForm';
+import type {
+  Block,
+  Citation,
+  FeedbackInput,
+  FeedbackRating,
+  MessageFeedback,
+  ToolUseRecord,
+} from '@/types/chat';
+
+/** Tool em andamento na resposta que está sendo gerada (SSE tool_use_start/result). */
+export interface LiveTool {
+  name: string;
+  id: string;
+  status: ToolChipStatus;
+}
 
 interface AssistantMessageProps {
   content: string;
+  /** Usos persistidos (histórico) — o input dá o nome do playbook. */
   toolUses?: ToolUseRecord[] | null;
+  /** Tools do stream em curso — têm estado próprio (várias rodam em paralelo). */
+  liveTools?: LiveTool[];
   blocks?: Block[];
+  citations?: Citation[] | null;
   streaming?: boolean;
   truncated?: boolean;
   onRegenerate?: () => void;
-  onFeedback?: (kind: 'up' | 'down') => void;
+  /** Voto atual (GET da conversa). */
+  feedback?: MessageFeedback | null;
+  /**
+   * Persiste o voto (null = remove). Sem ele os botões de voto não aparecem
+   * (modo leitura). Rejeita em falha — o botão volta ao estado anterior.
+   */
+  onFeedback?: (input: FeedbackInput | null) => Promise<void>;
+  /** Id ainda temporário: voto indisponível até o `done` trazer o id salvo. */
+  feedbackDisabled?: boolean;
 }
 
 // Ações da resposta: 32 px como o .icon-btn da SPA, 44 px em toque.
@@ -41,18 +71,32 @@ function parseNotice(content: string): Notice | null {
 export function AssistantMessage({
   content,
   toolUses,
+  liveTools,
   blocks,
+  citations,
   streaming,
   truncated,
   onRegenerate,
+  feedback,
   onFeedback,
+  feedbackDisabled,
 }: AssistantMessageProps) {
   const [copied, setCopied] = React.useState(false);
-  const [feedback, setFeedback] = React.useState<'up' | 'down' | null>(null);
+  const [vote, setVote] = React.useState<FeedbackRating | null>(feedback?.rating ?? null);
+  const [formOpen, setFormOpen] = React.useState(false);
+  const [voteError, setVoteError] = React.useState<string | null>(null);
+  const [thanks, setThanks] = React.useState(false);
+  const downRef = React.useRef<HTMLButtonElement | null>(null);
+  const pendingVote = React.useRef<Promise<void> | null>(null);
+
+  // O servidor é a verdade: GET da conversa (ou o retorno do POST) atualiza.
+  React.useEffect(() => {
+    setVote(feedback?.rating ?? null);
+  }, [feedback?.rating]);
 
   async function copy() {
     try {
-      await navigator.clipboard.writeText(content);
+      await navigator.clipboard.writeText(textForCopy(content, citations));
       setCopied(true);
       setTimeout(() => setCopied(false), 1500);
     } catch {
@@ -60,14 +104,63 @@ export function AssistantMessage({
     }
   }
 
-  function vote(kind: 'up' | 'down') {
-    setFeedback(kind);
-    onFeedback?.(kind);
+  /** Aplica o voto na hora; se o servidor recusar, volta ao anterior. */
+  async function persist(input: FeedbackInput | null, next: FeedbackRating | null) {
+    if (!onFeedback) return;
+    const prev = vote;
+    setVote(next);
+    setVoteError(null);
+    setThanks(false);
+    const req = onFeedback(input);
+    pendingVote.current = req;
+    try {
+      await req;
+    } catch {
+      setVote(prev);
+      setVoteError('Não foi possível salvar o voto. Tente de novo.');
+    }
+  }
+
+  function voteUp() {
+    setFormOpen(false);
+    // Mesmo voto de novo = desfaz.
+    if (vote === 1) void persist(null, null);
+    else void persist({ rating: 1, reasons: [] }, 1);
+  }
+
+  function voteDown() {
+    if (vote === -1) {
+      setFormOpen(false);
+      void persist(null, null);
+      return;
+    }
+    // O 👎 vale já (mesmo se o formulário for ignorado), mas SEM
+    // compartilhar: pergunta e resposta só chegam ao admin quando o usuário
+    // envia o formulário com o consentimento marcado.
+    void persist({ rating: -1, shared: false }, -1);
+    setFormOpen(true);
+  }
+
+  async function submitDetails(values: FeedbackFormValues) {
+    if (!onFeedback) return;
+    // O 👎 "seco" ainda em voo chegaria DEPOIS e apagaria os detalhes no upsert.
+    await pendingVote.current?.catch(() => undefined);
+    await onFeedback({ rating: -1, ...values });
+    setFormOpen(false);
+    setThanks(true);
+    downRef.current?.focus();
+  }
+
+  function closeForm() {
+    setFormOpen(false);
+    downRef.current?.focus();
   }
 
   const hasBlocks = !!blocks && blocks.length > 0;
-  const hasTools = !!toolUses && toolUses.length > 0;
-  const notice = !streaming && !hasBlocks && !hasTools && content ? parseNotice(content) : null;
+  const chips = React.useMemo(() => toolChips(toolUses, liveTools, streaming), [toolUses, liveTools, streaming]);
+  const notice = !streaming && !hasBlocks && chips.length === 0 && content ? parseNotice(content) : null;
+  const sources = citations ?? [];
+  const showVotes = !!onFeedback && !notice;
 
   return (
     <div className="group px-4 sm:px-6 py-4 flex gap-3" aria-busy={streaming || undefined}>
@@ -76,7 +169,7 @@ export function AssistantMessage({
       </div>
 
       <div className="flex-1 min-w-0 space-y-3">
-        {hasTools && <ToolUsesStrip uses={toolUses!} streaming={streaming} />}
+        {chips.length > 0 && <ToolChips chips={chips} />}
 
         {notice ? (
           <div
@@ -98,7 +191,7 @@ export function AssistantMessage({
         ) : (
           content && (
             <div className="nx-bubble-assistant rounded-lg rounded-tl-sm px-4 py-2.5">
-              <MarkdownBlock block={{ content }} streaming={streaming && !hasBlocks} />
+              <MarkdownBlock block={{ content }} citations={citations} streaming={streaming && !hasBlocks} />
             </div>
           )
         )}
@@ -113,6 +206,9 @@ export function AssistantMessage({
           </div>
         )}
 
+        {/* Fontes só no fim: durante o stream a lista cresceria embaixo do texto. */}
+        {!streaming && sources.length > 0 && <SourcesFooter citations={sources} />}
+
         {truncated && !streaming && (
           <div className="flex items-start gap-1.5 text-xs leading-[18px] text-warning">
             <NsIcon name="alert-triangle" size={14} className="mt-0.5 shrink-0" />
@@ -120,78 +216,157 @@ export function AssistantMessage({
           </div>
         )}
 
-        {!streaming && (
-          // Visível no hover, no foco por teclado e sempre em tela de toque.
-          <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 focus-within:opacity-100 [@media(hover:none)]:opacity-100 transition-opacity">
+        {/* A linha de ações existe (invisível) também durante o stream: quando
+            a resposta termina, nada embaixo dela pula. */}
+        <div
+          aria-hidden={streaming || undefined}
+          className={cn(
+            'flex flex-wrap items-center gap-1 transition-opacity',
+            streaming
+              ? 'invisible'
+              : formOpen || vote != null || voteError || thanks
+                ? 'opacity-100'
+                : 'opacity-0 group-hover:opacity-100 focus-within:opacity-100 [@media(hover:none)]:opacity-100',
+          )}
+        >
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={() => void copy()}
+            aria-label={copied ? 'Copiado' : 'Copiar resposta'}
+            title={copied ? 'Copiado' : 'Copiar resposta'}
+            className={ACTION_BTN}
+          >
+            {copied ? <NsIcon name="check" className="text-success" /> : <NsIcon name="copy" />}
+          </Button>
+          {onRegenerate && (
+            // O ChatShell devolve a última pergunta ao campo (não reenvia
+            // sozinho) — o rótulo diz isso.
             <Button
               variant="ghost"
               size="icon"
-              onClick={() => void copy()}
-              aria-label={copied ? 'Copiado' : 'Copiar resposta'}
-              title={copied ? 'Copiado' : 'Copiar resposta'}
+              onClick={onRegenerate}
+              aria-label="Repetir a pergunta"
+              title="Repetir a pergunta"
               className={ACTION_BTN}
             >
-              {copied ? <NsIcon name="check" className="text-success" /> : <NsIcon name="copy" />}
+              <NsIcon name="refresh" />
             </Button>
-            {onRegenerate && (
-              // O ChatShell devolve a última pergunta ao campo (não reenvia
-              // sozinho) — o rótulo diz isso.
+          )}
+          {showVotes && (
+            <>
               <Button
                 variant="ghost"
                 size="icon"
-                onClick={onRegenerate}
-                aria-label="Repetir a pergunta"
-                title="Repetir a pergunta"
-                className={ACTION_BTN}
+                onClick={voteUp}
+                disabled={feedbackDisabled}
+                aria-label="Resposta útil"
+                aria-pressed={vote === 1}
+                title={feedbackDisabled ? 'Disponível quando a resposta for salva' : 'Resposta útil'}
+                className={cn(ACTION_BTN, vote === 1 && 'text-success hover:text-success')}
               >
-                <NsIcon name="refresh" />
+                <NsIcon name="thumbs-up" />
               </Button>
-            )}
-            <Button
-              variant="ghost"
-              size="icon"
-              onClick={() => vote('up')}
-              aria-label="Resposta útil"
-              aria-pressed={feedback === 'up'}
-              title="Resposta útil"
-              className={cn(ACTION_BTN, feedback === 'up' && 'text-success hover:text-success')}
-            >
-              <NsIcon name="thumbs-up" />
-            </Button>
-            <Button
-              variant="ghost"
-              size="icon"
-              onClick={() => vote('down')}
-              aria-label="Resposta ruim"
-              aria-pressed={feedback === 'down'}
-              title="Resposta ruim"
-              className={cn(ACTION_BTN, feedback === 'down' && 'text-danger hover:text-danger')}
-            >
-              <NsIcon name="thumbs-down" />
-            </Button>
-          </div>
+              <Button
+                ref={downRef}
+                variant="ghost"
+                size="icon"
+                onClick={voteDown}
+                disabled={feedbackDisabled}
+                aria-label="Resposta ruim"
+                aria-pressed={vote === -1}
+                aria-expanded={vote === -1 ? formOpen : undefined}
+                title={feedbackDisabled ? 'Disponível quando a resposta for salva' : 'Resposta ruim'}
+                className={cn(ACTION_BTN, vote === -1 && 'text-danger hover:text-danger')}
+              >
+                <NsIcon name="thumbs-down" />
+              </Button>
+              {vote === -1 && !formOpen && !thanks && (
+                <button
+                  type="button"
+                  onClick={() => setFormOpen(true)}
+                  className="ml-1 text-xs leading-[18px] text-ring underline-offset-2 hover:underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-ring"
+                >
+                  Contar o que houve
+                </button>
+              )}
+              <span role="status" className="ml-1 text-xs leading-[18px]">
+                {voteError ? (
+                  <span className="text-danger">{voteError}</span>
+                ) : thanks ? (
+                  <span className="text-muted-foreground">Obrigado — feedback registrado.</span>
+                ) : null}
+              </span>
+            </>
+          )}
+        </div>
+
+        {showVotes && formOpen && vote === -1 && (
+          <FeedbackForm
+            initialReasons={feedback?.rating === -1 ? feedback.reasons : []}
+            initialComment={feedback?.rating === -1 ? feedback.comment ?? '' : ''}
+            onSubmit={submitDetails}
+            onCancel={closeForm}
+          />
         )}
       </div>
     </div>
   );
 }
 
-function ToolUsesStrip({ uses, streaming }: { uses: ToolUseRecord[]; streaming?: boolean }) {
+interface ToolChip {
+  key: string;
+  name: string;
+  label: string;
+  status: ToolChipStatus;
+}
+
+function toolChips(
+  toolUses: ToolUseRecord[] | null | undefined,
+  liveTools: LiveTool[] | undefined,
+  streaming: boolean | undefined,
+): ToolChip[] {
+  if (liveTools) {
+    return liveTools.map((t) => ({
+      key: t.id,
+      name: t.name,
+      label: toolChipLabel(t.name),
+      // Stream parado (abort/erro) com tool sem resultado: não gira pra sempre.
+      status: t.status === 'running' && !streaming ? 'ok' : t.status,
+    }));
+  }
+  return (toolUses ?? []).map((u, i) => ({
+    key: `${i}-${u.name}`,
+    name: u.name,
+    label: toolChipLabel(u.name, u.input),
+    status: storedToolStatus(u.result),
+  }));
+}
+
+function ToolChips({ chips }: { chips: ToolChip[] }) {
   return (
-    <div className="flex flex-wrap gap-1.5">
-      {uses.map((u, i) => {
-        const running = streaming && i === uses.length - 1;
-        return (
-          <span key={i} className={cn('nx-tool-chip', !running && 'is-done')}>
-            {running ? (
-              <NsIcon name="loader" size={12} className="animate-spin motion-reduce:animate-none" />
-            ) : (
-              <NsIcon name="wrench" size={12} />
-            )}
-            {u.name}
-          </span>
-        );
-      })}
-    </div>
+    <ul aria-label="Consultas feitas" className="flex flex-wrap gap-1.5">
+      {chips.map((c) => (
+        <li
+          key={c.key}
+          title={c.status === 'error' ? `${c.name} — falhou` : c.name}
+          className={cn(
+            'nx-tool-chip',
+            c.status === 'ok' && 'is-done',
+            c.status === 'error' && 'border-danger/50 bg-danger/10 text-danger',
+          )}
+        >
+          {c.status === 'running' ? (
+            <NsIcon name="loader" size={12} className="animate-spin motion-reduce:animate-none" />
+          ) : c.status === 'error' ? (
+            <NsIcon name="alert-triangle" size={12} />
+          ) : (
+            <NsIcon name="wrench" size={12} />
+          )}
+          {c.label}
+          {c.status === 'error' && <span className="sr-only"> (falhou)</span>}
+        </li>
+      ))}
+    </ul>
   );
 }

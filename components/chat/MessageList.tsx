@@ -2,17 +2,27 @@
 
 import * as React from 'react';
 import { ScrollArea } from '@/components/ui/scroll-area';
+import { isPersistedMessageId } from '@/lib/chat/client';
 import { NsIcon } from './NsIcon';
 import { UserMessage } from './UserMessage';
-import { AssistantMessage } from './AssistantMessage';
-import type { Message } from '@/types/chat';
+import { AssistantMessage, type LiveTool } from './AssistantMessage';
+import type { Citation, FeedbackInput, Message } from '@/types/chat';
+
+/** Resposta sendo gerada: texto parcial, tools com estado e fontes já citadas. */
+export interface StreamingPartial {
+  content: string;
+  tools: LiveTool[];
+  citations: Citation[];
+}
 
 interface MessageListProps {
   messages: Message[];
   streaming?: boolean;
-  streamingPartial?: { content: string; tools: { name: string; id: string }[] } | null;
+  streamingPartial?: StreamingPartial | null;
   onRegenerate?: () => void;
   onEditUser?: (id: string, next: string) => void;
+  /** Persiste 👍/👎 (null = remove). Sem ele, as respostas ficam sem voto. */
+  onFeedback?: (messageId: string, input: FeedbackInput | null) => Promise<void>;
   emptyState?: React.ReactNode;
 }
 
@@ -29,13 +39,14 @@ export function MessageList({
   streamingPartial,
   onRegenerate,
   onEditUser,
+  onFeedback,
   emptyState,
 }: MessageListProps) {
   const endRef = React.useRef<HTMLDivElement | null>(null);
 
   React.useEffect(() => {
     endRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' });
-  }, [messages.length, streamingPartial?.content]);
+  }, [messages.length, streamingPartial?.content, streamingPartial?.tools.length]);
 
   if (messages.length === 0 && !streaming) {
     return emptyState ?? <EmptyState />;
@@ -52,6 +63,7 @@ export function MessageList({
             <UserMessage
               key={m.id}
               content={m.content}
+              attachments={m.attachments}
               onEdit={onEditUser ? (next) => onEditUser(m.id, next) : undefined}
             />
           ) : (
@@ -60,7 +72,13 @@ export function MessageList({
               content={m.content}
               toolUses={m.toolUses}
               blocks={m.blocks}
+              citations={m.citations}
               truncated={m.truncated}
+              feedback={m.feedback}
+              onFeedback={onFeedback ? (input) => onFeedback(m.id, input) : undefined}
+              // Id local (antes do `done`, parada manual, aviso de erro): não
+              // existe no banco — o voto daria 404.
+              feedbackDisabled={!isPersistedMessageId(m.id)}
               onRegenerate={idx === messages.length - 1 ? onRegenerate : undefined}
             />
           ),
@@ -68,7 +86,8 @@ export function MessageList({
         {streaming && streamingPartial && (
           <AssistantMessage
             content={streamingPartial.content}
-            toolUses={streamingPartial.tools.map((t) => ({ name: t.name }))}
+            liveTools={streamingPartial.tools}
+            citations={streamingPartial.citations}
             streaming
           />
         )}
