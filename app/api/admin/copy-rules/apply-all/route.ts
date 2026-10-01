@@ -7,6 +7,7 @@ import { NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { requireAdmin } from '@/lib/auth/guard';
 import { invalidateRulesCache } from '@/lib/copy-optimizer/rules';
+import { splitBuyGoodsKey } from '@/lib/connectors/buygoods/affiliateKey';
 import { logger } from '@/lib/logger';
 
 export const runtime = 'nodejs';
@@ -40,7 +41,8 @@ export async function POST(req: Request) {
     where: { platform: { slug: 'buygoods' } },
     select: { externalId: true },
   });
-  const keys = Array.from(new Set(affs.map((a) => a.externalId).filter((k): k is string => !!k)));
+  // A conta é `aff_id@loja`; a regra casa o aff_id cru que a página manda.
+  const keys = Array.from(new Set(affs.map((a) => splitBuyGoodsKey(a.externalId).affId).filter((k): k is string => !!k)));
 
   const existing = await db.affiliateCopyRule.findMany({
     where: { key: { in: keys } },

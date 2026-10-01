@@ -7,6 +7,7 @@
 import { db } from '@/lib/db';
 import { getRulesCached } from './rules';
 import { decideLayer, isValidEmail, isCopyLayer, type CopyLayer } from './decision';
+import { splitBuyGoodsKey } from '@/lib/connectors/buygoods/affiliateKey';
 
 // Platform.id da BuyGoods é estável — resolve 1x e memoiza no processo.
 let buygoodsPlatformId: string | null = null;
@@ -79,7 +80,8 @@ export async function decideCopy(orderIdGlobalRaw: string): Promise<DecideCopyRe
   });
   if (!order) return miss();
 
-  const affId = order.affiliate?.externalId ?? null;
+  // A conta BuyGoods é `aff_id@loja`; regra e página falam o aff_id cru.
+  const affId = order.affiliate?.externalId ? splitBuyGoodsKey(order.affiliate.externalId).affId : null;
   const affName = order.affiliate?.nickname ?? null;
   const email = order.customer?.email ?? null;
   const emailValid = isValidEmail(email);

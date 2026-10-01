@@ -727,11 +727,14 @@ const HANDLERS: Record<string, Handler> = {
     // contas casando (mesmo nick em plataformas diferentes): usa a de venda
     // mais recente e devolve as outras em `alternatives` (antes escolhia
     // calado).
+    // BuyGoods: a conta é `aff_id@loja` (o aff_id é numerado por loja) — o "62"
+    // citado casa todas as lojas, e cada loja é uma pessoa diferente.
     const matches = await db.affiliate.findMany({
       where: {
         OR: [
           { externalId: { equals: id, mode: 'insensitive' } },
           { nickname: { equals: id, mode: 'insensitive' } },
+          ...(id.includes('@') ? [] : [{ externalId: { startsWith: `${id}@` }, platform: { slug: 'buygoods' } }]),
         ],
         ...(hint ? { platform: { slug: hint } } : {}),
       },
@@ -752,7 +755,14 @@ const HANDLERS: Record<string, Handler> = {
     }));
     if (!alternatives.length) return detail;
     return {
-      _meta: { notes: [`"${id}" casa com ${matches.length} contas — este é ${chosen.platform.slug}:${chosen.externalId} (venda mais recente). Pra outra, repita com platform + external_id de alternatives.`] },
+      _meta: {
+        notes: [
+          `"${id}" casa com ${matches.length} contas — este é ${chosen.platform.slug}:${chosen.externalId} (venda mais recente). Pra outra, repita com platform + external_id de alternatives.`,
+          ...(matches.some((m) => m.platform.slug === 'buygoods' && m.externalId.includes('@'))
+            ? ['BuyGoods numera o afiliado por loja (aff_id@loja): o mesmo número em lojas diferentes é outra pessoa — nunca some as contas sem confirmar que são a mesma.']
+            : []),
+        ],
+      },
       ...detail,
       alternatives,
     };

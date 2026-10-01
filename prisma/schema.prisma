@@ -248,6 +248,25 @@ model RecoveryRatePeriod {
   @@index([recoveryAffiliateId, effectiveFrom])
 }
 
+// Registro da separação das contas BuyGoods por loja (migração
+// 20261001120000_buygoods_affiliate_per_store). A BuyGoods numera o aff_id
+// POR LOJA; a conta antiga somava pessoas diferentes. Uma linha por
+// (conta antiga, loja): pra auditar e, se preciso, desfazer.
+model BuyGoodsAffiliateSplit {
+  id                String   @id
+  sourceAffiliateId String   // conta antiga (sem loja)
+  sourceExternalId  String   // aff_id cru
+  store             String   // account_id
+  affiliateId       String   // conta da loja (= sourceAffiliateId na dominante)
+  externalId        String   // aff_id@loja
+  orders            Int
+  kept              Boolean  // loja dominante: ficou com a conta original
+  recoveryDisabled  Boolean  @default(false)
+  createdAt         DateTime @default(now())
+
+  @@index([sourceAffiliateId])
+}
+
 model Customer {
   id          String    @id @default(cuid())
   platformId  String

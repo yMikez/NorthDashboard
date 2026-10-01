@@ -88,8 +88,6 @@ export interface MappingRepo {
   deleteUnmappedByAccounts(accountIds: string[]): Promise<number>;
 }
 
-const norm = (s: string | null | undefined) => (s ?? '').trim().toLowerCase();
-
 export const prismaMappingRepo: MappingRepo = {
   async loadIndexRows() {
     return db.affiliateMapping.findMany({ select: { platform: true, externalId: true, affiliateId: true } });
@@ -164,11 +162,14 @@ export const prismaMappingRepo: MappingRepo = {
       FROM "Affiliate" a
       JOIN "Platform" pl ON a."platformId" = pl.id
       WHERE pl."slug" = ANY(${platforms})
-        AND (LOWER(BTRIM(a."externalId")) = ANY(${ids}) OR LOWER(BTRIM(COALESCE(a."nickname", ''))) = ANY(${ids}))
+        AND (LOWER(BTRIM(a."externalId")) = ANY(${ids}) OR LOWER(BTRIM(COALESCE(a."nickname", ''))) = ANY(${ids})
+             -- BuyGoods: conta \`aff_id@loja\`, par publicado com o aff_id cru.
+             OR (pl."slug" = 'buygoods' AND position('@' IN a."externalId") > 0
+                 AND LOWER(BTRIM(split_part(a."externalId", '@', 1))) = ANY(${ids})))
     `);
     const wanted = new Set(pairs.map((p) => mappingKey(p.platform, p.externalId)));
     return rows
-      .filter((r) => wanted.has(mappingKey(r.slug, norm(r.externalId))) || wanted.has(mappingKey(r.slug, norm(r.nickname))))
+      .filter((r) => candidateExternalIds(r.slug, { externalId: r.externalId, nickname: r.nickname }).some((c) => wanted.has(mappingKey(r.slug, c))))
       .map((r) => ({ id: r.id, platformSlug: r.slug, externalId: r.externalId, nickname: r.nickname, mappedAffiliateId: r.mappedAffiliateId, isInternal: r.isInternal }));
   },
   async listAccounts(platforms) {

@@ -206,7 +206,7 @@ corpo sai em `/api/integrations/orders`):
 | `productId` / `productName` | string | **crus da plataforma**; o mesmo codinome já colidiu na BuyGoods |
 | `family` | string \| null | produto normalizado — **é por aqui que se agrupa** (§3.1.3) |
 | `bottles` | number \| null | frascos enviados (snapshot do fulfillment) |
-| `affiliateId` / `affiliateName` | string \| null | afiliado como a plataforma identifica |
+| `affiliateId` / `affiliateName` | string \| null | afiliado como a plataforma identifica. **BuyGoods: `aff_id@loja`** (ex.: `62@12595`) desde 2026-10-01 — a BuyGoods numera o afiliado por loja (`account_id`), e o mesmo `aff_id` em lojas diferentes é outra pessoa. `0` = sem afiliado, sem loja |
 | `mappedAffiliateId` | string \| null | id do mesmo afiliado no NorthScale Afiliados (cruza contas) |
 | `customerEmail` | string \| null | **dado pessoal** — ver §9 |
 

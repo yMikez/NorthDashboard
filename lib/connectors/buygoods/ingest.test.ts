@@ -83,7 +83,8 @@ describe('parseBuyGoodsIngest', () => {
     expect(o.productName).toBe('TestProd');
     expect(o.productType).toBe('FRONTEND');
 
-    expect(o.affiliateExternalId).toBe('1');
+    // aff_id é por loja: a conta leva o account_id junto.
+    expect(o.affiliateExternalId).toBe('1@12595');
     expect(o.affiliateNickname).toBe('AffID');
 
     expect(o.customerEmail).toBe('johndoe@gmail.com');
@@ -198,5 +199,13 @@ describe('parseBuyGoodsIngest', () => {
       flag_upsell: '',
     });
     expect(o.productType).toBe('FRONTEND');
+  });
+
+  it('mesmo aff_id em lojas diferentes = contas diferentes; "0" segue sem loja', () => {
+    expect(parseBuyGoodsIngest({ ...realPayload, aff_id: '62', account_id: '12595' }).affiliateExternalId).toBe('62@12595');
+    expect(parseBuyGoodsIngest({ ...realPayload, aff_id: '62', account_id: '13457' }).affiliateExternalId).toBe('62@13457');
+    expect(parseBuyGoodsIngest({ ...realPayload, aff_id: '0', account_id: '12595' }).affiliateExternalId).toBe('0');
+    expect(parseBuyGoodsIngest({ ...realPayload, aff_id: '', account_id: '12595' }).affiliateExternalId).toBeNull();
+    expect(parseBuyGoodsIngest({ ...realPayload, account_id: '12592,12592' }).vendorAccount).toBe('12592');
   });
 });

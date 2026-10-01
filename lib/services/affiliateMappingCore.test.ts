@@ -21,6 +21,11 @@ describe('candidateExternalIds — o que cada plataforma manda no webhook de ven
   it('BuyGoods: aff_id (por produto) primeiro, aff_name (username da conta) como fallback', () => {
     expect(candidateExternalIds('buygoods', { externalId: '1234', nickname: 'Joao.Silva' })).toEqual(['1234', 'joao.silva']);
   });
+  it('BuyGoods com loja (aff_id@loja): a chave com loja, depois o aff_id cru que o contrato publica', () => {
+    expect(candidateExternalIds('buygoods', { externalId: '62@13457', nickname: 'MailX' })).toEqual(['62@13457', '62', 'mailx']);
+    const index = buildMappingIndex([{ platform: 'buygoods', externalId: '62', affiliateId: 'af_mailx' }]);
+    expect(resolveAffiliateId(index, 'buygoods', { externalId: '62@13457', nickname: null })).toMatchObject({ affiliateId: 'af_mailx', matchedExternalId: '62' });
+  });
   it('Digistore24: affiliate_name (= Digistore ID) primeiro, affiliate_id numérico depois', () => {
     expect(candidateExternalIds('digistore24', { externalId: '3956536', nickname: 'edugodoy16235294' })).toEqual(['edugodoy16235294', '3956536']);
   });

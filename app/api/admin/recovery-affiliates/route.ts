@@ -16,6 +16,9 @@
 // depois da primeira venda — e essa primeira leva entra contada como front.
 // O formulário da aba não manda essa flag: lá um ID inexistente continua
 // sendo erro, que é o que protege contra dígito errado.
+//
+// BuyGoods: affiliateExternalId aceita o link do checkout ou `ID@loja` (o
+// aff_id é numerado por loja); ID sem loja = 400.
 
 import { NextResponse } from 'next/server';
 import { requireAdmin } from '@/lib/auth/guard';
@@ -73,15 +76,15 @@ export async function POST(req: Request) {
     nickname,
     createIfMissing,
   });
-  if ('error' in res) return NextResponse.json({ error: res.error }, { status: 404 });
+  if ('error' in res) return NextResponse.json({ error: res.error }, { status: res.status ?? 404 });
 
   // Derruba o cache de respostas pra mudança de % refletir já no
   // /api/metrics/recovery (TTL 30s seria confuso logo após salvar).
   clearResponseCache();
 
   logger.info(
-    { actorId: who.actorId, affiliateExternalId, platformSlug, pct: pctNum, nickname, contaCriada: res.created === true },
+    { actorId: who.actorId, affiliateExternalId: res.affiliateExternalId, platformSlug, pct: pctNum, nickname, contaCriada: res.created === true },
     'admin.recovery-affiliates.upsert',
   );
-  return NextResponse.json({ ok: true, conta_criada: res.created === true });
+  return NextResponse.json({ ok: true, conta_criada: res.created === true, affiliateExternalId: res.affiliateExternalId });
 }

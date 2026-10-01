@@ -46,7 +46,11 @@ export function candidateExternalIds(platformSlug: string, ids: AccountIdentifie
   if (!isMappingPlatform(platformSlug)) return [];
   const ext = normalizeExternalId(ids.externalId);
   const nick = normalizeExternalId(ids.nickname);
-  const ordered = platformSlug === 'digistore24' ? [nick, ext] : [ext, nick];
+  // BuyGoods: a conta é `aff_id@loja` (o aff_id é numerado por loja), mas o
+  // NorthScale Afiliados publica o aff_id cru. A chave com loja vem primeiro;
+  // o aff_id cru casa como antes da separação (mesmo comportamento de então).
+  const bare = platformSlug === 'buygoods' && ext && ext.includes('@') ? ext.slice(0, ext.lastIndexOf('@')) : null;
+  const ordered = platformSlug === 'digistore24' ? [nick, ext] : [ext, bare, nick];
   const out: string[] = [];
   for (const c of ordered) {
     if (c && !out.includes(c)) out.push(c);

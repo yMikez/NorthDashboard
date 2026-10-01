@@ -313,7 +313,9 @@ async function dbCandidates(term: string, kinds: Set<EntityKind>, take: number):
       : [],
   ]);
   for (const a of accounts) {
-    const exact = a.externalId.toLowerCase() === lower || (a.nickname ?? '').toLowerCase() === lower;
+    // BuyGoods `aff_id@loja`: o "62" citado é exato pra cada loja (pessoas diferentes).
+    const bareId = a.platform.slug === 'buygoods' ? a.externalId.split('@')[0].toLowerCase() : null;
+    const exact = a.externalId.toLowerCase() === lower || bareId === lower || (a.nickname ?? '').toLowerCase() === lower;
     out.push({
       kind: 'affiliate_account', value: `${a.platform.slug}:${a.externalId}`, label: a.nickname ?? a.externalId, score: exact ? 0.95 : 0.7,
       use: a.mappedAffiliateId ? { affiliate_ids: [a.mappedAffiliateId] } : null,

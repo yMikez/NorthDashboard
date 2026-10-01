@@ -2,7 +2,7 @@
 title: Ressalvas de dados por plataforma
 kind: policy
 description: Buracos e pegadinhas conhecidos do dado (estornos que não chegam, fusos, linhas extras, colisões de produto) que mudam a leitura de um número
-effectiveDate: 2026-09-30
+effectiveDate: 2026-10-01
 ---
 
 # Ressalvas de dados por plataforma
@@ -36,6 +36,7 @@ Entre 2026-08-24 e 2026-09-22 o dashboard registrou ZERO reembolso da BuyGoods s
 - Sessão: order_id_global é POR TRANSAÇÃO; a sessão real (FE + upsells) é o sessid2 — é por ele que funil, frete e AOV agrupam.
 - Papel: o IPN marca "Last Chance" (downsell) como UPSELL; o dashboard corrige pelo nome do produto.
 - Colisão de codename: a BuyGoods reutiliza o mesmo product_codename para produtos diferentes (neu2/neu3/neu6 usados por NeuroMindPro e NeuroPulsePro). A separação é pelo NOME do produto no IPN. NeuroPulsePro ≠ NeuroMindPro.
+- Afiliado é POR LOJA: a BuyGoods numera o aff_id separadamente em cada loja (account_id — uma por produto/marca). O 62 da loja 12595 (Nicolas Yago Zapora) não é o 62 da 12610 (Marco Cunha) nem o 62 da 13457 (MailX). Desde 2026-10-01 a conta do afiliado no dashboard é aff_id@loja (ex.: 62@12595); o histórico foi separado por loja. Antes disso 18 contas somavam pessoas diferentes (cerca de 1.900 vendas, US$ 449 mil creditados à pessoa errada). "0" é venda sem afiliado e fica sem loja. A mesma pessoa tem um aff_id diferente em cada loja — somar as contas dela só pela identidade unificada (parceiro), nunca pelo número.
 - Horário: wall clock America/New_York.
 
 ## JVZoo: IPN por produto, disputa e data do estorno

@@ -10,6 +10,7 @@
 
 import { Prisma } from '@prisma/client';
 import { db } from '../db';
+import { isStorelessBuyGoodsKey, parseBuyGoodsAffiliateRef } from '../connectors/buygoods/affiliateKey';
 
 export interface RecoveryFilters {
   startDate: Date;
@@ -319,6 +320,8 @@ export interface RecoveryAffiliateRow {
   commissionPct: number;
   enabled: boolean;
   note: string | null;
+  /** Conta BuyGoods antiga, sem loja: nunca mais recebe venda (o aff_id é por loja). */
+  storeless: boolean;
   // Histórico de taxas (mais recente primeiro) pro painel de gerência.
   ratePeriods: RatePeriod[];
 }
@@ -344,6 +347,7 @@ export async function listRecoveryAffiliates(): Promise<RecoveryAffiliateRow[]> 
     commissionPct: Number(r.commissionPct),
     enabled: r.enabled,
     note: r.note,
+    storeless: r.affiliate.platform.slug === 'buygoods' && isStorelessBuyGoodsKey(r.affiliate.externalId),
     ratePeriods: r.ratePeriods.map((p) => ({
       commissionPct: Number(p.commissionPct),
       effectiveFrom: p.effectiveFrom.toISOString(),
@@ -362,6 +366,11 @@ const INITIAL_PERIOD_START = new Date(0);
  * o período de taxa vigente (effectiveTo = agora) e abre um novo — vendas
  * antigas continuam comissionadas pela taxa antiga. Lança se o afiliado não
  * existe.
+ *
+ * BuyGoods: o aff_id é numerado POR LOJA, então a conta é `aff_id@loja`. Aceita
+ * o link do checkout do parceiro (traz aff_id e account_id) ou `ID@loja`; o ID
+ * sozinho é recusado — marcar o "62" sem loja creditava o Nicolas (12595) à
+ * MailX (13457).
  */
 export async function upsertRecoveryAffiliate(input: {
   affiliateExternalId: string;
@@ -379,9 +388,15 @@ export async function upsertRecoveryAffiliate(input: {
    * (platformId, externalId) e só atualiza a linha: a marca sobrevive.
    */
   createIfMissing?: boolean;
-}): Promise<{ ok: true; created?: boolean } | { error: string }> {
+}): Promise<{ ok: true; created?: boolean; affiliateExternalId: string } | { error: string; status?: number }> {
+  let externalId = input.affiliateExternalId.trim();
+  if (input.platformSlug === 'buygoods') {
+    const ref = parseBuyGoodsAffiliateRef(externalId);
+    if (!ref.ok) return { error: ref.error, status: 400 };
+    externalId = ref.key;
+  }
   let aff = await db.affiliate.findFirst({
-    where: { externalId: input.affiliateExternalId, platform: { slug: input.platformSlug } },
+    where: { externalId, platform: { slug: input.platformSlug } },
     select: { id: true, nickname: true },
   });
   let createdAccount = false;
@@ -392,7 +407,7 @@ export async function upsertRecoveryAffiliate(input: {
     aff = await db.affiliate.create({
       data: {
         platformId: platform.id,
-        externalId: input.affiliateExternalId,
+        externalId,
         nickname: input.nickname?.trim() || null,
         firstSeenAt: new Date(),
       },
@@ -469,5 +484,5 @@ export async function upsertRecoveryAffiliate(input: {
       }
     }
   });
-  return { ok: true, created: createdAccount };
+  return { ok: true, created: createdAccount, affiliateExternalId: externalId };
 }

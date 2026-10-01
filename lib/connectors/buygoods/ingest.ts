@@ -19,6 +19,9 @@
 // venda que ocorreu 12:43 BRT (= 15:43 UTC = 11:43 EDT). ANTES tratávamos como
 // UTC, o que adiantava todo orderedAt em 4-5h e jogava vendas de madrugada BRT
 // pro dia anterior. Agora convertemos via wallClockToUtc('America/New_York').
+//
+// Gotcha 3: aff_id é numerado POR LOJA (account_id) — o 62 da 12595 não é o
+// 62 da 13457. A conta do afiliado é `aff_id@loja` (affiliateKey.ts).
 
 import type {
   NormalizedOrder,
@@ -27,6 +30,7 @@ import type {
 } from '../../shared/types';
 import { wallClockToUtc } from '../../shared/datetime';
 import type { BuyGoodsPayload } from './types';
+import { buyGoodsAffiliateKey, buyGoodsStore } from './affiliateKey';
 
 export function parseBuyGoodsIngest(payload: BuyGoodsPayload): NormalizedOrder {
   const action = (payload.action_type ?? '').toLowerCase().trim();
@@ -62,13 +66,13 @@ export function parseBuyGoodsIngest(payload: BuyGoodsPayload): NormalizedOrder {
     externalId,
     parentExternalId: globalId,
     previousTransactionId: null,
-    vendorAccount: payload.account_id || null,
+    vendorAccount: buyGoodsStore(payload.account_id),
 
     productExternalId,
     productName: cleanString(payload.product_name) || cleanString(payload.product) || '',
     productType,
 
-    affiliateExternalId: notEmpty(payload.aff_id),
+    affiliateExternalId: buyGoodsAffiliateKey(notEmpty(payload.aff_id), payload.account_id),
     affiliateNickname: notEmpty(payload.aff_name),
 
     customerExternalId: notEmpty(payload.user_id) ?? notEmpty(payload.customer_emailaddress),

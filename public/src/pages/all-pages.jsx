@@ -7553,7 +7553,7 @@ function RecoveryManage({ affs, onChanged }) {
     if (!ext.trim()) { setMsg('Informe o ID do afiliado.'); return; }
     setBusy(true); setMsg(null);
     try {
-      await window.NSApi.addRecoveryAffiliate({
+      const r = await window.NSApi.addRecoveryAffiliate({
         affiliateExternalId: ext.trim(),
         platformSlug: plat,
         commissionPct: Number(pct),
@@ -7561,8 +7561,10 @@ function RecoveryManage({ affs, onChanged }) {
         nickname: empresa.trim() || null,
         createIfMissing: criarSemVenda === true,
       });
+      // BuyGoods: o servidor resolve link/ID@loja na conta — mostra qual ficou.
+      const conta = r && r.affiliateExternalId ? ` (${r.affiliateExternalId})` : '';
       setExt(''); setSemVenda(null);
-      setMsg(criarSemVenda ? 'Conta pré-cadastrada — a marca vale da primeira venda em diante.' : 'Afiliado marcado.');
+      setMsg(criarSemVenda ? `Conta pré-cadastrada${conta} — a marca vale da primeira venda em diante.` : `Afiliado marcado${conta}.`);
       onChanged();
     } catch (e) {
       const erro = e.message || 'falha';
@@ -7587,7 +7589,12 @@ function RecoveryManage({ affs, onChanged }) {
     <div className="panel" style={{ marginBottom: 12 }}>
       <div className="panel-head"><div className="panel-title">Afiliados de recuperação</div></div>
       <div style={{ display: 'flex', gap: 10, alignItems: 'end', marginTop: 10, flexWrap: 'wrap' }}>
-        <label style={coFieldLabel}><span>ID do afiliado</span><input value={ext} onChange={(e) => { setExt(e.target.value); setSemVenda(null); }} placeholder="3722234" style={{ ...coInputStyle, width: 150 }}/></label>
+        <label style={coFieldLabel}><span>{plat === 'buygoods' ? 'Link do checkout ou ID@loja' : 'ID do afiliado'}</span><input value={ext} onChange={(e) => {
+          const v = e.target.value;
+          setExt(v); setSemVenda(null);
+          // Link de checkout colado: a plataforma é BuyGoods.
+          if (/buygoods\.com|[?&]aff_id=/i.test(v)) setPlat('buygoods');
+        }} placeholder={plat === 'buygoods' ? 'https://buygoods.com/secure/checkout.html?…  ou  62@13457' : '3722234'} style={{ ...coInputStyle, width: plat === 'buygoods' ? 320 : 150 }}/></label>
         <label style={coFieldLabel}><span>Empresa</span>
           <input value={empresa} onChange={(e) => setEmpresa(e.target.value)} list="ns-empresas-recuperacao" placeholder="MailX" style={{ ...coInputStyle, width: 160 }}/>
           <datalist id="ns-empresas-recuperacao">{empresas.map((n) => <option key={n} value={n}/>)}</datalist>
@@ -7613,6 +7620,10 @@ function RecoveryManage({ affs, onChanged }) {
         A <strong>empresa</strong> é o que agrupa as contas: a mesma parceira pode ter um ID por plataforma, e a aba
         soma tudo numa linha só. Uma parceira com vários IDs? Marque um por vez com a mesma empresa.
       </div>
+      <div style={{ marginTop: 6, fontSize: 10, color: 'var(--fg5)' }}>
+        <strong>BuyGoods</strong> numera o afiliado <strong>por loja</strong>: o 62 de uma loja é outra pessoa na loja ao lado.
+        Cole o link do checkout do parceiro (ele traz o aff_id e o account_id) — a conta fica como <span className="cell-mono">ID@loja</span>.
+      </div>
       <div style={{ marginTop: 8, fontSize: 10, color: 'var(--fg5)' }}>
         Pra alterar a % de quem já está marcado, re-marque com a nova % — as vendas antigas continuam
         registradas com a taxa antiga e um novo contador começa com a nova.
@@ -7627,11 +7638,25 @@ function RecoveryManage({ affs, onChanged }) {
               return (
                 <div key={a.id} style={{ padding: '7px 0', borderTop: '1px solid var(--border-soft)' }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <span className="cell-mono" style={{ fontSize: 12 }}>{a.nickname || a.affiliateExternalId}<span style={{ color: 'var(--fg5)' }}> · {a.affiliateExternalId} · {a.platformSlug} · </span><span style={{ color: 'var(--glow-cyan)' }}>{(a.commissionPct * 100).toFixed(0)}% vigente</span></span>
+                    <span className="cell-mono" style={{ fontSize: 12 }}>{a.nickname || a.affiliateExternalId}<span style={{ color: 'var(--fg5)' }}> · {a.affiliateExternalId} · {a.platformSlug} · </span>{a.enabled === false
+                      ? <span style={{ color: 'var(--warning)' }}>{(a.commissionPct * 100).toFixed(0)}% · desativada</span>
+                      : <span style={{ color: 'var(--glow-cyan)' }}>{(a.commissionPct * 100).toFixed(0)}% vigente</span>}</span>
                     <button className="btn btn-ghost" style={{ padding: '4px 8px' }} onClick={() => remove(a.id, a.nickname || a.affiliateExternalId)} title="Remover"><Icon name="trash-2" size={12}/></button>
                   </div>
                   {a.note && (
                     <div className="cell-mono" style={{ fontSize: 10, color: 'var(--fg4)', marginTop: 2 }}>empresa: {a.note}</div>
+                  )}
+                  {a.enabled === false && (
+                    <div style={{ fontSize: 10, color: 'var(--warning)', marginTop: 2 }}>
+                      Desativada — não entra na Recuperação nem no Lucro real. {a.platformSlug === 'buygoods'
+                        ? 'A conta misturava lojas da BuyGoods; marque de novo com o link do checkout certo.'
+                        : 'Marque de novo pra reativar.'}
+                    </div>
+                  )}
+                  {a.storeless && (
+                    <div style={{ fontSize: 10, color: 'var(--warning)', marginTop: 2 }}>
+                      Sem loja — esta conta BuyGoods não recebe mais vendas (o ID é por loja). Remova e marque de novo com o link do checkout.
+                    </div>
                   )}
                   {history.length > 0 && (
                     <div className="cell-mono" style={{ fontSize: 10, color: 'var(--fg5)', marginTop: 2 }}>
