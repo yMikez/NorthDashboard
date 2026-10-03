@@ -45,6 +45,12 @@ export interface LoaderConfig {
   pv: LoaderVsl | null;
   /** endpoint do beacon (null = não rastreia) */
   e: string | null;
+  /** de onde vem o afiliado nesta plataforma: aid (URL, JVZoo) | mem (memória da página de vendas, BuyGoods) */
+  af?: 'aid' | 'mem' | null;
+  /** regras por afiliado: hash(chave|afiliado) → VSL */
+  ar?: Record<string, LoaderVsl> | null;
+  /** validade da memória do afiliado, em horas */
+  am?: number;
 }
 
 /** Hosts de checkout: clique num link pra eles = aceitou a oferta. */
@@ -116,8 +122,27 @@ const LOADER_SOURCE = String.raw`(function () {
     return null;
   }
 
+  // Afiliado lido na página (não é dado pessoal): JVZoo pelo aid da URL;
+  // BuyGoods pela memória que a página de vendas gravou (aff_id@loja).
+  function affiliate() {
+    if (C.af === 'aid') {
+      var v = param('aid');
+      return v && /^[0-9]{1,20}$/.test(v) ? v : null;
+    }
+    if (C.af === 'mem') {
+      try {
+        var m = JSON.parse(sget('localStorage', 'ns_aff') || 'null');
+        if (m && m.p === 'buygoods' && typeof m.k === 'string' && /^[0-9]{1,20}@[0-9]{1,12}$/.test(m.k) &&
+            typeof m.t === 'number' && Date.now() - m.t < (C.am || 6) * 3600000) return m.k;
+      } catch (e) {}
+    }
+    return null;
+  }
+
   var previewMode = !!param('ns_vsl_preview');
-  var arm = null, vsl = null, testId = null, pitch = null, player = null;
+  var aff = null;
+  try { aff = affiliate(); } catch (e) { aff = null; }
+  var arm = null, vsl = null, testId = null, pitch = null, player = null, viaRule = false;
   try {
     window.NS_VSL_LOADED = true;
     if (window._vturbPlayerLoaded) {
@@ -129,7 +154,10 @@ const LOADER_SOURCE = String.raw`(function () {
         vsl = C.pv;
       } else if (C.on) {
         vsl = C.v;
-        if (!previewMode && C.t && C.t.arms && C.t.arms.length) {
+        // Regra do afiliado vence o teste A/B (quem tem regra fica fora do teste).
+        var ruled = aff && C.ar ? C.ar[djb2(C.k + '|' + aff).toString(36)] : null;
+        if (ruled) { vsl = ruled; viaRule = true; }
+        if (!viaRule && !previewMode && C.t && C.t.arms && C.t.arms.length) {
           var vid = sget('localStorage', 'ns_vsl_vid');
           if (!vid) { vid = rid(); sset('localStorage', 'ns_vsl_vid', vid); }
           var saved = sget('localStorage', 'ns_vsl_t_' + C.t.id);
@@ -163,7 +191,7 @@ const LOADER_SOURCE = String.raw`(function () {
     inject(fallbackSrc());
     return;
   }
-  window.NS_VSL = { key: C.k, player: player, pitch: pitch, testId: testId, armId: arm ? arm.id : null, preview: previewMode };
+  window.NS_VSL = { key: C.k, player: player, pitch: pitch, testId: testId, armId: arm ? arm.id : null, affiliate: aff, affiliateRule: viaRule, preview: previewMode };
 
   var lastTu = 0;
   el.addEventListener('player:timeupdate', function (e) {
@@ -216,7 +244,7 @@ const LOADER_SOURCE = String.raw`(function () {
     if (once && sent[type]) return;
     sent[type] = true;
     var body = JSON.stringify({
-      k: C.k, v: visit, pl: player, t: testId, a: arm ? arm.id : null, e: type, s: maxSec,
+      k: C.k, v: visit, pl: player, t: testId, a: arm ? arm.id : null, af: aff, e: type, s: maxSec,
       sk: sk ? sk.slice(0, 160) : null, u: (location.host + location.pathname).slice(0, 200)
     });
     try { if (navigator.sendBeacon && navigator.sendBeacon(C.e, body)) return; } catch (e) {}

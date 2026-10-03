@@ -2610,3 +2610,14 @@ button:disabled:hover, .btn:disabled:hover { transform: none; filter: none; }
 .vsl-sr-only { position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
 .vsl-note { display: flex; gap: 10px; align-items: flex-start; padding: 10px 12px; border-radius: var(--r-md); background: var(--bg-hover); color: var(--fg2); font-size: 13px; line-height: 20px; }
 .vsl-note > svg { flex: 0 0 auto; margin-top: 3px; color: var(--accent); }
+.vsl-details { margin-top: 10px; border: 1px solid var(--border-soft); border-radius: var(--r-md); padding: 8px 12px; }
+.vsl-details > summary { cursor: pointer; font-size: 13px; font-weight: 500; color: var(--fg2); min-height: 28px; display: flex; align-items: center; }
+.vsl-details[open] > summary { margin-bottom: 4px; }
+.vsl-aff-add { margin-top: 14px; padding-top: 12px; border-top: 1px dashed var(--border-soft); }
+.vsl-aff-list { margin-top: 6px; max-height: 232px; overflow-y: auto; border: 1px solid var(--border-soft); border-radius: var(--r-md); }
+.vsl-aff-group { padding: 6px 10px 4px; font-size: 11px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; color: var(--fg4); }
+.vsl-aff-option { display: flex; justify-content: space-between; gap: 12px; width: 100%; min-height: 36px; padding: 6px 10px; background: none; border: 0; border-top: 1px solid var(--border-soft); color: var(--fg2); font: inherit; font-size: 13px; text-align: left; cursor: pointer; }
+.vsl-aff-option:hover, .vsl-aff-option:focus-visible { background: var(--bg-hover); color: var(--fg1); }
+.vsl-aff-option > span:first-child { min-width: 0; overflow-wrap: anywhere; }
+.vsl-aff-option > span:last-child { flex: 0 0 auto; }
+.vsl-aff-picked { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 6px 6px 6px 12px; border: 1px solid var(--accent); border-radius: var(--r-md); background: var(--bg-hover); font-size: 13px; }

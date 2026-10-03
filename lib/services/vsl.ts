@@ -12,7 +12,8 @@ import { clearResponseCache } from '../cache/responseCache';
 import { getFilterOptions } from './filterOptions';
 import { VSL_STAGES, FE_BOTTLE_OPTIONS, isVslStage, pageKeyFor, parsePitch, formatPitch, PAGE_KEY_RE, type VslStage } from '../vsl/catalog';
 import { parseVturbEmbed } from '../vsl/embed';
-import { buildVslSnippet } from '../vsl/snippet';
+import { buildAffiliateMemorySnippet, buildVslSnippet } from '../vsl/snippet';
+import { AFFILIATE_KEY_RE, AFFILIATE_MEMORY_HOURS, affRuleHash, affiliateKeyReadable, affiliateSourceFor } from '../vsl/affiliate';
 import { buildLoaderScript, type LoaderConfig, type LoaderVsl } from '../vsl/loader';
 
 export function publicOrigin(): string {
@@ -60,7 +61,12 @@ export function invalidateVslCaches(): void {
 
 async function buildIndex(): Promise<PageIndex> {
   const [pages, vsls] = await Promise.all([
-    db.vslPage.findMany({ include: { tests: { where: { status: { in: ['running', 'paused'] } }, include: { arms: true } } } }),
+    db.vslPage.findMany({
+      include: {
+        tests: { where: { status: { in: ['running', 'paused'] } }, include: { arms: true } },
+        affRules: { where: { enabled: true } },
+      },
+    }),
     db.vsl.findMany(),
   ]);
   const vslById = new Map(vsls.map((v) => [v.id, v]));
@@ -87,11 +93,30 @@ async function buildIndex(): Promise<PageIndex> {
         v: cur ? toLoaderVsl(cur) : null,
         t: running && arms.length >= 2 ? { id: running.id, arms } : null,
         pv: pv ? toLoaderVsl(pv) : null,
+        af: affiliateSourceFor(p.platform),
+        ar: rulesFor(p.key, p.platform, p.affRules, vslById),
+        am: AFFILIATE_MEMORY_HOURS,
         e: endpoint,
       },
     });
   }
   return { at: Date.now(), byKey, vslByPlayer: new Map(vsls.map((v) => [v.playerId, v.id])) };
+}
+
+/** Regras ativas da página no formato do script: hash(chave|afiliado) → VSL. */
+function rulesFor(
+  pageKey: string,
+  platform: string,
+  rules: Array<{ affiliateExternalId: string; vslId: string }>,
+  vslById: Map<string, VslRow>,
+): Record<string, LoaderVsl> | null {
+  if (!affiliateSourceFor(platform) || !rules.length) return null;
+  const out: Record<string, LoaderVsl> = {};
+  for (const r of rules) {
+    const v = vslById.get(r.vslId);
+    if (v && !v.archived) out[affRuleHash(pageKey, r.affiliateExternalId)] = toLoaderVsl(v);
+  }
+  return Object.keys(out).length ? out : null;
 }
 
 /**
@@ -167,6 +192,8 @@ export async function recordVslEvent(
 
   // A VSL vem do player que TOCOU (não do que o banco acha que está no ar):
   // reserva antiga no snippet, player carregado por outro script, tudo cai certo.
+  const afRaw = str(b.af, 40);
+  const affiliateKey = afRaw && AFFILIATE_KEY_RE.test(afRaw) ? afRaw : null;
   const player = str(b.pl, 24);
   const vslId = player && PLAYER_RE.test(player) ? idx.vslByPlayer.get(player) ?? null : null;
   // Braço só conta em teste aberto e quando o player é o do braço.
@@ -183,7 +210,7 @@ export async function recordVslEvent(
   const originHost = hostOf(meta.origin);
   const pageUrl = urlClean && originHost && hostOf(urlClean) === originHost ? urlClean : null;
 
-  await db.$executeRaw(visitUpsertSql({ visitId, pageId: page.pageId, vslId, testId, armId, platform: page.platform, sessionKey, pageUrl, type, second: sec }));
+  await db.$executeRaw(visitUpsertSql({ visitId, pageId: page.pageId, vslId, testId, armId, platform: page.platform, sessionKey, affiliateKey, pageUrl, type, second: sec }));
 
   // "Visto em" da página — no máximo uma escrita por minuto por página. O
   // endereço só é gravado na primeira vez (ninguém troca o link da página
@@ -203,16 +230,17 @@ export async function recordVslEvent(
 /** Upsert da visita: cada evento só preenche o que ainda está vazio. */
 export function visitUpsertSql(e: {
   visitId: string; pageId: string; vslId: string | null; testId: string | null; armId: string | null;
-  platform: string; sessionKey: string | null; pageUrl: string | null; type: string; second: number;
+  platform: string; sessionKey: string | null; affiliateKey?: string | null; pageUrl: string | null; type: string; second: number;
 }): Prisma.Sql {
   const { visitId, vslId, testId, armId, sessionKey, pageUrl, type } = e;
+  const affiliateKey = e.affiliateKey ?? null;
   const now = Prisma.sql`now()`;
   const at = (t: string) => (type === t ? now : Prisma.sql`NULL`);
   const playAt = type === 'play' || type === 'pitch' ? now : Prisma.sql`NULL`;
   return Prisma.sql`
-    INSERT INTO "VslVisit" (id, "pageId", "vslId", "testId", "armId", platform, "sessionKey", "pageUrl",
+    INSERT INTO "VslVisit" (id, "pageId", "vslId", "testId", "armId", platform, "sessionKey", "affiliateKey", "pageUrl",
                             "firstAt", "lastAt", "playAt", "pitchAt", "acceptAt", "declineAt", "maxSecond")
-    VALUES (${visitId}, ${e.pageId}, ${vslId}, ${testId}, ${armId}, ${e.platform}, ${sessionKey}, ${pageUrl},
+    VALUES (${visitId}, ${e.pageId}, ${vslId}, ${testId}, ${armId}, ${e.platform}, ${sessionKey}, ${affiliateKey}, ${pageUrl},
             now(), now(), ${playAt}, ${at('pitch')}, ${at('accept')}, ${at('decline')}, ${e.second})
     ON CONFLICT (id) DO UPDATE SET
       "lastAt" = now(),
@@ -221,7 +249,8 @@ export function visitUpsertSql(e: {
       "acceptAt" = COALESCE("VslVisit"."acceptAt", EXCLUDED."acceptAt"),
       "declineAt" = COALESCE("VslVisit"."declineAt", EXCLUDED."declineAt"),
       "maxSecond" = GREATEST("VslVisit"."maxSecond", EXCLUDED."maxSecond"),
-      "sessionKey" = COALESCE("VslVisit"."sessionKey", EXCLUDED."sessionKey")
+      "sessionKey" = COALESCE("VslVisit"."sessionKey", EXCLUDED."sessionKey"),
+      "affiliateKey" = COALESCE("VslVisit"."affiliateKey", EXCLUDED."affiliateKey")
     WHERE "VslVisit"."pageId" = EXCLUDED."pageId"`;
 }
 
@@ -249,7 +278,7 @@ function vslDto(v: VslRow) {
 }
 
 export async function getVslState() {
-  const [vsls, pages, tests, changes, options, recent] = await Promise.all([
+  const [vsls, pages, tests, changes, options, recent, rules, coverage] = await Promise.all([
     db.vsl.findMany({ orderBy: [{ archived: 'asc' }, { name: 'asc' }] }),
     db.vslPage.findMany({ orderBy: [{ family: 'asc' }, { stage: 'asc' }, { platform: 'asc' }, { variant: 'asc' }] }),
     db.vslTest.findMany({ include: { arms: true }, orderBy: { startedAt: 'desc' } }),
@@ -258,20 +287,30 @@ export async function getVslState() {
     db.$queryRaw<Array<{ pageId: string; n: number }>>`
       SELECT "pageId", COUNT(*)::int AS n FROM "VslVisit"
       WHERE "firstAt" > now() - interval '24 hours' GROUP BY 1`,
+    db.vslAffiliateRule.findMany({ orderBy: { createdAt: 'asc' } }),
+    db.$queryRaw<Array<{ pageId: string; n: number; withAff: number }>>`
+      SELECT "pageId", COUNT(*)::int AS n, COUNT("affiliateKey")::int AS "withAff" FROM "VslVisit"
+      WHERE "firstAt" > now() - interval '7 days' GROUP BY 1`,
   ]);
+  const ruleAffs = rules.length
+    ? await db.affiliate.findMany({ where: { id: { in: [...new Set(rules.map((r) => r.affiliateId))] } }, select: { id: true, nickname: true, externalId: true } })
+    : [];
+  const affById = new Map(ruleAffs.map((a) => [a.id, a]));
+  const coverageByPage = new Map(coverage.map((c) => [c.pageId, c]));
   const vslById = new Map(vsls.map((v) => [v.id, v]));
   const visits24 = new Map(recent.map((r) => [r.pageId, r.n]));
   const origin = publicOrigin();
 
   // fallbacks = páginas cujo snippet tem esta VSL como reserva (impede arquivar).
-  const usage = new Map<string, { pages: number; tests: number; fallbacks: number }>();
-  const use = (id: string | null | undefined, k: 'pages' | 'tests' | 'fallbacks') => {
+  const usage = new Map<string, { pages: number; tests: number; fallbacks: number; rules: number }>();
+  const use = (id: string | null | undefined, k: 'pages' | 'tests' | 'fallbacks' | 'rules') => {
     if (!id) return;
-    const u = usage.get(id) ?? { pages: 0, tests: 0, fallbacks: 0 };
+    const u = usage.get(id) ?? { pages: 0, tests: 0, fallbacks: 0, rules: 0 };
     u[k] += 1;
     usage.set(id, u);
   };
   for (const p of pages) { use(p.vslId, 'pages'); use(p.fallbackVslId, 'fallbacks'); }
+  for (const r of rules) use(r.vslId, 'rules');
   for (const t of tests) if (t.status !== 'finished') for (const a of t.arms) use(a.vslId, 'tests');
 
   const testDto = (t: (typeof tests)[number]) => ({
@@ -289,13 +328,15 @@ export async function getVslState() {
     origin,
     now: new Date().toISOString(),
     previewMinutes: PREVIEW_MINUTES,
+    affiliateMemoryHours: AFFILIATE_MEMORY_HOURS,
+    affiliateMemorySnippet: buildAffiliateMemorySnippet(),
     options: {
       families: options.families.map((f) => f.id),
       platforms: options.platforms.map((p) => ({ id: p.id, label: p.label })),
       stages: VSL_STAGES.map((s) => ({ id: s.id, label: s.label })),
       feBottles: FE_BOTTLE_OPTIONS,
     },
-    vsls: vsls.map((v) => ({ ...vslDto(v), usage: usage.get(v.id) ?? { pages: 0, tests: 0, fallbacks: 0 } })),
+    vsls: vsls.map((v) => ({ ...vslDto(v), usage: usage.get(v.id) ?? { pages: 0, tests: 0, fallbacks: 0, rules: 0 } })),
     pages: pages.map((p) => {
       const fb = p.fallbackVslId ? vslById.get(p.fallbackVslId) : undefined;
       const open = tests.find((t) => t.pageId === p.id && t.status !== 'finished');
@@ -318,6 +359,17 @@ export async function getVslState() {
         previewUntil: p.previewUntil?.toISOString() ?? null,
         createdAt: p.createdAt.toISOString(),
         test: open ? testDto(open) : null,
+        affiliateSource: affiliateSourceFor(p.platform),
+        affiliateCoverage7d: { visits: coverageByPage.get(p.id)?.n ?? 0, withAffiliate: coverageByPage.get(p.id)?.withAff ?? 0 },
+        affRules: rules.filter((r) => r.pageId === p.id).map((r) => ({
+          id: r.id,
+          affiliateId: r.affiliateId,
+          affiliateExternalId: r.affiliateExternalId,
+          affiliateName: affById.get(r.affiliateId)?.nickname ?? null,
+          vslId: r.vslId,
+          enabled: r.enabled,
+          createdAt: r.createdAt.toISOString(),
+        })),
         scriptUrl: `${origin}/api/vsl/p/${p.key}.js`,
         snippet: fb
           ? buildVslSnippet({
@@ -345,6 +397,60 @@ export async function getVslState() {
   };
 }
 
+// ── Afiliados pra regra (seletor da gaveta da página) ───────────────────
+
+export interface AffiliateCandidate {
+  id: string;
+  externalId: string;
+  nickname: string | null;
+  /** visitas desta página nos últimos 30 dias com esse afiliado */
+  visits30d: number;
+  lastOrderAt: string | null;
+}
+
+/**
+ * Candidatos a regra numa página: primeiro quem já passou pela página (o ID
+ * que a página leu é garantidamente o que a regra vai comparar), depois a
+ * busca nas contas da plataforma por nome ou ID.
+ */
+export async function affiliateCandidates(pageId: string, q: string): Promise<{ platform: string; seen: AffiliateCandidate[]; results: AffiliateCandidate[] }> {
+  const page = await db.vslPage.findUnique({ where: { id: pageId }, select: { platform: true } });
+  if (!page) throw new VslActionError('Página não encontrada.', 404);
+  const platform = await db.platform.findUnique({ where: { slug: page.platform }, select: { id: true } });
+  if (!platform) return { platform: page.platform, seen: [], results: [] };
+
+  const seenRows = await db.$queryRaw<Array<{ key: string; n: number }>>`
+    SELECT "affiliateKey" AS key, COUNT(*)::int AS n FROM "VslVisit"
+    WHERE "pageId" = ${pageId} AND "affiliateKey" IS NOT NULL AND "firstAt" > now() - interval '30 days'
+    GROUP BY 1 ORDER BY 2 DESC LIMIT 30`;
+  const seenCount = new Map(seenRows.map((r) => [r.key, r.n]));
+  const select = { id: true, externalId: true, nickname: true, lastOrderAt: true } as const;
+  const toDto = (a: { id: string; externalId: string; nickname: string | null; lastOrderAt: Date | null }): AffiliateCandidate => ({
+    id: a.id, externalId: a.externalId, nickname: a.nickname,
+    visits30d: seenCount.get(a.externalId) ?? 0, lastOrderAt: a.lastOrderAt?.toISOString() ?? null,
+  });
+
+  const seenAffs = seenRows.length
+    ? await db.affiliate.findMany({ where: { platformId: platform.id, externalId: { in: seenRows.map((r) => r.key) } }, select })
+    : [];
+  const seen = seenAffs.map(toDto).sort((a, b) => b.visits30d - a.visits30d);
+
+  const term = q.trim().slice(0, 60);
+  const results = (await db.affiliate.findMany({
+    where: {
+      platformId: platform.id,
+      ...(term ? { OR: [{ nickname: { contains: term, mode: 'insensitive' as const } }, { externalId: { startsWith: term } }] } : {}),
+    },
+    orderBy: { lastOrderAt: { sort: 'desc', nulls: 'last' } },
+    take: 40,
+    select,
+  }))
+    .filter((a) => affiliateKeyReadable(page.platform, a.externalId))
+    .slice(0, 20)
+    .map(toDto);
+  return { platform: page.platform, seen, results };
+}
+
 // ── Ações ────────────────────────────────────────────────────────────────
 
 export class VslActionError extends Error {
@@ -358,7 +464,7 @@ type Tx = Prisma.TransactionClient;
 async function log(
   tx: Tx,
   actor: VslActor,
-  c: { kind: string; detail: string; pageId?: string | null; pageKey?: string | null; vslId?: string | null; testId?: string | null; fromVslId?: string | null; toVslId?: string | null },
+  c: { kind: string; detail: string; pageId?: string | null; pageKey?: string | null; vslId?: string | null; testId?: string | null; ruleId?: string | null; fromVslId?: string | null; toVslId?: string | null },
 ) {
   await tx.vslChange.create({
     data: {
@@ -368,6 +474,7 @@ async function log(
       pageKey: c.pageKey ?? null,
       vslId: c.vslId ?? null,
       testId: c.testId ?? null,
+      ruleId: c.ruleId ?? null,
       fromVslId: c.fromVslId ?? null,
       toVslId: c.toVslId ?? null,
       actorId: actor.id,
@@ -480,7 +587,8 @@ export async function vslAction(body: Record<string, unknown>, actor: VslActor):
               tx.vslPage.count({ where: { OR: [{ vslId: v.id }, { fallbackVslId: v.id }] } }),
               tx.vslTestArm.count({ where: { vslId: v.id } }),
             ]);
-            if (inPages || inTests) {
+            const inRules = await tx.vslAffiliateRule.count({ where: { vslId: v.id } });
+            if (inPages || inTests || inRules) {
               throw new VslActionError(`"${v.name}" já está em uso — para outro vídeo, cadastre uma VSL nova (assim a métrica de cada vídeo fica separada).`);
             }
             const dup = await tx.vsl.findFirst({ where: { playerId: parsed.embed.playerId, id: { not: v.id } } });
@@ -502,12 +610,17 @@ export async function vslAction(body: Record<string, unknown>, actor: VslActor):
         const v = await vslOrThrow(tx, body.id, { allowArchived: true });
         const archive = action === 'archive_vsl';
         if (archive) {
-          const [pagesUsing, armsUsing] = await Promise.all([
+          const [pagesUsing, armsUsing, rulesUsing] = await Promise.all([
             tx.vslPage.findMany({ where: { OR: [{ vslId: v.id }, { fallbackVslId: v.id }] } }),
             tx.vslTestArm.findMany({ where: { vslId: v.id, test: { status: { in: ['running', 'paused'] } } }, include: { test: { include: { page: true } } } }),
+            tx.vslAffiliateRule.findMany({ where: { vslId: v.id }, include: { page: true } }),
           ]);
-          if (pagesUsing.length || armsUsing.length) {
-            const where = [...pagesUsing.map(pageLabel), ...armsUsing.map((a) => `teste em ${pageLabel(a.test.page)}`)];
+          if (pagesUsing.length || armsUsing.length || rulesUsing.length) {
+            const where = [
+              ...pagesUsing.map(pageLabel),
+              ...armsUsing.map((a) => `teste em ${pageLabel(a.test.page)}`),
+              ...rulesUsing.map((r) => `regra de afiliado em ${pageLabel(r.page)}`),
+            ];
             throw new VslActionError(`"${v.name}" ainda está em uso (${[...new Set(where)].join('; ')}). Troque antes de arquivar.`);
           }
         }
@@ -537,6 +650,62 @@ export async function vslAction(body: Record<string, unknown>, actor: VslActor):
         });
         await log(tx, actor, { kind: 'page_created', pageId: p.id, pageKey: key, toVslId: v.id, vslId: v.id, detail: `Página ${pageLabel(p)} criada com "${v.name}" (também é a reserva do snippet).` });
         return { id: p.id, message: `Página criada. Copie o snippet e cole no lugar do player.` };
+      }
+
+      case 'create_aff_rule': {
+        const p = await pageOrThrow(tx, body.pageId);
+        if (!affiliateSourceFor(p.platform)) {
+          throw new VslActionError(`Regra por afiliado ainda não existe pra ${p.platform}: a página não recebe o afiliado.`);
+        }
+        const v = await vslOrThrow(tx, body.vslId);
+        const aff = typeof body.affiliateId === 'string'
+          ? await tx.affiliate.findUnique({ where: { id: body.affiliateId }, include: { platform: true } })
+          : null;
+        if (!aff || aff.platform.slug !== p.platform) throw new VslActionError('Afiliado não encontrado nesta plataforma.', 404);
+        const dup = await tx.vslAffiliateRule.findUnique({ where: { pageId_affiliateId: { pageId: p.id, affiliateId: aff.id } } });
+        if (dup) throw new VslActionError('Esse afiliado já tem regra nesta página — troque a VSL na regra que já existe.');
+        if (!affiliateKeyReadable(p.platform, aff.externalId)) {
+          throw new VslActionError(`A conta ${aff.externalId} não tem o formato que a página lê${p.platform === 'buygoods' ? ' (BuyGoods: aff_id@loja)' : ''}.`);
+        }
+        const r = await tx.vslAffiliateRule.create({
+          data: { pageId: p.id, affiliateId: aff.id, affiliateExternalId: aff.externalId, vslId: v.id, createdById: actor.id },
+        });
+        await log(tx, actor, { kind: 'aff_rule_created', pageId: p.id, pageKey: p.key, ruleId: r.id, vslId: v.id, toVslId: v.id,
+          detail: `${pageLabel(p)}: afiliado ${aff.nickname ?? aff.externalId} (${aff.externalId}) passa a ver "${v.name}".` });
+        return { id: r.id, message: `Regra criada: ${aff.nickname ?? aff.externalId} vê "${v.name}" — entra na página em até 1 minuto.` };
+      }
+
+      case 'update_aff_rule':
+      case 'delete_aff_rule': {
+        const r = typeof body.ruleId === 'string'
+          ? await tx.vslAffiliateRule.findUnique({ where: { id: body.ruleId }, include: { page: true, vsl: true } })
+          : null;
+        if (!r) throw new VslActionError('Regra não encontrada.', 404);
+        const aff = await tx.affiliate.findUnique({ where: { id: r.affiliateId }, select: { nickname: true, externalId: true } });
+        const who = aff?.nickname ?? r.affiliateExternalId;
+        if (action === 'delete_aff_rule') {
+          await tx.vslAffiliateRule.delete({ where: { id: r.id } });
+          await log(tx, actor, { kind: 'aff_rule_deleted', pageId: r.pageId, pageKey: r.page.key, ruleId: r.id,
+            detail: `${pageLabel(r.page)}: regra do afiliado ${who} removida (volta pra VSL da página / teste).` });
+          return { id: r.id, message: 'Regra removida.' };
+        }
+        const data: Prisma.VslAffiliateRuleUpdateInput = {};
+        const changes: string[] = [];
+        if (typeof body.vslId === 'string' && body.vslId !== r.vslId) {
+          const v = await vslOrThrow(tx, body.vslId);
+          data.vsl = { connect: { id: v.id } };
+          changes.push(`"${r.vsl.name}" → "${v.name}"`);
+        }
+        if (typeof body.enabled === 'boolean' && body.enabled !== r.enabled) {
+          data.enabled = body.enabled;
+          changes.push(body.enabled ? 'religada' : 'desligada');
+        }
+        if (!changes.length) return { id: r.id, message: 'Nada mudou.' };
+        await tx.vslAffiliateRule.update({ where: { id: r.id }, data });
+        const kind = typeof data.enabled === 'boolean' && !data.vsl ? (data.enabled ? 'aff_rule_enabled' : 'aff_rule_disabled') : 'aff_rule_updated';
+        await log(tx, actor, { kind, pageId: r.pageId, pageKey: r.page.key, ruleId: r.id,
+          detail: `${pageLabel(r.page)}: regra do afiliado ${who} — ${changes.join(' · ')}.` });
+        return { id: r.id, message: 'Regra atualizada.' };
       }
 
       case 'update_variant': {

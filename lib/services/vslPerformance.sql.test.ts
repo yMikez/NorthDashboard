@@ -4,7 +4,7 @@ import type { PGlite } from '@electric-sql/pglite';
 import type { Prisma } from '@prisma/client';
 import { beforeAll, describe, expect, it } from 'vitest';
 import { migratedPglite } from '../test/pgliteDb';
-import { linkedRowsSql, realRowsSql, visitRowsSql } from './vslPerformance';
+import { affiliateRowsSql, linkedRowsSql, realRowsSql, visitRowsSql } from './vslPerformance';
 import { visitUpsertSql } from './vsl';
 import { Prisma as P } from '@prisma/client';
 
@@ -146,5 +146,49 @@ describe('SQL da aba VSLs', () => {
     expect(none.rows).toEqual([]);
     const fam = await run(db, realRowsSql({ start: START, end: END, families: ['NightCalm'] }));
     expect(fam.rows).toEqual([]);
+  });
+});
+
+describe('SQL da aba VSLs — afiliado da visita', () => {
+  let db: PGlite;
+  const START = new Date('2026-10-04T03:00:00Z');
+  const END = new Date('2026-10-06T02:59:59Z');
+
+  beforeAll(async () => {
+    db = await migratedPglite();
+    await insert(db, 'Platform', { id: 'jv', slug: 'jvzoo' });
+    await insert(db, 'Platform', { id: 'bg', slug: 'buygoods' });
+    await insert(db, 'Affiliate', { id: 'a1', platformId: 'jv', externalId: '3552295', nickname: 'Fulano JV' });
+    await insert(db, 'Affiliate', { id: 'a2', platformId: 'bg', externalId: '62@13457', nickname: 'Fulano BG' });
+    // Mesmo ID noutra plataforma: o nome não pode vazar de uma pra outra.
+    await insert(db, 'Affiliate', { id: 'a3', platformId: 'bg', externalId: '3552295', nickname: 'Outro BG' });
+    await insert(db, 'VslPage', { id: 'p_jv', key: 'glycoeden-up01-jvzoo', family: 'GlycoEden', stage: 'UP01', platform: 'jvzoo', updatedAt: new Date() });
+    await insert(db, 'VslPage', { id: 'p_bg', key: 'glycoeden-up01-buygoods', family: 'GlycoEden', stage: 'UP01', platform: 'buygoods', updatedAt: new Date() });
+    const ev = (visitId: string, pageId: string, platform: string, type: string, affiliateKey: string | null) =>
+      run(db, visitUpsertSql({ visitId, pageId, vslId: 'vsl_b', testId: null, armId: null, platform, sessionKey: null, affiliateKey, pageUrl: null, type, second: 0 }));
+    await ev('visit00001', 'p_jv', 'jvzoo', 'view', '3552295');
+    await ev('visit00001', 'p_jv', 'jvzoo', 'pitch', null); // evento sem afiliado não apaga o da visita
+    await ev('visit00001', 'p_jv', 'jvzoo', 'accept', null);
+    await ev('visit00002', 'p_jv', 'jvzoo', 'view', '3552295');
+    await ev('visit00003', 'p_jv', 'jvzoo', 'view', '999'); // sem conta no dash: entra sem nome
+    await ev('visit00004', 'p_jv', 'jvzoo', 'view', null);  // sem afiliado: fora do quadro
+    await ev('visit00005', 'p_bg', 'buygoods', 'view', '62@13457');
+    await db.query(`UPDATE "VslVisit" SET "firstAt" = '2026-10-05T12:00:00Z'`);
+  }, 120_000);
+
+  it('upsert guarda o afiliado do primeiro evento e não apaga depois', async () => {
+    const r = await db.query<{ affiliateKey: string | null }>(`SELECT "affiliateKey" FROM "VslVisit" WHERE id = 'visit00001'`);
+    expect(r.rows[0].affiliateKey).toBe('3552295');
+  });
+
+  it('quadro por afiliado: visitas, pitch e aceite por página, com o nome da plataforma certa', async () => {
+    const r = await run<{ pageId: string; affiliateKey: string; name: string | null; visits: number; pitch: number; accepts: number }>(
+      db, affiliateRowsSql({ start: START, end: END }));
+    const rows = [...r.rows].sort((a, b) => `${a.pageId}${a.affiliateKey}`.localeCompare(`${b.pageId}${b.affiliateKey}`));
+    expect(rows).toEqual([
+      { pageId: 'p_bg', affiliateKey: '62@13457', name: 'Fulano BG', visits: 1, pitch: 0, accepts: 0 },
+      { pageId: 'p_jv', affiliateKey: '3552295', name: 'Fulano JV', visits: 2, pitch: 1, accepts: 1 },
+      { pageId: 'p_jv', affiliateKey: '999', name: null, visits: 1, pitch: 0, accepts: 0 },
+    ]);
   });
 });

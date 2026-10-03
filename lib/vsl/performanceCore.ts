@@ -47,6 +47,8 @@ export interface ChangeRow {
   pageId: string | null;
   kind: string;
   toVslId: string | null;
+  /** regra por afiliado afetada (aff_rule_*) */
+  ruleId?: string | null;
   createdAt: Date;
 }
 
@@ -150,14 +152,15 @@ function finishReal(days: number, fe: number, sales: number, revenue: number): R
 
 // ── Linha do tempo: qual VSL estava no ar em cada instante ──────────────
 
-export type LiveState = { kind: 'vsl'; vslId: string | null } | { kind: 'test' };
+export type LiveState = { kind: 'vsl'; vslId: string | null } | { kind: 'test' } | { kind: 'mixed' };
 
 const LIVE_KINDS = new Set([
   'page_created', 'vsl_assigned', 'page_enabled', 'page_disabled', 'fallback_set',
   'test_started', 'test_resumed', 'test_paused', 'test_finished',
+  'aff_rule_created', 'aff_rule_deleted', 'aff_rule_enabled', 'aff_rule_disabled',
 ]);
 
-interface Machine { enabled: boolean; vslId: string | null; fallback: string | null; test: boolean }
+interface Machine { enabled: boolean; vslId: string | null; fallback: string | null; test: boolean; rules: Set<string> }
 
 function apply(m: Machine, c: ChangeRow) {
   switch (c.kind) {
@@ -170,12 +173,18 @@ function apply(m: Machine, c: ChangeRow) {
     case 'test_resumed': m.test = true; break;
     case 'test_paused': m.test = false; break;
     case 'test_finished': m.test = false; if (c.toVslId) m.vslId = c.toVslId; break;
+    case 'aff_rule_created':
+    case 'aff_rule_enabled': if (c.ruleId) m.rules.add(c.ruleId); break;
+    case 'aff_rule_deleted':
+    case 'aff_rule_disabled': if (c.ruleId) m.rules.delete(c.ruleId); break;
   }
 }
 
 function live(m: Machine): LiveState {
   if (!m.enabled) return { kind: 'vsl', vslId: m.fallback };
   if (m.test) return { kind: 'test' };
+  // Regra por afiliado ativa: parte do tráfego vê outra VSL — o dia não é de uma VSL só.
+  if (m.rules.size > 0) return { kind: 'mixed' };
   return { kind: 'vsl', vslId: m.vslId ?? m.fallback };
 }
 
@@ -196,7 +205,7 @@ export function exclusiveVslForDay(
   // A reserva começa vazia e segue o histórico (page_created, fallback_set) —
   // a reserva ATUAL não vale pra dias antes de ela ser trocada.
   void initialFallback;
-  const m: Machine = { enabled: true, vslId: null, fallback: null, test: false };
+  const m: Machine = { enabled: true, vslId: null, fallback: null, test: false, rules: new Set() };
   for (const c of changesSorted) {
     const t = c.createdAt.getTime();
     if (t >= end) break;

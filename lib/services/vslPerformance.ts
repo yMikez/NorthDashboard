@@ -246,15 +246,45 @@ async function testResults(): Promise<TestResult[]> {
   });
 }
 
+interface RawAffRow { pageId: string; affiliateKey: string; name: string | null; visits: number; pitch: number; accepts: number }
+
+/** Visitas por afiliado lido na página (JVZoo aid / BuyGoods memória), por página. */
+export function affiliateRowsSql(f: VslPerformanceFilters): Prisma.Sql {
+  return Prisma.sql`
+    SELECT v."pageId", v."affiliateKey", MAX(a.nickname) AS name,
+           COUNT(*)::int AS visits, COUNT(v."pitchAt")::int AS pitch, COUNT(v."acceptAt")::int AS accepts
+    FROM "VslVisit" v
+    JOIN "VslPage" p ON p.id = v."pageId"
+    LEFT JOIN "Platform" pl ON pl.slug = p.platform
+    LEFT JOIN "Affiliate" a ON a."platformId" = pl.id AND a."externalId" = v."affiliateKey"
+    WHERE v."affiliateKey" IS NOT NULL AND v."firstAt" >= ${f.start} AND v."firstAt" <= ${f.end} AND ${pageWhere(f)}
+    GROUP BY 1, 2`;
+}
+
 export async function getVslPerformance(f: VslPerformanceFilters) {
-  const [visits, linked, real, pages, changes, tests] = await Promise.all([
+  const [visits, linked, real, pages, changes, tests, affRows] = await Promise.all([
     visitRows(f),
     linkedRows(Prisma.sql`v."firstAt" >= ${f.start} AND v."firstAt" <= ${f.end} AND ${pageWhere(f)}`),
     realRows(f),
     db.vslPage.findMany({ select: { id: true, platform: true, fallbackVslId: true, installedAt: true } }),
-    db.vslChange.findMany({ where: { pageId: { not: null } }, select: { pageId: true, kind: true, toVslId: true, createdAt: true } }),
+    db.vslChange.findMany({ where: { pageId: { not: null } }, select: { pageId: true, kind: true, toVslId: true, ruleId: true, createdAt: true } }),
     testResults(),
+    db.$queryRaw<RawAffRow[]>(affiliateRowsSql(f)),
   ]);
+  // Top 30 afiliados por página (o resto entra só no total da página).
+  const byPageAffiliate = [...affRows]
+    .sort((a, b) => b.visits - a.visits)
+    .reduce<Record<string, Array<{ affiliateKey: string; name: string | null; visits: number; pitchRate: number | null; acceptRate: number | null; accepts: number }>>>((acc, r) => {
+      const list = (acc[r.pageId] ??= []);
+      if (list.length < 30) {
+        list.push({
+          affiliateKey: r.affiliateKey, name: r.name, visits: r.visits, accepts: r.accepts,
+          pitchRate: r.visits ? Math.round((r.pitch / r.visits) * 10000) / 10000 : null,
+          acceptRate: r.visits ? Math.round((r.accepts / r.visits) * 10000) / 10000 : null,
+        });
+      }
+      return acc;
+    }, {});
   const installDayByPage = new Map<string, string>();
   for (const p of pages) if (p.installedAt) installDayByPage.set(p.id, brtDay(p.installedAt));
 
@@ -267,6 +297,7 @@ export async function getVslPerformance(f: VslPerformanceFilters) {
   return {
     range: { start: f.start.toISOString(), end: f.end.toISOString() },
     ...reduced,
+    byPageAffiliate,
     tests,
   };
 }

@@ -25,6 +25,29 @@ function commentSafe(s: string): string {
   return s.replace(/--+/g, '-').replace(/[<>]/g, '').replace(/[\r\n]+/g, ' ').slice(0, 80);
 }
 
+/**
+ * "Memória do afiliado" (BuyGoods) — cola na PÁGINA DE VENDAS. O upsell da
+ * BuyGoods não recebe o afiliado na URL; a página de vendas tem, no link de
+ * checkout (aff_id + account_id). Guarda `aff_id@account_id` no localStorage
+ * do domínio (o mesmo do upsell) — o script do dash no upsell lê dali. Não
+ * chama o dash: a página de vendas não ganha dependência nenhuma.
+ */
+export function buildAffiliateMemorySnippet(): string {
+  const js =
+    `(function(){function s(h){try{var u=new URL(h,location.href);if(u.hostname.toLowerCase().indexOf("buygoods.com")<0)return;` +
+    `var a=u.searchParams.get("aff_id"),c=(u.searchParams.get("account_id")||"").split(",")[0];if(!a||!c)return;` +
+    `localStorage.setItem("ns_aff",JSON.stringify({p:"buygoods",k:a+"@"+c,t:Date.now()}));}catch(e){}}` +
+    `function scan(){var l=document.querySelectorAll('a[href*="buygoods.com"]');for(var i=0;i<l.length;i++){var h=l[i].href||"";if(h.indexOf("aff_id=")>=0){s(h);return;}}}` +
+    `document.addEventListener("click",function(e){var a=e.target&&e.target.closest?e.target.closest("a[href]"):null;if(a)s(a.href);},true);` +
+    `if(document.readyState==="loading")document.addEventListener("DOMContentLoaded",scan);else scan();setTimeout(scan,2500);setTimeout(scan,6000);})();`;
+  return [
+    `<!-- NorthScale · memória do afiliado (BuyGoods). Cole na PÁGINA DE VENDAS,`,
+    `     em qualquer lugar do <body>. Guarda o afiliado do link de checkout pra o upsell`,
+    `     (mesmo domínio) saber de quem é a venda. Não chama o dash. -->`,
+    `<script>${js}</script>`,
+  ].join('\n');
+}
+
 export function playerMaxWidth(aspectPct: number | null | undefined): string {
   return aspectPct != null && aspectPct < 110 ? '960px' : '400px';
 }

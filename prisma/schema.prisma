@@ -254,13 +254,13 @@ model RecoveryRatePeriod {
 // (conta antiga, loja): pra auditar e, se preciso, desfazer.
 model BuyGoodsAffiliateSplit {
   id                String   @id
-  sourceAffiliateId String   // conta antiga (sem loja)
-  sourceExternalId  String   // aff_id cru
-  store             String   // account_id
-  affiliateId       String   // conta da loja (= sourceAffiliateId na dominante)
-  externalId        String   // aff_id@loja
+  sourceAffiliateId String // conta antiga (sem loja)
+  sourceExternalId  String // aff_id cru
+  store             String // account_id
+  affiliateId       String // conta da loja (= sourceAffiliateId na dominante)
+  externalId        String // aff_id@loja
   orders            Int
-  kept              Boolean  // loja dominante: ficou com a conta original
+  kept              Boolean // loja dominante: ficou com a conta original
   recoveryDisabled  Boolean  @default(false)
   createdAt         DateTime @default(now())
 
@@ -1699,20 +1699,21 @@ model RetentionOffer {
 model Vsl {
   id           String   @id @default(cuid())
   name         String
-  accountId    String   // conta VTurb (uuid no caminho do player.js)
-  playerId     String   // id do player (24 hex) — o elemento vira vid-<playerId>
-  scriptUrl    String   // https://scripts.converteai.net/<conta>/players/<player>/v4/player.js
+  accountId    String // conta VTurb (uuid no caminho do player.js)
+  playerId     String // id do player (24 hex) — o elemento vira vid-<playerId>
+  scriptUrl    String // https://scripts.converteai.net/<conta>/players/<player>/v4/player.js
   // padding-top do placeholder do embed (133.333 = 3:4 vertical, 56.25 = 16:9)
   aspectPct    Decimal? @db.Decimal(7, 3)
-  pitchSeconds Int      // segundo do vídeo em que a oferta aparece
+  pitchSeconds Int // segundo do vídeo em que a oferta aparece
   notes        String?
   archived     Boolean  @default(false)
   createdById  String?
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
-  pages VslPage[]    @relation("VslPageCurrent")
-  arms  VslTestArm[]
+  pages    VslPage[]          @relation("VslPageCurrent")
+  arms     VslTestArm[]
+  affRules VslAffiliateRule[]
 
   @@index([archived])
 }
@@ -1723,8 +1724,8 @@ model VslPage {
   id            String    @id @default(cuid())
   key           String    @unique
   family        String
-  stage         String    // UP01..UP03 | DOWN01..DOWN03
-  platform      String    // slug da plataforma
+  stage         String // UP01..UP03 | DOWN01..DOWN03
+  platform      String // slug da plataforma
   // Variante da etapa: a mesma etapa pode ter mais de uma página (ex.: Upsell 1
   // de quem levou 6 potes × de quem levou 2–3). "" = página única. O rótulo
   // pode ser editado; a chave (snippet) fica a da criação.
@@ -1732,7 +1733,7 @@ model VslPage {
   // Potes do FE que levam a esta página (vazio = qualquer). Separa a venda
   // real entre variantes.
   feBottles     Int[]     @default([])
-  vslId         String?   // VSL no ar quando não há teste rodando
+  vslId         String? // VSL no ar quando não há teste rodando
   vsl           Vsl?      @relation("VslPageCurrent", fields: [vslId], references: [id], onDelete: SetNull)
   // VSL embutida no snippet como reserva (a que já estava na página).
   fallbackVslId String?
@@ -1750,9 +1751,30 @@ model VslPage {
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
 
-  tests VslTest[]
+  tests    VslTest[]
+  affRules VslAffiliateRule[]
 
   @@unique([family, stage, platform, variant])
+}
+
+// Regra por afiliado: nesta página, o visitante que veio do afiliado X vê a
+// VSL Y (fica fora do teste A/B). O afiliado é lido na página: JVZoo pelo aid
+// da URL; BuyGoods pela "memória do afiliado" colada na página de vendas.
+model VslAffiliateRule {
+  id                  String   @id @default(cuid())
+  pageId              String
+  page                VslPage  @relation(fields: [pageId], references: [id], onDelete: Cascade)
+  affiliateId         String // Affiliate.id
+  affiliateExternalId String // como a página lê: JVZoo "3552295", BuyGoods "62@13457"
+  vslId               String
+  vsl                 Vsl      @relation(fields: [vslId], references: [id], onDelete: Restrict)
+  enabled             Boolean  @default(true)
+  createdById         String?
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  @@unique([pageId, affiliateId])
+  @@index([vslId])
 }
 
 model VslTest {
@@ -1760,7 +1782,7 @@ model VslTest {
   pageId      String
   page        VslPage      @relation(fields: [pageId], references: [id], onDelete: Cascade)
   name        String
-  status      String       // running | paused | finished
+  status      String // running | paused | finished
   startedAt   DateTime     @default(now())
   endedAt     DateTime?
   winnerVslId String?
@@ -1780,8 +1802,8 @@ model VslTestArm {
   test   VslTest @relation(fields: [testId], references: [id], onDelete: Cascade)
   vslId  String
   vsl    Vsl     @relation(fields: [vslId], references: [id], onDelete: Restrict)
-  label  String  // A, B, C, D
-  weight Int     // 0..100 — soma 100 no teste
+  label  String // A, B, C, D
+  weight Int // 0..100 — soma 100 no teste
 
   @@unique([testId, label])
 }
@@ -1795,6 +1817,7 @@ model VslChange {
   pageKey   String?
   vslId     String?
   testId    String?
+  ruleId    String?
   kind      String
   fromVslId String?
   toVslId   String?
@@ -1811,25 +1834,28 @@ model VslChange {
 // mesma aba é a mesma visita). Sem dado pessoal: sessionKey é só o id de
 // sessão da plataforma (sessid2 da BuyGoods), pra casar visita com venda.
 model VslVisit {
-  id         String    @id
-  pageId     String
-  vslId      String?
-  testId     String?
-  armId      String?
-  platform   String
-  sessionKey String?
-  pageUrl    String?
-  firstAt    DateTime  @default(now())
-  lastAt     DateTime  @default(now())
-  playAt     DateTime?
-  pitchAt    DateTime?
-  acceptAt   DateTime?
-  declineAt  DateTime?
-  maxSecond  Int       @default(0)
+  id           String    @id
+  pageId       String
+  vslId        String?
+  testId       String?
+  armId        String?
+  platform     String
+  sessionKey   String?
+  // Afiliado lido na página (JVZoo aid, BuyGoods aff_id@loja) — não é dado pessoal.
+  affiliateKey String?
+  pageUrl      String?
+  firstAt      DateTime  @default(now())
+  lastAt       DateTime  @default(now())
+  playAt       DateTime?
+  pitchAt      DateTime?
+  acceptAt     DateTime?
+  declineAt    DateTime?
+  maxSecond    Int       @default(0)
 
   @@index([firstAt])
   @@index([pageId, firstAt])
   @@index([vslId, firstAt])
   @@index([testId, armId])
   @@index([sessionKey])
+  @@index([pageId, affiliateKey])
 }

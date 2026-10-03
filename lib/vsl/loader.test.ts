@@ -6,7 +6,8 @@ import path from 'node:path';
 import vm from 'node:vm';
 import { describe, expect, it } from 'vitest';
 import { buildLoaderScript, type LoaderConfig } from './loader';
-import { buildVslSnippet } from './snippet';
+import { affRuleHash } from './affiliate';
+import { buildAffiliateMemorySnippet, buildVslSnippet } from './snippet';
 
 const REVEAL = fs.readFileSync(path.join(__dirname, '__fixtures__/vsl-reveal.template.js'), 'utf8');
 
@@ -352,5 +353,147 @@ describe('script da página — o que NÃO pode quebrar a venda', () => {
       expect([href, kinds[0] ?? null]).toEqual([href, want]);
     }
     expect(pg.beacons[0].e).toBe('view');
+  });
+});
+
+describe('script da página — regra por afiliado', () => {
+  const RULED = VSL('vsl_r', 'rrrrrrrrrrrrrrrrrrrrrrrr', 190);
+  const T = { id: 'test1', arms: [{ id: 'armA', w: 50, v: VSL('vsl_a', 'aaaaaaaaaaaaaaaaaaaaaaaa', 327) }, { id: 'armB', w: 50, v: VSL('vsl_b', 'bbbbbbbbbbbbbbbbbbbbbbbb', 412) }] };
+  const jv = (over: Partial<LoaderConfig> = {}) => base({ af: 'aid', ar: { [affRuleHash('glycoeden-up01-jvzoo', '3552295')]: RULED }, am: 6, ...over });
+  const bgKey = 'glycoeden-up01-jvzoo'; // o player falso da página tem essa chave
+  const bg = (over: Partial<LoaderConfig> = {}) => base({ k: bgKey, af: 'mem', ar: { [affRuleHash(bgKey, '62@13457')]: RULED }, am: 6, ...over });
+  const memory = (k: string, ageMs: number, clockNow = 1_000_000) => new Map([['ns_aff', JSON.stringify({ p: 'buygoods', k, t: clockNow - ageMs })]]);
+
+  it('JVZoo: o aid da URL com regra troca a VSL e o pitch — e o hash do dash bate com o da página', () => {
+    const pg = page({ search: '?aid=3552295&sessid=abc' });
+    pg.run(buildLoaderScript(jv()));
+    pg.run(REVEAL);
+    expect(pg.player.id).toBe('vid-rrrrrrrrrrrrrrrrrrrrrrrr');
+    expect(pg.ctx.VSL_REVEAL_DELAY).toBe(190);
+    expect(pg.ctx.NS_VSL).toMatchObject({ affiliate: '3552295', affiliateRule: true, testId: null });
+    expect(pg.beacons[0]).toMatchObject({ e: 'view', pl: 'rrrrrrrrrrrrrrrrrrrrrrrr', af: '3552295', t: null });
+  });
+
+  it('JVZoo: afiliado sem regra vê a VSL da página, mas o afiliado vai no rastreio', () => {
+    const pg = page({ search: '?aid=999&sessid=abc' });
+    pg.run(buildLoaderScript(jv()));
+    expect(pg.player.id).toBe('vid-bbbbbbbbbbbbbbbbbbbbbbbb');
+    expect(pg.beacons[0]).toMatchObject({ af: '999', pl: 'bbbbbbbbbbbbbbbbbbbbbbbb' });
+  });
+
+  it('aid fora do formato é ignorado (nem regra nem rastreio)', () => {
+    const pg = page({ search: '?aid=3552295x' });
+    pg.run(buildLoaderScript(jv()));
+    expect(pg.player.id).toBe('vid-bbbbbbbbbbbbbbbbbbbbbbbb');
+    expect(pg.beacons[0].af).toBeNull();
+  });
+
+  it('regra vence o teste A/B: quem tem regra não é sorteado nem entra no teste', () => {
+    const pg = page({ search: '?aid=3552295' });
+    pg.run(buildLoaderScript(jv({ t: T })));
+    expect(pg.player.id).toBe('vid-rrrrrrrrrrrrrrrrrrrrrrrr');
+    expect(pg.storage.has('ns_vsl_t_test1')).toBe(false);
+    expect(pg.beacons[0]).toMatchObject({ t: null, a: null, af: '3552295' });
+    // Sem regra, o mesmo teste sorteia normalmente.
+    const other = page({ search: '?aid=999' });
+    other.run(buildLoaderScript(jv({ t: T })));
+    expect(other.beacons[0]).toMatchObject({ t: 'test1', af: '999' });
+  });
+
+  it('página desligada: regra não vale, toca a reserva', () => {
+    const pg = page({ search: '?aid=3552295' });
+    pg.run(buildLoaderScript(jv({ on: false })));
+    expect(pg.player.id).toBe('vid-aaaaaaaaaaaaaaaaaaaaaaaa');
+    expect(pg.ctx.NS_VSL).toMatchObject({ affiliateRule: false });
+  });
+
+  it('pré-visualização vence a regra', () => {
+    const pg = page({ search: '?aid=3552295&ns_vsl_preview=1' });
+    pg.run(buildLoaderScript(jv({ pv: VSL('vsl_c', 'cccccccccccccccccccccccc', 200) })));
+    expect(pg.player.id).toBe('vid-cccccccccccccccccccccccc');
+  });
+
+  it('a regra é por página: o mesmo afiliado noutra página não pega a regra', () => {
+    const pg = page({ search: '?aid=3552295' });
+    pg.run(buildLoaderScript(jv({ ar: { [affRuleHash('glycoeden-up02-jvzoo', '3552295')]: RULED } })));
+    expect(pg.player.id).toBe('vid-bbbbbbbbbbbbbbbbbbbbbbbb');
+  });
+
+  it('BuyGoods: a memória da página de vendas aplica a regra; o aid da URL é ignorado', () => {
+    const pg = page({ search: '?aid=3552295&order_id=1', storage: memory('62@13457', 60_000) });
+    pg.run(buildLoaderScript(bg()));
+    expect(pg.player.id).toBe('vid-rrrrrrrrrrrrrrrrrrrrrrrr');
+    expect(pg.beacons[0]).toMatchObject({ af: '62@13457', pl: 'rrrrrrrrrrrrrrrrrrrrrrrr' });
+  });
+
+  it('BuyGoods: memória vencida, de outra plataforma ou mal formada não vale', () => {
+    const cases: Array<Map<string, string>> = [
+      memory('62@13457', 7 * 3600_000),
+      new Map([['ns_aff', JSON.stringify({ p: 'jvzoo', k: '62@13457', t: 1_000_000 })]]),
+      new Map([['ns_aff', JSON.stringify({ p: 'buygoods', k: '62', t: 1_000_000 })]]),
+      new Map([['ns_aff', '{quebrado']]),
+    ];
+    for (const storage of cases) {
+      const pg = page({ storage });
+      pg.run(buildLoaderScript(bg()));
+      expect(pg.player.id).toBe('vid-bbbbbbbbbbbbbbbbbbbbbbbb');
+      expect(pg.beacons[0].af).toBeNull();
+    }
+  });
+});
+
+describe('memória do afiliado (página de vendas da BuyGoods)', () => {
+  type FakeLink = { href: string; closest: (s: string) => FakeLink | null };
+  function salesPage(hrefs: string[]) {
+    const storage = new Map<string, string>();
+    const links: FakeLink[] = [];
+    for (const href of hrefs) {
+      const l: FakeLink = { href, closest: (s: string) => (s === 'a[href]' ? l : null) };
+      links.push(l);
+    }
+    const listeners: Array<(e: unknown) => void> = [];
+    const timers: Array<() => void> = [];
+    const ctx: Record<string, unknown> = {
+      location: { href: 'https://getneuromindpro.online/bg/' },
+      localStorage: { setItem: (k: string, v: string) => storage.set(k, v), getItem: (k: string) => storage.get(k) ?? null },
+      document: {
+        readyState: 'complete',
+        querySelectorAll: (sel: string) => (sel === 'a[href*="buygoods.com"]' ? links.filter((l) => l.href.includes('buygoods.com')) : []),
+        addEventListener: (t: string, fn: (e: unknown) => void) => { if (t === 'click') listeners.push(fn); },
+      },
+      setTimeout: (fn: () => void) => { timers.push(fn); return timers.length; },
+      Date: { now: () => 5_000 },
+      URL, JSON,
+    };
+    vm.createContext(ctx);
+    vm.runInContext(buildAffiliateMemorySnippet().match(/<script>([\s\S]*)<\/script>/)![1], ctx);
+    return {
+      storage, links,
+      click: (i: number) => listeners.forEach((fn) => fn({ target: links[i] })),
+      runTimers: () => timers.splice(0).forEach((fn) => fn()),
+    };
+  }
+
+  it('guarda aff_id@account_id do link de checkout ao carregar', () => {
+    const p = salesPage(['https://getneuromindpro.online/', 'https://www.buygoods.com/secure/checkout.html?account_id=13457&product_codename=nmp6&aff_id=62&subid=x']);
+    expect(JSON.parse(p.storage.get('ns_aff')!)).toEqual({ p: 'buygoods', k: '62@13457', t: 5_000 });
+  });
+
+  it('link montado depois (script da página) é pego no clique ou na varredura atrasada', () => {
+    const p = salesPage(['https://www.buygoods.com/secure/checkout.html?account_id=12610&product_codename=x']);
+    expect(p.storage.has('ns_aff')).toBe(false);
+    p.links[0].href = 'https://www.buygoods.com/secure/checkout.html?account_id=12610&product_codename=x&aff_id=58134';
+    p.click(0);
+    expect(JSON.parse(p.storage.get('ns_aff')!).k).toBe('58134@12610');
+  });
+
+  it('sem aff_id ou sem loja não grava nada; link de outro domínio é ignorado', () => {
+    const p = salesPage([
+      'https://www.buygoods.com/secure/checkout.html?product_codename=x&aff_id=62',
+      'https://evil.example.com/?aff_id=1&account_id=2',
+    ]);
+    p.click(1);
+    p.runTimers();
+    expect(p.storage.has('ns_aff')).toBe(false);
   });
 });

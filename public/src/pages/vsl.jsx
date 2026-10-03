@@ -30,6 +30,7 @@ const VSL_HISTORY_GROUPS = [
   { id: 'live', label: 'VSL no ar', kinds: ['vsl_assigned', 'page_enabled', 'page_disabled', 'fallback_set', 'preview_started'] },
   { id: 'tests', label: 'Testes', kinds: ['test_started', 'test_paused', 'test_resumed', 'test_weights', 'test_finished'] },
   { id: 'pages', label: 'Páginas', kinds: ['page_created', 'page_deleted', 'page_url_reset', 'page_variant'] },
+  { id: 'affiliates', label: 'Afiliados', kinds: ['aff_rule_created', 'aff_rule_updated', 'aff_rule_deleted', 'aff_rule_enabled', 'aff_rule_disabled'] },
   { id: 'library', label: 'Biblioteca', kinds: ['vsl_created', 'vsl_updated', 'vsl_archived', 'vsl_restored'] },
 ];
 
@@ -606,7 +607,12 @@ function VslPagesSection({ st, perf, perfState, pages, nowMs, busy, onOpenPage, 
                             </select>
                           )}
                         </td>
-                        <td><VslStatus status={s} page={p} nowMs={nowMs}/></td>
+                        <td>
+                          <VslStatus status={s} page={p} nowMs={nowMs}/>
+                          {p.affRules && p.affRules.some((r) => r.enabled) && (
+                            <div><VslChip tone="var(--accent)" title="Afiliados com VSL própria nesta página">{p.affRules.filter((r) => r.enabled).length} regra{p.affRules.filter((r) => r.enabled).length === 1 ? '' : 's'} de afiliado</VslChip></div>
+                          )}
+                        </td>
                         <td className="num">{fmtInt(p.visits24h || 0)}</td>
                         <td className="num">{vslCell(perfState, b ? b.acceptRate : null, vslPct)}</td>
                         <td>
@@ -674,7 +680,8 @@ function VslLibrarySection({ st, perf, perfState, q, onOpenVsl, onNew }) {
                           {v.usage.pages > 0 && <VslChip tone="var(--success)">{v.usage.pages} página{v.usage.pages === 1 ? '' : 's'}</VslChip>}{' '}
                           {v.usage.tests > 0 && <VslChip tone="var(--accent)">em teste</VslChip>}{' '}
                           {v.usage.fallbacks > 0 && <VslChip tone="var(--fg4)" title="Está no snippet como reserva — toca se o dash não responder">reserva em {v.usage.fallbacks}</VslChip>}
-                          {!v.usage.pages && !v.usage.tests && !v.usage.fallbacks && <span className="vsl-muted">livre</span>}
+                          {v.usage.rules > 0 && <VslChip tone="var(--accent)" title="VSL de regra por afiliado">{v.usage.rules} regra{v.usage.rules === 1 ? '' : 's'}</VslChip>}
+                          {!v.usage.pages && !v.usage.tests && !v.usage.fallbacks && !v.usage.rules && <span className="vsl-muted">livre</span>}
                         </td>
                         <td className="num">{vslCell(perfState, b ? b.visits : 0, fmtInt)}</td>
                         <td className="num">{vslCell(perfState, b ? b.acceptRate : null, vslPct)}</td>
@@ -876,6 +883,197 @@ function VslHistorySection({ st, q, visiblePageIds }) {
 
 // ── Gavetas ───────────────────────────────────────────────────────────────
 
+/** Snippet curto com botão de copiar (memória do afiliado da BuyGoods). */
+function VslCodeCopy({ code, label, onCopied }) {
+  const [copied, setCopied] = useStateVsl(false);
+  async function copy() {
+    const ok = await vslCopy(code);
+    setCopied(ok);
+    if (onCopied) onCopied(ok);
+    if (ok) setTimeout(() => setCopied(false), 2500);
+  }
+  return (
+    <div className="vsl-code-wrap">
+      <pre className="vsl-code" tabIndex={0} aria-label={label} style={{ maxHeight: 160 }}>{code}</pre>
+      <button className="btn btn-primary vsl-code-copy" onClick={copy}>
+        <Icon name={copied ? 'check' : 'copy'} size={14}/> {copied ? 'Copiado' : 'Copiar'}
+      </button>
+    </div>
+  );
+}
+
+function VslAffiliateRules({ page, st, perf, busy, onAct, onToast }) {
+  const [q, setQ] = useStateVsl('');
+  const [cands, setCands] = useStateVsl(null);
+  const [loading, setLoading] = useStateVsl(false);
+  const [pick, setPick] = useStateVsl(null);
+  const [vslId, setVslId] = useStateVsl('');
+  const seq = useRefVsl(0);
+  const supported = !!page.affiliateSource;
+  const rules = page.affRules || [];
+
+  useEffectVsl(() => {
+    if (!supported) return undefined;
+    const my = ++seq.current;
+    setLoading(true);
+    const t = setTimeout(() => {
+      window.NSApi.fetchVslAffiliates(page.id, q.trim())
+        .then((r) => { if (my === seq.current) setCands(r); })
+        .catch(() => { if (my === seq.current) setCands({ seen: [], results: [] }); })
+        .finally(() => { if (my === seq.current) setLoading(false); });
+    }, q ? 300 : 0);
+    return () => clearTimeout(t);
+  }, [page.id, q, supported]);
+
+  if (!supported) {
+    return (
+      <VslSection title="Regras por afiliado">
+        <div className="vsl-muted">Disponível nas páginas da JVZoo e da BuyGoods — nesta plataforma a página ainda não recebe o afiliado.</div>
+      </VslSection>
+    );
+  }
+
+  const vslById = new Map(st.vsls.map((v) => [v.id, v]));
+  const ruled = new Set(rules.map((r) => r.affiliateId));
+  const cov = page.affiliateCoverage7d || { visits: 0, withAffiliate: 0 };
+  const covPct = cov.visits ? cov.withAffiliate / cov.visits : null;
+  const isBg = page.affiliateSource === 'mem';
+  const seenList = ((cands && cands.seen) || []).filter((a) => !ruled.has(a.id));
+  const resultList = ((cands && cands.results) || []).filter((a) => !ruled.has(a.id) && !seenList.some((x) => x.id === a.id));
+  const perfAff = (perf && perf.byPageAffiliate && perf.byPageAffiliate[page.id]) || [];
+  const label = (a) => `${a.nickname || 'sem nome'} · ${a.externalId}`;
+
+  function create() {
+    if (!pick || !vslId) return;
+    onAct({ action: 'create_aff_rule', pageId: page.id, affiliateId: pick.id, vslId }).then((ok) => { if (ok) { setPick(null); setVslId(''); setQ(''); } });
+  }
+
+  return (
+    <VslSection title="Regras por afiliado"
+      hint={`Quem vem do afiliado escolhido vê a VSL da regra${page.test ? ' e fica fora do teste A/B' : ''}. Vale da próxima visita em diante (até 1 minuto).`}>
+      <div className="vsl-note" role="status" style={{ marginBottom: 10 }}>
+        <Icon name="info" size={14}/>
+        <div>
+          {isBg
+            ? <>Na BuyGoods o afiliado vem da <strong>página de vendas</strong> (o upsell não recebe na URL): cole a memória do afiliado abaixo nela. </>
+            : <>Na JVZoo o afiliado vem do <code>aid</code> da URL do upsell. </>}
+          {cov.visits > 0
+            ? <>Afiliado reconhecido em <strong>{vslPct(covPct, 0)}</strong> das {fmtInt(cov.visits)} visitas dos últimos 7 dias.</>
+            : <>Ainda sem visitas nos últimos 7 dias para medir o reconhecimento.</>}
+        </div>
+      </div>
+      {isBg && (
+        <details className="vsl-details" open={cov.visits > 20 && covPct != null && covPct < 0.3}>
+          <summary>Memória do afiliado — snippet da página de vendas</summary>
+          <div style={{ marginTop: 8 }}>
+            <VslCodeCopy code={st.affiliateMemorySnippet} label="Memória do afiliado (página de vendas)" onCopied={(ok) => onToast(ok ? 'Snippet copiado.' : 'Não deu para copiar — selecione e copie.')}/>
+            <ol className="vsl-steps">
+              <li>Cole na <strong>página de vendas</strong> (a que tem os botões que levam ao checkout da BuyGoods), em qualquer lugar do <code>&lt;body&gt;</code>. Uma vez por página de vendas.</li>
+              <li>A página de vendas e o upsell precisam estar no <strong>mesmo domínio</strong> (com ou sem <code>www</code> igual).</li>
+              <li>A memória vale {st.affiliateMemoryHours} h e não chama o dash — a página de vendas não ganha dependência.</li>
+            </ol>
+          </div>
+        </details>
+      )}
+
+      {rules.length > 0 && (
+        <div className="tbl-wrap" style={{ marginTop: 10 }}>
+          <table className="tbl vsl-tbl">
+            <thead><tr><th>Afiliado</th><th>VSL</th><th style={{ width: 90 }}>Ligada</th><th style={{ width: 44 }}/></tr></thead>
+            <tbody>
+              {rules.map((r) => (
+                <tr key={r.id}>
+                  <td><div className="vsl-name">{r.affiliateName || 'sem nome'}</div><div className="vsl-muted cell-mono">{r.affiliateExternalId}</div></td>
+                  <td style={{ minWidth: 200 }}>
+                    <select aria-label={`VSL do afiliado ${r.affiliateName || r.affiliateExternalId}`} value={r.vslId} disabled={busy} style={{ width: '100%' }}
+                      onChange={(e) => onAct({ action: 'update_aff_rule', ruleId: r.id, vslId: e.target.value })}>
+                      {st.vsls.filter((v) => !v.archived || v.id === r.vslId).map((v) => <option key={v.id} value={v.id}>{v.name} · {vslFmtPitch(v.pitchSeconds)}</option>)}
+                    </select>
+                  </td>
+                  <td>
+                    <label className="vsl-toggle" style={{ marginTop: 0 }}>
+                      <input type="checkbox" checked={r.enabled} disabled={busy} onChange={(e) => onAct({ action: 'update_aff_rule', ruleId: r.id, enabled: e.target.checked })}/>
+                      <span>{r.enabled ? 'sim' : 'não'}</span>
+                    </label>
+                  </td>
+                  <td>
+                    <button className="btn btn-ghost vsl-icon-btn" disabled={busy} aria-label={`Remover regra de ${r.affiliateName || r.affiliateExternalId}`} title="Remover regra"
+                      onClick={() => { if (window.confirm(`Remover a regra de ${r.affiliateName || r.affiliateExternalId}? Ele volta pra VSL da página (ou pro teste).`)) onAct({ action: 'delete_aff_rule', ruleId: r.id }); }}>
+                      <Icon name="trash-2" size={14}/>
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      <div className="vsl-aff-add">
+        <div className="vsl-field-label" style={{ marginBottom: 6 }}>Nova regra</div>
+        {pick ? (
+          <div className="vsl-aff-picked">
+            <span><strong>{pick.nickname || 'sem nome'}</strong> <span className="vsl-muted cell-mono">{pick.externalId}</span></span>
+            <button className="btn btn-ghost vsl-icon-btn" aria-label="Trocar afiliado" title="Trocar afiliado" onClick={() => setPick(null)}><Icon name="x" size={14}/></button>
+          </div>
+        ) : (
+          <>
+            <div className="vsl-search" style={{ marginLeft: 0, width: '100%' }}>
+              <Icon name="search" size={14}/>
+              <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Buscar afiliado por nome ou ID…" aria-label="Buscar afiliado" style={{ width: '100%' }}/>
+            </div>
+            <div className="vsl-aff-list" role="group" aria-label="Afiliados">
+              {loading && !cands && <div className="vsl-muted" style={{ padding: 8 }}>Buscando…</div>}
+              {seenList.length > 0 && <div className="vsl-aff-group">Já passaram por esta página (30 dias)</div>}
+              {seenList.map((a) => (
+                <button key={a.id} type="button" className="vsl-aff-option" onClick={() => setPick(a)}>
+                  <span>{label(a)}</span><span className="vsl-muted num">{fmtInt(a.visits30d)} visitas</span>
+                </button>
+              ))}
+              {resultList.length > 0 && <div className="vsl-aff-group">{q.trim() ? 'Resultado da busca' : 'Afiliados com venda recente'}</div>}
+              {resultList.map((a) => (
+                <button key={a.id} type="button" className="vsl-aff-option" onClick={() => setPick(a)}>
+                  <span>{label(a)}</span><span className="vsl-muted">{a.lastOrderAt ? `última venda ${vslFmtDay(a.lastOrderAt)}` : ''}</span>
+                </button>
+              ))}
+              {cands && !loading && !seenList.length && !resultList.length && <div className="vsl-muted" style={{ padding: 8 }}>Nenhum afiliado encontrado.</div>}
+            </div>
+          </>
+        )}
+        <div className="vsl-inline-form" style={{ marginTop: 8 }}>
+          <VslVslSelect vsls={st.vsls} value={vslId} onChange={setVslId} label="VSL da regra" placeholder="VSL que esse afiliado vai ver"/>
+          <button className="btn btn-primary" disabled={busy || !pick || !vslId} onClick={create}>Criar regra</button>
+        </div>
+      </div>
+
+      {perfAff.length > 0 && (
+        <div style={{ marginTop: 14 }}>
+          <div className="vsl-field-label" style={{ marginBottom: 6 }}>Afiliados nesta página (período do filtro)</div>
+          <div className="tbl-wrap">
+            <table className="tbl vsl-tbl">
+              <thead><tr><th>Afiliado</th><th className="num">Visitas</th><th className="num">Pitch</th><th className="num">Aceite</th><th/></tr></thead>
+              <tbody>
+                {perfAff.slice(0, 10).map((r) => {
+                  const rule = rules.find((x) => x.affiliateExternalId === r.affiliateKey);
+                  return (
+                    <tr key={r.affiliateKey}>
+                      <td><div className="vsl-name">{r.name || 'sem nome'}</div><div className="vsl-muted cell-mono">{r.affiliateKey}</div></td>
+                      <td className="num">{fmtInt(r.visits)}</td>
+                      <td className="num">{vslPct(r.pitchRate)}</td>
+                      <td className="num">{vslPct(r.acceptRate)}</td>
+                      <td>{rule ? <VslChip tone="var(--accent)">regra: {(vslById.get(rule.vslId) || {}).name || 'VSL'}</VslChip> : null}</td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+    </VslSection>
+  );
+}
+
 function VslPageDrawer({ page, st, perf, focus, busy, nowMs, onClose, onAct, onToast, onOpenTest }) {
   const vslById = new Map(st.vsls.map((v) => [v.id, v]));
   const [assignId, setAssignId] = useStateVsl(page.vslId || '');
@@ -945,6 +1143,8 @@ function VslPageDrawer({ page, st, perf, focus, busy, nowMs, onClose, onAct, onT
           <span>Página ligada no dash <span className="vsl-muted">— desligada, ela toca a reserva do snippet{fb ? ` (${fb.name})` : ''}</span></span>
         </label>
       </VslSection>
+
+      <VslAffiliateRules page={page} st={st} perf={perf} busy={busy} onAct={onAct} onToast={onToast}/>
 
       <VslSection title="Variante" hint="Para quando a mesma etapa tem mais de uma página (ex.: upsell de quem levou 6 potes × 2–3 potes). Mudar aqui não muda o snippet.">
         <VslVariantFields variant={variant} setVariant={setVariant} bottles={bottles} setBottles={setBottles} options={st.options.feBottles || [1, 2, 3, 4, 5, 6]}
@@ -1124,7 +1324,8 @@ function VslVslDrawer({ vsl, st, perf, busy, onClose, onAct, onCreated }) {
   const parsed = vslParseEmbed(code);
   const pitchSec = vslParsePitch(pitch);
   const dup = parsed && !parsed.error ? st.vsls.find((v) => v.playerId === parsed.playerId && (!vsl || v.id !== vsl.id)) : null;
-  const pages = vsl ? st.pages.filter((p) => p.vslId === vsl.id || p.fallbackVslId === vsl.id || (p.test && p.test.arms.some((a) => a.vslId === vsl.id))) : [];
+  const pages = vsl ? st.pages.filter((p) => p.vslId === vsl.id || p.fallbackVslId === vsl.id || (p.test && p.test.arms.some((a) => a.vslId === vsl.id))
+    || (p.affRules || []).some((r) => r.vslId === vsl.id)) : [];
   const inUse = pages.length > 0;
   const perfRows = vsl && perf ? perf.byPageVsl.filter((r) => r.vslId === vsl.id) : [];
   const pageById = new Map(st.pages.map((p) => [p.id, p]));
@@ -1176,7 +1377,8 @@ function VslVslDrawer({ vsl, st, perf, busy, onClose, onAct, onCreated }) {
           {pages.length === 0 ? <div className="vsl-muted">Em nenhuma página agora.</div> : (
             <ul className="vsl-timeline">
               {pages.map((p) => {
-                const roles = [p.vslId === vsl.id ? 'no ar' : null, p.test && p.test.arms.some((a) => a.vslId === vsl.id) ? 'em teste' : null, p.fallbackVslId === vsl.id ? 'reserva do snippet' : null].filter(Boolean);
+                const ruleN = (p.affRules || []).filter((r) => r.vslId === vsl.id).length;
+                const roles = [p.vslId === vsl.id ? 'no ar' : null, p.test && p.test.arms.some((a) => a.vslId === vsl.id) ? 'em teste' : null, p.fallbackVslId === vsl.id ? 'reserva do snippet' : null, ruleN ? `${ruleN} regra${ruleN === 1 ? '' : 's'} de afiliado` : null].filter(Boolean);
                 return <li key={p.id}>{vslPageName(p, true)} <span className="vsl-muted">({roles.join(', ')})</span></li>;
               })}
             </ul>

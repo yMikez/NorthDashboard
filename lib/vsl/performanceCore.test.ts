@@ -31,6 +31,23 @@ describe('VSL exclusiva do dia', () => {
   });
 });
 
+describe('regra por afiliado no dia exclusivo', () => {
+  const withRule: ChangeRow[] = [
+    { pageId: 'p1', kind: 'page_created', toVslId: 'v1', createdAt: at('2026-10-01T15:00:00Z') },
+    { pageId: 'p1', kind: 'aff_rule_created', toVslId: 'v9', ruleId: 'r1', createdAt: at('2026-10-05T18:00:00Z') },
+    { pageId: 'p1', kind: 'aff_rule_created', toVslId: 'v8', ruleId: 'r2', createdAt: at('2026-10-06T18:00:00Z') },
+    { pageId: 'p1', kind: 'aff_rule_disabled', toVslId: null, ruleId: 'r1', createdAt: at('2026-10-08T12:00:00Z') },
+    { pageId: 'p1', kind: 'aff_rule_deleted', toVslId: null, ruleId: 'r2', createdAt: at('2026-10-11T12:00:00Z') },
+  ];
+  it('com regra ativa o dia é misto (não atribui); sem nenhuma regra volta a atribuir', () => {
+    expect(exclusiveVslForDay(withRule, '2026-10-04', '2026-10-03', 'v1')).toBe('v1');
+    expect(exclusiveVslForDay(withRule, '2026-10-07', '2026-10-03', 'v1')).toBeNull();
+    // r1 desligada, r2 ainda ativa: segue misto
+    expect(exclusiveVslForDay(withRule, '2026-10-09', '2026-10-03', 'v1')).toBeNull();
+    expect(exclusiveVslForDay(withRule, '2026-10-12', '2026-10-03', 'v1')).toBe('v1');
+  });
+});
+
 describe('redução do desempenho', () => {
   const v = (o: Partial<VisitAggRow>): VisitAggRow => ({
     pageId: 'p1', vslId: 'v1', testId: null, armId: null, day: '2026-10-04',
