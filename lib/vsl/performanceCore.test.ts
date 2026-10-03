@@ -59,11 +59,15 @@ describe('redução do desempenho', () => {
       v({ day: '2026-10-06', vslId: 'v2', visits: 50, plays: 30, pitch: 20, accepts: 10, declines: 15, watchSum: 30 * 300 }),
       v({ pageId: 'p2', vslId: 'v1', visits: 40, plays: 10, pitch: 4, accepts: 2, acceptsAfterPitch: 1, declines: 20, watchSum: 10 * 100 }),
     ],
-    linked: [{ pageId: 'p2', vslId: 'v1', testId: null, armId: null, day: '2026-10-04', soldVisits: 2, revenue: 197.8 }],
+    // p2 (BuyGoods): 40 visitas, 36 casadas com sessão; p1 (JVZoo): 10 de 150 casadas.
+    linked: [
+      { pageId: 'p2', vslId: 'v1', testId: null, armId: null, day: '2026-10-04', linkedVisits: 36, soldVisits: 2, revenue: 197.8 },
+      { pageId: 'p1', vslId: 'v1', testId: null, armId: null, day: '2026-10-04', linkedVisits: 10, soldVisits: 3, revenue: 441 },
+    ],
     real: [
-      { pageId: 'p1', day: '2026-10-04', feSessions: 200, sales: 30, revenue: 3000 },
-      { pageId: 'p1', day: '2026-10-05', feSessions: 210, sales: 35, revenue: 3500 },
-      { pageId: 'p1', day: '2026-10-06', feSessions: 190, sales: 40, revenue: 4000 },
+      { pageId: 'p1', day: '2026-10-04', feSessions: 200, sales: 30, revenue: 3000, feLive: 0, salesLive: 0, revenueLive: 0 },
+      { pageId: 'p1', day: '2026-10-05', feSessions: 210, sales: 35, revenue: 3500, feLive: 120, salesLive: 20, revenueLive: 2000 },
+      { pageId: 'p1', day: '2026-10-06', feSessions: 190, sales: 40, revenue: 4000, feLive: 190, salesLive: 40, revenueLive: 4000 },
     ],
     changes,
     pages: [{ id: 'p1', platform: 'jvzoo', fallbackVslId: 'v1' }, { id: 'p2', platform: 'buygoods', fallbackVslId: 'v1' }],
@@ -74,20 +78,26 @@ describe('redução do desempenho', () => {
     expect(out.totals.visits).toBe(190);
     expect(out.totals.acceptRate).toBeCloseTo(24 / 190, 4);
     expect(out.totals.avgWatchSeconds).toBe(Math.round((12000 + 9000 + 1000) / 100));
-    expect(out.totals.sales).toBe(2);
-    // taxa de venda confirmada só sobre visitas BuyGoods (p2), não sobre as 190
-    expect(out.totals.linkableVisits).toBe(40);
-    expect(out.totals.saleRate).toBeCloseTo(2 / 40, 4);
+    expect(out.totals.sales).toBe(5);
+    // base da compra confirmada = visitas CASADAS com sessão (36 + 10), não as 190
+    expect(out.totals.linkableVisits).toBe(46);
+    expect(out.totals.saleRate).toBeCloseTo(5 / 46, 4);
     expect(out.totals.acceptAfterPitch).toBeCloseTo(1 / 54, 4);
   });
 
-  it('venda confirmada só onde a plataforma permite (BuyGoods)', () => {
+  it('compra confirmada na BuyGoods e na JVZoo, sobre as visitas casadas', () => {
     const p1 = out.byPage.find((p) => p.pageId === 'p1')!;
     const p2 = out.byPage.find((p) => p.pageId === 'p2')!;
-    expect(p1.linkable).toBe(false);
-    expect(p1.sales).toBeNull();
+    expect(p1.linkable).toBe(true);
+    expect(p1.sales).toBe(3);
+    expect(p1.saleRate).toBeCloseTo(3 / 10, 4);
     expect(p2.sales).toBe(2);
-    expect(p2.revenuePerVisit).toBeCloseTo(197.8 / 40, 2);
+    expect(p2.revenuePerVisit).toBeCloseTo(197.8 / 36, 2);
+  });
+
+  it('venda real da página também desde a instalação (mesma janela do rastreio)', () => {
+    const p1 = out.byPage.find((p) => p.pageId === 'p1')!;
+    expect(p1.real?.live).toEqual({ feSessions: 310, sales: 60, revenue: 6000, takeRate: 0.1935 });
   });
 
   it('venda real: total por página e só dias exclusivos por VSL', () => {

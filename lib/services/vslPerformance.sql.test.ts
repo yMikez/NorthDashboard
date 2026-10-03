@@ -4,7 +4,7 @@ import type { PGlite } from '@electric-sql/pglite';
 import type { Prisma } from '@prisma/client';
 import { beforeAll, describe, expect, it } from 'vitest';
 import { migratedPglite } from '../test/pgliteDb';
-import { affiliateRowsSql, linkedRowsSql, realRowsSql, visitRowsSql } from './vslPerformance';
+import { affiliateRowsSql, linkedRowsSql, realRowsSql, visitRowsSql, visitSessionSql } from './vslPerformance';
 import { visitUpsertSql } from './vsl';
 import { Prisma as P } from '@prisma/client';
 
@@ -117,7 +117,7 @@ describe('SQL da aba VSLs', () => {
     const where = P.sql`v."firstAt" >= ${START} AND v."firstAt" <= ${END}`;
     const r = await run<{ pageId: string; sold: number; revenue: number }>(db, linkedRowsSql(where));
     expect(r.rows).toHaveLength(1);
-    expect(r.rows[0]).toMatchObject({ pageId: 'p_bg', sold: 1 });
+    expect(r.rows[0]).toMatchObject({ pageId: 'p_bg', linked: 2, sold: 1 });
     expect(Number(r.rows[0].revenue)).toBeCloseTo(197.8, 2);
   });
 
@@ -137,8 +137,19 @@ describe('SQL da aba VSLs', () => {
     expect(Number(day5('p_v6')!.revenue)).toBeCloseTo(147, 2);
     expect(day5('p_v23')).toMatchObject({ fe: 1, sales: 1 });
     expect(Number(day5('p_v23')!.revenue)).toBeCloseTo(99, 2);
-    // página sem condição de potes continua vendo a etapa inteira
-    expect(day5('p_jv')).toMatchObject({ fe: 3, sales: 2 });
+    // página sem filtro de potes conta só os DEMAIS: aqui 6 e 2–3 têm variante → nada em dobro
+    expect(day5('p_jv')).toBeUndefined();
+  });
+
+  it('venda real desde a instalação: só sessões com FE depois da 1ª visita rastreada', async () => {
+    await db.query(`UPDATE "VslPage" SET "installedAt" = '2026-10-05T15:30:00Z' WHERE id = 'p_v6'`);
+    const r = await run<{ pageId: string; day: string; fe: number; sales: number; fe_live: number; sales_live: number }>(db, realRowsSql({ start: START, end: END }));
+    const v6 = r.rows.find((x) => x.pageId === 'p_v6' && x.day === '2026-10-05')!;
+    // v6a (15:00, comprou o UP01) é de antes da instalação; v6b (16:00) é depois e não comprou
+    expect(v6).toMatchObject({ fe: 2, sales: 1, fe_live: 1, sales_live: 0 });
+    // página sem instalação não tem janela "desde a instalação"
+    expect(r.rows.find((x) => x.pageId === 'p_v23')).toMatchObject({ fe_live: 0, sales_live: 0 });
+    await db.query(`UPDATE "VslPage" SET "installedAt" = NULL WHERE id = 'p_v6'`);
   });
 
   it('filtro de etapa e família', async () => {
@@ -173,10 +184,43 @@ describe('SQL da aba VSLs — afiliado da visita', () => {
     await ev('visit00003', 'p_jv', 'jvzoo', 'view', '999'); // sem conta no dash: entra sem nome
     await ev('visit00004', 'p_jv', 'jvzoo', 'view', null);  // sem afiliado: fora do quadro
     await ev('visit00005', 'p_bg', 'buygoods', 'view', '62@13457');
+    await ev('visit00006', 'p_jv', 'jvzoo', 'view', '3552295'); // teste da equipe: vai ser descartada
     await db.query(`UPDATE "VslVisit" SET "firstAt" = '2026-10-05T12:00:00Z'`);
   }, 120_000);
 
-  it('upsert guarda o afiliado do primeiro evento e não apaga depois', async () => {
+  it('descartada (teste) fica fora do quadro por afiliado e do rastreio', async () => {
+    await db.query(`UPDATE "VslVisit" SET "discardedAt" = now() WHERE id = 'visit00006'`);
+    const r = await run<{ pageId: string; affiliateKey: string; visits: number }>(db, affiliateRowsSql({ start: START, end: END }));
+    expect(r.rows.find((x) => x.pageId === 'p_jv' && x.affiliateKey === '3552295')?.visits).toBe(2);
+    const v = await run<{ visits: number }>(db, visitRowsSql({ start: START, end: END, platforms: ['jvzoo'] }));
+    expect(v.rows.reduce((n, x) => n + x.visits, 0)).toBe(4);
+  });
+
+  it('JVZoo: visita casa com o FE do mesmo afiliado minutos antes; venda da etapa confirma (1 vez por sessão)', async () => {
+    await insert(db, 'Product', { id: 'jv_fe', platformId: 'jv', externalId: 'ge-fe6', family: 'GlycoEden', bottles: 6 });
+    await insert(db, 'Product', { id: 'jv_up', platformId: 'jv', externalId: 'ge-up12', family: 'GlycoEden' });
+    // FE do afiliado 3552295 às 11:55; as visitas (11:55→12:00) vêm logo depois
+    await insert(db, 'Order', { id: 'jo1', platformId: 'jv', productId: 'jv_fe', externalId: 'T1', parentExternalId: 'T1', affiliateId: 'a1',
+      productType: 'FRONTEND', funnelStep: 1, grossAmountUsd: 294, status: 'APPROVED', orderedAt: new Date('2026-10-05T11:55:00Z') });
+    await insert(db, 'Order', { id: 'jo2', platformId: 'jv', productId: 'jv_up', externalId: 'T2', parentExternalId: 'T1', affiliateId: 'a1',
+      productType: 'UPSELL', funnelStep: 2, grossAmountUsd: 147, status: 'APPROVED', orderedAt: new Date('2026-10-05T12:07:00Z') });
+    // FE de OUTRO afiliado no mesmo minuto não pode casar com a visita do 3552295
+    await insert(db, 'Affiliate', { id: 'a4', platformId: 'jv', externalId: '777', nickname: 'Outro' });
+    await insert(db, 'Order', { id: 'jo3', platformId: 'jv', productId: 'jv_fe', externalId: 'T3', parentExternalId: 'T3', affiliateId: 'a4',
+      productType: 'FRONTEND', funnelStep: 1, grossAmountUsd: 294, status: 'APPROVED', orderedAt: new Date('2026-10-05T11:59:30Z') });
+
+    const sess = await run<{ visit_id: string; session: string | null }>(db, visitSessionSql(P.sql`v."pageId" = 'p_jv'`));
+    const byVisit = Object.fromEntries(sess.rows.map((x) => [x.visit_id, x.session]));
+    expect(byVisit).toEqual({ visit00001: 'T1', visit00002: 'T1', visit00003: null, visit00004: null }); // 00006 descartada nem entra
+
+    const r = await run<{ pageId: string; linked: number; sold: number; revenue: number }>(db, linkedRowsSql(P.sql`v."pageId" = 'p_jv'`));
+    expect(r.rows).toHaveLength(1);
+    // 2 visitas da mesma sessão (recarga) contam 1; a venda do UP01 confirma
+    expect(r.rows[0]).toMatchObject({ pageId: 'p_jv', linked: 1, sold: 1 });
+    expect(Number(r.rows[0].revenue)).toBeCloseTo(147, 2);
+  });
+
+    it('upsert guarda o afiliado do primeiro evento e não apaga depois', async () => {
     const r = await db.query<{ affiliateKey: string | null }>(`SELECT "affiliateKey" FROM "VslVisit" WHERE id = 'visit00001'`);
     expect(r.rows[0].affiliateKey).toBe('3552295');
   });

@@ -127,6 +127,12 @@ function vslPageName(p, withPlatform) {
   return `${p.family} · ${p.stage}${p.variant ? ` · ${p.variant}` : ''}${withPlatform ? ` · ${p.platform}` : ''}`;
 }
 
+/** Rótulo da variante; página sem filtro com variante irmã = "demais potes". */
+function vslVariantLabel(p) {
+  if (p.variant) return p.variant;
+  return p.otherBottles && p.otherBottles.length ? 'demais potes' : '';
+}
+
 function vslBottlesText(list) {
   if (!list || !list.length) return 'qualquer front';
   return `front com ${list.join(' ou ')} pote${list.length === 1 && list[0] === 1 ? '' : 's'}`;
@@ -311,8 +317,10 @@ function VslOverview({ st, perf, perfLoading, perfErr, visiblePages, nowMs, onOp
   const t = perf.totals;
   const live = visiblePages.filter((p) => vslPageStatus(p, nowMs) === 'live').length;
   const waiting = visiblePages.filter((p) => vslPageStatus(p, nowMs) === 'waiting').length;
-  const realSales = perf.byPage.filter((b) => pageIds.has(b.pageId)).reduce((s, b) => s + (b.real ? b.real.sales : 0), 0);
-  const realRevenue = perf.byPage.filter((b) => pageIds.has(b.pageId)).reduce((s, b) => s + (b.real ? b.real.revenue : 0), 0);
+  const pagesPerf = perf.byPage.filter((b) => pageIds.has(b.pageId));
+  const realSales = pagesPerf.reduce((s, b) => s + (b.real ? b.real.sales : 0), 0);
+  const liveSales = pagesPerf.reduce((s, b) => s + (b.real && b.real.live ? b.real.live.sales : 0), 0);
+  const liveRevenue = pagesPerf.reduce((s, b) => s + (b.real && b.real.live ? b.real.live.revenue : 0), 0);
 
   // Ranking: amostra decente primeiro (por aceite), resto no fim.
   const ranking = perf.byVsl
@@ -350,6 +358,14 @@ function VslOverview({ st, perf, perfLoading, perfErr, visiblePages, nowMs, onOp
     if (tr.status === 'finished' || !pageIds.has(tr.pageId)) continue;
     if (tr.byAccept.verdict === 'leader') attention.push({ key: `t${tr.id}`, tone: 'var(--success)', icon: 'trophy', text: `Teste "${tr.name}": ${tr.byAccept.message}`, go: 'tests' });
   }
+  // One-click: clicar em comprar deveria virar compra. Muito clique sem compra
+  // confirmada = cobrança do upsell falhando ou travando na plataforma.
+  for (const b of pagesPerf) {
+    const p = visiblePages.find((x) => x.id === b.pageId);
+    if (!p || !b.linkable || b.linkableVisits < 5 || b.accepts < 4 || (b.sales || 0) >= b.accepts * 0.6) continue;
+    attention.push({ key: `c${p.id}`, tone: 'var(--warning)', icon: 'alert-triangle', page: p,
+      text: `${vslPageName(p)}: ${b.accepts} cliques em comprar e só ${b.sales || 0} compras confirmadas — no one-click o clique devia virar compra. Confira a cobrança do upsell na plataforma.` });
+  }
   for (const r of perf.byPageVsl) {
     if (!pageIds.has(r.pageId) || r.visits < 100 || r.pitchRate == null || r.pitchRate >= 0.15) continue;
     const v = r.vslId ? vslById.get(r.vslId) : null;
@@ -371,18 +387,19 @@ function VslOverview({ st, perf, perfLoading, perfErr, visiblePages, nowMs, onOp
     <div>
       <div className="vsl-kpis">
         <VslKpi label="Visitas rastreadas" value={fmtInt(t.visits)} sub={`${live} de ${visiblePages.length} páginas no ar${waiting ? ` · ${waiting} aguardando` : ''}`}/>
-        <VslKpi label="Deram play" value={vslPct(t.playRate)} sub={`${fmtInt(t.plays)} visitas`}/>
-        <VslKpi label="Chegaram ao pitch" value={vslPct(t.pitchRate)} sub={t.avgWatchSeconds != null ? `assistem ${vslFmtPitch(t.avgWatchSeconds)} em média` : '—'}/>
-        <VslKpi label="Aceitaram a oferta" value={vslPct(t.acceptRate)} emphasis tone="var(--accent)"
-          sub={`${fmtInt(t.accepts)} cliques em comprar · ${vslPct(t.acceptAfterPitch)} de quem viu o pitch`}
-          title="Aceite = clique no botão de compra da página. É a taxa que decide os testes."/>
-        <VslKpi label="Vendas reais das etapas" value={fmtInt(realSales)} tone="var(--money)"
-          sub={fmtCurrency(realRevenue, 'USD', 0)} title="Pedidos aprovados da etapa (família + etapa + plataforma) no período, pelas plataformas — independe do rastreio."/>
+        <VslKpi label="Chegaram ao pitch" value={vslPct(t.pitchRate)} sub={t.avgWatchSeconds != null ? `assistem ${vslFmtPitch(t.avgWatchSeconds)} em média` : '—'}
+          title="Os botões só aparecem no pitch: quem quer seguir no funil precisa esperar até ele."/>
+        <VslKpi label="Clicaram em comprar" value={vslPct(t.acceptRate)} emphasis tone="var(--accent)"
+          sub={`${fmtInt(t.accepts)} cliques · ${vslPct(t.acceptAfterPitch)} de quem viu o pitch`}
+          title="Clique no botão de compra da página. É a taxa que decide os testes. No one-click devia virar compra — compare com a compra confirmada."/>
         {t.linkable && (
-          <VslKpi label="Vendas confirmadas" value={fmtInt(t.sales || 0)} tone="var(--money)"
-            sub={`${vslPct(t.saleRate)} das ${fmtInt(t.linkableVisits || 0)} visitas BuyGoods · ${fmtCurrency(t.revenuePerVisit || 0, 'USD', 2)} por visita`}
-            title="Só BuyGoods: a visita casa com a venda pelo sessid2. A base é só a visita BuyGoods."/>
+          <VslKpi label="Compra confirmada" value={vslPct(t.saleRate)} tone="var(--money)"
+            sub={`${fmtInt(t.sales || 0)} de ${fmtInt(t.linkableVisits || 0)} visitas ligadas à venda · ${fmtCurrency(t.revenuePerVisit || 0, 'USD', 2)} por visita`}
+            title="Visita ligada à sessão da plataforma que comprou a etapa. BuyGoods: sessid2 ou pedido da URL. JVZoo: mesmo afiliado e front comprado até 30 min antes (aproximado). A base são só as visitas ligadas."/>
         )}
+        <VslKpi label="Vendas reais das etapas" value={fmtInt(liveSales)} tone="var(--money)"
+          sub={`desde a instalação · ${fmtCurrency(liveRevenue, 'USD', 0)} · no período todo: ${fmtInt(realSales)}`}
+          title="Pedidos aprovados da etapa pelas plataformas, só de sessões com front DEPOIS da instalação da página — a mesma janela das visitas rastreadas. O período todo inclui os dias antes do snippet."/>
       </div>
 
       {attention.length > 0 && <VslAttention items={attention} onOpenPage={onOpenPage} onGo={onGo}/>}
@@ -400,7 +417,8 @@ function VslOverview({ st, perf, perfLoading, perfErr, visiblePages, nowMs, onOp
               <div className="tbl-wrap">
                 <table className="tbl vsl-tbl">
                   <thead><tr>
-                    <th>VSL</th><th className="num">Visitas</th><th className="num">Pitch</th><th>Aceite</th>
+                    <th>VSL</th><th className="num">Visitas</th><th className="num">Pitch</th><th title="Clicaram em comprar">Clique</th>
+                    <th className="num" title="Compra confirmada: visita ligada à venda da etapa">Compra</th>
                     <th className="num" title="Take rate real nos dias em que só esta VSL esteve no ar">Take real</th>
                   </tr></thead>
                   <tbody>
@@ -414,7 +432,8 @@ function VslOverview({ st, perf, perfLoading, perfErr, visiblePages, nowMs, onOp
                         <td className="num">{fmtInt(r.visits)}</td>
                         <td className="num">{vslPct(r.pitchRate)}</td>
                         <td style={{ minWidth: 130 }}><VslRate value={r.acceptRate} max={maxAccept} n={r.visits} strong/></td>
-                        <td className="num">{r.real ? vslPct(r.real.takeRate) : '—'}</td>
+                        <td className="num" title={r.linkable ? `${fmtInt(r.sales || 0)} de ${fmtInt(r.linkableVisits || 0)} visitas ligadas` : 'Sem como ligar visita e venda nesta plataforma'}>{r.linkable ? vslPct(r.saleRate) : '—'}</td>
+                        <td className="num" title={r.real ? undefined : 'Só conta dia inteiro com esta VSL sozinha no ar, depois do dia da instalação'}>{r.real ? vslPct(r.real.takeRate) : '—'}</td>
                       </tr>
                     ))}
                   </tbody>
@@ -432,7 +451,7 @@ function VslOverview({ st, perf, perfLoading, perfErr, visiblePages, nowMs, onOp
               <div className="panel-sub">As 5 VSLs com mais visitas</div>
             </div>
             <div className="seg" role="group" aria-label="Métrica do gráfico">
-              <button className={metric === 'accept' ? 'is-active' : ''} aria-pressed={metric === 'accept'} onClick={() => setMetric('accept')}>Aceite</button>
+              <button className={metric === 'accept' ? 'is-active' : ''} aria-pressed={metric === 'accept'} onClick={() => setMetric('accept')}>Clique</button>
               <button className={metric === 'pitch' ? 'is-active' : ''} aria-pressed={metric === 'pitch'} onClick={() => setMetric('pitch')}>Pitch</button>
             </div>
           </div>
@@ -443,9 +462,12 @@ function VslOverview({ st, perf, perfLoading, perfErr, visiblePages, nowMs, onOp
       <VslPagePerfTable st={st} perf={perf} pages={visiblePages} onOpenPage={onOpenPage}/>
 
       <div className="vsl-footnote">
-        <strong>Aceite</strong> = clique no botão de compra da página (o checkout ainda pode recusar o cartão).
-        {' '}<strong>Take real</strong> = vendas aprovadas da etapa ÷ sessões com FE da família, nos dias em que a VSL ficou sozinha no ar depois da instalação (dia de troca e de teste A/B ficam de fora).
-        {' '}<strong>Vendas confirmadas</strong> só existem na BuyGoods (o sessid2 liga visita e venda).
+        <strong>Clique</strong> = clique no botão de compra da página. <strong>Compra</strong> = a visita ligada à sessão da plataforma comprou a etapa
+        (BuyGoods: sessid2 ou pedido da URL; JVZoo: mesmo afiliado e front comprado até 30 min antes — aproximado). No one-click, clique sem compra
+        é cobrança que não passou.
+        {' '}<strong>Vendas reais</strong> = pedidos aprovados da etapa de sessões com front depois da instalação (mesma janela das visitas).
+        {' '}<strong>Take real</strong> por VSL = só dias inteiros com ela sozinha no ar depois do dia da instalação (dia de troca e de teste A/B ficam de fora).
+        {' '}Visita de teste: abra a página com <code>?ns_vsl_test=1</code> (não rastreia) ou descarte na gaveta da página.
       </div>
     </div>
   );
@@ -482,7 +504,7 @@ function VslPagePerfTable({ st, perf, pages, onOpenPage }) {
       <div className="vsl-panel-head">
         <div>
           <div className="panel-title vsl-block-title">Por página</div>
-          <div className="panel-sub">Rastreio do snippet ao lado da venda real da etapa no período</div>
+          <div className="panel-sub">Rastreio e venda real na mesma janela: desde a instalação do snippet (passe o mouse para ver o período todo)</div>
         </div>
       </div>
       <Paginated items={rows} label="páginas" initialPageSize={10}>
@@ -490,7 +512,8 @@ function VslPagePerfTable({ st, perf, pages, onOpenPage }) {
           <div className="tbl-wrap">
             <table className="tbl vsl-tbl">
               <thead><tr>
-                <th>Página</th><th>No ar</th><th className="num">Visitas</th><th className="num">Aceite</th>
+                <th>Página</th><th>No ar</th><th className="num">Visitas</th><th className="num" title="Clicaram em comprar">Clique</th>
+                <th className="num" title="Compra confirmada: visita ligada à venda da etapa">Compra</th>
                 <th className="num">Sessões FE</th><th className="num">Vendas reais</th><th className="num">Take real</th>
               </tr></thead>
               <tbody>
@@ -498,13 +521,14 @@ function VslPagePerfTable({ st, perf, pages, onOpenPage }) {
                   const v = p.vslId ? vslById.get(p.vslId) : null;
                   return (
                     <tr key={p.id} tabIndex={0} className="is-clickable" onClick={() => onOpenPage(p.id)} onKeyDown={(e) => { if (e.key === 'Enter') onOpenPage(p.id); }}>
-                      <td><div className="vsl-name">{p.family}</div><div className="vsl-muted">{p.stage}{p.variant ? ` · ${p.variant}` : ''} · {p.platform}</div></td>
+                      <td><div className="vsl-name">{p.family}</div><div className="vsl-muted">{p.stage}{vslVariantLabel(p) ? ` · ${vslVariantLabel(p)}` : ''} · {p.platform}</div></td>
                       <td>{p.test ? <VslChip tone="var(--accent)">Teste A/B</VslChip> : <span>{v ? v.name : '—'}</span>}</td>
                       <td className="num">{b ? fmtInt(b.visits) : '0'}</td>
                       <td className="num">{b ? vslPct(b.acceptRate) : '—'}</td>
-                      <td className="num">{b && b.real ? fmtInt(b.real.feSessions) : '—'}</td>
-                      <td className="num" style={{ color: 'var(--money)' }}>{b && b.real ? fmtInt(b.real.sales) : '—'}</td>
-                      <td className="num">{b && b.real ? vslPct(b.real.takeRate) : '—'}</td>
+                      <td className="num" title={b && b.linkable ? `${fmtInt(b.sales || 0)} de ${fmtInt(b.linkableVisits || 0)} visitas ligadas` : undefined}>{b && b.linkable ? vslPct(b.saleRate) : '—'}</td>
+                      <td className="num" title={b && b.real ? `Período todo: ${fmtInt(b.real.feSessions)}` : undefined}>{b && b.real && b.real.live ? fmtInt(b.real.live.feSessions) : '—'}</td>
+                      <td className="num" style={{ color: 'var(--money)' }} title={b && b.real ? `Período todo: ${fmtInt(b.real.sales)}` : undefined}>{b && b.real && b.real.live ? fmtInt(b.real.live.sales) : '—'}</td>
+                      <td className="num" title={b && b.real ? `Período todo: ${vslPct(b.real.takeRate)}` : undefined}>{b && b.real && b.real.live ? vslPct(b.real.live.takeRate) : '—'}</td>
                     </tr>
                   );
                 })}
@@ -588,7 +612,9 @@ function VslPagesSection({ st, perf, perfState, pages, nowMs, busy, onOpenPage, 
                           <button className="vsl-link" onClick={() => onOpenPage(p.id)}>{stageLabel.get(p.stage) || p.stage}</button>
                           {p.variant
                             ? <div><VslChip tone="var(--accent)" title={vslBottlesText(p.feBottles)}>{p.variant}</VslChip></div>
-                            : <div className="vsl-muted cell-mono">{p.stage}</div>}
+                            : vslVariantLabel(p)
+                              ? <div><VslChip tone="var(--fg4)" title={`Conta quem NÃO comprou ${p.otherBottles.join(' ou ')} potes (essas têm variante própria)`}>demais potes</VslChip></div>
+                              : <div className="vsl-muted cell-mono">{p.stage}</div>}
                         </td>
                         <td>{platformLabel.get(p.platform) || p.platform}</td>
                         <td style={{ minWidth: 220 }}>
@@ -745,7 +771,7 @@ function VslTestCard({ tr, page, st, busy, onAct, onFinish, onWeights }) {
             <th style={{ width: 44 }}>Braço</th><th>VSL</th><th className="num">Peso</th><th className="num">Visitas</th>
             <th className="num">Pitch</th><th>Aceite</th><th className="num" title="Intervalo de 95%">Faixa provável</th>
             <th className="num">vs {tr.arms[0] ? tr.arms[0].label : 'A'}</th><th title="Chance de ser a melhor VSL do teste">Chance de ser a melhor</th>
-            {tr.linkable && <th className="num" title="BuyGoods: venda aprovada da etapa casada pelo sessid2">Vendas</th>}
+            {tr.linkable && <th className="num" title="Compra confirmada: visita ligada à venda da etapa (BuyGoods pelo sessid2/pedido; JVZoo pelo afiliado + horário do front)">Compras</th>}
           </tr></thead>
           <tbody>
             {tr.arms.map((a, i) => {
@@ -780,7 +806,7 @@ function VslTestCard({ tr, page, st, busy, onAct, onFinish, onWeights }) {
       </div>
 
       {tr.bySale && !finished && (
-        <div className="vsl-muted" style={{ padding: '8px 14px 0' }}>Por venda confirmada (BuyGoods): {tr.bySale.message}</div>
+        <div className="vsl-muted" style={{ padding: '8px 14px 0' }}>Por compra confirmada: {tr.bySale.message}</div>
       )}
 
       {!finished && (
@@ -1074,6 +1100,81 @@ function VslAffiliateRules({ page, st, perf, busy, onAct, onToast }) {
   );
 }
 
+/** Últimas visitas da página: achar e descartar as de teste da equipe. */
+function VslVisitsSection({ page, busy, onAct }) {
+  const [data, setData] = useStateVsl({ status: 'loading', visits: [], error: null });
+  const [sel, setSel] = useStateVsl(() => new Set());
+  const [seq, setSeq] = useStateVsl(0);
+  useEffectVsl(() => {
+    let alive = true;
+    setData((d) => ({ ...d, status: 'loading' }));
+    window.NSApi.fetchVslVisits(page.id)
+      .then((r) => { if (alive) setData({ status: 'ready', visits: r.visits || [], error: null }); })
+      .catch((e) => { if (alive) setData({ status: 'error', visits: [], error: e.message || 'falha' }); });
+    return () => { alive = false; };
+  }, [page.id, seq]);
+  const vis = data.visits;
+  const chosen = vis.filter((v) => sel.has(v.id));
+  const toggle = (id) => setSel((s) => { const n = new Set(s); if (n.has(id)) n.delete(id); else n.add(id); return n; });
+  function apply(discard) {
+    const ids = chosen.filter((v) => v.discarded !== discard).map((v) => v.id);
+    if (!ids.length) return;
+    onAct({ action: 'discard_visits', pageId: page.id, visitIds: ids, discard }).then((ok) => { if (ok) { setSel(new Set()); setSeq((n) => n + 1); } });
+  }
+  const watch = (s) => (s > 0 ? vslFmtPitch(s) : '—');
+  return (
+    <VslSection title="Visitas recentes"
+      hint="30 dias, da mais nova. Marque as visitas de teste da equipe e descarte: saem de todas as métricas (dá pra restaurar).">
+      <div className="vsl-note" style={{ marginBottom: 8 }}>
+        <Icon name="info" size={14}/>
+        <div>Pra testar sem entrar na conta, abra a página com <code>?ns_vsl_test=1</code> no fim do endereço — a página roda normal e nada é rastreado nessa aba do navegador.</div>
+      </div>
+      {data.status === 'loading' && !vis.length && <div className="vsl-muted">Carregando…</div>}
+      {data.status === 'error' && <ReadState kind="falha" title="Não deu para listar as visitas">{data.error}</ReadState>}
+      {data.status !== 'error' && vis.length === 0 && data.status === 'ready' && <div className="vsl-muted">Nenhuma visita nos últimos 30 dias.</div>}
+      {vis.length > 0 && (
+        <Paginated items={vis} label="visitas" initialPageSize={10}>
+          {(rows, pager) => (<>
+            <div className="tbl-wrap">
+              <table className="tbl vsl-tbl">
+                <thead><tr>
+                  <th style={{ width: 36 }}><span className="vsl-sr-only">Selecionar</span></th>
+                  <th>Quando</th><th>Afiliado</th><th className="num">Assistiu</th><th>Clique</th><th>Compra</th>
+                </tr></thead>
+                <tbody>
+                  {rows.map((v) => (
+                    <tr key={v.id} style={v.discarded ? { opacity: 0.55 } : undefined}>
+                      <td><input type="checkbox" checked={sel.has(v.id)} onChange={() => toggle(v.id)} aria-label={`Selecionar visita de ${fmtDateTime(v.firstAt)}`}/></td>
+                      <td>
+                        <div className="cell-mono">{fmtDateTime(v.firstAt)}</div>
+                        {v.discarded && <VslChip tone="var(--fg4)">descartada</VslChip>}
+                      </td>
+                      <td className="cell-mono">{v.affiliateKey || '—'}</td>
+                      <td className="num">{watch(v.maxSecond)}{v.pitch ? ' · pitch' : ''}</td>
+                      <td>{v.accept && v.decline ? 'Sim e Não' : v.accept ? 'Sim' : v.decline ? 'Não' : '—'}</td>
+                      <td>{!v.linked ? <span className="vsl-muted" title="Não deu pra ligar esta visita a uma compra da plataforma">sem vínculo</span>
+                        : v.bought ? <span style={{ color: 'var(--money)' }}>comprou</span>
+                        : <span className={v.accept ? '' : 'vsl-muted'} style={v.accept ? { color: 'var(--warning)' } : undefined}>{v.accept ? 'clicou e não comprou' : 'não comprou'}</span>}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            {pager}
+          </>)}
+        </Paginated>
+      )}
+      {chosen.length > 0 && (
+        <div className="vsl-inline-form" style={{ marginTop: 10 }}>
+          <span className="vsl-muted">{chosen.length} selecionada{chosen.length === 1 ? '' : 's'}</span>
+          <button className="btn btn-ghost" disabled={busy || !chosen.some((v) => !v.discarded)} onClick={() => apply(true)}>Descartar (teste)</button>
+          <button className="btn btn-ghost" disabled={busy || !chosen.some((v) => v.discarded)} onClick={() => apply(false)}>Restaurar</button>
+        </div>
+      )}
+    </VslSection>
+  );
+}
+
 function VslPageDrawer({ page, st, perf, focus, busy, nowMs, onClose, onAct, onToast, onOpenTest }) {
   const vslById = new Map(st.vsls.map((v) => [v.id, v]));
   const [assignId, setAssignId] = useStateVsl(page.vslId || '');
@@ -1196,6 +1297,8 @@ function VslPageDrawer({ page, st, perf, focus, busy, nowMs, onClose, onAct, onT
           </div>
         </VslSection>
       )}
+
+      <VslVisitsSection page={page} busy={busy} onAct={onAct}/>
 
       <VslSection title="Últimas alterações">
         {changes.length === 0 ? <div className="vsl-muted">Nada ainda.</div> : (

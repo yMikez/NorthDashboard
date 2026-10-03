@@ -862,6 +862,15 @@ describe('classifyProduct — JVZoo convenção UP01..Down 03', () => {
       .toMatchObject({ type: 'DOWNSELL', funnelStep: 3 });
   });
 
+  it('Gelazen sem número na JVZoo ancora no slot 2 (cross-sell do funil GlycoEden)', () => {
+    expect(classifyProduct('449461', 'Gelazen 6 Bottles (Upgrade)', 'jvzoo'))
+      .toMatchObject({ type: 'UPSELL', funnelStep: 3, family: 'Gelazen' });
+    expect(classifyProduct('449467', 'Gelazen 9 Bottles (Upgrade)', 'jvzoo'))
+      .toMatchObject({ type: 'UPSELL', funnelStep: 3 });
+    expect(classifyProduct('449469', 'Gelazen 3 Bottles (Last Chance)', 'jvzoo'))
+      .toMatchObject({ type: 'DOWNSELL', funnelStep: 3 });
+  });
+
   it('DigestFlow na BuyGoods segue o default (slot 1) — âncora é só JVZoo', () => {
     expect(classifyProduct('x', 'Digest Flow 6 Bottles (Upgrade)', 'buygoods'))
       .toMatchObject({ type: 'UPSELL', funnelStep: 2 });

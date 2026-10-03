@@ -246,6 +246,16 @@ describe('script da página (loader)', () => {
     expect(seen).toEqual(new Set(['armA', 'armB']));
   });
 
+  it('?ns_vsl_test=1: página normal (VSL do dash) sem rastrear nada', () => {
+    const pg = page({ search: '?ns_vsl_test=1' });
+    pg.run(buildLoaderScript(base()));
+    expect(pg.player.id).toBe('vid-bbbbbbbbbbbbbbbbbbbbbbbb');
+    expect(pg.ctx.NS_VSL).toMatchObject({ test: true, preview: false });
+    pg.player.dispatch('player:play');
+    pg.click(pg.accept);
+    expect(pg.beacons).toEqual([]);
+  });
+
   it('pré-visualização só com ?ns_vsl_preview e sem entrar na métrica', () => {
     const pv = VSL('vsl_c', 'cccccccccccccccccccccccc', 200);
     const normal = page();

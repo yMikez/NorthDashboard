@@ -1851,6 +1851,8 @@ model VslVisit {
   acceptAt     DateTime?
   declineAt    DateTime?
   maxSecond    Int       @default(0)
+  /// Visita de teste descartada na aba (não entra em nenhuma métrica).
+  discardedAt  DateTime?
 
   @@index([firstAt])
   @@index([pageId, firstAt])

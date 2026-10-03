@@ -140,6 +140,13 @@ const LOADER_SOURCE = String.raw`(function () {
   }
 
   var previewMode = !!param('ns_vsl_preview');
+  // Teste da equipe: ?ns_vsl_test=1 roda a página normal mas não rastreia; vale
+  // pra aba inteira (sessionStorage) — o funil leva os parâmetros adiante.
+  var testMode = false;
+  try {
+    if (param('ns_vsl_test')) sset('sessionStorage', 'ns_vsl_test', '1');
+    testMode = sget('sessionStorage', 'ns_vsl_test') === '1';
+  } catch (e) {}
   var aff = null;
   try { aff = affiliate(); } catch (e) { aff = null; }
   var arm = null, vsl = null, testId = null, pitch = null, player = null, viaRule = false;
@@ -191,7 +198,7 @@ const LOADER_SOURCE = String.raw`(function () {
     inject(fallbackSrc());
     return;
   }
-  window.NS_VSL = { key: C.k, player: player, pitch: pitch, testId: testId, armId: arm ? arm.id : null, affiliate: aff, affiliateRule: viaRule, preview: previewMode };
+  window.NS_VSL = { key: C.k, player: player, pitch: pitch, testId: testId, armId: arm ? arm.id : null, affiliate: aff, affiliateRule: viaRule, preview: previewMode, test: testMode };
 
   var lastTu = 0;
   el.addEventListener('player:timeupdate', function (e) {
@@ -227,7 +234,7 @@ const LOADER_SOURCE = String.raw`(function () {
     }, 500);
     return;
   }
-  if (!C.e || !player) return;
+  if (testMode || !C.e || !player) return;
 
   var vkey = 'ns_vsl_v_' + C.k + '_' + player + '_' + (arm ? arm.id : '');
   var visit = sget('sessionStorage', vkey);

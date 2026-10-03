@@ -3,7 +3,9 @@
 //
 //   RASTREIO (beacon do snippet): visitas → play → chegou ao pitch → aceite
 //     (clique em comprar) / recusa. Vale por visita, por VSL e por braço de
-//     teste. Na BuyGoods o sessid2 casa a visita com a venda confirmada.
+//     teste. COMPRA CONFIRMADA: a visita casada com a sessão da plataforma
+//     (BuyGoods: sessid2/order_id; JVZoo: afiliado + FE minutos antes) e a
+//     venda aprovada da etapa nessa sessão. Base = visitas casadas.
 //   VENDA REAL (pedidos das plataformas): sessões com FE da família e vendas
 //     da etapa, por dia BRT. Atribuída a uma VSL só nos dias em que ela foi a
 //     ÚNICA no ar o dia inteiro, depois da instalação da página (primeira
@@ -31,6 +33,8 @@ export interface LinkedRow {
   testId: string | null;
   armId: string | null;
   day: string;
+  /** visitas casadas com uma sessão da plataforma (base da compra confirmada) */
+  linkedVisits: number;
   soldVisits: number;
   revenue: number;
 }
@@ -41,6 +45,10 @@ export interface RealRow {
   feSessions: number;
   sales: number;
   revenue: number;
+  /** mesmo recorte, só sessões com FE depois da instalação da página */
+  feLive: number;
+  salesLive: number;
+  revenueLive: number;
 }
 
 export interface ChangeRow {
@@ -69,9 +77,9 @@ export interface Metrics {
   acceptRate: number | null;
   acceptAfterPitch: number | null;
   avgWatchSeconds: number | null;
-  /** vendas confirmadas por visita (só onde dá pra casar: BuyGoods) */
+  /** compra confirmada por visita (onde dá pra casar: BuyGoods e JVZoo) */
   linkable: boolean;
-  /** visitas em página que casa visita e venda — base de saleRate/receita por visita */
+  /** visitas casadas com a sessão da plataforma — base de saleRate/receita por visita */
   linkableVisits: number;
   sales: number | null;
   revenue: number | null;
@@ -85,6 +93,8 @@ export interface RealMetrics {
   sales: number;
   revenue: number;
   takeRate: number | null;
+  /** só por página: desde a instalação (a mesma janela das visitas rastreadas) */
+  live?: { feSessions: number; sales: number; revenue: number; takeRate: number | null };
 }
 
 export interface Acc {
@@ -122,7 +132,7 @@ function addVisit(a: Acc, r: VisitAggRow, linkable: boolean) {
   a.acceptsAfterPitch += r.acceptsAfterPitch;
   a.declines += r.declines;
   a.watchSum += r.watchSum;
-  if (linkable) { a.linkable = true; a.linkableVisits += r.visits; }
+  if (linkable) a.linkable = true;
 }
 
 export function finishMetrics(a: Acc): Metrics {
@@ -228,7 +238,8 @@ export interface PerformanceInput {
   installDayByPage: Map<string, string>;
 }
 
-const LINKABLE_PLATFORMS = new Set(['buygoods']);
+/** Plataformas em que a visita casa com a venda (ver linkedRowsSql). */
+export const LINKABLE_PLATFORMS = new Set(['buygoods', 'jvzoo']);
 
 const vk = (pageId: string, vslId: string | null) => `${pageId}|${vslId ?? ''}`;
 
@@ -269,7 +280,7 @@ export function reducePerformance(input: PerformanceInput) {
   }
 
   for (const l of input.linked) {
-    const add = (a: Acc | undefined) => { if (a) { a.sold += l.soldVisits; a.revenue += l.revenue; } };
+    const add = (a: Acc | undefined) => { if (a) { a.linkableVisits += l.linkedVisits; a.sold += l.soldVisits; a.revenue += l.revenue; } };
     add(totals);
     add(byVsl.get(l.vslId ?? ''));
     add(byPage.get(l.pageId));
@@ -287,6 +298,7 @@ export function reducePerformance(input: PerformanceInput) {
   for (const list of changesByPage.values()) list.sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime());
 
   const realPage = new Map<string, { days: number; fe: number; sales: number; revenue: number }>();
+  const realLive = new Map<string, { fe: number; sales: number; revenue: number }>();
   const realPageVsl = new Map<string, { days: number; fe: number; sales: number; revenue: number }>();
   const realVsl = new Map<string, { days: number; fe: number; sales: number; revenue: number }>();
   const bump = (m: Map<string, { days: number; fe: number; sales: number; revenue: number }>, k: string, r: RealRow) => {
@@ -296,6 +308,9 @@ export function reducePerformance(input: PerformanceInput) {
   };
   for (const r of input.real) {
     bump(realPage, r.pageId, r);
+    const lv = realLive.get(r.pageId) ?? { fe: 0, sales: 0, revenue: 0 };
+    lv.fe += r.feLive; lv.sales += r.salesLive; lv.revenue += r.revenueLive;
+    realLive.set(r.pageId, lv);
     const page = pageById.get(r.pageId);
     const vslId = exclusiveVslForDay(changesByPage.get(r.pageId) ?? [], r.day, input.installDayByPage.get(r.pageId) ?? null, page?.fallbackVslId ?? null);
     if (vslId) {
@@ -321,11 +336,14 @@ export function reducePerformance(input: PerformanceInput) {
       ...finishMetrics(a),
       real: real(realVsl.get(vslId)),
     })),
-    byPage: [...new Set([...byPage.keys(), ...realPage.keys()])].map((pageId) => ({
-      pageId,
-      ...finishMetrics(byPage.get(pageId) ?? emptyAcc(linkablePage(pageId))),
-      real: real(realPage.get(pageId)),
-    })),
+    byPage: [...new Set([...byPage.keys(), ...realPage.keys()])].map((pageId) => {
+      const r = real(realPage.get(pageId));
+      const lv = realLive.get(pageId);
+      if (r && lv) {
+        r.live = { feSessions: lv.fe, sales: lv.sales, revenue: r2(lv.revenue), takeRate: div(lv.sales, lv.fe) };
+      }
+      return { pageId, ...finishMetrics(byPage.get(pageId) ?? emptyAcc(linkablePage(pageId))), real: r };
+    }),
     byPageVsl: [...byPageVsl.entries()].map(([k, a]) => ({
       pageId: a.pageId,
       vslId: a.vslId,

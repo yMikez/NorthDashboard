@@ -423,7 +423,10 @@ function buyGoodsType(
     if (family === 'NightCalm') return classifyType(isDownsell ? 'DW2' : 'UP2');
     if (family === 'FlexImmuneGuard') return classifyType(isDownsell ? 'DW3' : 'UP3');
     // JVZoo (funil NeuroMind): DigestFlow não tem FE lá — slot 2 sempre.
-    if (platform === 'jvzoo' && family === 'DigestFlow') {
+    // Gelazen idem no funil GlycoEden (sem FE próprio na JVZoo; a Digistore
+    // já marca UP2/DS2 no nome): sem a âncora, quem recusava o 12B do Up01
+    // e comprava o Gelazen tinha a compra contada como Up01 (2026-10-03).
+    if (platform === 'jvzoo' && (family === 'DigestFlow' || family === 'Gelazen')) {
       return classifyType(isDownsell ? 'DW2' : 'UP2');
     }
     return classifyType(isDownsell ? 'DW1' : 'UP1');

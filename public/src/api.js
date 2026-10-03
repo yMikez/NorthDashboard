@@ -653,6 +653,9 @@ function affiliateCrmExportUrl(params = {}) {
 // desempenho usa o filtro global (período, plataformas, famílias).
 function fetchVslState() { return coGet('/api/vsl-admin/state'); }
 function adminVslAction(body) { return coSend('/api/vsl-admin/actions', 'POST', body); }
+function fetchVslVisits(pageId) {
+  return coGet(`/api/vsl-admin/visits?${new URLSearchParams({ page: pageId })}`);
+}
 function fetchVslAffiliates(pageId, q = '') {
   const qs = new URLSearchParams({ page: pageId });
   if (q) qs.set('q', q);
@@ -750,4 +753,5 @@ window.NSApi = _wrapMutations({
   adminVslAction,
   fetchVslPerformance,
   fetchVslAffiliates,
+  fetchVslVisits,
 });

@@ -286,11 +286,11 @@ export async function getVslState() {
     getFilterOptions(),
     db.$queryRaw<Array<{ pageId: string; n: number }>>`
       SELECT "pageId", COUNT(*)::int AS n FROM "VslVisit"
-      WHERE "firstAt" > now() - interval '24 hours' GROUP BY 1`,
+      WHERE "firstAt" > now() - interval '24 hours' AND "discardedAt" IS NULL GROUP BY 1`,
     db.vslAffiliateRule.findMany({ orderBy: { createdAt: 'asc' } }),
     db.$queryRaw<Array<{ pageId: string; n: number; withAff: number }>>`
       SELECT "pageId", COUNT(*)::int AS n, COUNT("affiliateKey")::int AS "withAff" FROM "VslVisit"
-      WHERE "firstAt" > now() - interval '7 days' GROUP BY 1`,
+      WHERE "firstAt" > now() - interval '7 days' AND "discardedAt" IS NULL GROUP BY 1`,
   ]);
   const ruleAffs = rules.length
     ? await db.affiliate.findMany({ where: { id: { in: [...new Set(rules.map((r) => r.affiliateId))] } }, select: { id: true, nickname: true, externalId: true } })
@@ -347,6 +347,10 @@ export async function getVslState() {
         stage: p.stage,
         variant: p.variant,
         feBottles: p.feBottles ?? [],
+        // Página sem filtro de potes conta os DEMAIS: estes potes têm variante própria.
+        otherBottles: (p.feBottles ?? []).length ? [] : [...new Set(pages
+          .filter((x) => x.id !== p.id && x.family === p.family && x.stage === p.stage && x.platform === p.platform)
+          .flatMap((x) => x.feBottles ?? []))].sort((m, n) => m - n),
         platform: p.platform,
         vslId: p.vslId,
         fallbackVslId: p.fallbackVslId,
@@ -421,7 +425,7 @@ export async function affiliateCandidates(pageId: string, q: string): Promise<{ 
 
   const seenRows = await db.$queryRaw<Array<{ key: string; n: number }>>`
     SELECT "affiliateKey" AS key, COUNT(*)::int AS n FROM "VslVisit"
-    WHERE "pageId" = ${pageId} AND "affiliateKey" IS NOT NULL AND "firstAt" > now() - interval '30 days'
+    WHERE "pageId" = ${pageId} AND "affiliateKey" IS NOT NULL AND "discardedAt" IS NULL AND "firstAt" > now() - interval '30 days'
     GROUP BY 1 ORDER BY 2 DESC LIMIT 30`;
   const seenCount = new Map(seenRows.map((r) => [r.key, r.n]));
   const select = { id: true, externalId: true, nickname: true, lastOrderAt: true } as const;
@@ -749,6 +753,27 @@ export async function vslAction(body: Record<string, unknown>, actor: VslActor):
         await tx.vslPage.update({ where: { id: p.id }, data: { fallbackVslId: v.id } });
         await log(tx, actor, { kind: 'fallback_set', pageId: p.id, pageKey: p.key, vslId: v.id, fromVslId: p.fallbackVslId, toVslId: v.id, detail: `${pageLabel(p)}: reserva do snippet agora é "${v.name}" (cole o snippet novo na página).` });
         return { id: p.id, message: 'Reserva trocada — o snippet mudou: cole a versão nova na página.' };
+      }
+
+      case 'discard_visits': {
+        // Visita de teste da equipe sai de todas as métricas (e volta, se
+        // descartada por engano). Só visitas desta página.
+        const p = await pageOrThrow(tx, body.pageId);
+        const ids = Array.isArray(body.visitIds)
+          ? [...new Set(body.visitIds.filter((x): x is string => typeof x === 'string' && x.length <= 64))].slice(0, 500)
+          : [];
+        if (!ids.length) throw new VslActionError('Escolha ao menos uma visita.');
+        const discard = body.discard !== false;
+        const r = await tx.vslVisit.updateMany({
+          where: { id: { in: ids }, pageId: p.id, discardedAt: discard ? null : { not: null } },
+          data: { discardedAt: discard ? new Date() : null },
+        });
+        if (r.count === 0) return { id: p.id, message: 'Nada mudou.' };
+        await log(tx, actor, {
+          kind: discard ? 'visits_discarded' : 'visits_restored', pageId: p.id, pageKey: p.key,
+          detail: `${pageLabel(p)}: ${r.count} visita${r.count === 1 ? '' : 's'} ${discard ? 'descartada' : 'restaurada'}${r.count === 1 ? '' : 's'} ${discard ? '(teste — fora das métricas)' : '(volta às métricas)'}.`,
+        });
+        return { id: p.id, message: `${r.count} visita${r.count === 1 ? '' : 's'} ${discard ? 'descartada' : 'restaurada'}${r.count === 1 ? '' : 's'}.` };
       }
 
       case 'reset_page_url': {
