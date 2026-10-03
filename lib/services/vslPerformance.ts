@@ -183,9 +183,9 @@ interface RawReal { pageId: string; day: string; fe: number; sales: number; reve
 // Variante por potes do FE: página com filtro conta só o front que bate;
 // página sem filtro conta os DEMAIS (tira os potes de variante irmã). FE
 // desconhecido (upsell órfão) fica só na página sem filtro.
-const FE_BOTTLES_MATCH = Prisma.sql`(CASE WHEN cardinality(pg.fe_bottles) = 0
-  THEN (fe.bottles IS NULL OR NOT (fe.bottles = ANY(pg.claimed)))
-  ELSE fe.bottles = ANY(pg.fe_bottles) END)`;
+const feBottlesMatch = (bottles: Prisma.Sql) => Prisma.sql`(CASE WHEN cardinality(pg.fe_bottles) = 0
+  THEN (${bottles} IS NULL OR NOT (${bottles} = ANY(pg.claimed)))
+  ELSE ${bottles} = ANY(pg.fe_bottles) END)`;
 
 /** Venda real por página e dia BRT: sessões com FE da família e vendas da etapa. */
 export function realRowsSql(f: VslPerformanceFilters): Prisma.Sql {
@@ -217,32 +217,52 @@ export function realRowsSql(f: VslPerformanceFilters): Prisma.Sql {
       GROUP BY 1, 2
     ),
     bk AS (
-      SELECT pl.slug AS platform, ${SESSION_KEY} AS sk, o."productType"::text AS pt, ${ORDER_STEP} AS step,
-             o."grossAmountUsd" AS gross, o."orderedAt" AS at, pr.family AS own_family
+      -- só upsell/downsell das etapas que têm página (UP01 → UPSELL step 2…)
+      SELECT o."platformId" AS platform_id, pl.slug AS platform, ${SESSION_KEY} AS sk, o."productType"::text AS pt,
+             ${ORDER_STEP} AS step, o."grossAmountUsd" AS gross, o."orderedAt" AS at, pr.family AS own_family
       FROM "Order" o
       JOIN "Platform" pl ON pl.id = o."platformId"
       JOIN "Product" pr ON pr.id = o."productId"
       WHERE o.status = 'APPROVED' AND o."productType" IN ('UPSELL', 'DOWNSELL')
         AND o."orderedAt" >= ${f.start} AND o."orderedAt" <= ${f.end}
         AND pl.slug IN (SELECT DISTINCT platform FROM pg)
+        AND (o."productType"::text, ${ORDER_STEP}) IN (SELECT pt, step FROM pg)
+    ),
+    bkfe AS (
+      -- FE da sessão de cada upsell, por índice: a mesma "primeira FE aprovada
+      -- da sessão desde 2 dias antes" do CTE fe, sem cruzar CTE × CTE (o planner
+      -- errava a estimativa e fazia laço aninhado de milhões de linhas).
+      SELECT bk.*, fx.family AS fe_family, fx.bottles AS fe_bottles, fx.at AS fe_at
+      FROM bk
+      LEFT JOIN LATERAL (
+        SELECT pr2.family, pr2.bottles, f2."orderedAt" AS at
+        FROM "Order" f2 JOIN "Product" pr2 ON pr2.id = f2."productId"
+        WHERE f2."platformId" = bk.platform_id
+          AND (f2."funnelSessionId" = bk.sk OR f2."parentExternalId" = bk.sk OR f2."externalId" = bk.sk)
+          AND (CASE WHEN bk.platform = 'buygoods' THEN COALESCE(f2."funnelSessionId", f2."parentExternalId", f2."externalId")
+                    ELSE COALESCE(f2."parentExternalId", f2."externalId") END) = bk.sk
+          AND f2."productType" = 'FRONTEND' AND f2.status = 'APPROVED'
+          AND f2."orderedAt" >= ${feStart} AND f2."orderedAt" <= ${f.end}
+        ORDER BY f2."orderedAt"
+        LIMIT 1
+      ) fx ON true
     ),
     sales AS (
-      SELECT pg.id AS page_id, ${DAY_SQL(Prisma.sql`bk.at`)} AS day,
-             COUNT(DISTINCT bk.sk)::int AS sales, COALESCE(SUM(bk.gross), 0)::float8 AS revenue,
-             COUNT(DISTINCT bk.sk) FILTER (WHERE COALESCE(fe.at, bk.at) >= pg.installed_at)::int AS sales_live,
-             COALESCE(SUM(bk.gross) FILTER (WHERE COALESCE(fe.at, bk.at) >= pg.installed_at), 0)::float8 AS revenue_live
-      FROM bk
-      LEFT JOIN fe ON fe.platform = bk.platform AND fe.sk = bk.sk
-      JOIN pg ON pg.platform = bk.platform AND pg.family = COALESCE(fe.family, bk.own_family)
-             AND pg.pt = bk.pt AND pg.step = bk.step
-             AND ${FE_BOTTLES_MATCH}
+      SELECT pg.id AS page_id, ${DAY_SQL(Prisma.sql`b.at`)} AS day,
+             COUNT(DISTINCT b.sk)::int AS sales, COALESCE(SUM(b.gross), 0)::float8 AS revenue,
+             COUNT(DISTINCT b.sk) FILTER (WHERE COALESCE(b.fe_at, b.at) >= pg.installed_at)::int AS sales_live,
+             COALESCE(SUM(b.gross) FILTER (WHERE COALESCE(b.fe_at, b.at) >= pg.installed_at), 0)::float8 AS revenue_live
+      FROM bkfe b
+      JOIN pg ON pg.platform = b.platform AND pg.family = COALESCE(b.fe_family, b.own_family)
+             AND pg.pt = b.pt AND pg.step = b.step
+             AND ${feBottlesMatch(Prisma.sql`b.fe_bottles`)}
       GROUP BY 1, 2
     ),
     fes AS (
       SELECT pg.id AS page_id, ${DAY_SQL(Prisma.sql`fe.at`)} AS day, COUNT(*)::int AS fe,
              COUNT(*) FILTER (WHERE fe.at >= pg.installed_at)::int AS fe_live
       FROM fe JOIN pg ON pg.platform = fe.platform AND pg.family = fe.family
-             AND ${FE_BOTTLES_MATCH}
+             AND ${feBottlesMatch(Prisma.sql`fe.bottles`)}
       WHERE fe.at >= ${f.start}
       GROUP BY 1, 2
     )
