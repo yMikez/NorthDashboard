@@ -28,12 +28,20 @@ function slug(s: string): string {
     .slice(0, 40);
 }
 
-/** glycoeden-up01-jvzoo — vai no snippet e na URL do script. */
-export function pageKeyFor(family: string, stage: VslStage, platform: string): string {
-  return `${slug(family) || 'produto'}-${stage.toLowerCase()}-${slug(platform) || 'plataforma'}`;
+/**
+ * glycoeden-up01-jvzoo — vai no snippet e na URL do script. Com variante:
+ * glycoeden-up01-jvzoo-23potes (a mesma etapa com mais de uma página).
+ */
+export function pageKeyFor(family: string, stage: VslStage, platform: string, variant = ''): string {
+  const base = `${slug(family) || 'produto'}-${stage.toLowerCase()}-${slug(platform) || 'plataforma'}`;
+  const v = slug(variant).slice(0, 24);
+  return v ? `${base}-${v}` : base;
 }
 
-export const PAGE_KEY_RE = /^[a-z0-9]{1,40}-(?:up|down)0[1-3]-[a-z0-9]{1,40}$/;
+export const PAGE_KEY_RE = /^[a-z0-9]{1,40}-(?:up|down)0[1-3]-[a-z0-9]{1,40}(?:-[a-z0-9]{1,24})?$/;
+
+/** Potes do FE aceitos numa variante. */
+export const FE_BOTTLE_OPTIONS = [1, 2, 3, 4, 5, 6];
 
 /** 327 → "5:27"; 3725 → "1:02:05". */
 export function formatPitch(seconds: number): string {

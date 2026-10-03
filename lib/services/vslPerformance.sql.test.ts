@@ -54,6 +54,11 @@ describe('SQL da aba VSLs', () => {
     await insert(db, 'Product', { id: 'nc_up', platformId: 'jv', externalId: 'nc-up', family: 'NightCalm' });
     await insert(db, 'Product', { id: 'bg_fe', platformId: 'bg', externalId: 'neu6', family: 'GlycoEden' });
     await insert(db, 'Product', { id: 'bg_up', platformId: 'bg', externalId: 'neu6u', family: 'GlycoEden' });
+    await insert(db, 'Product', { id: 'ge_fe6', platformId: 'jv', externalId: 'ge-fe6', family: 'GlycoEden', bottles: 6 });
+    await insert(db, 'Product', { id: 'ge_fe3', platformId: 'jv', externalId: 'ge-fe3', family: 'GlycoEden', bottles: 3 });
+    // Variantes do mesmo Upsell 1: quem levou 6 potes × quem levou 2–3.
+    await insert(db, 'VslPage', { id: 'p_v6', key: 'glycoeden-up01-jvzoo-6potes', family: 'GlycoEden', stage: 'UP01', platform: 'jvzoo', variant: '6 potes', feBottles: [6], updatedAt: new Date() });
+    await insert(db, 'VslPage', { id: 'p_v23', key: 'glycoeden-up01-jvzoo-23potes', family: 'GlycoEden', stage: 'UP01', platform: 'jvzoo', variant: '2–3 potes', feBottles: [2, 3], updatedAt: new Date() });
     await insert(db, 'VslPage', { id: 'p_jv', key: 'glycoeden-up01-jvzoo', family: 'GlycoEden', stage: 'UP01', platform: 'jvzoo', updatedAt: new Date() });
     await insert(db, 'VslPage', { id: 'p_bg', key: 'glycoeden-up01-buygoods', family: 'GlycoEden', stage: 'UP01', platform: 'buygoods', updatedAt: new Date() });
 
@@ -68,6 +73,13 @@ describe('SQL da aba VSLs', () => {
     // FE de ontem (03/10 BRT) com upsell hoje: conta a venda, não a sessão de hoje.
     await order(db, { plat: 'jv', prod: 'ge_fe', type: 'FRONTEND', ext: 's0', gross: 69, at: '2026-10-04T01:00:00Z' });
     await order(db, { plat: 'jv', prod: 'ge_up', type: 'UPSELL', parent: 's0', step: 2, gross: 147, at: '2026-10-04T03:30:00Z' });
+
+    // Dia 05/10: 2 FEs de 6 potes (1 compra o UP01) e 1 FE de 3 potes (compra o UP01).
+    await order(db, { plat: 'jv', prod: 'ge_fe6', type: 'FRONTEND', ext: 'v6a', gross: 294, at: '2026-10-05T15:00:00Z' });
+    await order(db, { plat: 'jv', prod: 'ge_up', type: 'UPSELL', parent: 'v6a', step: 2, gross: 147, at: '2026-10-05T15:05:00Z' });
+    await order(db, { plat: 'jv', prod: 'ge_fe6', type: 'FRONTEND', ext: 'v6b', gross: 294, at: '2026-10-05T16:00:00Z' });
+    await order(db, { plat: 'jv', prod: 'ge_fe3', type: 'FRONTEND', ext: 'v3a', gross: 177, at: '2026-10-05T17:00:00Z' });
+    await order(db, { plat: 'jv', prod: 'ge_up', type: 'UPSELL', parent: 'v3a', step: 2, gross: 99, at: '2026-10-05T17:04:00Z' });
 
     // BuyGoods: sessão sess-1 comprou o UP01 depois da visita.
     await order(db, { plat: 'bg', prod: 'bg_fe', type: 'FRONTEND', ext: 'b1', session: 'sess-1', gross: 79, at: '2026-10-05T12:00:00Z' });
@@ -111,11 +123,22 @@ describe('SQL da aba VSLs', () => {
 
   it('venda real da etapa: família do FE da sessão (cross-sell entra), só aprovada, etapa certa', async () => {
     const r = await run<{ pageId: string; day: string; fe: number; sales: number; revenue: number }>(db, realRowsSql({ start: START, end: END }));
-    const jv = r.rows.filter((x) => x.pageId === 'p_jv').sort((a, b) => a.day.localeCompare(b.day));
+    const jv = r.rows.filter((x) => x.pageId === 'p_jv' && x.day === '2026-10-04');
     expect(jv).toEqual([expect.objectContaining({ day: '2026-10-04', fe: 3, sales: 3 })]);
     expect(Number(jv[0].revenue)).toBeCloseTo(147 + 120 + 147, 2);
     const bg = r.rows.find((x) => x.pageId === 'p_bg')!;
     expect(bg).toMatchObject({ day: '2026-10-05', fe: 1, sales: 1 });
+  });
+
+  it('variantes: a venda real se separa pelos potes do front', async () => {
+    const r = await run<{ pageId: string; day: string; fe: number; sales: number; revenue: number }>(db, realRowsSql({ start: START, end: END }));
+    const day5 = (id: string) => r.rows.find((x) => x.pageId === id && x.day === '2026-10-05');
+    expect(day5('p_v6')).toMatchObject({ fe: 2, sales: 1 });
+    expect(Number(day5('p_v6')!.revenue)).toBeCloseTo(147, 2);
+    expect(day5('p_v23')).toMatchObject({ fe: 1, sales: 1 });
+    expect(Number(day5('p_v23')!.revenue)).toBeCloseTo(99, 2);
+    // página sem condição de potes continua vendo a etapa inteira
+    expect(day5('p_jv')).toMatchObject({ fe: 3, sales: 2 });
   });
 
   it('filtro de etapa e família', async () => {

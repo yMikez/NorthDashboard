@@ -10,7 +10,7 @@ import { db } from '../db';
 import { logger } from '../logger';
 import { clearResponseCache } from '../cache/responseCache';
 import { getFilterOptions } from './filterOptions';
-import { VSL_STAGES, isVslStage, pageKeyFor, parsePitch, formatPitch, PAGE_KEY_RE, type VslStage } from '../vsl/catalog';
+import { VSL_STAGES, FE_BOTTLE_OPTIONS, isVslStage, pageKeyFor, parsePitch, formatPitch, PAGE_KEY_RE, type VslStage } from '../vsl/catalog';
 import { parseVturbEmbed } from '../vsl/embed';
 import { buildVslSnippet } from '../vsl/snippet';
 import { buildLoaderScript, type LoaderConfig, type LoaderVsl } from '../vsl/loader';
@@ -251,7 +251,7 @@ function vslDto(v: VslRow) {
 export async function getVslState() {
   const [vsls, pages, tests, changes, options, recent] = await Promise.all([
     db.vsl.findMany({ orderBy: [{ archived: 'asc' }, { name: 'asc' }] }),
-    db.vslPage.findMany({ orderBy: [{ family: 'asc' }, { stage: 'asc' }, { platform: 'asc' }] }),
+    db.vslPage.findMany({ orderBy: [{ family: 'asc' }, { stage: 'asc' }, { platform: 'asc' }, { variant: 'asc' }] }),
     db.vslTest.findMany({ include: { arms: true }, orderBy: { startedAt: 'desc' } }),
     db.vslChange.findMany({ orderBy: { createdAt: 'desc' }, take: 500 }),
     getFilterOptions(),
@@ -293,6 +293,7 @@ export async function getVslState() {
       families: options.families.map((f) => f.id),
       platforms: options.platforms.map((p) => ({ id: p.id, label: p.label })),
       stages: VSL_STAGES.map((s) => ({ id: s.id, label: s.label })),
+      feBottles: FE_BOTTLE_OPTIONS,
     },
     vsls: vsls.map((v) => ({ ...vslDto(v), usage: usage.get(v.id) ?? { pages: 0, tests: 0, fallbacks: 0 } })),
     pages: pages.map((p) => {
@@ -303,6 +304,8 @@ export async function getVslState() {
         key: p.key,
         family: p.family,
         stage: p.stage,
+        variant: p.variant,
+        feBottles: p.feBottles ?? [],
         platform: p.platform,
         vslId: p.vslId,
         fallbackVslId: p.fallbackVslId,
@@ -389,7 +392,17 @@ function pitchOf(v: unknown): number {
   return p;
 }
 
-const pageLabel = (p: { family: string; stage: string; platform: string }) => `${p.family} · ${p.stage} · ${p.platform}`;
+const pageLabel = (p: { family: string; stage: string; platform: string; variant?: string | null }) =>
+  `${p.family} · ${p.stage}${p.variant ? ` (${p.variant})` : ''} · ${p.platform}`;
+
+/** Potes do FE: inteiros 1–6, sem repetição, em ordem. */
+function bottlesOf(v: unknown): number[] {
+  if (v == null) return [];
+  if (!Array.isArray(v)) throw new VslActionError('Potes do front: lista de números.');
+  const out = [...new Set(v.map(Number))].sort((a, b) => a - b);
+  if (out.some((n) => !FE_BOTTLE_OPTIONS.includes(n))) throw new VslActionError(`Potes do front: só ${FE_BOTTLE_OPTIONS.join(', ')}.`);
+  return out;
+}
 
 async function vslOrThrow(tx: Tx, id: unknown, opts: { allowArchived?: boolean } = {}) {
   const v = typeof id === 'string' ? await tx.vsl.findUnique({ where: { id } }) : null;
@@ -509,15 +522,36 @@ export async function vslAction(body: Record<string, unknown>, actor: VslActor):
         if (!isVslStage(body.stage)) throw new VslActionError('Escolha a etapa (UP01…DOWN03).');
         const stage = body.stage as VslStage;
         const v = await vslOrThrow(tx, body.vslId);
-        const exists = await tx.vslPage.findUnique({ where: { family_stage_platform: { family, stage, platform } } });
-        if (exists) throw new VslActionError(`A página ${pageLabel(exists)} já existe.`);
-        let key = pageKeyFor(family, stage, platform);
+        const variant = text(body.variant, 'Variante', 40, false) ?? '';
+        const feBottles = bottlesOf(body.feBottles);
+        const exists = await tx.vslPage.findUnique({ where: { family_stage_platform_variant: { family, stage, platform, variant } } });
+        if (exists) {
+          throw new VslActionError(variant
+            ? `A variante "${variant}" de ${family} · ${stage} · ${platform} já existe.`
+            : `${family} · ${stage} · ${platform} já tem uma página. Para outra página na mesma etapa, dê um nome de variante (ex.: 2–3 potes).`);
+        }
+        let key = pageKeyFor(family, stage, platform, variant);
         if (await tx.vslPage.findUnique({ where: { key } })) key = `${key}${Date.now().toString(36).slice(-3)}`;
         const p = await tx.vslPage.create({
-          data: { key, family, stage, platform, vslId: v.id, fallbackVslId: v.id, createdById: actor.id },
+          data: { key, family, stage, platform, variant, feBottles, vslId: v.id, fallbackVslId: v.id, createdById: actor.id },
         });
         await log(tx, actor, { kind: 'page_created', pageId: p.id, pageKey: key, toVslId: v.id, vslId: v.id, detail: `Página ${pageLabel(p)} criada com "${v.name}" (também é a reserva do snippet).` });
         return { id: p.id, message: `Página criada. Copie o snippet e cole no lugar do player.` };
+      }
+
+      case 'update_variant': {
+        // Rótulo e potes do FE mudam; a chave (snippet) fica a da criação.
+        const p = await pageOrThrow(tx, body.pageId);
+        const variant = text(body.variant, 'Variante', 40, false) ?? '';
+        const feBottles = bottlesOf(body.feBottles);
+        if (variant !== p.variant) {
+          const clash = await tx.vslPage.findUnique({ where: { family_stage_platform_variant: { family: p.family, stage: p.stage, platform: p.platform, variant } } });
+          if (clash) throw new VslActionError(variant ? `Já existe a variante "${variant}" nesta etapa.` : 'Esta etapa já tem uma página sem variante.');
+        }
+        await tx.vslPage.update({ where: { id: p.id }, data: { variant, feBottles } });
+        const potes = feBottles.length ? `front com ${feBottles.join('/')} pote${feBottles.length === 1 && feBottles[0] === 1 ? '' : 's'}` : 'qualquer front';
+        await log(tx, actor, { kind: 'page_variant', pageId: p.id, pageKey: p.key, detail: `${pageLabel(p)} → variante "${variant || 'sem nome'}", ${potes}.` });
+        return { id: p.id, message: 'Variante salva. O snippet não muda.' };
       }
 
       case 'assign_vsl': {

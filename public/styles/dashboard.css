@@ -2608,3 +2608,5 @@ button:disabled:hover, .btn:disabled:hover { transform: none; filter: none; }
 .vsl-attention-row.is-static { cursor: default; }
 .vsl-attention-row.is-static:hover { background: none; }
 .vsl-sr-only { position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
+.vsl-note { display: flex; gap: 10px; align-items: flex-start; padding: 10px 12px; border-radius: var(--r-md); background: var(--bg-hover); color: var(--fg2); font-size: 13px; line-height: 20px; }
+.vsl-note > svg { flex: 0 0 auto; margin-top: 3px; color: var(--accent); }

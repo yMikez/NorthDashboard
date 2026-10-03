@@ -29,7 +29,7 @@ const VSL_HISTORY_GROUPS = [
   { id: 'all', label: 'Tudo' },
   { id: 'live', label: 'VSL no ar', kinds: ['vsl_assigned', 'page_enabled', 'page_disabled', 'fallback_set', 'preview_started'] },
   { id: 'tests', label: 'Testes', kinds: ['test_started', 'test_paused', 'test_resumed', 'test_weights', 'test_finished'] },
-  { id: 'pages', label: 'Páginas', kinds: ['page_created', 'page_deleted', 'page_url_reset'] },
+  { id: 'pages', label: 'Páginas', kinds: ['page_created', 'page_deleted', 'page_url_reset', 'page_variant'] },
   { id: 'library', label: 'Biblioteca', kinds: ['vsl_created', 'vsl_updated', 'vsl_archived', 'vsl_restored'] },
 ];
 
@@ -119,6 +119,16 @@ function vslAgo(iso, nowMs) {
   if (s < 3600) return `há ${Math.round(s / 60)} min`;
   if (s < 86400) return `há ${Math.round(s / 3600)} h`;
   return `há ${Math.round(s / 86400)} d`;
+}
+
+/** "GlycoEden · UP01 · 6 potes" — a variante entra quando existe. */
+function vslPageName(p, withPlatform) {
+  return `${p.family} · ${p.stage}${p.variant ? ` · ${p.variant}` : ''}${withPlatform ? ` · ${p.platform}` : ''}`;
+}
+
+function vslBottlesText(list) {
+  if (!list || !list.length) return 'qualquer front';
+  return `front com ${list.join(' ou ')} pote${list.length === 1 && list[0] === 1 ? '' : 's'}`;
 }
 
 function vslPageStatus(p, nowMs) {
@@ -332,8 +342,8 @@ function VslOverview({ st, perf, perfLoading, perfErr, visiblePages, nowMs, onOp
   const attention = [];
   for (const p of visiblePages) {
     const s = vslPageStatus(p, nowMs);
-    if (s === 'stale') attention.push({ key: `s${p.id}`, tone: 'var(--warning)', icon: 'alert-triangle', text: `${p.family} · ${p.stage}: sem sinal ${vslAgo(p.lastSeenAt, nowMs)}.`, page: p });
-    if (s === 'waiting' && nowMs - Date.parse(p.createdAt) > 24 * 3600 * 1000) attention.push({ key: `w${p.id}`, tone: 'var(--fg4)', icon: 'clock', text: `${p.family} · ${p.stage}: criada ${vslAgo(p.createdAt, nowMs)} e ainda sem visita — o snippet foi colado?`, page: p });
+    if (s === 'stale') attention.push({ key: `s${p.id}`, tone: 'var(--warning)', icon: 'alert-triangle', text: `${vslPageName(p)}: sem sinal ${vslAgo(p.lastSeenAt, nowMs)}.`, page: p });
+    if (s === 'waiting' && nowMs - Date.parse(p.createdAt) > 24 * 3600 * 1000) attention.push({ key: `w${p.id}`, tone: 'var(--fg4)', icon: 'clock', text: `${vslPageName(p)}: criada ${vslAgo(p.createdAt, nowMs)} e ainda sem visita — o snippet foi colado?`, page: p });
   }
   for (const tr of perf.tests) {
     if (tr.status === 'finished' || !pageIds.has(tr.pageId)) continue;
@@ -487,7 +497,7 @@ function VslPagePerfTable({ st, perf, pages, onOpenPage }) {
                   const v = p.vslId ? vslById.get(p.vslId) : null;
                   return (
                     <tr key={p.id} tabIndex={0} className="is-clickable" onClick={() => onOpenPage(p.id)} onKeyDown={(e) => { if (e.key === 'Enter') onOpenPage(p.id); }}>
-                      <td><div className="vsl-name">{p.family}</div><div className="vsl-muted">{p.stage} · {p.platform}</div></td>
+                      <td><div className="vsl-name">{p.family}</div><div className="vsl-muted">{p.stage}{p.variant ? ` · ${p.variant}` : ''} · {p.platform}</div></td>
                       <td>{p.test ? <VslChip tone="var(--accent)">Teste A/B</VslChip> : <span>{v ? v.name : '—'}</span>}</td>
                       <td className="num">{b ? fmtInt(b.visits) : '0'}</td>
                       <td className="num">{b ? vslPct(b.acceptRate) : '—'}</td>
@@ -573,7 +583,12 @@ function VslPagesSection({ st, perf, perfState, pages, nowMs, busy, onOpenPage, 
                     const s = vslPageStatus(p, nowMs);
                     return (
                       <tr key={p.id}>
-                        <td><button className="vsl-link" onClick={() => onOpenPage(p.id)}>{stageLabel.get(p.stage) || p.stage}</button><div className="vsl-muted cell-mono">{p.stage}</div></td>
+                        <td>
+                          <button className="vsl-link" onClick={() => onOpenPage(p.id)}>{stageLabel.get(p.stage) || p.stage}</button>
+                          {p.variant
+                            ? <div><VslChip tone="var(--accent)" title={vslBottlesText(p.feBottles)}>{p.variant}</VslChip></div>
+                            : <div className="vsl-muted cell-mono">{p.stage}</div>}
+                        </td>
                         <td>{platformLabel.get(p.platform) || p.platform}</td>
                         <td style={{ minWidth: 220 }}>
                           {p.test ? (
@@ -582,7 +597,7 @@ function VslPagesSection({ st, perf, perfState, pages, nowMs, busy, onOpenPage, 
                               <span className="vsl-muted">{p.test.arms.map((a) => `${a.label} ${a.weight}%`).join(' · ')}</span>
                             </button>
                           ) : (
-                            <select aria-label={`VSL no ar em ${p.family} ${p.stage}`} value={p.vslId || ''} disabled={busy}
+                            <select aria-label={`VSL no ar em ${vslPageName(p)}`} value={p.vslId || ''} disabled={busy}
                               onChange={(e) => e.target.value && onAssign(p, e.target.value)} style={{ width: '100%', maxWidth: 320 }}>
                               {!p.vslId && <option value="">— reserva do snippet —</option>}
                               {st.vsls.filter((v) => !v.archived || v.id === p.vslId).map((v) => (
@@ -595,8 +610,8 @@ function VslPagesSection({ st, perf, perfState, pages, nowMs, busy, onOpenPage, 
                         <td className="num">{fmtInt(p.visits24h || 0)}</td>
                         <td className="num">{vslCell(perfState, b ? b.acceptRate : null, vslPct)}</td>
                         <td>
-                          <button className="btn btn-ghost vsl-icon-btn" onClick={() => onOpenPage(p.id, 'snippet')} title="Snippet da página" aria-label={`Snippet de ${p.family} ${p.stage}`}><Icon name="copy" size={14}/></button>
-                          <button className="btn btn-ghost vsl-icon-btn" onClick={() => onOpenPage(p.id)} title="Abrir página" aria-label={`Abrir ${p.family} ${p.stage}`}><Icon name="chevron-right" size={14}/></button>
+                          <button className="btn btn-ghost vsl-icon-btn" onClick={() => onOpenPage(p.id, 'snippet')} title="Snippet da página" aria-label={`Snippet de ${vslPageName(p)}`}><Icon name="copy" size={14}/></button>
+                          <button className="btn btn-ghost vsl-icon-btn" onClick={() => onOpenPage(p.id)} title="Abrir página" aria-label={`Abrir ${vslPageName(p)}`}><Icon name="chevron-right" size={14}/></button>
                         </td>
                       </tr>
                     );
@@ -696,7 +711,7 @@ function VslTestCard({ tr, page, st, busy, onAct, onFinish, onWeights }) {
         <div style={{ minWidth: 0 }}>
           <div className="vsl-block-title">{tr.name}</div>
           <div className="panel-sub">
-            {page ? `${page.family} · ${page.stage} · ${page.platform}` : 'Página excluída'} · {finished ? `${days} dia${days === 1 ? '' : 's'}, encerrado em ${vslFmtDay(tr.endedAt)}` : `rodando há ${days} dia${days === 1 ? '' : 's'}`}
+            {page ? vslPageName(page, true) : 'Página excluída'} · {finished ? `${days} dia${days === 1 ? '' : 's'}, encerrado em ${vslFmtDay(tr.endedAt)}` : `rodando há ${days} dia${days === 1 ? '' : 's'}`}
           </div>
         </div>
         <VslChip tone={finished ? 'var(--fg4)' : tr.status === 'paused' ? 'var(--warning)' : 'var(--success)'}>
@@ -867,7 +882,13 @@ function VslPageDrawer({ page, st, perf, focus, busy, nowMs, onClose, onAct, onT
   const [fallbackId, setFallbackId] = useStateVsl(page.fallbackVslId || '');
   const [previewId, setPreviewId] = useStateVsl(page.vslId || '');
   const snippetRef = useRefVsl(null);
+  const [variant, setVariant] = useStateVsl(page.variant || '');
+  const [bottles, setBottles] = useStateVsl(page.feBottles || []);
   useEffectVsl(() => { setAssignId(page.vslId || ''); setFallbackId(page.fallbackVslId || ''); }, [page.id, page.vslId, page.fallbackVslId]);
+  useEffectVsl(() => { setVariant(page.variant || ''); setBottles(page.feBottles || []); }, [page.id, page.variant, (page.feBottles || []).join(',')]);
+  const variantDirty = variant.trim() !== (page.variant || '') || bottles.join(',') !== (page.feBottles || []).join(',');
+  const variantClash = st.pages.some((p) => p.id !== page.id && p.family === page.family && p.stage === page.stage && p.platform === page.platform
+    && (p.variant || '').trim().toLowerCase() === variant.trim().toLowerCase());
   useEffectVsl(() => { if (focus === 'snippet' && snippetRef.current) snippetRef.current.scrollIntoView({ block: 'start' }); }, [focus]);
 
   const status = vslPageStatus(page, nowMs);
@@ -886,7 +907,7 @@ function VslPageDrawer({ page, st, perf, focus, busy, nowMs, onClose, onAct, onT
   }
 
   return (
-    <VslDrawer title={`${page.family} · ${page.stage}`} sub={`${page.platform} · chave ${page.key}`} onClose={onClose} wide>
+    <VslDrawer title={vslPageName(page)} sub={`${page.platform} · chave ${page.key}${page.variant ? ` · ${vslBottlesText(page.feBottles)}` : ''}`} onClose={onClose} wide>
       <div className="vsl-drawer-status">
         <VslStatus status={status} page={page} nowMs={nowMs}/>
         {page.lastSeenUrl && (
@@ -923,6 +944,15 @@ function VslPageDrawer({ page, st, perf, focus, busy, nowMs, onClose, onAct, onT
             onChange={(e) => onAct({ action: 'set_enabled', pageId: page.id, enabled: e.target.checked })}/>
           <span>Página ligada no dash <span className="vsl-muted">— desligada, ela toca a reserva do snippet{fb ? ` (${fb.name})` : ''}</span></span>
         </label>
+      </VslSection>
+
+      <VslSection title="Variante" hint="Para quando a mesma etapa tem mais de uma página (ex.: upsell de quem levou 6 potes × 2–3 potes). Mudar aqui não muda o snippet.">
+        <VslVariantFields variant={variant} setVariant={setVariant} bottles={bottles} setBottles={setBottles} options={st.options.feBottles || [1, 2, 3, 4, 5, 6]}
+          error={variantClash ? (variant.trim() ? `Já existe a variante “${variant.trim()}” nesta etapa.` : 'Esta etapa já tem uma página sem variante.') : null}/>
+        <div style={{ marginTop: 8 }}>
+          <button className="btn btn-ghost" disabled={busy || !variantDirty || variantClash}
+            onClick={() => onAct({ action: 'update_variant', pageId: page.id, variant: variant.trim(), feBottles: bottles })}>Salvar variante</button>
+        </div>
       </VslSection>
 
       <VslSection title="Pré-visualizar na página" hint={pageUrl ? `Abre a página real com a VSL escolhida, só para você, por ${st.previewMinutes} min. Não entra na métrica.` : 'Disponível depois da primeira visita (o dash precisa saber o endereço da página).'}>
@@ -984,7 +1014,7 @@ function VslPageDrawer({ page, st, perf, focus, busy, nowMs, onClose, onAct, onT
             : 'A página real continua funcionando com a reserva do snippet. Os testes encerrados desta página e os números dela saem da aba.'}
         </div>
         <button className="btn btn-ghost vsl-danger" disabled={busy || !!page.test}
-          onClick={() => { if (window.confirm(`Excluir a página ${page.family} · ${page.stage} · ${page.platform}?
+          onClick={() => { if (window.confirm(`Excluir a página ${vslPageName(page, true)}?
 
 Os testes encerrados dela e os números dela saem da aba (o histórico de alterações fica).`)) onAct({ action: 'delete_page', pageId: page.id }, { close: true }); }}>
           <Icon name="trash-2" size={14}/> Excluir página
@@ -994,18 +1024,52 @@ Os testes encerrados dela e os números dela saem da aba (o histórico de altera
   );
 }
 
-function VslNewPageDrawer({ st, busy, draft, onClose, onAct, onNewVsl }) {
+function VslVariantFields({ variant, setVariant, bottles, setBottles, options, error }) {
+  const toggle = (n) => setBottles(bottles.includes(n) ? bottles.filter((x) => x !== n) : [...bottles, n].sort((a, b) => a - b));
+  return (
+    <>
+      <VslField label="Variante (opcional)" error={error}
+        hint="Use quando a mesma etapa tem mais de uma página — ex.: “6 potes” e “2–3 potes”. Vazio = página única da etapa.">
+        <input value={variant} onChange={(e) => setVariant(e.target.value)} maxLength={40} placeholder="Ex.: 2–3 potes" style={{ width: '100%' }}/>
+      </VslField>
+      <div className="vsl-field">
+        <span className="vsl-field-label" id="vsl-bottles-label">Potes do front que levam a esta página (opcional)</span>
+        <div className="vsl-chips" role="group" aria-labelledby="vsl-bottles-label" style={{ margin: 0 }}>
+          {options.map((n) => (
+            <button key={n} type="button" className={bottles.includes(n) ? 'chip is-active' : 'chip'} aria-pressed={bottles.includes(n)} onClick={() => toggle(n)}>
+              {n} pote{n === 1 ? '' : 's'}
+            </button>
+          ))}
+        </div>
+        <span className="vsl-field-hint">
+          {bottles.length
+            ? `A venda real desta página conta só quem comprou ${vslBottlesText(bottles)}.`
+            : 'Sem marcar, a venda real conta todo front da família — marque para separar entre variantes.'}
+        </span>
+      </div>
+    </>
+  );
+}
+
+function VslNewPageDrawer({ st, busy, draft, onClose, onAct, onNewVsl, onOpenPage }) {
   const d = draft || {};
   const [family, setFamily] = useStateVsl(d.family || '');
   const [stage, setStage] = useStateVsl(d.stage || 'UP01');
   const [platform, setPlatform] = useStateVsl(d.platform || '');
   const [vslId, setVslId] = useStateVsl(d.vslId || '');
-  const exists = st.pages.find((p) => p.family === family && p.stage === stage && p.platform === platform);
+  const [variant, setVariant] = useStateVsl(d.variant || '');
+  const [bottles, setBottles] = useStateVsl(d.feBottles || []);
+  const siblings = st.pages.filter((p) => p.family === family && p.stage === stage && p.platform === platform);
+  const norm = (x) => (x || '').trim().toLowerCase();
+  const exists = siblings.find((p) => norm(p.variant) === norm(variant));
+  const variantError = exists
+    ? (variant.trim() ? `Já existe a variante “${variant.trim()}” nesta etapa.` : 'Esta etapa já tem uma página — dê um nome de variante para criar outra.')
+    : null;
   const ready = family && stage && platform && vslId && !exists;
   return (
     <VslDrawer title="Nova página" sub="Uma etapa do funil que vai receber a VSL pelo dash" onClose={onClose}
       footer={<button className="btn btn-primary" disabled={busy || !ready}
-        onClick={() => onAct({ action: 'create_page', family, stage, platform, vslId }, { openCreated: 'snippet' })}>Criar e gerar snippet</button>}>
+        onClick={() => onAct({ action: 'create_page', family, stage, platform, vslId, variant: variant.trim(), feBottles: bottles }, { openCreated: 'snippet' })}>Criar e gerar snippet</button>}>
       <VslField label="Família (produto)">
         <select value={family} onChange={(e) => setFamily(e.target.value)} style={{ width: '100%' }}>
           <option value="">Escolha a família</option>
@@ -1025,12 +1089,27 @@ function VslNewPageDrawer({ st, busy, draft, onClose, onAct, onNewVsl }) {
           </select>
         </VslField>
       </div>
-      {exists && <div className="vsl-field-error" role="alert">Essa página já existe — abra ela na lista.</div>}
+      {siblings.length > 0 && (
+        <div className="vsl-note" role="status">
+          <Icon name="info" size={14}/>
+          <div>
+            Esta etapa já tem {siblings.length === 1 ? 'a página' : 'as páginas'}{' '}
+            {siblings.map((p, i) => (
+              <React.Fragment key={p.id}>
+                {i > 0 ? ', ' : ''}
+                <button type="button" className="vsl-link" onClick={() => onOpenPage(p.id)}>{p.variant || 'sem variante'}</button>
+              </React.Fragment>
+            ))}
+            . Dê um nome de variante para criar outra{siblings.some((p) => !p.variant) ? ' — e vale nomear a que já existe (abra e edite a variante; o snippet dela não muda)' : ''}.
+          </div>
+        </div>
+      )}
+      <VslVariantFields variant={variant} setVariant={setVariant} bottles={bottles} setBottles={setBottles} options={st.options.feBottles || [1, 2, 3, 4, 5, 6]} error={family && platform ? variantError : null}/>
       <VslField label="VSL que está hoje na página"
         hint="Vira a VSL no ar e a reserva do snippet (o que toca se o dash não responder).">
         <VslVslSelect vsls={st.vsls} value={vslId} onChange={setVslId}/>
       </VslField>
-      <button className="btn btn-ghost" onClick={() => onNewVsl({ family, stage, platform, vslId })}><Icon name="plus" size={14}/> Cadastrar uma VSL nova</button>
+      <button className="btn btn-ghost" onClick={() => onNewVsl({ family, stage, platform, vslId, variant, feBottles: bottles })}><Icon name="plus" size={14}/> Cadastrar uma VSL nova</button>
       <div className="vsl-field-hint">Cadastre e volte para cá — o que você já preencheu fica guardado.</div>
     </VslDrawer>
   );
@@ -1098,7 +1177,7 @@ function VslVslDrawer({ vsl, st, perf, busy, onClose, onAct, onCreated }) {
             <ul className="vsl-timeline">
               {pages.map((p) => {
                 const roles = [p.vslId === vsl.id ? 'no ar' : null, p.test && p.test.arms.some((a) => a.vslId === vsl.id) ? 'em teste' : null, p.fallbackVslId === vsl.id ? 'reserva do snippet' : null].filter(Boolean);
-                return <li key={p.id}>{p.family} · {p.stage} · {p.platform} <span className="vsl-muted">({roles.join(', ')})</span></li>;
+                return <li key={p.id}>{vslPageName(p, true)} <span className="vsl-muted">({roles.join(', ')})</span></li>;
               })}
             </ul>
           )}
@@ -1114,7 +1193,7 @@ function VslVslDrawer({ vsl, st, perf, busy, onClose, onAct, onCreated }) {
                   const p = pageById.get(r.pageId);
                   return (
                     <tr key={r.pageId}>
-                      <td>{p ? `${p.family} · ${p.stage}` : 'Página excluída'}</td>
+                      <td>{p ? vslPageName(p) : 'Página excluída'}</td>
                       <td className="num">{fmtInt(r.visits)}</td>
                       <td className="num">{vslPct(r.pitchRate)}</td>
                       <td className="num">{vslPct(r.acceptRate)}</td>
@@ -1158,7 +1237,7 @@ function VslNewTestDrawer({ st, busy, presetPageId, onClose, onAct }) {
       <VslField label="Página" hint={candidates.length < st.pages.length ? 'Páginas com teste aberto não aparecem.' : null}>
         <select value={pageId} onChange={(e) => setPageId(e.target.value)} style={{ width: '100%' }}>
           <option value="">Escolha a página</option>
-          {candidates.map((p) => <option key={p.id} value={p.id}>{p.family} · {p.stage} · {p.platform}{p.enabled ? '' : ' (desligada)'}</option>)}
+          {candidates.map((p) => <option key={p.id} value={p.id}>{vslPageName(p, true)}{p.enabled ? '' : ' (desligada)'}</option>)}
         </select>
       </VslField>
       {page && !page.installedAt && <div className="vsl-field-error" role="alert">Essa página ainda não recebeu visita — o teste só coleta dado depois que o snippet estiver no ar.</div>}
@@ -1340,7 +1419,7 @@ function VslPage({ filters, user }) {
   const scopedPageIds = useMemoVsl(() => new Set(scopedPages.map((p) => p.id)), [scopedPages]);
   const visiblePages = useMemoVsl(() => {
     const needle = q.trim().toLowerCase();
-    return needle ? scopedPages.filter((p) => `${p.family} ${p.stage} ${p.platform} ${p.key}`.toLowerCase().includes(needle)) : scopedPages;
+    return needle ? scopedPages.filter((p) => `${p.family} ${p.stage} ${p.platform} ${p.variant || ''} ${p.key}`.toLowerCase().includes(needle)) : scopedPages;
   }, [scopedPages, q]);
   const perfState = perfErr && !perf ? 'error' : perfLoading && !perf ? 'loading' : perfErr ? 'error' : 'ok';
 
@@ -1366,7 +1445,7 @@ function VslPage({ filters, user }) {
     const v = st.vsls.find((x) => x.id === vslId);
     const cur = st.vsls.find((x) => x.id === p.vslId);
     if (!v || vslId === p.vslId) return;
-    if (!window.confirm(`Colocar "${v.name}" no ar em ${p.family} · ${p.stage} · ${p.platform}?\n\nSai: ${cur ? cur.name : 'reserva'}. Entra na página em até 1 minuto.`)) return;
+    if (!window.confirm(`Colocar "${v.name}" no ar em ${vslPageName(p, true)}?\n\nSai: ${cur ? cur.name : 'reserva'}. Entra na página em até 1 minuto.`)) return;
     act({ action: 'assign_vsl', pageId: p.id, vslId });
   }
 
@@ -1465,6 +1544,7 @@ function VslPage({ filters, user }) {
       )}
       {drawer && drawer.type === 'newPage' && (
         <VslNewPageDrawer key={JSON.stringify(drawer.draft || {})} st={st} busy={busy} draft={drawer.draft} onClose={() => setDrawer(null)} onAct={act}
+          onOpenPage={(id) => setDrawer({ type: 'page', id })}
           onNewVsl={(draft) => setDrawer({ type: 'vsl', id: null, returnDraft: draft })}/>
       )}
       {drawer && drawer.type === 'vsl' && (drawer.id == null || drawerVsl) && (

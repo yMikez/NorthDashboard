@@ -111,12 +111,14 @@ export function realRowsSql(f: VslPerformanceFilters): Prisma.Sql {
   const feStart = new Date(f.start.getTime() - 2 * 86_400_000);
   return Prisma.sql`
     WITH pg AS (
-      SELECT p.id, p.family, p.platform, ${STAGE_PT('p')} AS pt, ${STAGE_STEP('p')} AS step
+      SELECT p.id, p.family, p.platform, ${STAGE_PT('p')} AS pt, ${STAGE_STEP('p')} AS step,
+             COALESCE(p."feBottles", ARRAY[]::int[]) AS fe_bottles
       FROM "VslPage" p WHERE ${pageWhere(f)}
     ),
     fe AS (
       SELECT pl.slug AS platform, ${SESSION_KEY} AS sk, MIN(o."orderedAt") AS at,
-             (ARRAY_AGG(pr.family ORDER BY o."orderedAt"))[1] AS family
+             (ARRAY_AGG(pr.family ORDER BY o."orderedAt"))[1] AS family,
+             (ARRAY_AGG(pr.bottles ORDER BY o."orderedAt"))[1] AS bottles
       FROM "Order" o
       JOIN "Platform" pl ON pl.id = o."platformId"
       JOIN "Product" pr ON pr.id = o."productId"
@@ -142,11 +144,14 @@ export function realRowsSql(f: VslPerformanceFilters): Prisma.Sql {
       LEFT JOIN fe ON fe.platform = bk.platform AND fe.sk = bk.sk
       JOIN pg ON pg.platform = bk.platform AND pg.family = COALESCE(fe.family, bk.own_family)
              AND pg.pt = bk.pt AND pg.step = bk.step
+             -- variante por potes do FE: só a sessão cujo front bate (sem FE conhecido, fica fora)
+             AND (cardinality(pg.fe_bottles) = 0 OR fe.bottles = ANY(pg.fe_bottles))
       GROUP BY 1, 2
     ),
     fes AS (
       SELECT pg.id AS page_id, ${DAY_SQL(Prisma.sql`fe.at`)} AS day, COUNT(*)::int AS fe
       FROM fe JOIN pg ON pg.platform = fe.platform AND pg.family = fe.family
+             AND (cardinality(pg.fe_bottles) = 0 OR fe.bottles = ANY(pg.fe_bottles))
       WHERE fe.at >= ${f.start}
       GROUP BY 1, 2
     )

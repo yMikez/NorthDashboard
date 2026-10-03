@@ -1725,6 +1725,13 @@ model VslPage {
   family        String
   stage         String    // UP01..UP03 | DOWN01..DOWN03
   platform      String    // slug da plataforma
+  // Variante da etapa: a mesma etapa pode ter mais de uma página (ex.: Upsell 1
+  // de quem levou 6 potes × de quem levou 2–3). "" = página única. O rótulo
+  // pode ser editado; a chave (snippet) fica a da criação.
+  variant       String    @default("")
+  // Potes do FE que levam a esta página (vazio = qualquer). Separa a venda
+  // real entre variantes.
+  feBottles     Int[]     @default([])
   vslId         String?   // VSL no ar quando não há teste rodando
   vsl           Vsl?      @relation("VslPageCurrent", fields: [vslId], references: [id], onDelete: SetNull)
   // VSL embutida no snippet como reserva (a que já estava na página).
@@ -1745,7 +1752,7 @@ model VslPage {
 
   tests VslTest[]
 
-  @@unique([family, stage, platform])
+  @@unique([family, stage, platform, variant])
 }
 
 model VslTest {

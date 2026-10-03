@@ -12,6 +12,11 @@ describe('catálogo', () => {
     expect(pageKeyFor('GlycoEden', 'UP01', 'jvzoo')).toBe('glycoeden-up01-jvzoo');
     expect(pageKeyFor('Neuro Mind Pró', 'DOWN02', 'buygoods')).toBe('neuromindpro-down02-buygoods');
     expect(PAGE_KEY_RE.test('glycoeden-up01-jvzoo')).toBe(true);
+    // variante: a mesma etapa com mais de uma página
+    expect(pageKeyFor('GlycoEden', 'UP01', 'jvzoo', '2–3 potes')).toBe('glycoeden-up01-jvzoo-23potes');
+    expect(pageKeyFor('GlycoEden', 'UP01', 'jvzoo', '  ')).toBe('glycoeden-up01-jvzoo');
+    expect(PAGE_KEY_RE.test('glycoeden-up01-jvzoo-23potes')).toBe(true);
+    expect(PAGE_KEY_RE.test('glycoeden-up01-jvzoo-23potes-x')).toBe(false);
     expect(PAGE_KEY_RE.test('glycoeden-up04-jvzoo')).toBe(false);
     expect(PAGE_KEY_RE.test('../etc-up01-x')).toBe(false);
   });
