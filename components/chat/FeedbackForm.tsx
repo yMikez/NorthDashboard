@@ -145,7 +145,7 @@ export function FeedbackForm({
           onChange={(e) => setExpected(e.target.value)}
           rows={2}
           maxLength={2000}
-          placeholder="ex.: o lucro certo era $12,345.00 (aba Custos)"
+          placeholder="ex.: o lucro certo era $12,345.00 (aba Lucro real)"
           className={FIELD}
         />
       </div>

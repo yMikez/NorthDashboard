@@ -76,7 +76,7 @@ export function DataTableBlock({ block }: { block: TableData }) {
       )}
       <div className="overflow-x-auto">
         {/* DS1 (.tbl da SPA): cabeçalho 12 px medium no tom secundário,
-            linha 44 px, corpo 14/22, números à direita em Montserrat. */}
+            linha 44 px, corpo 14/22, números à direita em Inter tabular. */}
         <table className="w-full border-collapse text-sm tabular-nums">
           <thead>
             <tr className="border-b border-border">

@@ -2143,7 +2143,7 @@ body { background: var(--bg); color: var(--fg3); }
 .panel-h3 { font-family: var(--f-display); font-size: 16px; font-weight: 600; color: var(--fg1); letter-spacing: 0; }
 .panel-title { color: var(--fg1); }
 .panel-sub { font-family: var(--f-body); font-size: 12px; line-height: 18px; letter-spacing: 0; color: var(--fg4); }
-/* Métrica: Montserrat Semibold 32/38 (DS1) */
+/* Métrica: Inter Semibold 32/38 (eixo óptico dá o corte display) */
 .kpi-value, .panel-metric, .mini-kpi .v {
   font-family: var(--f-mono); font-weight: 600;
   font-size: var(--t-metric); line-height: 1.19; letter-spacing: 0;
@@ -2621,3 +2621,93 @@ button:disabled:hover, .btn:disabled:hover { transform: none; filter: none; }
 .vsl-aff-option > span:first-child { min-width: 0; overflow-wrap: anywhere; }
 .vsl-aff-option > span:last-child { flex: 0 0 auto; }
 .vsl-aff-picked { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 6px 6px 6px 12px; border: 1px solid var(--accent); border-radius: var(--r-md); background: var(--bg-hover); font-size: 13px; }
+
+/* ============================================================
+   VIDA (2026-10-03) — pedido do dono: "está tudo muito acinzentado,
+   está bom, mas pode ter um pouco de vida a mais". Cor com função, não
+   enfeite: seleção, hierarquia de cabeçalho, tom por métrica e variação
+   em verde/vermelho. Nada de vidro, brilho ou gradiente decorativo.
+   Tokens novos (canvas com tinta azul, paleta de 5 matizes) ficam em
+   colors_and_type.css. Esta camada vem por ÚLTIMO; onde o legado claro tem
+   [data-theme="light"] (mais específico), a regra daqui leva [data-theme]
+   pra empatar e vencer pela ordem nos dois temas.
+   ============================================================ */
+
+/* ---------- Sidebar: seleção em azul cheio ---------- */
+.side-item.is-active {
+  background: var(--cta); color: var(--on-cta); font-weight: 600;
+}
+.side-item.is-active svg { color: var(--on-cta); }
+.side-item.is-active::before { display: none; }
+.side-item.is-active:hover { background: var(--cta-hover); color: var(--on-cta); }
+.side-item.is-active:hover svg { color: var(--on-cta); }
+.side-item:not(.is-active):hover svg { color: var(--accent); }
+.side-group-label { color: var(--accent); font-weight: 600; }
+
+/* ---------- Títulos: o complemento ganha o azul de destaque ---------- */
+[data-theme] .top-h1 em, [data-theme] .page-head h2 em { color: var(--accent); }
+[data-theme] .page-head .eyebrow { color: var(--accent); font-weight: 600; }
+
+/* ---------- Cabeçalho de painel: título com peso e cor ---------- */
+[data-theme] .panel-eyebrow { color: var(--accent); font-weight: 600; font-size: 13px; }
+
+/* ---------- KPI: cada card com o seu tom (KpiCard define --kpi-tone) ---------- */
+.kpi {
+  --kpi-tone: var(--chart-1);
+  background-image: linear-gradient(var(--kpi-tone), var(--kpi-tone));
+  background-size: 100% 3px;
+  background-repeat: no-repeat;
+  background-position: top left;
+}
+[data-theme] .kpi-icon {
+  background: color-mix(in oklab, var(--kpi-tone, var(--accent)) 14%, transparent);
+  border-color: color-mix(in oklab, var(--kpi-tone, var(--accent)) 30%, transparent);
+  color: var(--kpi-tone, var(--accent));
+}
+.kpi-label::before { background: var(--kpi-tone, var(--accent)); }
+.kpi.is-alert .kpi-label::before { background: var(--danger); }
+/* Variação em selo: verde quando melhora, vermelho quando piora */
+.kpi-delta { display: inline-flex; align-items: center; gap: 6px; min-width: 0; }
+.kpi .delta {
+  padding: 2px 7px; border-radius: var(--r-full);
+  font-size: 12px; font-weight: 600; line-height: 18px;
+}
+.kpi .delta.good { background: var(--success-bg); color: var(--success); }
+.kpi .delta.bad  { background: var(--danger-bg);  color: var(--danger); }
+.kpi .delta.flat { background: var(--bg-subtle);  color: var(--fg4); }
+.kpi-delta .vs { color: var(--fg5); font-size: 12px; letter-spacing: 0; white-space: nowrap; }
+
+/* ---------- Tabelas: cabeçalho com leve tinta azul ---------- */
+[data-theme] .tbl th {
+  background: color-mix(in oklab, var(--accent) 6%, var(--bg-raised));
+  color: var(--fg3); font-weight: 600;
+}
+
+/* ---------- Controle segmentado: opção ativa visível ---------- */
+.seg button.is-active {
+  background: var(--accent-soft); color: var(--accent); font-weight: 600;
+  box-shadow: inset 0 0 0 1px color-mix(in oklab, var(--accent) 45%, transparent);
+}
+
+/* ---------- Barras por país: nome em cima, barra embaixo ----------
+   Antes o nome ficava POR CIMA de uma barra de 8 px (parecia riscado). */
+.hbar .bar-track {
+  display: block; height: auto; position: relative;
+  padding-bottom: 10px; min-width: 0;
+}
+.hbar .bar-track::before {
+  content: ''; position: absolute; left: 0; right: 0; bottom: 0; height: 6px;
+  border-radius: 3px; background: color-mix(in oklab, var(--chart-1) 12%, transparent);
+}
+.hbar .bar-track .bar {
+  top: auto; bottom: 0; height: 6px; border-radius: 3px; background: var(--chart-1);
+}
+.hbar .bar-track .nm {
+  display: block; margin-left: 0; line-height: 18px; color: var(--fg1); font-weight: 500;
+}
+.hbar-others .bar-track::before { display: none; }
+.hbar-others .bar-track { padding-bottom: 0; }
+
+/* ---------- Avatar do usuário e chips ativos ---------- */
+.user-chip .av { background: var(--cta); color: var(--on-cta); border-color: transparent; }
+.chip.is-active, .date-chip.is-active { background: var(--accent-soft); font-weight: 600; }

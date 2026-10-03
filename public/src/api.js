@@ -304,150 +304,6 @@ async function fetchOrderDetail(externalId, platformSlug) {
   return fetchJSON(`/api/metrics/orders/${encodeURIComponent(externalId)}`, params);
 }
 
-/**
- * Fetch current cost tables (read-only). For editing call adminSaveCosts()
- * with the bearer token.
- */
-async function fetchCosts() {
-  return fetchJSON('/api/metrics/costs', {});
-}
-
-/**
- * Fetch /api/metrics/costs-overview — dashboard agregado de custos & margem.
- *
- * Retorna kpis (gross, profit, margem, fulfillment/cogs/fees/cpa), série diária,
- * breakdown por plataforma e família, e snapshot de allowance (rolling 60d).
- */
-async function fetchCostsOverview(filters) {
-  const params = {
-    start_date: toISODate(filters.dateRange.start),
-    end_date: toISODate(filters.dateRange.end),
-    platforms: setToCSV(filters.platforms),
-    countries: setToCSV(filters.countries),
-    products: setToCSV(filters.funnels),
-    families: setToCSV(filters.families),
-    stages: setToCSV(filters.stages),
-    affiliate_id: setToCSV(filters.affiliates),
-  };
-  return fetchJSON('/api/metrics/costs-overview', params);
-}
-
-/**
- * Fetch /api/metrics/fulfillment-overview — distribuição APPROVED orders
- * entre RedRock e ShipOffers. Resolve supplier on-the-fly (Product override
- * → família default → 'shipoffers'). Respeita filtros globais.
- */
-// Aba Fulfillment reformulada: enviado/gasto/mix/projeções num payload só.
-async function fetchFulfillment(filters) {
-  const params = {
-    start_date: toISODate(filters.dateRange.start),
-    end_date: toISODate(filters.dateRange.end),
-    platforms: setToCSV(filters.platforms),
-    countries: setToCSV(filters.countries),
-    families: setToCSV(filters.families),
-  };
-  return fetchJSON('/api/metrics/fulfillment', params);
-}
-
-// Saúde do custo (sem filtros de dimensão de propósito — problemas de
-// cadastro não podem ser escondidos por filtro).
-async function fetchFulfillmentHealth(filters) {
-  const params = {
-    start_date: toISODate(filters.dateRange.start),
-    end_date: toISODate(filters.dateRange.end),
-  };
-  return fetchJSON('/api/metrics/fulfillment-health', params);
-}
-
-async function fetchFulfillmentOverview(filters) {
-  const params = {
-    start_date: toISODate(filters.dateRange.start),
-    end_date: toISODate(filters.dateRange.end),
-    platforms: setToCSV(filters.platforms),
-    countries: setToCSV(filters.countries),
-    products: setToCSV(filters.funnels),
-    families: setToCSV(filters.families),
-    stages: setToCSV(filters.stages),
-    affiliate_id: setToCSV(filters.affiliates),
-  };
-  return fetchJSON('/api/metrics/fulfillment-overview', params);
-}
-
-/**
- * Admin: GET /api/admin/product-suppliers. Lista Products com supplier
- * resolvido (override → família default → fallback). Token bearer.
- * Opcional: { platform, family, search } pra filtrar.
- */
-// Catálogo de SKUs (fila de confirmação do catálogo VERIFICADO).
-async function adminListCatalog(token, opts = {}) {
-  const qs = new URLSearchParams();
-  if (opts.platform) qs.set('platform', opts.platform);
-  if (opts.verified != null) qs.set('verified', String(opts.verified));
-  if (opts.onlyIssues) qs.set('onlyIssues', '1');
-  if (opts.search) qs.set('search', opts.search);
-  const res = await fetch(`/api/admin/catalog${qs.toString() ? `?${qs}` : ''}`, {
-    headers: { Authorization: `Bearer ${token}`, Accept: 'application/json' },
-  });
-  if (!res.ok) throw new Error(`${res.status} ${await res.text().catch(() => '')}`);
-  return res.json();
-}
-async function adminPatchCatalog(token, updates) {
-  const res = await fetch('/api/admin/catalog', {
-    method: 'PATCH',
-    headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-    body: JSON.stringify({ updates }),
-  });
-  if (!res.ok) throw new Error(`${res.status} ${await res.text().catch(() => '')}`);
-  return res.json();
-}
-async function adminVerifyCatalog(token, dryRun) {
-  const res = await fetch('/api/admin/verify-catalog', {
-    method: 'POST',
-    headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-    body: JSON.stringify({ dryRun: dryRun !== false }),
-  });
-  if (!res.ok) throw new Error(`${res.status} ${await res.text().catch(() => '')}`);
-  return res.json();
-}
-
-async function adminListProductSuppliers(token, opts = {}) {
-  const qs = new URLSearchParams();
-  if (opts.platform) qs.set('platform', opts.platform);
-  if (opts.family) qs.set('family', opts.family);
-  if (opts.search) qs.set('search', opts.search);
-  const url = `/api/admin/product-suppliers${qs.toString() ? `?${qs}` : ''}`;
-  const res = await fetch(url, {
-    headers: { Authorization: `Bearer ${token}`, Accept: 'application/json' },
-  });
-  if (!res.ok) {
-    const txt = await res.text().catch(() => '');
-    throw new Error(`${res.status} ${txt}`);
-  }
-  return res.json();
-}
-
-/**
- * Admin: PATCH /api/admin/product-suppliers. Bulk update do supplier
- * por Product. updates: [{ productId, supplier: 'redrock'|'shipoffers'|null }].
- * null = remove override e herda do default da família.
- */
-async function adminUpdateProductSuppliers(token, updates) {
-  const res = await fetch('/api/admin/product-suppliers', {
-    method: 'PATCH',
-    headers: {
-      Authorization: `Bearer ${token}`,
-      'Content-Type': 'application/json',
-      Accept: 'application/json',
-    },
-    body: JSON.stringify({ updates }),
-  });
-  if (!res.ok) {
-    const txt = await res.text().catch(() => '');
-    throw new Error(`${res.status} ${txt}`);
-  }
-  return res.json();
-}
-
 async function adminListUsers(opts = {}) {
   const search = new URLSearchParams();
   if (opts.page) search.set('page', String(opts.page));
@@ -500,70 +356,6 @@ async function adminDeleteUser(id) {
   const data = await res.json().catch(() => ({}));
   if (!res.ok) throw new Error(data.error || `${res.status}`);
   return data;
-}
-
-async function adminSaveCosts(token, body) {
-  const res = await fetch('/api/admin/costs', {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${token}`,
-      'Content-Type': 'application/json',
-      Accept: 'application/json',
-    },
-    body: JSON.stringify(body),
-  });
-  if (!res.ok) {
-    const txt = await res.text().catch(() => '');
-    throw new Error(`${res.status} ${txt}`);
-  }
-  return res.json();
-}
-
-// Dispara o backfill em BACKGROUND. Retorna { started, running, startedAt }
-// imediatamente (202) — não espera o job terminar (evita timeout HTTP).
-async function adminBackfillCogs(token) {
-  const res = await fetch('/api/admin/backfill-cogs', {
-    method: 'POST',
-    headers: { Authorization: `Bearer ${token}`, Accept: 'application/json' },
-  });
-  if (!res.ok) {
-    const txt = await res.text().catch(() => '');
-    throw new Error(`${res.status} ${txt}`);
-  }
-  return res.json();
-}
-
-// Status do job de backfill (polling). { running, startedAt, finishedAt,
-// result, error }.
-async function adminBackfillStatus(token) {
-  const res = await fetch('/api/admin/backfill-cogs', {
-    method: 'GET',
-    headers: { Authorization: `Bearer ${token}`, Accept: 'application/json' },
-  });
-  if (!res.ok) {
-    const txt = await res.text().catch(() => '');
-    throw new Error(`${res.status} ${txt}`);
-  }
-  return res.json();
-}
-
-// Classifica produtos não-reconhecidos pelo regex via IA (Claude).
-// dryRun=true retorna propostas sem gravar; false aplica + recalcula COGS.
-async function adminClassifyAi(token, { dryRun = false } = {}) {
-  const res = await fetch('/api/admin/classify-ai', {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${token}`,
-      'Content-Type': 'application/json',
-      Accept: 'application/json',
-    },
-    body: JSON.stringify({ dryRun }),
-  });
-  if (!res.ok) {
-    const txt = await res.text().catch(() => '');
-    throw new Error(`${res.status} ${txt}`);
-  }
-  return res.json();
 }
 
 /* -------- AI Chat -------- */
@@ -672,56 +464,6 @@ async function adminPatchPlatformFees(slug, { feeRatePct, allowancePct, refundCb
   return res.json();
 }
 
-// ---------- Copy Optimizer (admin, session-cookie auth) ----------
-// Endpoints usam requireAdmin() → cookie de sessão (same-origin), sem bearer.
-
-async function fetchCopyRules() {
-  const res = await fetch('/api/admin/copy-rules', { headers: { Accept: 'application/json' } });
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({}));
-    throw new Error(err.error || `HTTP ${res.status}`);
-  }
-  return res.json();
-}
-
-async function createCopyRule(body) {
-  const res = await fetch('/api/admin/copy-rules', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
-    body: JSON.stringify(body),
-  });
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({}));
-    throw new Error(err.error || `HTTP ${res.status}`);
-  }
-  return res.json();
-}
-
-async function patchCopyRule(id, body) {
-  const res = await fetch(`/api/admin/copy-rules/${encodeURIComponent(id)}`, {
-    method: 'PATCH',
-    headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
-    body: JSON.stringify(body),
-  });
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({}));
-    throw new Error(err.error || `HTTP ${res.status}`);
-  }
-  return res.json();
-}
-
-async function deleteCopyRule(id) {
-  const res = await fetch(`/api/admin/copy-rules/${encodeURIComponent(id)}`, {
-    method: 'DELETE',
-    headers: { Accept: 'application/json' },
-  });
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({}));
-    throw new Error(err.error || `HTTP ${res.status}`);
-  }
-  return res.json();
-}
-
 async function coGet(path) {
   const res = await fetch(path, { headers: { Accept: 'application/json' } });
   if (!res.ok) { const e = await res.json().catch(() => ({})); throw new Error(e.error || `HTTP ${res.status}`); }
@@ -770,15 +512,6 @@ async function fetchAffiliateSequence(filters, { window = 7, count = 3, view = '
 async function adminListAffiliateIdentity() { return coGet('/api/admin/affiliate-identity'); }
 async function adminAffiliateIdentity(action, body) { return coSend('/api/admin/affiliate-identity', 'POST', { action, ...(body || {}) }); }
 
-function fetchCopyFunnel(params = {}) {
-  const qs = new URLSearchParams();
-  for (const [k, v] of Object.entries(params)) { if (v !== null && v !== undefined && v !== '') qs.set(k, v); }
-  return coGet(`/api/metrics/copy-funnel${qs.toString() ? `?${qs}` : ''}`);
-}
-function calcCopyAov(body) { return coSend('/api/metrics/copy-aov-calculator', 'POST', body); }
-function batchApplyCopyRules(body) { return coSend('/api/admin/copy-rules/batch-apply', 'POST', body); }
-function applyCopyRulesToAll(body) { return coSend('/api/admin/copy-rules/apply-all', 'POST', body); }
-
 // ---------- Recuperação ----------
 function fetchRecovery(filters) {
   const qs = new URLSearchParams({
@@ -819,17 +552,6 @@ async function adminSaveIntegrationSetting(key, value) {
   const body = await res.json().catch(() => ({}));
   if (!res.ok) throw new Error(body.error || `${res.status} saveSetting`);
   return body;
-}
-// SMS health (Mautic → n8n → Twilio) — aba própria. `extra` leva os
-// filtros locais da tela: { brand, campaign } (slug da campanha).
-function fetchSms(filters, extra = {}) {
-  const qs = new URLSearchParams({
-    start_date: toISODate(filters.dateRange.start),
-    end_date: toISODate(filters.dateRange.end),
-  });
-  if (extra.brand) qs.set('brand', extra.brand);
-  if (extra.campaign) qs.set('campaign', extra.campaign);
-  return coGet(`/api/metrics/sms?${qs}`);
 }
 // Monitor de call center (aba Produtos): vendas/dia dos produtos vigiados
 // + watchlist admin (adicionar/remover produto do monitoramento).
@@ -907,14 +629,6 @@ function deleteRecoveryAffiliate(id) {
   return fetch(`/api/admin/recovery-affiliates/${encodeURIComponent(id)}`, { method: 'DELETE', headers: { Accept: 'application/json' } })
     .then(async (r) => { if (!r.ok) { const e = await r.json().catch(() => ({})); throw new Error(e.error || `HTTP ${r.status}`); } return r.json(); });
 }
-function fetchCopyAutotuneConfig() { return coGet('/api/admin/copy-autotune/config'); }
-function patchCopyAutotuneConfig(body) { return coSend('/api/admin/copy-autotune/config', 'PATCH', body); }
-function fetchCopyAutotuneLogs(params = {}) {
-  const qs = new URLSearchParams();
-  for (const [k, v] of Object.entries(params)) { if (v !== null && v !== undefined && v !== '') qs.set(k, v); }
-  return coGet(`/api/admin/copy-autotune/logs${qs.toString() ? `?${qs}` : ''}`);
-}
-
 // ---------- Cobertura do dado (aviso de leitura parcial, DS1) ----------
 function fetchDataCoverage() { return coGet('/api/metrics/data-coverage'); }
 
@@ -973,17 +687,11 @@ function _wrapMutations(api) {
 }
 
 window.NSApi = _wrapMutations({
-  fetchCopyRules,
-  createCopyRule,
-  patchCopyRule,
-  deleteCopyRule,
-  applyCopyRulesToAll,
   fetchRecovery,
   fetchTauk,
   adminLogicallSync,
   adminListIntegrationSettings,
   adminSaveIntegrationSetting,
-  fetchSms,
   fetchCallCenter,
   addCallCenterWatch,
   deleteCallCenterWatch,
@@ -994,12 +702,6 @@ window.NSApi = _wrapMutations({
   fetchRecoveryAffiliates,
   addRecoveryAffiliate,
   deleteRecoveryAffiliate,
-  fetchCopyFunnel,
-  calcCopyAov,
-  batchApplyCopyRules,
-  fetchCopyAutotuneConfig,
-  patchCopyAutotuneConfig,
-  fetchCopyAutotuneLogs,
   fetchOverview,
   fetchOrders,
   ordersExportUrl,
@@ -1031,20 +733,6 @@ window.NSApi = _wrapMutations({
   fetchPageStates,
   fetchHealth,
   fetchOrderDetail,
-  fetchCosts,
-  fetchCostsOverview,
-  fetchFulfillment,
-  fetchFulfillmentHealth,
-  fetchFulfillmentOverview,
-  adminListProductSuppliers,
-  adminUpdateProductSuppliers,
-  adminListCatalog,
-  adminPatchCatalog,
-  adminVerifyCatalog,
-  adminSaveCosts,
-  adminBackfillCogs,
-  adminBackfillStatus,
-  adminClassifyAi,
   adminListUsers,
   adminCreateUser,
   adminPatchUser,

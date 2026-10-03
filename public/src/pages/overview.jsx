@@ -48,12 +48,19 @@ function deltaFor(cur, prev, directionPreference = 'higher') {
   return { display, delta: display, trend, good };
 }
 
+// Tom de cada card (faixa no topo, ícone, ponto e sparkline). Métrica em que
+// "menor é melhor" (reembolso, chargeback) leva o coral de risco; as demais
+// alternam pela posição pra grade não virar um bloco de uma cor só.
+const KPI_TONES = ['var(--chart-1)', 'var(--chart-2)', 'var(--chart-4)', 'var(--chart-3)'];
+
 function KpiCard({
   label, value, unit, icon, alert, hint, sparkData,
   cur, prev, directionPreference = 'higher',
   threshold, hideSparkline, onClick,
-  index, countValue, countFormat, money, sub,
+  index, countValue, countFormat, money, sub, tone,
 }) {
+  const kpiTone = alert ? 'var(--danger)'
+    : tone || (directionPreference === 'lower' ? 'var(--chart-5)' : KPI_TONES[(index || 0) % KPI_TONES.length]);
   const { display, trend, good } = deltaFor(cur, prev, directionPreference);
   const colorClass = good === true ? 'good' : good === false ? 'bad' : 'flat';
   const arrowIcon = trend === 'up' ? 'arrow-up-right'
@@ -67,7 +74,7 @@ function KpiCard({
   return (
     <div
       className={`kpi anim-in ${alert ? 'is-alert' : ''} ${onClick ? 'is-clickable' : ''}`}
-      style={index != null ? { '--i': index } : undefined}
+      style={{ '--kpi-tone': kpiTone, ...(index != null ? { '--i': index } : {}) }}
       onClick={onClick}
       role={onClick ? 'button' : undefined}
       tabIndex={onClick ? 0 : undefined}
@@ -84,12 +91,14 @@ function KpiCard({
         {valueNode}{unit && <span className="unit">{unit}</span>}
       </div>
       <div className="kpi-foot">
-        <span className={`delta ${colorClass}`}>
-          <Icon name={arrowIcon} size={10}/>
-          {display}
+        <span className="kpi-delta">
+          <span className={`delta ${colorClass}`}>
+            <Icon name={arrowIcon} size={10}/>
+            {display}
+          </span>
           <span className="vs">{hint || 'vs prev'}</span>
         </span>
-        {!hideSparkline && sparkData && <Sparkline data={sparkData} color={alert ? 'var(--danger)' : 'var(--accent)'}/>}
+        {!hideSparkline && sparkData && <Sparkline data={sparkData} color={kpiTone}/>}
       </div>
       {threshold && threshold.label && (
         <div className={`kpi-threshold ${threshold.state}`}>{threshold.label}</div>
@@ -116,7 +125,7 @@ const PRODUCT_TYPE_COLORS = {
   FRONTEND: 'var(--chart-1)',
   UPSELL: 'var(--chart-2)',
   BUMP: 'var(--chart-3)',
-  DOWNSELL: 'var(--chart-5)', // não --chart-4: o Donut pinta o rótulo central com a cor da fatia e #4260E6 dá 3,4:1 como texto no card escuro
+  DOWNSELL: 'var(--chart-4)', // o Donut pinta o rótulo central com a cor da fatia — --chart-4 (turquesa) passa 4,5:1 nos dois temas
 };
 
 const COUNTRY_NAMES = {

@@ -11,7 +11,7 @@ import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxi
 import { DAY_METRICS, fmtDay, fmtDayMetric, fmtDayShort, type DayMetric, type QualitySummary } from './adminCore';
 import { Panel, ReadState, Segmented } from './ui';
 
-// Eixos: rótulo auxiliar em Montserrat (fonte de dados do DS1), tom secundário.
+// Eixos: rótulo auxiliar em Inter tabular (fonte de dados do DS1), tom secundário.
 const TICK = { fontSize: 11, fill: 'hsl(var(--muted-foreground))', fontFamily: 'var(--f-mono)' };
 
 interface Point {

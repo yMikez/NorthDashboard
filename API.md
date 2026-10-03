@@ -365,8 +365,6 @@ Mesma resposta que a interface consome. Todos aceitam os filtros da §4.
 | `/api/metrics/refund-cohorts` | refund-cohorts | maturação de reembolso por coorte |
 | `/api/metrics/recovery` | recovery | vendas de recuperação |
 | `/api/metrics/tauk` | tauk | call center (Tauk, Logicall e SalesBound) |
-| `/api/metrics/sms` | sms | saúde do envio de SMS |
-| `/api/metrics/costs`, `/api/metrics/fulfillment*` | costs | custo de produto e envio |
 | `/api/metrics/health` | health | consistência dos dados |
 
 ---

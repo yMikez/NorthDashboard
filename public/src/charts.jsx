@@ -28,11 +28,11 @@ function Donut({ items, totalLabel = 'Total', format = (v) => fmtCurrency(v), on
   let offset = 0;
   // Paleta tokenizada resolvida no render (segue troca de tema).
   const colors = [
-    chTok('--chart-1', '#4260E6'),
-    chTok('--chart-2', '#167447'),
-    chTok('--chart-3', '#87520B'),
-    chTok('--chart-4', '#1B22A7'),
-    chTok('--chart-5', '#515766'),
+    chTok('--chart-1', '#2F4FD6'),
+    chTok('--chart-2', '#0E6B3C'),
+    chTok('--chart-3', '#954C00'),
+    chTok('--chart-4', '#07687A'),
+    chTok('--chart-5', '#A93224'),
   ];
   const act = active != null ? items[active] : null;
   const clickable = (it) => !!onItemClick && it.clickable !== false;

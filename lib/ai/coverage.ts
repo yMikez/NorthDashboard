@@ -242,7 +242,7 @@ export async function getDataCoverage(platforms?: string[]): Promise<Record<stri
       unverifiedProducts: health.catalog.unverifiedProducts,
       productsWithoutFamily: health.catalog.productsWithoutFamily,
       unknownSKUs: health.catalog.unknownSKUs,
-      note: 'Pedidos com custo pendente têm COGS/frete NULL (não $0) — lucro por custo real fica otimista até a fila do catálogo (/costs) ser resolvida.',
+      note: 'Pedidos com custo pendente têm COGS/frete NULL (não $0) — lucro por custo real fica otimista até os SKUs pendentes serem confirmados no catálogo.',
     },
     callCenter: { logicallCommissionAssumed: snap.logicallCommissionAssumed },
     // Visão Geral lê a MV daily_metrics (refresh throttled): idade dela diz

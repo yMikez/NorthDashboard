@@ -1,3 +1,4 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:opsz,wght@14..32,400..700&display=swap');
 /* ============================================================
    Northscale Design System — Colors & Type (v3.2 + light theme)
    Single source of truth. Import this FIRST.
@@ -14,17 +15,12 @@
    - números no padrão americano (US$ 1,250.50);
    - densidade compacta: controles 36 px (44 em toque), linhas de 44 px.
 
-   Fontes: Sequel Sans auto-hospedada (Body 400/500/600/700) com Inter de
-   reserva; Montserrat para dados, como o DS1 define. */
-@font-face { font-family: 'Sequel Sans'; font-weight: 400; font-style: normal; font-display: swap;
-  src: url('/fonts/sequel-sans-roman-body.ttf') format('truetype'); }
-@font-face { font-family: 'Sequel Sans'; font-weight: 500; font-style: normal; font-display: swap;
-  src: url('/fonts/sequel-sans-medium-body.ttf') format('truetype'); }
-@font-face { font-family: 'Sequel Sans'; font-weight: 600; font-style: normal; font-display: swap;
-  src: url('/fonts/sequel-sans-semibold-body.ttf') format('truetype'); }
-@font-face { font-family: 'Sequel Sans'; font-weight: 700; font-style: normal; font-display: swap;
-  src: url('/fonts/sequel-sans-bold-body.ttf') format('truetype'); }
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Montserrat:wght@500;600;700&display=swap');
+   Fonte (2026-10-03, pedido do dono: "a fonte está serrilhada"): Inter em
+   tudo — texto, títulos e números. A Sequel Sans era um TTF de desktop sem
+   hinting de tela e serrilhava no Windows; Inter é a reserva oficial do DS1,
+   tem hinting e eixo óptico (título grande ganha o desenho "display"
+   sozinho) e algarismos tabulares. O @import fica na 1ª linha do arquivo:
+   depois de qualquer regra o navegador o ignora (era o que acontecia). */
 
 /* ============================================================
    ROOT — TEMA ESCURO (derivado do DS1)
@@ -85,19 +81,22 @@
   --warning-base: #F5A623;
   --danger-base:  #EF4A5A;
 
-  /* Séries de gráfico: distintas entre si e ≥ 3:1 no card (DS1 pede 3:1
-     para elementos essenciais de gráfico). --hot e --warning coincidem no
-     DS1, então a paleta NÃO pode mais sair dos tokens semânticos. */
+  /* Séries de gráfico: 5 matizes distintos (azul, verde, âmbar, turquesa,
+     coral) — a cor da série às vezes vira TEXTO (selo de família/etapa,
+     rótulo do donut), então todas passam 4,5:1 até no elevado e no próprio
+     tint de 14%. Antes: #4260E6 (3,4:1, reprovava como texto) e cinza. */
   --chart-1: #8FA3F2;  --chart-2: #2FBF71;  --chart-3: #F5A623;
-  --chart-4: #4260E6;  --chart-5: #B9BEC9;
+  --chart-4: #35C3D6;  --chart-5: #F27A65;
 
   /* Superfícies */
-  --bg:         #101217;
-  --bg-deep:    #0D0D0D;
-  --bg-raised:  #16181F;
-  --bg-elev:    #1D2029;
-  --bg-hover:   rgba(143, 163, 242, 0.09);
-  --bg-subtle:  #13151B;
+  /* Leve tinta do azul da marca (antes: neutro puro) — dá temperatura sem
+     virar "tema azul"; texto mantém ≥ 4,5:1 (fg5 = 4,76:1 no elevado). */
+  --bg:         #0F1219;
+  --bg-deep:    #0B0D12;
+  --bg-raised:  #151923;
+  --bg-elev:    #1C2130;
+  --bg-hover:   rgba(143, 163, 242, 0.11);
+  --bg-subtle:  #12151D;
 
   /* Texto (todos ≥ 4,5:1 no card #16181F) */
   --fg1: #F4F5F7;
@@ -107,8 +106,8 @@
   --fg5: #868C9B;
 
   /* Bordas: 1 px para divisor e campo; 2 px só no foco (DS1) */
-  --border-soft:   #1F222B;
-  --border:        #2C303B;
+  --border-soft:   #1E2330;
+  --border:        #2B3142;
   --border-strong: #6E7484;   /* limite de campo — 3,8:1 (não-texto ≥ 3:1) */
   --accent:        var(--glow-cyan);
   --accent-soft:   rgba(143, 163, 242, 0.14);
@@ -156,11 +155,11 @@
   --ctl-px: 14px;
 
   /* Fontes */
-  --f-display: 'Sequel Sans', 'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif;
-  --f-body:    'Sequel Sans', 'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif;
-  /* "Dados" no DS1 = Montserrat com algarismos tabulares. O nome --f-mono
-     fica por compat (é o token que todo número da UI já usa). */
-  --f-mono:    'Montserrat', 'Inter', system-ui, sans-serif;
+  --f-display: 'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --f-body:    'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  /* Dados: Inter com algarismos tabulares (body liga o tnum). O nome --f-mono
+     é histórico — é o token que todo número da UI já usa. */
+  --f-mono:    'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif;
   --f-code:    ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
 
   --fvs-hero:    normal;
@@ -207,12 +206,14 @@
   --glow-cyan:     #2E47BA;   /* azul de texto/destaque: 5,9:1 no pior fundo; 4,55:1 no próprio tint 18% */
   --glow-electric: #8FA3F2;
 
-  --bg:         #E1E4EA;      /* canvas (era #F4F5F7) */
-  --bg-deep:    #D6DAE2;
-  --bg-raised:  #ECEEF2;      /* painel/tabela (era #FFFFFF) */
-  --bg-elev:    #F2F3F6;      /* popover/drawer/modal — o mais claro, sem ser branco */
-  --bg-hover:   #DCE2F1;
-  --bg-subtle:  #E6E9EE;
+  /* 2026-10-03 ("muito acinzentado"): mesmo brilho do claro suave, com leve
+     tinta do azul da marca no canvas e nas superfícies. */
+  --bg:         #DEE3EE;      /* canvas (era #E1E4EA, cinza neutro) */
+  --bg-deep:    #D3DAE7;
+  --bg-raised:  #EDF0F6;      /* painel/tabela (era #ECEEF2) */
+  --bg-elev:    #F3F5FA;      /* popover/drawer/modal — o mais claro, sem ser branco */
+  --bg-hover:   #DBE3F7;
+  --bg-subtle:  #E6EAF2;
 
   --fg1: #1A1E26;             /* texto principal (era #0D0D0D) */
   --fg2: #2A2F3A;
@@ -229,14 +230,16 @@
   --success-bg: #DCEBE2;
   --warning-bg: #F1E6D3;
   --danger-bg:  #F2DEE2;
-  /* séries: tons escuros (a cor da série às vezes vira texto — ≥ 4,5:1) */
-  --chart-1: #2E47BA;  --chart-2: #12633D;  --chart-3: #744608;
-  --chart-4: #1B22A7;  --chart-5: #515766;
+  /* séries: 5 matizes (azul, verde, laranja, turquesa, coral) no lugar de
+     2 azuis + marrom + cinza. A cor da série às vezes vira texto: todas
+     passam 4,5:1 no canvas, no painel e no próprio tint de 14% (selo). */
+  --chart-1: #2F4FD6;  --chart-2: #0E6B3C;  --chart-3: #954C00;
+  --chart-4: #07687A;  --chart-5: #A93224;
 
-  --border-soft:   #D6DAE1;
-  --border:        #C9CED8;   /* divisor — separa painel do canvas */
+  --border-soft:   #D5DBE7;
+  --border:        #C6CEDD;   /* divisor — separa painel do canvas */
   --border-strong: #666C7C;   /* limite de campo: 4,1:1 no canvas */
-  --accent-soft:   #DCE2F1;
+  --accent-soft:   #DBE3F7;
 
   --shadow-sm: 0 1px 2px rgba(13, 13, 13, 0.05);
   --shadow-md: 0 1px 2px rgba(13, 13, 13, 0.04), 0 4px 12px rgba(13, 13, 13, 0.06);
@@ -643,7 +646,7 @@ hr {
   -webkit-backdrop-filter: none !important;
 }
 
-/* Números de negócio: Montserrat com algarismos tabulares (DS1 "dados"),
+/* Números de negócio: Inter com algarismos tabulares,
    sem o tracking apertado que servia ao Roboto Mono. */
 .cell-mono, .mono, .num {
   letter-spacing: 0;

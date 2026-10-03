@@ -52,5 +52,5 @@ Exemplo que acompanhou a especificação de 2026-09 — ilustrativo, NÃO é o r
 ## Diferença para as outras lentes de lucro
 
 - Net after CPA (modelo) da Visão Geral usa refund&cb% do modelo por plataforma e opex%, sem custo real de produto e sem a parcela do backend.
-- Lucro de custo real (aba Custos) usa COGS e frete registrados e não soma backend.
+- Lucro de custo real (lente de custo registrado) usa COGS e frete registrados e não soma backend.
 - A margem de contribuição conta reembolso pela premissa do admin ou pelo observado por DATA DO ESTORNO — por isso difere das coortes.

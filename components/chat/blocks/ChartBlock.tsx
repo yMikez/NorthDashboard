@@ -22,7 +22,7 @@ import type { ChartBlock as ChartData } from '@/types/chat';
 // hsl(): lá os tokens são hex.
 const PALETTE = ['var(--chart-1)', 'var(--chart-2)', 'var(--chart-3)', 'var(--chart-4)', 'var(--chart-5)'];
 
-// Eixos: rótulo auxiliar em Montserrat (fonte de dados do DS1), tom secundário.
+// Eixos: rótulo auxiliar em Inter tabular (fonte de dados do DS1), tom secundário.
 const TICK = { fontSize: 11, fill: 'hsl(var(--muted-foreground))', fontFamily: 'var(--f-mono)' };
 
 export function ChartBlock({ block }: { block: ChartData }) {

@@ -1,7 +1,7 @@
 ---
 title: Fulfillment, custo de produto e fornecedores
 kind: reference
-description: Como o dashboard calcula potes enviados, frete e custo de produto, qual fornecedor atende cada família, fatura de terça e as projeções da aba Fulfillment
+description: Como o dashboard calcula potes enviados, frete e custo de produto, qual fornecedor atende cada família, fatura de terça e as projeções de envio (não há mais aba própria; os números vêm pelo chat)
 effectiveDate: 2026-07-30
 ---
 
@@ -22,7 +22,7 @@ Ordem de resolução do fornecedor de um pedido: override do SKU → padrão da 
 ## Custo de produto (COGS)
 
 - COGS = custo unitário do pote da família × potes; em combos, soma por componente (Σ custo × potes de cada família) e o frete é pelo total de potes.
-- SKU que não dá para resolver fica com custo NULO e o pedido marcado como pendente de classificação — aparece na fila de /costs e o custo do período fica subestimado até ser resolvido.
+- SKU que não dá para resolver fica com custo NULO e o pedido marcado como pendente de classificação — fica pendente de confirmação no catálogo e o custo do período fica subestimado até ser resolvido.
 - Família sem custo cadastrado entra com custo zero. Algumas famílias novas usam custo unitário médio provisório.
 
 ## Fatura e projeções

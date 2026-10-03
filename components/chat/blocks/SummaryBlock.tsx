@@ -31,7 +31,7 @@ function Kpi({
   return (
     <div className="p-4 min-w-0">
       {/* DS1: rótulo 12 px em caixa normal, tom secundário; métrica em
-          Montserrat semibold com algarismos tabulares. 20 px (não 24) porque
+          Inter semibold com algarismos tabulares. 20 px (não 24) porque
           a coluna do bloco tem ~140 px; quebra em vez de cortar o número. */}
       <div className="text-xs leading-[18px] text-muted-foreground">{label}</div>
       <div className="text-xl leading-7 font-semibold font-mono tabular-nums text-foreground mt-1 break-words">{value}</div>

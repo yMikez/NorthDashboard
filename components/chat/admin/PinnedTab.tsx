@@ -476,7 +476,7 @@ function EntryEditor({
           </span>
         </div>
         {/* Editor de markdown: monoespaçada do sistema (--f-code), não a
-            Montserrat de dados que o font-mono vira no chat. */}
+            Inter tabular de dados que o font-mono vira no chat. */}
         <Textarea
           id={ids.content}
           placeholder={'Ex.: ## Glossário\n- FE: venda de front-end…'}

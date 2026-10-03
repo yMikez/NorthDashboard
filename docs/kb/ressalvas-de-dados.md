@@ -78,7 +78,7 @@ O IPN de upsell/downsell da Digistore24 às vezes traz no campo de afiliado o tr
 
 ## Catálogo, custos e fulfillment
 
-- Família inferida pelo classificador × verificada por humano: SKU ainda não verificado pode estar na família errada; SKU irresolvível fica com custo NULO (pedido marcado como pendente de classificação) — o custo de produto do período fica subestimado até a fila de /costs ser resolvida.
+- Família inferida pelo classificador × verificada por humano: SKU ainda não verificado pode estar na família errada; SKU irresolvível fica com custo NULO (pedido marcado como pendente de classificação) — o custo de produto do período fica subestimado até os SKUs pendentes serem confirmados no catálogo.
 - Família sem custo cadastrado entra com custo de produto zero: lucro de custo real inflado.
 - Desde 2026-07-30 a ShipOffers está pausada e TODO o frete é calculado com as tarifas da RedRock (fornecedor padrão temporário). O fornecedor "fullstack" usa tarifas provisórias.
 

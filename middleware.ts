@@ -52,14 +52,16 @@ const SPA_ROUTES = new Set([
   '/transactions',
   '/platforms',
   '/health',
-  '/costs',
-  '/custos',
   '/users',
   '/recovery',
   '/tauk',
+  '/net-profit',
+  // Abas removidas em 2026-10-03: link salvo abre a Visão geral (a SPA cai
+  // no overview pra rota desconhecida) em vez de 404.
+  '/costs',
+  '/custos',
   '/sms',
   '/copy-optimizer',
-  '/net-profit',
   // /chat foi MIGRADO pra Next.js native route (app/chat/page.tsx)
   // com TS + Tailwind + shadcn. Não rewriter — deixa o Next.js servir.
 ]);

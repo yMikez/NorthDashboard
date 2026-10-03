@@ -285,12 +285,12 @@ const CORE_TOOLS: Anthropic.Tool[] = [
   ),
   tool(
     'get_costs_overview',
-    'Custos e lucro de CUSTO REAL (aba Custos): receita, refunds, fulfillment, COGS, fees de plataforma, CPA, allowance reservado — total, por dia, por plataforma e por família. kpis.profitUsd = gross − fees − CPA − COGS − frete; marginPct = ÷ gross (pontos percentuais). byFamily.profitUsd NÃO desconta fee nem CPA. `daily` agrupa por dia UTC (não BRT). Custo por POTE fica em get_fulfillment.',
+    'Custos e lucro de CUSTO REAL (lente de custo registrado; não há aba própria): receita, refunds, fulfillment, COGS, fees de plataforma, CPA, allowance reservado — total, por dia, por plataforma e por família. kpis.profitUsd = gross − fees − CPA − COGS − frete; marginPct = ÷ gross (pontos percentuais). byFamily.profitUsd NÃO desconta fee nem CPA. `daily` agrupa por dia UTC (não BRT). Custo por POTE fica em get_fulfillment.',
     { ...DATE_PROPS, ...SCOPE_PROPS },
   ),
   tool(
     'get_fulfillment',
-    'Operação de envio (aba Fulfillment): potes enviados, gasto, custo por pote, projeções now-relative, saúde do custo, ciclos de fatura (fecham terça), por fornecedor e por família. fulfillmentPctOfGross/totalPctOfGross/invoiceBenchmarkPct = fração; trendPct e pctPackages = pontos percentuais. A aba não filtra por afiliado; aqui affiliate_ids restringe aos pedidos do afiliado.',
+    'Operação de envio (sem aba própria — só por aqui): potes enviados, gasto, custo por pote, projeções now-relative, saúde do custo, ciclos de fatura (fecham terça), por fornecedor e por família. fulfillmentPctOfGross/totalPctOfGross/invoiceBenchmarkPct = fração; trendPct e pctPackages = pontos percentuais. affiliate_ids restringe aos pedidos do afiliado.',
     { ...DATE_PROPS, platforms: SCOPE_PROPS.platforms, countries: SCOPE_PROPS.countries, families: SCOPE_PROPS.families, affiliate_ids: AFFILIATE_PROP },
   ),
   tool(
@@ -316,7 +316,7 @@ const CORE_TOOLS: Anthropic.Tool[] = [
   ),
   tool(
     'get_sms',
-    'Saúde e conversão das campanhas de SMS (Mautic → Twilio; aba SMS): enviados, entregues, falhas, respostas, conversões e receita por campanha/número, com semáforo de saúde. deliveryRate/stopRate = fração; deliveryRateDeltaPp = pontos percentuais.',
+    'Saúde e conversão das campanhas de SMS (Mautic → Twilio; sem aba própria — só por aqui): enviados, entregues, falhas, respostas, conversões e receita por campanha/número, com semáforo de saúde. deliveryRate/stopRate = fração; deliveryRateDeltaPp = pontos percentuais.',
     {
       ...DATE_PROPS,
       brand: { type: 'string', description: 'Filtrar marca/família (opcional)' },

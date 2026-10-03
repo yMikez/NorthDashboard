@@ -10,18 +10,15 @@ export type TabId =
   | 'funnel'
   | 'vsl'
   | 'refund-cohorts'
-  | 'custos'
   | 'leaderboard'
   | 'all-affiliates'
   | 'affiliate-analysis'
   | 'affiliate-crm'
   | 'recovery'
   | 'tauk'
-  | 'sms'
   | 'products'
   | 'transactions'
   | 'platforms'
-  | 'costs'
   | 'health';
 
 export interface TabSpec {
@@ -36,23 +33,19 @@ export const AVAILABLE_TABS: TabSpec[] = [
   // VSLs: quem tem a aba vê e edita (troca VSL de página no ar, roda teste A/B).
   { id: 'vsl',            label: 'VSLs',                group: 'Análise' },
   { id: 'refund-cohorts', label: 'Reembolsos',          group: 'Análise' },
-  { id: 'custos',         label: 'Custos',              group: 'Análise' },
   { id: 'leaderboard',    label: 'Ranking',             group: 'Afiliados' },
   { id: 'all-affiliates', label: 'Todos os afiliados',  group: 'Afiliados' },
   { id: 'affiliate-analysis', label: 'Análise',         group: 'Afiliados' },
   // CRM: aba própria de propósito — quem opera o WhatsApp recebe só ela,
   // sem ver receita, margem nem CPA da operação inteira.
   { id: 'affiliate-crm',  label: 'CRM',                 group: 'Afiliados' },
-  // Captação: fontes novas de receita (recuperação/SMS/email). sms/email são
-  // placeholders "em breve" — a tab já existe pra permissão ficar pronta.
+  // Captação: fontes de receita fora do funil (recuperação, call center).
   { id: 'recovery',       label: 'Recuperação',         group: 'Captação' },
   // id 'tauk' preservado (permissões) — a aba virou Call Center (Tauk + Logicall).
   { id: 'tauk',           label: 'Call Center',         group: 'Captação' },
-  { id: 'sms',            label: 'SMS',                 group: 'Captação' },
   { id: 'products',       label: 'Produtos',            group: 'Catálogo' },
   { id: 'transactions',   label: 'Transações',          group: 'Catálogo' },
   { id: 'platforms',      label: 'Plataformas',         group: 'Sistema' },
-  { id: 'costs',          label: 'Fulfillment',         group: 'Sistema' },
   { id: 'health',         label: 'Saúde do dado',       group: 'Sistema' },
 ];
 

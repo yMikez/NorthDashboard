@@ -12,7 +12,6 @@ function Sidebar({ active, onNav, user, open, onClose }) {
         { id: 'funnel',   label: 'Funil', icon: 'ns-funil' },
         { id: 'vsl',      label: 'VSLs', icon: 'monitor-play' },
         { id: 'refund-cohorts', label: 'Reembolsos', icon: 'percent' },
-        { id: 'custos',   label: 'Custos', icon: 'ns-custos' },
       ]
     },
     {
@@ -30,7 +29,6 @@ function Sidebar({ active, onNav, user, open, onClose }) {
       items: [
         { id: 'recovery', label: 'Recuperação', icon: 'ns-recuperacao' },
         { id: 'tauk', label: 'Call Center', icon: 'target' },
-        { id: 'sms', label: 'SMS', icon: 'message-square' },
       ]
     },
     {
@@ -44,7 +42,6 @@ function Sidebar({ active, onNav, user, open, onClose }) {
       label: 'Sistema',
       items: [
         { id: 'platforms', label: 'Plataformas', icon: 'ns-networks' },
-        { id: 'costs', label: 'Fulfillment', icon: 'wallet' },
         { id: 'health', label: 'Saúde do dado', icon: 'alert-triangle' },
       ]
     }
@@ -67,7 +64,6 @@ function Sidebar({ active, onNav, user, open, onClose }) {
     label: 'Admin',
     items: [
       { id: 'users', label: 'Usuários', icon: 'user-plus' },
-      { id: 'copy-optimizer', label: 'Copy Optimizer', icon: 'sliders' },
       { id: 'net-profit', label: 'Lucro real', icon: 'dollar' },
     ],
   };

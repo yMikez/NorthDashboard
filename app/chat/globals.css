@@ -17,9 +17,9 @@
      botão nos dois temas; em fundo escuro o acento de texto/foco é o
      azul claro #8FA3F2 (o #4260E6 dá 3,4:1 ali e reprova como texto).
 
-   Fontes: Sequel Sans (corpo/títulos, com Inter de reserva) e Montserrat
-   (dados) já chegam por /styles/colors_and_type.css, que a layout carrega
-   — lá estão os @font-face e os tokens --f-body/--f-display/--f-mono.
+   Fonte: Inter (texto, títulos e dados) já chega por
+   /styles/colors_and_type.css, que a layout carrega — lá estão o @import e
+   os tokens --f-body/--f-display/--f-mono.
    Não importar fonte aqui.
 
    Efeitos: o DS1 pede "evitar efeitos decorativos". Nada de blur, brilho,
@@ -108,11 +108,11 @@
   [data-app-scope='chat'] {
     color: hsl(var(--foreground));
     background: hsl(var(--background));
-    font-family: var(--f-body, 'Sequel Sans', 'Inter', system-ui, sans-serif);
+    font-family: var(--f-body, 'Inter', system-ui, sans-serif);
   }
   [data-app-scope='chat'] .font-mono,
   [data-app-scope='chat'] [class*='font-mono'] {
-    font-family: var(--f-mono, 'Montserrat', 'Inter', system-ui, sans-serif);
+    font-family: var(--f-mono, 'Inter', system-ui, sans-serif);
     font-variant-numeric: tabular-nums;
   }
 }
@@ -217,7 +217,7 @@
     background: hsl(var(--card));
     border: 1px solid hsl(var(--input));
     color: hsl(var(--foreground));
-    font-family: var(--f-body, 'Sequel Sans', 'Inter', system-ui, sans-serif);
+    font-family: var(--f-body, 'Inter', system-ui, sans-serif);
     transition: border-color var(--dur-base, 180ms) var(--ease-smooth, ease),
       box-shadow var(--dur-base, 180ms) var(--ease-smooth, ease);
   }
@@ -231,7 +231,7 @@
   /* Tool chip — acento enquanto roda, verde de sucesso quando termina. */
   .nx-tool-chip {
     position: relative;
-    font-family: var(--f-mono, 'Montserrat', 'Inter', system-ui, sans-serif);
+    font-family: var(--f-mono, 'Inter', system-ui, sans-serif);
     font-size: 12px;
     line-height: 18px;
     padding: 1px 10px;
@@ -252,7 +252,7 @@
   /* Eyebrow: rótulo de seção em caixa normal, tom secundário (DS1: sem
      caixa-alta nem tracking decorativo). */
   .nx-eyebrow {
-    font-family: var(--f-mono, 'Montserrat', 'Inter', system-ui, sans-serif);
+    font-family: var(--f-mono, 'Inter', system-ui, sans-serif);
     font-size: 10px;
     color: hsl(var(--muted-foreground));
   }
@@ -291,7 +291,7 @@
     gap: 0.25rem;
     padding: 0.125rem 0.375rem;
     border-radius: var(--r-sm, 4px);
-    font-family: var(--f-mono, 'Montserrat', 'Inter', system-ui, sans-serif);
+    font-family: var(--f-mono, 'Inter', system-ui, sans-serif);
     font-size: 0.85em;
     background: hsl(var(--cx-accent));
     color: hsl(var(--ring));

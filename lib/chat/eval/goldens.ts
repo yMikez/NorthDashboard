@@ -282,7 +282,7 @@ export const GOLDEN_CASES: GoldenCase[] = [
     ],
     // Decisão do dono: lente default + UMA linha com o lucro de custo real.
     mention: ['net after cpa|modelo( cpa)?', 'custo real|custos'],
-    oracle: ['Lente: Net after CPA (modelo CPA); pelo custo real (aba Custos) o número difere.'],
+    oracle: ['Lente: Net after CPA (modelo CPA); pela lente de custo real o número difere.'],
     tools: [{ anyOf: ['get_profit_split', 'get_costs_overview', 'get_overview', 'get_profit_model'], args: YESTERDAY }],
   },
   {

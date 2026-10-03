@@ -34,7 +34,7 @@ Com qualquer filtro de pedido (plataforma, país, família, afiliado), Tauk e Lo
 
 ## Lente (b) — lucro de custo real
 
-Tool get_costs_overview (aba Custos): lucro = gross − fees da plataforma − CPA − COGS − fulfillment; margem = lucro ÷ gross. É a lente de "quanto sobrou com os custos registrados". Atenção: por família (byFamily) o lucro NÃO desconta fee nem CPA; família sem custo cadastrado entra com COGS zero (lucro inflado); fee é a real quando a plataforma informa, senão a do cadastro.
+Tool get_costs_overview (lente de custo real; sem aba própria): lucro = gross − fees da plataforma − CPA − COGS − fulfillment; margem = lucro ÷ gross. É a lente de "quanto sobrou com os custos registrados". Atenção: por família (byFamily) o lucro NÃO desconta fee nem CPA; família sem custo cadastrado entra com COGS zero (lucro inflado); fee é a real quando a plataforma informa, senão a do cadastro.
 
 ## Lente (c) — lucro estimado
 
