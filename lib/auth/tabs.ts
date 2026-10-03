@@ -8,6 +8,7 @@
 export type TabId =
   | 'overview'
   | 'funnel'
+  | 'vsl'
   | 'refund-cohorts'
   | 'custos'
   | 'leaderboard'
@@ -32,6 +33,8 @@ export interface TabSpec {
 export const AVAILABLE_TABS: TabSpec[] = [
   { id: 'overview',       label: 'Visão geral',         group: 'Análise' },
   { id: 'funnel',         label: 'Funil',               group: 'Análise' },
+  // VSLs: quem tem a aba vê e edita (troca VSL de página no ar, roda teste A/B).
+  { id: 'vsl',            label: 'VSLs',                group: 'Análise' },
   { id: 'refund-cohorts', label: 'Reembolsos',          group: 'Análise' },
   { id: 'custos',         label: 'Custos',              group: 'Análise' },
   { id: 'leaderboard',    label: 'Ranking',             group: 'Afiliados' },

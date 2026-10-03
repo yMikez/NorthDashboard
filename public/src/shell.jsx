@@ -10,6 +10,7 @@ function Sidebar({ active, onNav, user, open, onClose }) {
       items: [
         { id: 'overview', label: 'Visão geral', icon: 'layout-dashboard' },
         { id: 'funnel',   label: 'Funil', icon: 'ns-funil' },
+        { id: 'vsl',      label: 'VSLs', icon: 'monitor-play' },
         { id: 'refund-cohorts', label: 'Reembolsos', icon: 'percent' },
         { id: 'custos',   label: 'Custos', icon: 'ns-custos' },
       ]
@@ -367,6 +368,8 @@ const ROUTES_WITH_COMPARE = new Set(['overview']);
 // Rotas cujos endpoints aplicam o filtro "Afiliado (sistema)" (affiliate_id
 // do NorthScale Afiliados). Fora delas o seletor some — o filtro fica na
 // URL mas não é enviado, então nada finge estar filtrado.
+// Rotas que não aplicam Etapa/País do filtro global (a aba VSLs tem etapa própria UP01…DOWN03).
+const ROUTES_WITHOUT_STAGE_COUNTRY = new Set(['vsl']);
 const ROUTES_WITH_AFFILIATE = new Set(['overview', 'funnel', 'leaderboard', 'all-affiliates', 'transactions', 'products', 'platforms']);
 
 // ---------- Date range chip with custom-range popover ----------
@@ -644,10 +647,12 @@ function FilterBar({ filters, setFilters, options, route }) {
         onChange={(s) => setFilters(f => ({ ...f, platforms: s }))}/>
       <MultiSelect label="Produto" icon="package" options={familyOpts} selected={filters.families}
         onChange={(s) => setFilters(f => ({ ...f, families: s }))}/>
-      <MultiSelect label="Etapa" icon="layers" options={stageOpts} selected={filters.stages || new Set()}
-        onChange={(s) => setFilters(f => ({ ...f, stages: s }))}/>
-      <MultiSelect label="País" icon="globe" options={countryOpts} selected={filters.countries}
-        onChange={(s) => setFilters(f => ({ ...f, countries: s }))}/>
+      {!ROUTES_WITHOUT_STAGE_COUNTRY.has(route) && (<>
+        <MultiSelect label="Etapa" icon="layers" options={stageOpts} selected={filters.stages || new Set()}
+          onChange={(s) => setFilters(f => ({ ...f, stages: s }))}/>
+        <MultiSelect label="País" icon="globe" options={countryOpts} selected={filters.countries}
+          onChange={(s) => setFilters(f => ({ ...f, countries: s }))}/>
+      </>)}
       {showAffiliate && (
         <MultiSelect label="Afiliado" icon="users" options={affiliateOpts} selected={filters.affiliates || new Set()}
           onChange={(s) => setFilters(f => ({ ...f, affiliates: s }))}/>

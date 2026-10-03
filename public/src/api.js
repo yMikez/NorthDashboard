@@ -934,6 +934,22 @@ function affiliateCrmExportUrl(params = {}) {
   return `/api/admin/affiliate-crm/export${qs ? `?${qs}` : ''}`;
 }
 
+// ---------- VSLs (aba VSLs) ----------
+// Estado sem cache (depois de salvar, a tela precisa ver o dado novo);
+// desempenho usa o filtro global (período, plataformas, famílias).
+function fetchVslState() { return coGet('/api/vsl-admin/state'); }
+function adminVslAction(body) { return coSend('/api/vsl-admin/actions', 'POST', body); }
+function fetchVslPerformance(filters, { stage = null, page = null } = {}) {
+  return fetchJSON('/api/vsl-admin/performance', {
+    start_date: toISODate(filters.dateRange.start),
+    end_date: toISODate(filters.dateRange.end),
+    platforms: setToCSV(filters.platforms),
+    families: setToCSV(filters.families),
+    stage: stage || null,
+    page: page || null,
+  });
+}
+
 // Mutações invalidam o cache client-side de GETs: depois de salvar algo, o
 // refetch da página precisa ver o dado novo — não o cache de 15s. Cobertura
 // por convenção de nome (add/create/patch/delete/save/apply/...); helpers
@@ -1037,4 +1053,7 @@ window.NSApi = _wrapMutations({
   adminAffiliateCrm,
   fetchDataCoverage,
   affiliateCrmExportUrl,
+  fetchVslState,
+  adminVslAction,
+  fetchVslPerformance,
 });

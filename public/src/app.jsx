@@ -4,6 +4,7 @@ const { useState: useStateApp, useEffect: useEffectApp } = React;
 const ROUTES = {
   'overview':       { title: 'Visão',       em: 'geral',       crumbs: ['Análise', 'Visão geral'] },
   'funnel':         { title: 'Funil',       em: 'completo',    crumbs: ['Análise', 'Funil'] },
+  'vsl':            { title: 'VSLs',        em: 'por página do funil', crumbs: ['Análise', 'VSLs'] },
   'refund-cohorts': { title: 'Reembolsos',  em: 'por coorte',  crumbs: ['Análise', 'Reembolsos'] },
   'custos':         { title: 'Custos',      em: 'e lucro',     crumbs: ['Análise', 'Custos'] },
   'leaderboard':    { title: 'Ranking',     em: 'de afiliados', crumbs: ['Afiliados', 'Ranking'] },
@@ -298,6 +299,7 @@ function App({ user }) {
         <div className="page" id="conteudo" role="main" tabIndex={-1} aria-label={r.title + (r.em ? ' ' + r.em : '')}>
           {hashState.route === 'overview'       && <OverviewPage filters={filters} setFilters={setFilters}/>}
           {hashState.route === 'funnel'         && <FunnelPage filters={filters}/>}
+          {hashState.route === 'vsl'            && <VslPage filters={filters} user={user}/>}
           {hashState.route === 'refund-cohorts' && <RefundCohortsPage filters={filters}/>}
           {hashState.route === 'leaderboard'    && <LeaderboardPage filters={filters} onOpenAffiliate={setDrawerAff} user={user}/>}
           {/* Fundida com o Ranking (modelo planilha CPA) — rota antiga rende a mesma página. */}

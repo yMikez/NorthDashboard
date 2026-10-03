@@ -33,6 +33,7 @@ const options = {
     'public/src/pages/affiliate-analysis.jsx',
     'public/src/pages/affiliate-crm.jsx',
     'public/src/pages/funnel-windows.jsx',
+    'public/src/pages/vsl.jsx',
     'public/src/app.jsx',
   ],
   outdir: 'public/dist',
@@ -112,6 +113,7 @@ function checkGlobals() {
     'public/src/pages/affiliate-crm.jsx',
     'public/src/pages/affiliate-mapping.jsx',
     'public/src/pages/funnel-windows.jsx',
+    'public/src/pages/vsl.jsx',
     'public/src/pages/net-profit.jsx',
   ]) {
     for (const m of read(f).matchAll(/NSApi\.(\w+)/g)) {

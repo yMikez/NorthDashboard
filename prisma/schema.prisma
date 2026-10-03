@@ -1688,3 +1688,141 @@ model RetentionOffer {
   @@index([orderId])
   @@index([sourceUpdatedAt])
 }
+
+// ============================================================
+// VSLs (aba VSLs) — biblioteca de VSLs do VTurb, as páginas do funil que
+// recebem a VSL pelo dash (snippet + /api/vsl/p/<chave>.js), testes A/B e
+// o rastreio das visitas (beacon /api/vsl/e). A página nunca depende do
+// dash pra funcionar: o snippet carrega a VSL de reserva se o dash cair.
+// ============================================================
+
+model Vsl {
+  id           String   @id @default(cuid())
+  name         String
+  accountId    String   // conta VTurb (uuid no caminho do player.js)
+  playerId     String   // id do player (24 hex) — o elemento vira vid-<playerId>
+  scriptUrl    String   // https://scripts.converteai.net/<conta>/players/<player>/v4/player.js
+  // padding-top do placeholder do embed (133.333 = 3:4 vertical, 56.25 = 16:9)
+  aspectPct    Decimal? @db.Decimal(7, 3)
+  pitchSeconds Int      // segundo do vídeo em que a oferta aparece
+  notes        String?
+  archived     Boolean  @default(false)
+  createdById  String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  pages VslPage[]    @relation("VslPageCurrent")
+  arms  VslTestArm[]
+
+  @@index([archived])
+}
+
+// "Página": uma etapa do funil (família + etapa + plataforma) que recebe a
+// VSL pelo dash. A chave vai no snippet colado na página.
+model VslPage {
+  id            String    @id @default(cuid())
+  key           String    @unique
+  family        String
+  stage         String    // UP01..UP03 | DOWN01..DOWN03
+  platform      String    // slug da plataforma
+  vslId         String?   // VSL no ar quando não há teste rodando
+  vsl           Vsl?      @relation("VslPageCurrent", fields: [vslId], references: [id], onDelete: SetNull)
+  // VSL embutida no snippet como reserva (a que já estava na página).
+  fallbackVslId String?
+  enabled       Boolean   @default(true)
+  // Pré-visualização: abrir a página com ?ns_vsl_preview=1 mostra esta VSL
+  // até previewUntil (só pra quem abre com o parâmetro; não entra na métrica).
+  previewVslId  String?
+  previewUntil  DateTime?
+  // Primeira visita rastreada = snippet no ar. Venda real só conta pra VSL
+  // a partir daqui.
+  installedAt   DateTime?
+  lastSeenAt    DateTime?
+  lastSeenUrl   String?
+  createdById   String?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  tests VslTest[]
+
+  @@unique([family, stage, platform])
+}
+
+model VslTest {
+  id          String       @id @default(cuid())
+  pageId      String
+  page        VslPage      @relation(fields: [pageId], references: [id], onDelete: Cascade)
+  name        String
+  status      String       // running | paused | finished
+  startedAt   DateTime     @default(now())
+  endedAt     DateTime?
+  winnerVslId String?
+  createdById String?
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+  arms        VslTestArm[]
+
+  // + índice parcial único "VslTest_one_open_per_page" (só no SQL da migração):
+  // no máximo um teste rodando/pausado por página.
+  @@index([pageId, status])
+}
+
+model VslTestArm {
+  id     String  @id @default(cuid())
+  testId String
+  test   VslTest @relation(fields: [testId], references: [id], onDelete: Cascade)
+  vslId  String
+  vsl    Vsl     @relation(fields: [vslId], references: [id], onDelete: Restrict)
+  label  String  // A, B, C, D
+  weight Int     // 0..100 — soma 100 no teste
+
+  @@unique([testId, label])
+}
+
+// Histórico da aba: quem trocou o quê e quando. Guarda os rótulos em texto
+// (chave da página, nomes das VSLs) pra continuar legível se algo for
+// apagado.
+model VslChange {
+  id        String   @id @default(cuid())
+  pageId    String?
+  pageKey   String?
+  vslId     String?
+  testId    String?
+  kind      String
+  fromVslId String?
+  toVslId   String?
+  detail    String
+  actorId   String?
+  actorName String?
+  createdAt DateTime @default(now())
+
+  @@index([pageId, createdAt])
+  @@index([createdAt])
+}
+
+// Uma visita à página com o snippet (gerada no navegador; recarregar na
+// mesma aba é a mesma visita). Sem dado pessoal: sessionKey é só o id de
+// sessão da plataforma (sessid2 da BuyGoods), pra casar visita com venda.
+model VslVisit {
+  id         String    @id
+  pageId     String
+  vslId      String?
+  testId     String?
+  armId      String?
+  platform   String
+  sessionKey String?
+  pageUrl    String?
+  firstAt    DateTime  @default(now())
+  lastAt     DateTime  @default(now())
+  playAt     DateTime?
+  pitchAt    DateTime?
+  acceptAt   DateTime?
+  declineAt  DateTime?
+  maxSecond  Int       @default(0)
+
+  @@index([firstAt])
+  @@index([pageId, firstAt])
+  @@index([vslId, firstAt])
+  @@index([testId, armId])
+  @@index([sessionKey])
+}
