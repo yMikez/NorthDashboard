@@ -33,16 +33,82 @@ export interface FilterOptionsResponse {
     label: string;
     orderCount: number;
   }>;
-  // Afiliados do sistema NorthScale Afiliados (espelho do mapping) — filtro
-  // "Afiliado" da barra global (Order.mappedAffiliateId). Só quem tem ao
-  // menos um pedido mapeado aparece; status/removed viram meta no chip.
+  // Filtro "Afiliado" da barra global (SPA e /chat): a PESSOA (contas
+  // unificadas na Análise de afiliados, chave p:<partnerId>) ou a CONTA de
+  // plataforma solta (a:<Affiliate.id>). O servidor resolve pra Affiliate.id
+  // e filtra Order.affiliateId (lib/shared/affiliateFilter). Ordem: receita
+  // aprovada dos últimos 30 dias, depois a venda mais recente.
   affiliates: Array<{
-    id: string;        // affiliate_id externo
-    label: string;     // nome
-    status: string;    // active | inactive
-    removed: boolean;
-    orderCount: number;
+    id: string;          // 'p:<partnerId>' | 'a:<affiliateId>'
+    label: string;       // nome
+    kind: 'partner' | 'account';
+    platforms: string[]; // slugs
+    /** "JVZoo 3552295" (conta) · "JVZoo + BuyGoods · 3 contas" (pessoa) */
+    meta: string;
+    revenue30d: number;
+    internal: boolean;
   }>;
+}
+
+const PLATFORM_SHORT: Record<string, string> = {
+  jvzoo: 'JVZoo', buygoods: 'BuyGoods', digistore24: 'Digistore', clickbank: 'ClickBank', cartpanda: 'Cartpanda',
+};
+
+/** Opções do filtro "Afiliado": pessoa unificada ou conta solta, com venda. */
+async function affiliateFilterOptions(
+  platforms: Array<{ slug: string; displayName: string }>,
+): Promise<FilterOptionsResponse['affiliates']> {
+  const since30 = new Date(Date.now() - 30 * 86_400_000);
+  const [accounts, rev] = await Promise.all([
+    db.affiliate.findMany({
+      where: { lastOrderAt: { not: null } },
+      select: {
+        id: true, externalId: true, nickname: true, isInternal: true, lastOrderAt: true,
+        platform: { select: { slug: true } },
+        partner: { select: { id: true, displayName: true } },
+      },
+    }),
+    db.order.groupBy({
+      by: ['affiliateId'],
+      where: { status: 'APPROVED', orderedAt: { gte: since30 }, affiliateId: { not: null } },
+      _sum: { grossAmountUsd: true },
+    }),
+  ]);
+  const revById = new Map(rev.map((r) => [r.affiliateId as string, Number(r._sum.grossAmountUsd ?? 0)]));
+  const nameOf = (slug: string) => PLATFORM_SHORT[slug] ?? platforms.find((p) => p.slug === slug)?.displayName ?? slug;
+  type Acc = { id: string; label: string; kind: 'partner' | 'account'; platforms: Set<string>; accounts: number; revenue30d: number; last: number; internal: boolean; ext: string };
+  const byKey = new Map<string, Acc>();
+  for (const a of accounts) {
+    const key = a.partner ? `p:${a.partner.id}` : `a:${a.id}`;
+    let o = byKey.get(key);
+    if (!o) {
+      o = {
+        id: key,
+        label: a.partner ? a.partner.displayName : (a.nickname?.trim() || a.externalId),
+        kind: a.partner ? 'partner' : 'account',
+        platforms: new Set(), accounts: 0, revenue30d: 0, last: 0, internal: a.isInternal === true, ext: a.externalId,
+      };
+      byKey.set(key, o);
+    }
+    o.platforms.add(a.platform.slug);
+    o.accounts += 1;
+    o.revenue30d += revById.get(a.id) ?? 0;
+    o.last = Math.max(o.last, a.lastOrderAt?.getTime() ?? 0);
+    if (a.isInternal !== true) o.internal = false;
+  }
+  return [...byKey.values()]
+    .sort((x, y) => y.revenue30d - x.revenue30d || y.last - x.last || x.label.localeCompare(y.label))
+    .map((o) => {
+      const plats = [...o.platforms];
+      const meta = o.kind === 'partner'
+        ? `${plats.map(nameOf).join(' + ')} · ${o.accounts} conta${o.accounts === 1 ? '' : 's'}`
+        : `${nameOf(plats[0])} ${o.ext}`;
+      return {
+        id: o.id, label: o.label, kind: o.kind, platforms: plats,
+        meta: o.internal ? `${meta} · interno` : meta,
+        revenue30d: Math.round(o.revenue30d), internal: o.internal,
+      };
+    });
 }
 
 export async function getFilterOptions(): Promise<FilterOptionsResponse> {
@@ -51,28 +117,7 @@ export async function getFilterOptions(): Promise<FilterOptionsResponse> {
     orderBy: { displayName: 'asc' },
   });
 
-  const [mappedCounts, mappedStates] = await Promise.all([
-    db.order.groupBy({
-      by: ['mappedAffiliateId'],
-      where: { mappedAffiliateId: { not: null } },
-      _count: { _all: true },
-    }),
-    db.affiliateMappingState.findMany({ select: { affiliateId: true, name: true, status: true, removedAt: true } }),
-  ]);
-  const stateById = new Map(mappedStates.map((s) => [s.affiliateId, s]));
-  const affiliates = mappedCounts
-    .filter((r): r is typeof r & { mappedAffiliateId: string } => !!r.mappedAffiliateId)
-    .map((r) => {
-      const st = stateById.get(r.mappedAffiliateId);
-      return {
-        id: r.mappedAffiliateId,
-        label: st?.name ?? r.mappedAffiliateId,
-        status: st?.status ?? 'unknown',
-        removed: st?.removedAt != null,
-        orderCount: r._count._all,
-      };
-    })
-    .sort((a, b) => b.orderCount - a.orderCount || a.label.localeCompare(b.label));
+  const affiliates = await affiliateFilterOptions(platforms);
 
   // FE products that have at least one FRONTEND-typed order. We aggregate by
   // product to dedupe and rank by activity (most-sold first).

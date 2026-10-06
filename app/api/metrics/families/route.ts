@@ -4,6 +4,7 @@ import { requireTab } from '@/lib/auth/guard';
 import { logger } from '@/lib/logger';
 import { respondCached } from '@/lib/shared/metricsResponse';
 import { affiliateIdsParam } from '@/lib/shared/queryParams';
+import { resolveAffiliateFilter } from '@/lib/shared/affiliateFilter';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -31,6 +32,8 @@ export async function GET(req: Request) {
   const countries = csvParam(searchParams.get('countries'));
   const productFamilies = csvParam(searchParams.get('families'));
   const mappedAffiliateIds = affiliateIdsParam(searchParams.get('affiliate_id'));
+  // Filtro "Afiliado" da barra (contas de plataforma / pessoa unificada).
+  const affiliateIds = await resolveAffiliateFilter(searchParams.get('aff'));
 
   try {
     return await respondCached('families', searchParams, () =>
@@ -41,6 +44,7 @@ export async function GET(req: Request) {
         countries,
         productFamilies,
         mappedAffiliateIds,
+        affiliateIds,
       }),
     );
   } catch (err) {

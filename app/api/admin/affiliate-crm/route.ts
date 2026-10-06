@@ -20,6 +20,7 @@ import {
 } from '@/lib/services/affiliateCrm';
 import { TIERS, type Tier } from '@/lib/services/affiliateCrmCore';
 import { logger } from '@/lib/logger';
+import { resolveAffiliateFilter } from '@/lib/shared/affiliateFilter';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -37,7 +38,9 @@ export async function GET(req: Request) {
   if (!auth.ok) return auth.response;
   const { searchParams } = new URL(req.url);
   try {
-    return NextResponse.json(await listAffiliateCrm(crmOptionsFromQuery(searchParams)));
+    const opts = crmOptionsFromQuery(searchParams);
+    opts.affiliateIds = await resolveAffiliateFilter(searchParams.get('aff'));
+    return NextResponse.json(await listAffiliateCrm(opts));
   } catch (err) {
     logger.error({ err }, 'admin/affiliate-crm GET failed');
     return NextResponse.json({ error: 'query failed' }, { status: 500 });

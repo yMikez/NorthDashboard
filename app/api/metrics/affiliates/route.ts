@@ -5,6 +5,7 @@ import { requireAnyTab } from '@/lib/auth/guard';
 import { logger } from '@/lib/logger';
 import { affiliateIdsParam, csvParam, stagesParam } from '@/lib/shared/queryParams';
 import { respondCached } from '@/lib/shared/metricsResponse';
+import { resolveAffiliateFilter } from '@/lib/shared/affiliateFilter';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -35,6 +36,8 @@ export async function GET(req: Request) {
   const productFamilies = csvParam(searchParams.get('families'));
   // Filtro "Afiliado (sistema)" — affiliate_id do NorthScale Afiliados.
   const mappedAffiliateIds = affiliateIdsParam(searchParams.get('affiliate_id'));
+  // Filtro "Afiliado" da barra (contas de plataforma / pessoa unificada).
+  const affiliateIds = await resolveAffiliateFilter(searchParams.get('aff'));
   // Etapa é parseada mas NÃO aplicada aqui de propósito (a aba não filtra
   // por etapa — o chat e a Análise seguem a mesma convenção).
   stagesParam(searchParams.get('stages'));
@@ -59,6 +62,7 @@ export async function GET(req: Request) {
         productExternalIds,
         productFamilies,
         mappedAffiliateIds,
+        affiliateIds,
       });
       if (unifyMapped) return unifyAffiliatesByMapping(data, platformSlugs);
       return unify ? unifyAffiliates(data, includeContact, platformSlugs) : data;

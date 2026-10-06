@@ -9,6 +9,7 @@ import { getVslPerformance } from '@/lib/services/vslPerformance';
 import { isVslStage } from '@/lib/vsl/catalog';
 import { respondCached } from '@/lib/shared/metricsResponse';
 import { logger } from '@/lib/logger';
+import { resolveAffiliateAccounts } from '@/lib/shared/affiliateFilter';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -25,6 +26,8 @@ export async function GET(req: Request) {
     return NextResponse.json({ error: 'start_date e end_date são obrigatórios' }, { status: 400 });
   }
   const stage = sp.get('stage');
+  // Filtro "Afiliado" da barra: contas → ids (venda real) e plataforma:ID (visita).
+  const accounts = await resolveAffiliateAccounts(sp.get('aff'));
   try {
     return await respondCached('vsl-performance', sp, () =>
       getVslPerformance({
@@ -34,6 +37,8 @@ export async function GET(req: Request) {
         families: list(sp.get('families')),
         stage: stage && isVslStage(stage) ? stage : null,
         pageId: sp.get('page') || null,
+        affiliateIds: accounts ? (accounts.length ? accounts.map((a) => a.id) : ['__none__']) : undefined,
+        affiliateVisitKeys: accounts ? accounts.map((a) => `${a.platform}:${a.externalId}`) : undefined,
       }),
     );
   } catch (err) {

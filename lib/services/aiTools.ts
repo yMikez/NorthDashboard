@@ -122,6 +122,11 @@ const AFFILIATE_PROP: JsonSchema = {
   description: 'Filtrar pelo afiliado do NorthScale Afiliados (affiliate_id — o mesmo do filtro "Afiliado" da tela; NÃO é o ID/nickname da conta na plataforma). Mantém só os pedidos atribuídos a esse(s) affiliate_id.',
 };
 
+const AFFILIATE_ACCOUNTS_PROP: JsonSchema = {
+  type: 'array', items: { type: 'string' },
+  description: 'Filtrar por CONTA de afiliado de plataforma (Affiliate.id do dash — o filtro "Afiliado" da tela já vem com as contas resolvidas no Estado da UI; pra um nome, resolve_entities). Pessoa com contas em várias plataformas = passe todas as contas dela. Mantém só os pedidos dessas contas (sessão: a conta da FE decide).',
+};
+
 const SCOPE_PROPS: Record<string, JsonSchema> = {
   platforms: {
     type: 'array', items: { type: 'string' },
@@ -139,9 +144,10 @@ const SCOPE_PROPS: Record<string, JsonSchema> = {
     description: 'Filtrar etapa do funil (productType). Vazio = todas.',
   },
   affiliate_ids: AFFILIATE_PROP,
+  affiliate_accounts: AFFILIATE_ACCOUNTS_PROP,
 };
 
-const SCOPE_KEYS = ['platforms', 'countries', 'families', 'products', 'stages', 'affiliate_ids', 'platform'] as const;
+const SCOPE_KEYS = ['platforms', 'countries', 'families', 'products', 'stages', 'affiliate_ids', 'affiliate_accounts', 'platform'] as const;
 
 /** window/anchor/include_today das tools de janela → opções dos serviços. */
 function windowArgs(input: ToolInput): { window: number; anchor?: string; includeToday: boolean } {
@@ -189,6 +195,7 @@ const CORE_TOOLS: Anthropic.Tool[] = [
       ...DATE_PROPS,
       platforms: SCOPE_PROPS.platforms, countries: SCOPE_PROPS.countries, families: SCOPE_PROPS.families, products: SCOPE_PROPS.products,
       affiliate_ids: AFFILIATE_PROP,
+      affiliate_accounts: AFFILIATE_ACCOUNTS_PROP,
       search: { type: 'string', description: 'Filtra por trecho do nickname ou ID do afiliado (case-insensitive).' },
     },
   ),
@@ -237,7 +244,7 @@ const CORE_TOOLS: Anthropic.Tool[] = [
   tool(
     'get_funnel',
     'Funil de conversão por família (aba Funil): etapas (FE → Bump → UP1 → UP2 → UP3 → DW1 → DW2 → DW3) com volume, take rate (fração sobre as sessões com FE) e receita. revenueLiftFromUpsells = quanto o AOV das sessões COM upsell supera o das só-FE (fração) — não é a participação do upsell na receita. Cross-sell de outra família fica fora das etapas e aparece em crossSell. Com affiliate_ids, conta as sessões cujo FE é do afiliado (igual à aba).',
-    { ...DATE_PROPS, platforms: SCOPE_PROPS.platforms, countries: SCOPE_PROPS.countries, families: SCOPE_PROPS.families, products: SCOPE_PROPS.products, affiliate_ids: AFFILIATE_PROP },
+    { ...DATE_PROPS, platforms: SCOPE_PROPS.platforms, countries: SCOPE_PROPS.countries, families: SCOPE_PROPS.families, products: SCOPE_PROPS.products, affiliate_ids: AFFILIATE_PROP, affiliate_accounts: AFFILIATE_ACCOUNTS_PROP },
   ),
   tool(
     'get_funnel_sequence',
@@ -247,6 +254,7 @@ const CORE_TOOLS: Anthropic.Tool[] = [
       count: { type: 'integer', description: 'Quantas janelas em sequência, 2 a 8 (default 3)' },
       platforms: SCOPE_PROPS.platforms, countries: SCOPE_PROPS.countries, families: SCOPE_PROPS.families, products: SCOPE_PROPS.products,
       affiliate_ids: AFFILIATE_PROP,
+      affiliate_accounts: AFFILIATE_ACCOUNTS_PROP,
     },
   ),
   tool(
@@ -260,7 +268,7 @@ const CORE_TOOLS: Anthropic.Tool[] = [
   tool(
     'get_families',
     'Visão por família de produto (aba Famílias): catálogo (SKUs por tipo), receita bruta/líquida, pedidos FE e totais, CPA, AOV (receita ÷ FEs), upsellLiftPct (fração: AOV com upsell vs só-FE).',
-    { ...DATE_PROPS, platforms: SCOPE_PROPS.platforms, countries: SCOPE_PROPS.countries, families: SCOPE_PROPS.families, affiliate_ids: AFFILIATE_PROP },
+    { ...DATE_PROPS, platforms: SCOPE_PROPS.platforms, countries: SCOPE_PROPS.countries, families: SCOPE_PROPS.families, affiliate_ids: AFFILIATE_PROP, affiliate_accounts: AFFILIATE_ACCOUNTS_PROP },
   ),
   tool(
     'get_platforms',
@@ -281,7 +289,7 @@ const CORE_TOOLS: Anthropic.Tool[] = [
   tool(
     'get_profit_split',
     'Lucro FRONT × BACK do modelo CPA (painel e cards da Visão Geral). front.profitUsd = card "Net after CPA (modelo)" = Σ gross_p × (1 − (refund&cb%_p + fee%_p + opex%)/100) − CPA pago; totalUsd = front + back. refunds = cards "Taxa de reembolso" (valuePct, lente de VALOR) e "Reembolso por pedidos" (pct), em pontos percentuais: estornos pela DATA DO ESTORNO ÷ pedidos/faturamento do período pela data da venda (sem as linhas sintéticas da Digistore); refunds7d = monitor rolante de 7 dias a partir de agora (alerta > 10%). BACK = recuperação, Tauk, Logicall e SMS; SalesBound e Email aparecem com available:false e 0 — SalesBound NÃO entra no BACK aqui (a receita dele está em get_call_center). Com QUALQUER filtro de pedido (plataforma, país, família, afiliado) Tauk e Logicall saem do BACK — diga isso na resposta.',
-    { ...DATE_PROPS, platforms: SCOPE_PROPS.platforms, countries: SCOPE_PROPS.countries, families: SCOPE_PROPS.families, affiliate_ids: AFFILIATE_PROP },
+    { ...DATE_PROPS, platforms: SCOPE_PROPS.platforms, countries: SCOPE_PROPS.countries, families: SCOPE_PROPS.families, affiliate_ids: AFFILIATE_PROP, affiliate_accounts: AFFILIATE_ACCOUNTS_PROP },
   ),
   tool(
     'get_costs_overview',
@@ -291,7 +299,7 @@ const CORE_TOOLS: Anthropic.Tool[] = [
   tool(
     'get_fulfillment',
     'Operação de envio (sem aba própria — só por aqui): potes enviados, gasto, custo por pote, projeções now-relative, saúde do custo, ciclos de fatura (fecham terça), por fornecedor e por família. fulfillmentPctOfGross/totalPctOfGross/invoiceBenchmarkPct = fração; trendPct e pctPackages = pontos percentuais. affiliate_ids restringe aos pedidos do afiliado.',
-    { ...DATE_PROPS, platforms: SCOPE_PROPS.platforms, countries: SCOPE_PROPS.countries, families: SCOPE_PROPS.families, affiliate_ids: AFFILIATE_PROP },
+    { ...DATE_PROPS, platforms: SCOPE_PROPS.platforms, countries: SCOPE_PROPS.countries, families: SCOPE_PROPS.families, affiliate_ids: AFFILIATE_PROP, affiliate_accounts: AFFILIATE_ACCOUNTS_PROP },
   ),
   tool(
     'get_refund_cohorts',
@@ -475,6 +483,7 @@ export interface ToolInput {
   products?: string[];
   stages?: string[];
   affiliate_ids?: string[];
+  affiliate_accounts?: string[];
   external_id?: string;
   platform?: string;
   status?: string;
@@ -595,12 +604,26 @@ export function parseFilters(input: ToolInput, ctx: ToolContext = {}): MetricsFi
     productExternalIds: strList(input.products),
     productTypes: stages ? stagesParam(stages.join(',')) : undefined,
     mappedAffiliateIds: affiliateIdsArg(input),
+    affiliateIds: affiliateAccountsArg(input),
   };
 }
 
 function rangeSource(input: ToolInput, ctx: ToolContext): RangeSource {
   if (input.start_date || input.end_date) return 'explicit';
   return ctx.defaultStart && ctx.defaultEnd ? 'ui' : 'default';
+}
+
+/** affiliate_accounts (Affiliate.id) validados: [A-Za-z0-9_-], dedup. */
+function affiliateAccountsArg(input: ToolInput): string[] | undefined {
+  const raw = strList(input.affiliate_accounts);
+  if (!raw) return undefined;
+  const ids = affiliateIdsParam(raw.join(','));
+  if (!ids) {
+    throw new ToolInputError(`affiliate_accounts inválido (${raw.join(', ')}) — use o id da conta (Affiliate.id), não o nickname nem o ID da plataforma`, {
+      hint: 'O Estado da UI traz as contas do filtro; pra um nome, resolve_entities.',
+    });
+  }
+  return ids;
 }
 
 /** affiliate_ids validados como nas rotas (affiliateIdsParam: [A-Za-z0-9_-], dedup). */
@@ -644,7 +667,7 @@ type Handler = (input: ToolInput, ctx: ToolContext) => Promise<unknown>;
  */
 async function alignedPreviousKpis(filters: MetricsFilters, win: { start: Date; end: Date }): Promise<AiOverviewKpis> {
   const prevFilters: MetricsFilters = { ...filters, startDate: win.start, endDate: win.end };
-  if (filters.mappedAffiliateIds?.length || filters.productExternalIds?.length) {
+  if (filters.mappedAffiliateIds?.length || filters.affiliateIds?.length || filters.productExternalIds?.length) {
     return stripNetProfit((await getOverview(prevFilters, false)).kpis);
   }
   return overviewKpisBetween(prevFilters);
@@ -660,13 +683,14 @@ const HANDLERS: Record<string, Handler> = {
     // Com afiliado ou SKU o serviço lê direto da Order (a MV não tem essas
     // dimensões) — o refresh forçado seria só espera. Sem eles, refresh antes
     // (o throttle de 60s dava MV defasada vs dado real; correção > latência).
-    const viaMv = !filters.mappedAffiliateIds?.length && !filters.productExternalIds?.length;
+    const viaMv = !filters.mappedAffiliateIds?.length && !filters.affiliateIds?.length && !filters.productExternalIds?.length;
     const [data, split, alignedPrev] = await Promise.all([
       (viaMv ? refreshDailyMetricsNow() : Promise.resolve()).then(() => getOverview(filters, compare && !aligned)),
       // Mesmo escopo do painel da tela: o profit split não recebe etapa/SKU.
       getProfitSplit({
         startDate: filters.startDate, endDate: filters.endDate, platformSlugs: filters.platformSlugs,
         productFamilies: filters.productFamilies, countries: filters.countries, mappedAffiliateIds: filters.mappedAffiliateIds,
+        affiliateIds: filters.affiliateIds,
       }),
       aligned ? alignedPreviousKpis(filters, aligned) : Promise.resolve(null),
     ]);
@@ -707,7 +731,7 @@ const HANDLERS: Record<string, Handler> = {
     // modelo. Sem corte de linhas: o modelo vê TODOS os afiliados.
     // Com affiliate_ids o serviço devolve TODAS as contas (as de fora zeradas);
     // pro modelo só interessam as que têm pedido no recorte.
-    const byAffiliate = !!filters.mappedAffiliateIds?.length;
+    const byAffiliate = !!filters.mappedAffiliateIds?.length || !!filters.affiliateIds?.length;
     const affiliates = data.affiliates
       .filter((a) => !byAffiliate || a.allOrders > 0)
       .filter((a) => !q || String(a.externalId ?? '').toLowerCase().includes(q) || String(a.nickname ?? '').toLowerCase().includes(q))
@@ -809,6 +833,7 @@ const HANDLERS: Record<string, Handler> = {
       platformSlugs: strList(input.platforms), countries: strList(input.countries),
       productFamilies: strList(input.families), productExternalIds: strList(input.products),
       mappedAffiliateIds: affiliateIdsArg(input),
+      affiliateIds: affiliateAccountsArg(input),
     });
   },
   async get_products(input, ctx) {
@@ -840,20 +865,20 @@ const HANDLERS: Record<string, Handler> = {
   },
   async get_profit_split(input, ctx) {
     const f = parseFilters(input, ctx);
-    return getProfitSplit({ startDate: f.startDate, endDate: f.endDate, platformSlugs: f.platformSlugs, productFamilies: f.productFamilies, countries: f.countries, mappedAffiliateIds: f.mappedAffiliateIds });
+    return getProfitSplit({ startDate: f.startDate, endDate: f.endDate, platformSlugs: f.platformSlugs, productFamilies: f.productFamilies, countries: f.countries, mappedAffiliateIds: f.mappedAffiliateIds, affiliateIds: f.affiliateIds });
   },
   async get_costs_overview(input, ctx) {
     return getCostsOverview(parseFilters(input, ctx));
   },
   async get_fulfillment(input, ctx) {
     const f = parseFilters(input, ctx);
-    return getFulfillment({ startDate: f.startDate, endDate: f.endDate, platformSlugs: f.platformSlugs, countries: f.countries, productFamilies: f.productFamilies, mappedAffiliateIds: f.mappedAffiliateIds });
+    return getFulfillment({ startDate: f.startDate, endDate: f.endDate, platformSlugs: f.platformSlugs, countries: f.countries, productFamilies: f.productFamilies, mappedAffiliateIds: f.mappedAffiliateIds, affiliateIds: f.affiliateIds });
   },
   async get_refund_cohorts(input, ctx) {
     const f = parseFilters(input, ctx);
     const horizon = Math.trunc(Number(input.horizon) || 30);
     return getRefundCohorts(
-      { startDate: f.startDate, endDate: f.endDate, platformSlugs: f.platformSlugs, productFamilies: f.productFamilies, productExternalIds: f.productExternalIds, productTypes: f.productTypes, countries: f.countries, mappedAffiliateIds: f.mappedAffiliateIds },
+      { startDate: f.startDate, endDate: f.endDate, platformSlugs: f.platformSlugs, productFamilies: f.productFamilies, productExternalIds: f.productExternalIds, productTypes: f.productTypes, countries: f.countries, mappedAffiliateIds: f.mappedAffiliateIds, affiliateIds: f.affiliateIds },
       horizon,
     );
   },
@@ -899,7 +924,7 @@ const EXTRA_FILTER_KEYS = [
   'key', 'external_id', 'platform', 'brand', 'campaign', 'include_internal', 'include_urls', 'limit', 'offset',
 ] as const;
 // Filtros que restringem o conjunto (vazio com eles = conferir antes de dizer "zero").
-const NARROWING_KEYS = ['platforms', 'countries', 'families', 'products', 'stages', 'affiliate_ids', 'search', 'status', 'external_id', 'platform', 'brand', 'campaign'];
+const NARROWING_KEYS = ['platforms', 'countries', 'families', 'products', 'stages', 'affiliate_ids', 'affiliate_accounts', 'search', 'status', 'external_id', 'platform', 'brand', 'campaign'];
 
 function appliedFilters(props: Set<string>, input: ToolInput, f: MetricsFilters | undefined): Record<string, unknown> {
   const raw = input as Record<string, unknown>;
@@ -914,6 +939,7 @@ function appliedFilters(props: Set<string>, input: ToolInput, f: MetricsFilters 
   put('products', f ? f.productExternalIds : strList(raw.products));
   put('stages', f ? f.productTypes : strList(raw.stages));
   put('affiliate_ids', f ? f.mappedAffiliateIds : strList(raw.affiliate_ids));
+  put('affiliate_accounts', f ? f.affiliateIds : strList(raw.affiliate_accounts));
   for (const k of EXTRA_FILTER_KEYS) put(k, raw[k]);
   if (out.provider === 'all') delete out.provider;
   return out;

@@ -15,6 +15,8 @@ import { isStorelessBuyGoodsKey, parseBuyGoodsAffiliateRef } from '../connectors
 export interface RecoveryFilters {
   startDate: Date;
   endDate: Date;
+  /** Filtro "Afiliado" da barra: só as contas de recuperação escolhidas. */
+  affiliateIds?: string[];
 }
 
 // Período de taxa (já normalizado pra número/ISO).
@@ -251,7 +253,7 @@ export function reduceRecovery(
 
 export async function getRecovery(filters: RecoveryFilters): Promise<RecoveryResponse> {
   const recAffs = await db.recoveryAffiliate.findMany({
-    where: { enabled: true },
+    where: { enabled: true, ...(filters.affiliateIds?.length ? { affiliateId: { in: filters.affiliateIds } } : {}) },
     select: {
       affiliateId: true,
       commissionPct: true,

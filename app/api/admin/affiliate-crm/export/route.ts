@@ -14,6 +14,7 @@ import { NextResponse } from 'next/server';
 import { requireTab } from '@/lib/auth/guard';
 import { crmCsv, crmOptionsFromQuery } from '@/lib/services/affiliateCrm';
 import { logger } from '@/lib/logger';
+import { resolveAffiliateFilter } from '@/lib/shared/affiliateFilter';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -24,6 +25,7 @@ export async function GET(req: Request) {
   if (!auth.ok) return auth.response;
   const { searchParams } = new URL(req.url);
   const opts = crmOptionsFromQuery(searchParams);
+  opts.affiliateIds = await resolveAffiliateFilter(searchParams.get('aff'));
   // Sem parâmetro explícito, o export é a fila de pendentes.
   if (!searchParams.has('pending')) opts.pendingOnly = true;
   try {

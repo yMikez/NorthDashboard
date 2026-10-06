@@ -74,7 +74,7 @@ async function fetchOverview(filters) {
     products: setToCSV(filters.funnels),
     families: setToCSV(filters.families),
     stages: setToCSV(filters.stages),
-    affiliate_id: setToCSV(filters.affiliates),
+    aff: setToCSV(filters.affiliates),
     compare: filters.compare ? '1' : null,
   };
   return fetchJSON('/api/metrics/overview', params);
@@ -102,7 +102,7 @@ function ordersExportUrl(filters, options = {}) {
     products: setToCSV(filters.funnels),
     families: setToCSV(filters.families),
     stages: setToCSV(filters.stages),
-    affiliate_id: setToCSV(filters.affiliates),
+    aff: setToCSV(filters.affiliates),
     status: options.status && options.status !== 'all' ? options.status : null,
     product_type: options.productType && options.productType !== 'all' ? options.productType : null,
     search: options.search || null,
@@ -122,7 +122,7 @@ async function fetchOrders(filters, options = {}) {
     products: setToCSV(filters.funnels),
     families: setToCSV(filters.families),
     stages: setToCSV(filters.stages),
-    affiliate_id: setToCSV(filters.affiliates),
+    aff: setToCSV(filters.affiliates),
     status: options.status && options.status !== 'all' ? options.status : null,
     product_type: options.productType && options.productType !== 'all' ? options.productType : null,
     search: options.search || null,
@@ -149,7 +149,7 @@ async function fetchRefundCohorts(filters, horizon) {
     families: setToCSV(filters.families),
     products: setToCSV(filters.funnels),
     stages: setToCSV(filters.stages),
-    affiliate_id: setToCSV(filters.affiliates),
+    aff: setToCSV(filters.affiliates),
     horizon: String(horizon || 30),
   };
   return fetchJSON('/api/metrics/refund-cohorts', params);
@@ -164,7 +164,7 @@ async function fetchAffiliates(filters, { unify = false } = {}) {
     products: setToCSV(filters.funnels),
     families: setToCSV(filters.families),
     stages: setToCSV(filters.stages),
-    affiliate_id: setToCSV(filters.affiliates),
+    aff: setToCSV(filters.affiliates),
     // unify=1: contas do mesmo parceiro (Identidades) viram uma linha;
     // unify=mapped: agrupa pelo affiliate_id do NorthScale Afiliados.
     unify: unify === 'mapped' ? 'mapped' : (unify === true || unify === 'partner' || unify === '1') ? '1' : null,
@@ -186,7 +186,7 @@ async function fetchPlatforms(filters) {
     products: setToCSV(filters.funnels),
     families: setToCSV(filters.families),
     stages: setToCSV(filters.stages),
-    affiliate_id: setToCSV(filters.affiliates),
+    aff: setToCSV(filters.affiliates),
   };
   return fetchJSON('/api/metrics/platforms', params);
 }
@@ -206,7 +206,7 @@ async function fetchProducts(filters) {
     products: setToCSV(filters.funnels),
     families: setToCSV(filters.families),
     stages: setToCSV(filters.stages),
-    affiliate_id: setToCSV(filters.affiliates),
+    aff: setToCSV(filters.affiliates),
   };
   return fetchJSON('/api/metrics/products', params);
 }
@@ -226,7 +226,7 @@ async function fetchAffiliateDetail(externalId, filters, platformHint) {
     products: setToCSV(filters.funnels),
     families: setToCSV(filters.families),
     stages: setToCSV(filters.stages),
-    affiliate_id: setToCSV(filters.affiliates),
+    aff: setToCSV(filters.affiliates),
     platform: platformHint || null,
   };
   return fetchJSON(`/api/metrics/affiliates/${encodeURIComponent(externalId)}`, params);
@@ -247,7 +247,7 @@ async function fetchFunnel(filters) {
     products: setToCSV(filters.funnels),
     families: setToCSV(filters.families),
     stages: setToCSV(filters.stages),
-    affiliate_id: setToCSV(filters.affiliates),
+    aff: setToCSV(filters.affiliates),
   };
   return fetchJSON('/api/metrics/funnel', params);
 }
@@ -272,7 +272,7 @@ async function fetchFamilies(filters) {
     countries: setToCSV(filters.countries),
     families: setToCSV(filters.families),
     stages: setToCSV(filters.stages),
-    affiliate_id: setToCSV(filters.affiliates),
+    aff: setToCSV(filters.affiliates),
   };
   return fetchJSON('/api/metrics/families', params);
 }
@@ -485,7 +485,7 @@ async function coSend(path, method, body) {
 async function fetchAffiliateAnalysis(filters, { window = 7, view = 'partner', internal = false, today = false, anchor = null } = {}) {
   return fetchJSON('/api/metrics/affiliate-analysis', {
     window: String(window), view, internal: internal ? '1' : '0', today: today ? '1' : '0', anchor: anchor || null,
-    platforms: setToCSV(filters.platforms), families: setToCSV(filters.families),
+    platforms: setToCSV(filters.platforms), families: setToCSV(filters.families), aff: setToCSV(filters.affiliates),
   });
 }
 async function fetchAffiliateExplain(filters, key, { window = 7, internal = false, today = false, anchor = null } = {}) {
@@ -499,14 +499,14 @@ async function fetchFunnelSequence(filters, { window = 7, count = 3, anchor = nu
   return fetchJSON('/api/metrics/funnel/sequence', {
     window: String(window), count: String(count), anchor: anchor || null, today: today ? '1' : '0',
     platforms: setToCSV(filters.platforms), countries: setToCSV(filters.countries),
-    products: setToCSV(filters.funnels), families: setToCSV(filters.families),
+    products: setToCSV(filters.funnels), families: setToCSV(filters.families), aff: setToCSV(filters.affiliates),
   });
 }
 // K janelas consecutivas de N dias (Janela 1..K) + evolução/saúde/reativação.
 async function fetchAffiliateSequence(filters, { window = 7, count = 3, view = 'partner', internal = false, today = false, anchor = null } = {}) {
   return fetchJSON('/api/metrics/affiliate-analysis/sequence', {
     window: String(window), count: String(count), view, internal: internal ? '1' : '0', today: today ? '1' : '0', anchor: anchor || null,
-    platforms: setToCSV(filters.platforms), families: setToCSV(filters.families),
+    platforms: setToCSV(filters.platforms), families: setToCSV(filters.families), aff: setToCSV(filters.affiliates),
   });
 }
 async function adminListAffiliateIdentity() { return coGet('/api/admin/affiliate-identity'); }
@@ -518,6 +518,7 @@ function fetchRecovery(filters) {
     start_date: toISODate(filters.dateRange.start),
     end_date: toISODate(filters.dateRange.end),
   });
+  if (filters.affiliates?.size) qs.set('aff', Array.from(filters.affiliates).join(','));
   return coGet(`/api/metrics/recovery?${qs}`);
 }
 // Tauk Solutions (recuperação por telefone/SMS) — aba própria.
@@ -570,7 +571,7 @@ function fetchProfitSplit(filters) {
   if (filters.platforms?.size) qs.set('platforms', Array.from(filters.platforms).join(','));
   if (filters.families?.size) qs.set('families', Array.from(filters.families).join(','));
   if (filters.countries?.size) qs.set('countries', Array.from(filters.countries).join(','));
-  if (filters.affiliates?.size) qs.set('affiliate_id', Array.from(filters.affiliates).join(','));
+  if (filters.affiliates?.size) qs.set('aff', Array.from(filters.affiliates).join(','));
   return coGet(`/api/metrics/profit-split?${qs}`);
 }
 // Lucro real (admin-only). GET carrega tudo; compute recalcula com os
@@ -667,6 +668,7 @@ function fetchVslPerformance(filters, { stage = null, page = null } = {}) {
     end_date: toISODate(filters.dateRange.end),
     platforms: setToCSV(filters.platforms),
     families: setToCSV(filters.families),
+    aff: setToCSV(filters.affiliates),
     stage: stage || null,
     page: page || null,
   });

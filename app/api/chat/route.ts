@@ -30,7 +30,7 @@ import { claimAttachments, loadMessageAttachments } from '@/lib/rag/attachments'
 import { ResultStore } from '@/lib/ai/resultStore';
 import { SourceRegistry } from '@/lib/rag/citations';
 import { logger } from '@/lib/logger';
-import { uiStateText, type UiState } from '@/lib/services/chatUiState';
+import { resolveUiAffiliates, uiStateText, type UiState } from '@/lib/services/chatUiState';
 import { knowledgeHashOf } from '@/lib/services/chatTelemetry';
 
 export const runtime = 'nodejs';
@@ -91,7 +91,8 @@ export async function POST(req: Request) {
   if (!userMsg) userMsg = attachmentIds.length === 1 ? 'Analise o anexo.' : 'Analise os anexos.';
 
   const now = new Date();
-  const uiTxt = uiStateText(body.uiState);
+  const uiAffiliates = await resolveUiAffiliates(body.uiState?.affiliates).catch(() => []);
+  const uiTxt = uiStateText(body.uiState, uiAffiliates);
   const turnContext = buildTurnContext(now, uiTxt);
 
   // Rate limit: conta mensagens 'user' nas últimas 24h.

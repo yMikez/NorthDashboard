@@ -266,7 +266,7 @@ function CrmParams({ config, onSave, onClose, busy }) {
   );
 }
 
-function AffiliateCrmPage({ user }) {
+function AffiliateCrmPage({ user, filters }) {
   const [data, setData] = useStateCrm(null);
   const [loading, setLoading] = useStateCrm(true);
   const [err, setErr] = useStateCrm(null);
@@ -281,10 +281,12 @@ function AffiliateCrmPage({ user }) {
   const [params, setParams] = useStateCrm(false);
   const [toast, setToast] = useStateCrm(null);
 
+  // Filtro "Afiliado" da barra global (a:<conta> / p:<pessoa>).
+  const affKey = Array.from((filters && filters.affiliates) || []).join(',');
   const query = useMemoCrm(() => ({
     segment, tier: tier || undefined, pending: pendingOnly ? 1 : undefined,
-    phone: noPhone ? 0 : undefined, q: q.trim() || undefined,
-  }), [segment, tier, pendingOnly, noPhone, q]);
+    phone: noPhone ? 0 : undefined, q: q.trim() || undefined, aff: affKey || undefined,
+  }), [segment, tier, pendingOnly, noPhone, q, affKey]);
 
   const load = useCallbackCrm(async () => {
     setLoading(true); setErr(null);

@@ -13,6 +13,7 @@ import { requireTab } from '@/lib/auth/guard';
 import { logger } from '@/lib/logger';
 import { affiliateIdsParam, csvParam, stagesParam } from '@/lib/shared/queryParams';
 import { buildCsv } from '@/lib/shared/csv';
+import { resolveAffiliateFilter } from '@/lib/shared/affiliateFilter';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -52,6 +53,7 @@ export async function GET(req: Request) {
     productFamilies: csvParam(searchParams.get('families')),
     productTypes: stagesParam(searchParams.get('stages')),
     mappedAffiliateIds: affiliateIdsParam(searchParams.get('affiliate_id')),
+    affiliateIds: await resolveAffiliateFilter(searchParams.get('aff')),
   };
   const options = {
     status: searchParams.get('status') ?? undefined,

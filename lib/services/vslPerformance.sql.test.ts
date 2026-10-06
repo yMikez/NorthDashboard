@@ -220,7 +220,7 @@ describe('SQL da aba VSLs — afiliado da visita', () => {
     expect(Number(r.rows[0].revenue)).toBeCloseTo(147, 2);
   });
 
-    it('upsert guarda o afiliado do primeiro evento e não apaga depois', async () => {
+  it('upsert guarda o afiliado do primeiro evento e não apaga depois', async () => {
     const r = await db.query<{ affiliateKey: string | null }>(`SELECT "affiliateKey" FROM "VslVisit" WHERE id = 'visit00001'`);
     expect(r.rows[0].affiliateKey).toBe('3552295');
   });
@@ -234,5 +234,27 @@ describe('SQL da aba VSLs — afiliado da visita', () => {
       { pageId: 'p_jv', affiliateKey: '3552295', name: 'Fulano JV', visits: 2, pitch: 1, accepts: 1 },
       { pageId: 'p_jv', affiliateKey: '999', name: null, visits: 1, pitch: 0, accepts: 0 },
     ]);
+  });
+
+
+  it('filtro "Afiliado" da barra: visita pelo ID lido na página (plataforma:ID); "nenhum" zera', async () => {
+    const vis = async (keys: string[] | undefined) => (await run<{ pageId: string; visits: number }>(db,
+      visitRowsSql({ start: START, end: END, affiliateVisitKeys: keys }))).rows.reduce((m, r) => ({ ...m, [r.pageId]: (m[r.pageId] ?? 0) + r.visits }), {} as Record<string, number>);
+    expect(await vis(['jvzoo:3552295'])).toEqual({ p_jv: 2 }); // a 00006 descartada não volta
+    expect(await vis(['buygoods:62@13457'])).toEqual({ p_bg: 1 });
+    // mesmo ID em outra plataforma não casa
+    expect(await vis(['buygoods:3552295'])).toEqual({});
+    expect(await vis([])).toEqual({});
+    expect(await vis(undefined)).toEqual({ p_jv: 4, p_bg: 1 });
+  });
+
+  it('filtro "Afiliado" da barra na venda real: a conta da FE da sessão decide', async () => {
+    const real = async (ids: string[] | undefined) => (await run<{ pageId: string; fe: number; sales: number }>(db,
+      realRowsSql({ start: START, end: END, affiliateIds: ids }))).rows.filter((r) => r.pageId === 'p_jv')
+      .reduce((a, r) => ({ fe: a.fe + r.fe, sales: a.sales + r.sales }), { fe: 0, sales: 0 });
+    expect(await real(['a1'])).toEqual({ fe: 1, sales: 1 }); // T1 → upsell T2
+    expect(await real(['a4'])).toEqual({ fe: 1, sales: 0 }); // T3 sem upsell
+    expect(await real(['__none__'])).toEqual({ fe: 0, sales: 0 });
+    expect(await real(undefined)).toEqual({ fe: 2, sales: 1 });
   });
 });

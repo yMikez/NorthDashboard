@@ -6,6 +6,7 @@ import { requireTab } from '@/lib/auth/guard';
 import { getRecovery } from '@/lib/services/recovery';
 import { logger } from '@/lib/logger';
 import { respondCached } from '@/lib/shared/metricsResponse';
+import { resolveAffiliateFilter } from '@/lib/shared/affiliateFilter';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -27,7 +28,8 @@ export async function GET(req: Request) {
   }
 
   try {
-    return await respondCached('recovery', searchParams, () => getRecovery({ startDate, endDate }));
+    const affiliateIds = await resolveAffiliateFilter(searchParams.get('aff'));
+    return await respondCached('recovery', searchParams, () => getRecovery({ startDate, endDate, affiliateIds }));
   } catch (err) {
     logger.error({ err }, 'metrics/recovery failed');
     return NextResponse.json({ error: 'query failed' }, { status: 500 });

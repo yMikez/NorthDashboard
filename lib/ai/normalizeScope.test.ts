@@ -14,6 +14,8 @@ vi.mock('../db', async () => {
       },
       affiliate: { findMany: (...a: unknown[]) => findAffiliates(...a) },
       affiliateMappingState: { findMany: async () => c.nsAffiliates.map((a) => ({ affiliateId: a.id, name: a.name })) },
+      // contagem de pedidos por affiliate_id do NorthScale Afiliados (catálogo da IA)
+      order: { groupBy: async () => c.nsAffiliates.filter((a) => a.orders > 0).map((a) => ({ mappedAffiliateId: a.id, _count: { _all: a.orders } })) },
     },
   };
 });

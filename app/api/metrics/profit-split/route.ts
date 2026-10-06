@@ -7,6 +7,7 @@ import { getProfitSplit } from '@/lib/services/profitSplit';
 import { logger } from '@/lib/logger';
 import { respondCached } from '@/lib/shared/metricsResponse';
 import { affiliateIdsParam } from '@/lib/shared/queryParams';
+import { resolveAffiliateFilter } from '@/lib/shared/affiliateFilter';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -37,10 +38,12 @@ export async function GET(req: Request) {
   const productFamilies = csv('families');
   const countries = csv('countries');
   const mappedAffiliateIds = affiliateIdsParam(searchParams.get('affiliate_id'));
+  // Filtro "Afiliado" da barra (contas de plataforma / pessoa unificada).
+  const affiliateIds = await resolveAffiliateFilter(searchParams.get('aff'));
 
   try {
     return await respondCached('profit-split', searchParams, () =>
-      getProfitSplit({ startDate, endDate, platformSlugs, productFamilies, countries, mappedAffiliateIds }));
+      getProfitSplit({ startDate, endDate, platformSlugs, productFamilies, countries, mappedAffiliateIds, affiliateIds }));
   } catch (err) {
     logger.error({ err }, 'metrics/profit-split failed');
     return NextResponse.json({ error: 'query failed' }, { status: 500 });

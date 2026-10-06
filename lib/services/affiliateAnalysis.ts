@@ -48,6 +48,8 @@ export interface AnalysisOptions {
   anchor?: string;
   platformSlugs?: string[];
   families?: string[];
+  /** Filtro "Afiliado" da barra: só estas contas (Affiliate.id) entram. */
+  affiliateIds?: string[];
   includeContact: boolean;
   now?: Date;
 }
@@ -450,7 +452,7 @@ function entityPlatforms(raw: RawData, e: Entity): string[] {
 // ── API pública ─────────────────────────────────────────────────────────
 
 export async function getAffiliateAnalysis(opts: AnalysisOptions): Promise<AffiliateAnalysisResponse> {
-  const raw = await loadRaw(opts);
+  const raw = await loadRaw(opts, opts.affiliateIds);
   const { entities, excludedIds } = buildEntities(raw, opts.view, opts.includeInternal);
   const days = opts.window;
   const { cur: curRange, prev: prevRange } = windowRanges(days, raw.lastIdx);
@@ -825,7 +827,7 @@ async function loadNewAffiliates(
 
 export async function getAffiliateSequence(opts: SequenceOptions): Promise<AffiliateSequenceResponse> {
   const count = Math.min(Math.max(Math.trunc(opts.count) || 3, 2), 8);
-  const raw = await loadRaw(opts, undefined, count * opts.window);
+  const raw = await loadRaw(opts, opts.affiliateIds, count * opts.window);
   const { entities, excludedIds } = buildEntities(raw, opts.view, opts.includeInternal);
   const ranges = sequenceRanges(opts.window, count, raw.lastIdx);
   const labels = ranges.map((_, i) => `Janela ${i + 1}`);

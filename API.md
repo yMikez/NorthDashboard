@@ -378,7 +378,8 @@ Mesma resposta que a interface consome. Todos aceitam os filtros da §4.
 | `families` | nomes separados por vírgula | família do produto |
 | `products` | IDs externos | |
 | `countries` | ISO-2 | `US,CA` |
-| `affiliate_id` | IDs separados por vírgula | ID do sistema de afiliados |
+| `aff` | `a:<conta>` ou `p:<pessoa>`, separados por vírgula | filtro "Afiliado" da barra: conta de afiliado da plataforma (id interno) ou a pessoa com todas as contas unificadas. Vale em todas as abas de venda (funil e sessões: o afiliado do front decide) |
+| `affiliate_id` | IDs separados por vírgula | ID do sistema de afiliados (mapeamento externo; mantido por compatibilidade) |
 | `stages` | `FRONTEND,UPSELL,…` | etapa do funil |
 | `compare=1` | — | inclui o período anterior para comparação |
 

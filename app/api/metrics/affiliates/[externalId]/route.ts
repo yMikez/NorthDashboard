@@ -4,6 +4,7 @@ import { requireAnyTab } from '@/lib/auth/guard';
 import { getCachedResponse, setCachedResponse } from '@/lib/cache/responseCache';
 import { logger } from '@/lib/logger';
 import { affiliateIdsParam, csvParam, stagesParam } from '@/lib/shared/queryParams';
+import { resolveAffiliateFilter } from '@/lib/shared/affiliateFilter';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -39,6 +40,8 @@ export async function GET(
   const productExternalIds = csvParam(searchParams.get('products'));
   const productFamilies = csvParam(searchParams.get('families'));
   const mappedAffiliateIds = affiliateIdsParam(searchParams.get('affiliate_id'));
+  // Filtro "Afiliado" da barra (contas de plataforma / pessoa unificada).
+  const affiliateIds = await resolveAffiliateFilter(searchParams.get('aff'));
   const productTypes = stagesParam(searchParams.get('stages'));
   const platformHint = searchParams.get('platform') ?? undefined;
 
@@ -52,7 +55,7 @@ export async function GET(
     const t0 = Date.now();
     const data = await getAffiliateDetail(
       decodeURIComponent(externalId),
-      { startDate, endDate, platformSlugs, countries, productExternalIds, productFamilies, productTypes, mappedAffiliateIds },
+      { startDate, endDate, platformSlugs, countries, productExternalIds, productFamilies, productTypes, mappedAffiliateIds, affiliateIds },
       platformHint,
     );
     if (!data) {

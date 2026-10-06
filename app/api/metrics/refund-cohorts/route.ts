@@ -11,6 +11,7 @@ import { requireTab } from '@/lib/auth/guard';
 import { logger } from '@/lib/logger';
 import { csvParam, stagesParam } from '@/lib/shared/queryParams';
 import { respondCached } from '@/lib/shared/metricsResponse';
+import { resolveAffiliateFilter } from '@/lib/shared/affiliateFilter';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -36,6 +37,7 @@ export async function GET(req: Request) {
 
   const horizon = Number.parseInt(searchParams.get('horizon') ?? '30', 10) || 30;
 
+  const affiliateIds = await resolveAffiliateFilter(searchParams.get('aff'));
   try {
     return await respondCached('refund-cohorts', searchParams, () =>
       getRefundCohorts(
@@ -47,6 +49,7 @@ export async function GET(req: Request) {
           productExternalIds: csvParam(searchParams.get('products')),
           productTypes: stagesParam(searchParams.get('stages')),
           countries: csvParam(searchParams.get('countries')),
+          affiliateIds,
         },
         horizon,
       ),

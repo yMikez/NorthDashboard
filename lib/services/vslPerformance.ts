@@ -21,6 +21,16 @@ export interface VslPerformanceFilters {
   families?: string[];
   stage?: string | null;
   pageId?: string | null;
+  /** Filtro "Afiliado" da barra — venda real: FE da sessão destas contas (Affiliate.id). */
+  affiliateIds?: string[];
+  /** Mesmo filtro no rastreio: "plataforma:ID lido na página" (JVZoo aid, BuyGoods aff_id@loja). */
+  affiliateVisitKeys?: string[];
+}
+
+/** Visita do afiliado escolhido (pelo ID que a página leu). Sem filtro = TRUE. */
+function visitAffWhere(f: VslPerformanceFilters): Prisma.Sql {
+  if (!f.affiliateVisitKeys) return Prisma.sql`TRUE`;
+  return Prisma.sql`(p.platform || ':' || v."affiliateKey") = ANY(${f.affiliateVisitKeys.length ? f.affiliateVisitKeys : ['__none__']})`;
 }
 
 const DAY_SQL = (col: Prisma.Sql) => Prisma.sql`to_char((${col} - interval '3 hours')::date, 'YYYY-MM-DD')`;
@@ -57,7 +67,7 @@ export function visitRowsSql(f: VslPerformanceFilters): Prisma.Sql {
            COALESCE(SUM(v."maxSecond") FILTER (WHERE v."playAt" IS NOT NULL), 0)::float8 AS watch
     FROM "VslVisit" v
     JOIN "VslPage" p ON p.id = v."pageId"
-    WHERE v."discardedAt" IS NULL AND v."firstAt" >= ${f.start} AND v."firstAt" <= ${f.end} AND ${pageWhere(f)}
+    WHERE v."discardedAt" IS NULL AND v."firstAt" >= ${f.start} AND v."firstAt" <= ${f.end} AND ${pageWhere(f)} AND ${visitAffWhere(f)}
     GROUP BY 1, 2, 3, 4, 5`;
 }
 
@@ -207,7 +217,8 @@ export function realRowsSql(f: VslPerformanceFilters): Prisma.Sql {
     fe AS (
       SELECT pl.slug AS platform, ${SESSION_KEY} AS sk, MIN(o."orderedAt") AS at,
              (ARRAY_AGG(pr.family ORDER BY o."orderedAt"))[1] AS family,
-             (ARRAY_AGG(pr.bottles ORDER BY o."orderedAt"))[1] AS bottles
+             (ARRAY_AGG(pr.bottles ORDER BY o."orderedAt"))[1] AS bottles,
+             (ARRAY_AGG(o."affiliateId" ORDER BY o."orderedAt"))[1] AS aff
       FROM "Order" o
       JOIN "Platform" pl ON pl.id = o."platformId"
       JOIN "Product" pr ON pr.id = o."productId"
@@ -232,10 +243,10 @@ export function realRowsSql(f: VslPerformanceFilters): Prisma.Sql {
       -- FE da sessão de cada upsell, por índice: a mesma "primeira FE aprovada
       -- da sessão desde 2 dias antes" do CTE fe, sem cruzar CTE × CTE (o planner
       -- errava a estimativa e fazia laço aninhado de milhões de linhas).
-      SELECT bk.*, fx.family AS fe_family, fx.bottles AS fe_bottles, fx.at AS fe_at
+      SELECT bk.*, fx.family AS fe_family, fx.bottles AS fe_bottles, fx.at AS fe_at, fx.aff AS fe_aff
       FROM bk
       LEFT JOIN LATERAL (
-        SELECT pr2.family, pr2.bottles, f2."orderedAt" AS at
+        SELECT pr2.family, pr2.bottles, f2."orderedAt" AS at, f2."affiliateId" AS aff
         FROM "Order" f2 JOIN "Product" pr2 ON pr2.id = f2."productId"
         WHERE f2."platformId" = bk.platform_id
           AND (f2."funnelSessionId" = bk.sk OR f2."parentExternalId" = bk.sk OR f2."externalId" = bk.sk)
@@ -256,6 +267,7 @@ export function realRowsSql(f: VslPerformanceFilters): Prisma.Sql {
       JOIN pg ON pg.platform = b.platform AND pg.family = COALESCE(b.fe_family, b.own_family)
              AND pg.pt = b.pt AND pg.step = b.step
              AND ${feBottlesMatch(Prisma.sql`b.fe_bottles`)}
+      WHERE ${f.affiliateIds ? Prisma.sql`b.fe_aff = ANY(${f.affiliateIds})` : Prisma.sql`TRUE`}
       GROUP BY 1, 2
     ),
     fes AS (
@@ -264,6 +276,7 @@ export function realRowsSql(f: VslPerformanceFilters): Prisma.Sql {
       FROM fe JOIN pg ON pg.platform = fe.platform AND pg.family = fe.family
              AND ${feBottlesMatch(Prisma.sql`fe.bottles`)}
       WHERE fe.at >= ${f.start}
+        AND ${f.affiliateIds ? Prisma.sql`fe.aff = ANY(${f.affiliateIds})` : Prisma.sql`TRUE`}
       GROUP BY 1, 2
     )
     SELECT COALESCE(s.page_id, x.page_id) AS "pageId", COALESCE(s.day, x.day) AS day,
@@ -374,14 +387,14 @@ export function affiliateRowsSql(f: VslPerformanceFilters): Prisma.Sql {
     JOIN "VslPage" p ON p.id = v."pageId"
     LEFT JOIN "Platform" pl ON pl.slug = p.platform
     LEFT JOIN "Affiliate" a ON a."platformId" = pl.id AND a."externalId" = v."affiliateKey"
-    WHERE v."affiliateKey" IS NOT NULL AND v."discardedAt" IS NULL AND v."firstAt" >= ${f.start} AND v."firstAt" <= ${f.end} AND ${pageWhere(f)}
+    WHERE v."affiliateKey" IS NOT NULL AND v."discardedAt" IS NULL AND v."firstAt" >= ${f.start} AND v."firstAt" <= ${f.end} AND ${pageWhere(f)} AND ${visitAffWhere(f)}
     GROUP BY 1, 2`;
 }
 
 export async function getVslPerformance(f: VslPerformanceFilters) {
   const [visits, linked, real, pages, changes, tests, affRows] = await Promise.all([
     visitRows(f),
-    linkedRows(Prisma.sql`v."firstAt" >= ${f.start} AND v."firstAt" <= ${f.end} AND ${pageWhere(f)}`),
+    linkedRows(Prisma.sql`v."firstAt" >= ${f.start} AND v."firstAt" <= ${f.end} AND ${pageWhere(f)} AND ${visitAffWhere(f)}`),
     realRows(f),
     db.vslPage.findMany({ select: { id: true, platform: true, fallbackVslId: true, installedAt: true } }),
     db.vslChange.findMany({ where: { pageId: { not: null } }, select: { pageId: true, kind: true, toVslId: true, ruleId: true, createdAt: true } }),

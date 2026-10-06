@@ -24,6 +24,8 @@ export interface FunnelSequenceOptions {
   productFamilies?: string[];
   // Afiliado (sistema) — repassado ao getFunnel de cada janela.
   mappedAffiliateIds?: string[];
+  /** Filtro "Afiliado" da barra: contas de plataforma (Affiliate.id). */
+  affiliateIds?: string[];
   now?: Date;
 }
 
@@ -197,6 +199,7 @@ export async function getFunnelSequence(opts: FunnelSequenceOptions): Promise<Fu
     platformSlugs: opts.platformSlugs, countries: opts.countries,
     productExternalIds: opts.productExternalIds, productFamilies: opts.productFamilies,
     mappedAffiliateIds: opts.mappedAffiliateIds,
+    affiliateIds: opts.affiliateIds,
   };
   const results: FunnelResponse[] = await Promise.all(ranges.map((r) =>
     getFunnel({

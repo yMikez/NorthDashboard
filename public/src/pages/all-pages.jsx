@@ -5514,7 +5514,7 @@ function RecoveryPage({ filters }) {
       .then(([m, a]) => { if (!cancelled) { setData({ status: 'ready', m, err: null }); setAffs(a.affiliates || []); } })
       .catch((err) => { if (!cancelled) setData({ status: 'error', m: null, err: err.message || 'erro' }); });
     return () => { cancelled = true; };
-  }, [filters.dateRange.start.getTime(), filters.dateRange.end.getTime(), refresh]);
+  }, [filters.dateRange.start.getTime(), filters.dateRange.end.getTime(), refresh, Array.from(filters.affiliates || []).join(',')]);
 
   function reload() { setRefresh((n) => n + 1); }
   const m = data.m;

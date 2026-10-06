@@ -31,6 +31,7 @@
 import { Prisma } from '@prisma/client';
 import { db } from '../db';
 import { EXTRA_ROW_REFUND_PLATFORMS } from './profitModel';
+import { affiliateSqlCond } from '../shared/affiliateFilter';
 
 export interface RefundCohortFilters {
   startDate: Date;
@@ -42,6 +43,8 @@ export interface RefundCohortFilters {
   countries?: string[];
   /** affiliate_id do NorthScale Afiliados (Order.mappedAffiliateId) — usado pela IA; a aba não manda. */
   mappedAffiliateIds?: string[];
+  /** Filtro "Afiliado" da barra: contas de plataforma (Affiliate.id). */
+  affiliateIds?: string[];
 }
 
 export interface CohortCell {
@@ -146,6 +149,9 @@ export async function getRefundCohorts(
   // afiliado saem do mesmo recorte.
   if (filters.mappedAffiliateIds?.length) {
     conds.push(Prisma.sql`o."mappedAffiliateId" = ANY(${filters.mappedAffiliateIds})`);
+  }
+  if (filters.affiliateIds?.length) {
+    conds.push(affiliateSqlCond(filters.affiliateIds, 'o'));
   }
   const whereSql = Prisma.join(conds, ' AND ');
   const saleDay = BRT_DAY(Prisma.sql`o."orderedAt"`);

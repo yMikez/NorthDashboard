@@ -282,20 +282,40 @@ function ThemeToggle() {
 // que é exatamente o esperado de "nenhuma opção marcada".
 const NONE_TOKEN = '__NONE__';
 
-function MultiSelect({ label, options, selected, onChange, icon }) {
+// Normaliza pra busca: minúsculas e sem acento.
+const msFold = (t) => String(t || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+
+// pick = lista grande em que se ESCOLHE (afiliado): de "Todos", clicar marca
+// só aquele (não "todos menos ele"); desmarcar o último volta a "Todos".
+// searchable = campo de busca no topo (lista longa). disabledReason = o
+// filtro existe mas não se aplica nesta aba — o botão fica apagado com o
+// motivo no title (a escolha continua na URL pras outras abas).
+function MultiSelect({ label, options, selected, onChange, icon, pick, searchable, disabledReason }) {
   const [open, setOpen] = useStateS(false);
+  const [q, setQ] = useStateS('');
   const ref = useRefS(null);
   useEffectS(() => {
     function onDoc(e) { if (ref.current && !ref.current.contains(e.target)) setOpen(false); }
     document.addEventListener('mousedown', onDoc);
     return () => document.removeEventListener('mousedown', onDoc);
   }, []);
+  useEffectS(() => { if (!open) setQ(''); }, [open]);
   const isNone = selected.has(NONE_TOKEN);
-  const isAll = !isNone && (selected.size === 0 || selected.size === options.length);
-  const pill = isAll ? 'Todos' : isNone ? 'Nenhum' : String(selected.size);
+  const isAll = !isNone && (selected.size === 0 || (!pick && selected.size === options.length));
+  const pill = disabledReason ? (isAll ? '—' : isNone ? 'Nenhum' : String(selected.size)) : isAll ? 'Todos' : isNone ? 'Nenhum' : String(selected.size);
+  const showSearch = searchable && options.length > 12;
+  const fq = msFold(q.trim());
+  let shown = fq ? options.filter((o) => msFold(o.label).includes(fq) || msFold(o.meta).includes(fq)) : options;
+  // Escolhidos primeiro (sem busca), pra ver o que está filtrando.
+  if (pick && !fq && selected.size && !isNone) shown = [...shown.filter((o) => selected.has(o.id)), ...shown.filter((o) => !selected.has(o.id))];
+  const LIMIT = 150;
+  const cut = shown.length > LIMIT;
+  if (cut) shown = shown.slice(0, LIMIT);
   return (
     <div ref={ref} style={{ position: 'relative' }}>
-      <button className="select-btn" onClick={() => setOpen(v => !v)}>
+      <button className="select-btn" onClick={() => { if (!disabledReason) setOpen(v => !v); }}
+        disabled={!!disabledReason} aria-disabled={disabledReason ? 'true' : undefined}
+        title={disabledReason || undefined} style={disabledReason ? { opacity: 0.55, cursor: 'not-allowed' } : undefined}>
         {icon && <Icon name={icon} size={13}/>}
         <span>{label}</span>
         <span className="pill">{pill}</span>
@@ -303,25 +323,42 @@ function MultiSelect({ label, options, selected, onChange, icon }) {
       </button>
       {open && (
         <div className="filter-pop" style={{
-          position: 'absolute', top: 'calc(100% + 6px)', left: 0, minWidth: 220,
+          position: 'absolute', top: 'calc(100% + 6px)', left: pick ? 'auto' : 0, right: pick ? 0 : 'auto', minWidth: pick ? 300 : 220,
           maxWidth: 'calc(100vw - 24px)',
           background: 'var(--bg-elev)', border: '1px solid var(--border)',
           borderRadius: 8, padding: 6, zIndex: 20, boxShadow: 'var(--shadow-lg)',
         }}>
+          {showSearch && (
+            <div style={{ padding: '2px 2px 6px' }}>
+              <input autoFocus value={q} onChange={(e) => setQ(e.target.value)} placeholder={`Buscar ${label.toLowerCase()}…`}
+                aria-label={`Buscar ${label.toLowerCase()}`} style={{ width: '100%', minHeight: 32, fontSize: 13 }}/>
+            </div>
+          )}
           <div style={{ display: 'flex', justifyContent: 'space-between', padding: '4px 8px', marginBottom: 4 }}>
             <button className="dh-link" style={{ background: 'none', border: 0, color: 'var(--glow-cyan)', fontFamily: 'var(--f-mono)', fontSize: 10, cursor: 'pointer' }}
-              onClick={() => onChange(new Set())}>Todos</button>
-            <button className="dh-link" style={{ background: 'none', border: 0, color: 'var(--fg4)', fontFamily: 'var(--f-mono)', fontSize: 10, cursor: 'pointer' }}
-              onClick={() => onChange(new Set([NONE_TOKEN]))}>Nenhum</button>
+              onClick={() => onChange(new Set())}>{pick ? 'Limpar (todos)' : 'Todos'}</button>
+            {!pick && (
+              <button className="dh-link" style={{ background: 'none', border: 0, color: 'var(--fg4)', fontFamily: 'var(--f-mono)', fontSize: 10, cursor: 'pointer' }}
+                onClick={() => onChange(new Set([NONE_TOKEN]))}>Nenhum</button>
+            )}
+            {pick && !isAll && <span style={{ fontFamily: 'var(--f-mono)', fontSize: 10, color: 'var(--fg5)' }}>{selected.size} escolhido{selected.size === 1 ? '' : 's'}</span>}
           </div>
           <div style={{ maxHeight: 280, overflowY: 'auto' }}>
-            {options.map(opt => {
-              const on = isNone ? false : (selected.size === 0 ? true : selected.has(opt.id));
+            {shown.length === 0 && <div style={{ padding: '8px', fontSize: 12, color: 'var(--fg5)' }}>Nada encontrado.</div>}
+            {shown.map(opt => {
+              const on = pick ? selected.has(opt.id) : isNone ? false : (selected.size === 0 ? true : selected.has(opt.id));
               // Toggle. Estados: Set vazio = TODOS; {NONE_TOKEN} = NENHUM;
               // senão = seleção explícita. Sair de qualquer um deles limpa
-              // o token; voltar a zero itens reais = NENHUM; marcar todos
-              // colapsa pra Set vazio (TODOS) e URL limpa.
+              // o token; voltar a zero itens reais = NENHUM (no modo pick,
+              // volta a TODOS); marcar todos colapsa pra Set vazio (TODOS).
               const toggle = () => {
+                if (pick) {
+                  const next = new Set(isNone ? [] : selected);
+                  next.delete(NONE_TOKEN);
+                  if (next.has(opt.id)) next.delete(opt.id); else next.add(opt.id);
+                  onChange(next);
+                  return;
+                }
                 let effective;
                 if (isNone) effective = new Set();
                 else if (selected.size === 0) effective = new Set(options.map(o => o.id));
@@ -346,11 +383,12 @@ function MultiSelect({ label, options, selected, onChange, icon }) {
                     style={{ accentColor: 'var(--glow-cyan)' }}
                   />
                   {opt.swatch && <span style={{ width: 10, height: 10, borderRadius: 3, background: opt.swatch, flexShrink: 0 }}/>}
-                  <span style={{ flex: 1 }}>{opt.label}</span>
-                  {opt.meta && <span style={{ fontFamily: 'var(--f-mono)', fontSize: 10, color: 'var(--fg5)' }}>{opt.meta}</span>}
+                  <span style={{ flex: 1, minWidth: 0, overflowWrap: 'anywhere' }}>{opt.label}</span>
+                  {opt.meta && <span style={{ fontFamily: 'var(--f-mono)', fontSize: 10, color: 'var(--fg5)', textAlign: 'right' }}>{opt.meta}</span>}
                 </label>
               );
             })}
+            {cut && <div style={{ padding: '6px 8px', fontSize: 11, color: 'var(--fg5)' }}>Mostrando {LIMIT} — busque pelo nome ou ID pra achar os outros.</div>}
           </div>
         </div>
       )}
@@ -361,12 +399,17 @@ function MultiSelect({ label, options, selected, onChange, icon }) {
 // Routes that already render comparison data (deltas vs previous period).
 // Other routes hide the toggle since flipping it would have no visible effect.
 const ROUTES_WITH_COMPARE = new Set(['overview']);
-// Rotas cujos endpoints aplicam o filtro "Afiliado (sistema)" (affiliate_id
-// do NorthScale Afiliados). Fora delas o seletor some — o filtro fica na
-// URL mas não é enviado, então nada finge estar filtrado.
 // Rotas que não aplicam Etapa/País do filtro global (a aba VSLs tem etapa própria UP01…DOWN03).
 const ROUTES_WITHOUT_STAGE_COUNTRY = new Set(['vsl']);
-const ROUTES_WITH_AFFILIATE = new Set(['overview', 'funnel', 'leaderboard', 'all-affiliates', 'transactions', 'products', 'platforms']);
+// Filtro "Afiliado" (conta de plataforma ou pessoa unificada): vale em todas
+// as abas de venda. Onde não se aplica, o seletor fica apagado com o motivo
+// — a escolha continua na URL e volta a valer ao trocar de aba.
+const AFFILIATE_NOT_APPLICABLE = {
+  tauk: 'Call Center: a venda é da parceira de call center, não tem afiliado.',
+  health: 'Saúde do dado olha a integração de cada plataforma, não um afiliado.',
+  'net-profit': 'Lucro real é o modelo da operação inteira (frente + backend), sem recorte por afiliado.',
+  users: 'Usuários do dashboard — não se aplica.',
+};
 
 // ---------- Date range chip with custom-range popover ----------
 function DateRangeChip({ range, onChange }) {
@@ -605,12 +648,9 @@ function FilterBar({ filters, setFilters, options, route }) {
 
   const showCompare = ROUTES_WITH_COMPARE.has(route);
 
-  // Afiliados do sistema de afiliados (espelho do mapping) — só aparecem
-  // quando há mapeamento carregado e a rota aplica o filtro.
-  const affiliateOpts = (options?.affiliates || []).map((a) => ({
-    id: a.id, label: a.label, meta: a.removed ? 'removido' : a.status === 'active' ? 'ativo' : 'inativo',
-  }));
-  const showAffiliate = ROUTES_WITH_AFFILIATE.has(route) && (affiliateOpts.length > 0 || (filters.affiliates && filters.affiliates.size > 0));
+  // Afiliado = pessoa (contas unificadas) ou conta de plataforma solta.
+  const affiliateOpts = (options?.affiliates || []).map((a) => ({ id: a.id, label: a.label, meta: a.meta }));
+  const affiliateNA = AFFILIATE_NOT_APPLICABLE[route] || null;
 
   return (
     <div className="filters">
@@ -649,10 +689,9 @@ function FilterBar({ filters, setFilters, options, route }) {
         <MultiSelect label="País" icon="globe" options={countryOpts} selected={filters.countries}
           onChange={(s) => setFilters(f => ({ ...f, countries: s }))}/>
       </>)}
-      {showAffiliate && (
-        <MultiSelect label="Afiliado" icon="users" options={affiliateOpts} selected={filters.affiliates || new Set()}
-          onChange={(s) => setFilters(f => ({ ...f, affiliates: s }))}/>
-      )}
+      <MultiSelect label="Afiliado" icon="users" options={affiliateOpts} selected={filters.affiliates || new Set()}
+        pick searchable disabledReason={affiliateNA}
+        onChange={(s) => setFilters(f => ({ ...f, affiliates: s }))}/>
     </div>
   );
 }

@@ -143,7 +143,9 @@ function App({ user }) {
     stages: decodeSet(params.get('st')),
     // Afiliado do sistema NorthScale Afiliados (affiliate_id) — query
     // param `affiliate_id` nos endpoints que aceitam (Order.mappedAffiliateId).
-    affiliates: decodeSet(params.get('aff')),
+    // Afiliado: a:<conta> / p:<pessoa>. Link antigo (id do NorthScale
+    // Afiliados, filtro anterior) não tem prefixo e cai fora.
+    affiliates: new Set(Array.from(decodeSet(params.get('aff'))).filter((k) => /^[ap]:[A-Za-z0-9_-]{1,64}$/.test(k) || k === '__NONE__')),
     // Retained for backward-compat with pages still reading filters.trafficSources / filters.currency.
     // Both removed from FilterBar UI + URL persistence in Fase 2A cleanup.
     trafficSources: new Set(),
@@ -301,7 +303,7 @@ function App({ user }) {
           {/* Fundida com o Ranking (modelo planilha CPA) — rota antiga rende a mesma página. */}
           {hashState.route === 'all-affiliates' && <LeaderboardPage filters={filters} onOpenAffiliate={setDrawerAff} user={user}/>}
           {hashState.route === 'affiliate-analysis' && <AffiliateAnalysisPage filters={filters} user={user}/>}
-          {hashState.route === 'affiliate-crm' && <AffiliateCrmPage user={user}/>}
+          {hashState.route === 'affiliate-crm' && <AffiliateCrmPage user={user} filters={filters}/>}
           {hashState.route === 'recovery'       && <RecoveryPage filters={filters}/>}
           {hashState.route === 'tauk'           && <CallCenterPage filters={filters} user={user}/>}
           {hashState.route === 'products'       && <ProductsPage filters={filters}/>}

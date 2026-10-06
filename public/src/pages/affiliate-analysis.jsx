@@ -108,6 +108,7 @@ function AffiliateAnalysisPage({ filters, user }) {
 
   const platformsKey = Array.from(filters.platforms || []).join(',');
   const familiesKey = Array.from(filters.families || []).join(',');
+  const affKey = Array.from(filters.affiliates || []).join(',');
 
   useEffectAA(() => {
     let cancelled = false;
@@ -116,7 +117,7 @@ function AffiliateAnalysisPage({ filters, user }) {
       .then((data) => { if (!cancelled) setState({ status: 'ready', data, error: null }); })
       .catch((err) => { if (!cancelled) setState({ status: 'error', data: null, error: err.message }); });
     return () => { cancelled = true; };
-  }, [win, view, internal, today, anchor, tick, platformsKey, familiesKey]);
+  }, [win, view, internal, today, anchor, tick, platformsKey, familiesKey, affKey]);
 
   // Sequência (janelas/evolução/saúde): só busca quando um desses modos está ativo.
   useEffectAA(() => {
@@ -126,7 +127,7 @@ function AffiliateAnalysisPage({ filters, user }) {
       .then((data) => { if (!cancelled) setSeqState({ status: 'ready', data, error: null }); })
       .catch((err) => { if (!cancelled) setSeqState({ status: 'error', data: null, error: err.message }); });
     return () => { cancelled = true; };
-  }, [mode, win, count, view, internal, today, anchor, tick, platformsKey, familiesKey]);
+  }, [mode, win, count, view, internal, today, anchor, tick, platformsKey, familiesKey, affKey]);
   const seq = seqState.data;
 
   const data = state.data;

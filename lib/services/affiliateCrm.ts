@@ -179,6 +179,8 @@ export interface CrmListOptions {
   withPhone?: boolean | null;
   search?: string | null;
   limit?: number | null;
+  /** Filtro "Afiliado" da barra: só estas contas (Affiliate.id). */
+  affiliateIds?: string[];
 }
 
 export interface CrmListResponse {
@@ -222,7 +224,7 @@ export async function listAffiliateCrm(opts: CrmListOptions = {}): Promise<CrmLi
   const now = opts.now ?? new Date();
   const [config, raw] = await Promise.all([
     getCrmConfig(),
-    loadRaw({ window: 30, view: 'partner', includeInternal: false, includeContact: true, now, includeToday: true }),
+    loadRaw({ window: 30, view: 'partner', includeInternal: false, includeContact: true, now, includeToday: true }, opts.affiliateIds),
   ]);
   const { entities } = buildEntities(raw, 'partner', false);
   const anchorDay = dateAt(raw, raw.lastIdx);

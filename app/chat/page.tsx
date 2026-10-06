@@ -41,7 +41,8 @@ export default async function ChatPageRoute({ searchParams }: { searchParams: Pr
     families: list(sp.fam),
     countries: list(sp.co),
     stages: list(sp.st),
-    affiliates: list(sp.aff),
+    // a:<conta> / p:<pessoa>; link antigo (id do NorthScale Afiliados) cai fora.
+    affiliates: list(sp.aff).filter((k) => /^[ap]:[A-Za-z0-9_-]{1,64}$/.test(k)),
   };
   const c = one(sp.c);
   // id de conversa é cuid — qualquer outra coisa nem tenta abrir.

@@ -12,6 +12,7 @@ import {
   realOrderCount, EXTRA_ROW_REFUND_PLATFORMS, ZERO_PLATFORM_PCTS,
 } from './profitModel';
 import { DEFAULT_SUPPLIER } from './cogs';
+import { addAffiliateWhere, affiliateSqlCond } from '../shared/affiliateFilter';
 
 export interface MetricsFilters {
   startDate: Date;
@@ -34,6 +35,10 @@ export interface MetricsFilters {
   // Aplicado como filtro de ORDEM em todos os relatórios; no overview força
   // o caminho sem MV (a daily_metrics não tem essa dimensão).
   mappedAffiliateIds?: string[];
+  // Filtro "Afiliado" da barra: contas de plataforma (Affiliate.id) já
+  // resolvidas do param `aff` (lib/shared/affiliateFilter). Mesma semântica
+  // do mappedAffiliateIds em cada ponto (sessão: a FE decide).
+  affiliateIds?: string[];
 }
 
 export interface OverviewKPIs {
@@ -658,7 +663,7 @@ export async function getOverview(
   // SKU-level filtering isn't supported by the MV (keyed on family). Fall
   // back to the legacy path on those filter combinations — accuracy wins
   // over speed when the user explicitly picks SKUs.
-  if (filters.productExternalIds?.length || filters.mappedAffiliateIds?.length) {
+  if (filters.productExternalIds?.length || filters.mappedAffiliateIds?.length || filters.affiliateIds?.length) {
     return getOverviewLegacy(filters, compare);
   }
 
@@ -831,10 +836,13 @@ async function feSessionStats(filters: MetricsFilters): Promise<FeSessionStats> 
   if (filters.mappedAffiliateIds?.length) {
     feConds.push(Prisma.sql`b."mappedAffiliateId" = ANY(${filters.mappedAffiliateIds})`);
   }
+  if (filters.affiliateIds?.length) {
+    feConds.push(affiliateSqlCond(filters.affiliateIds, 'b'));
+  }
   const [row] = await db.$queryRaw<Array<{ sessions: bigint; revenue: Prisma.Decimal | null; net: Prisma.Decimal | null }>>(Prisma.sql`
     WITH base AS (
       SELECT o.id, o."productType", o."status", o."orderedAt",
-             o."grossAmountUsd", o."netAmountUsd", o."mappedAffiliateId",
+             o."grossAmountUsd", o."netAmountUsd", o."mappedAffiliateId", o."affiliateId",
              pr."family" AS family,
              ${SESSION_KEY_SQL} AS skey
       FROM "Order" o
@@ -878,6 +886,9 @@ async function orderGroupsCount(filters: MetricsFilters): Promise<number> {
   }
   if (filters.mappedAffiliateIds?.length) {
     conds.push(Prisma.sql`o."mappedAffiliateId" = ANY(${filters.mappedAffiliateIds})`);
+  }
+  if (filters.affiliateIds?.length) {
+    conds.push(affiliateSqlCond(filters.affiliateIds, 'o'));
   }
   if (filters.productFamilies?.length) {
     conds.push(Prisma.sql`pr."family" = ANY(${filters.productFamilies})`);
@@ -1014,6 +1025,9 @@ async function hourlyHeatmapQuery(
   if (filters.mappedAffiliateIds?.length) {
     conds.push(Prisma.sql`o."mappedAffiliateId" = ANY(${filters.mappedAffiliateIds})`);
   }
+  if (filters.affiliateIds?.length) {
+    conds.push(affiliateSqlCond(filters.affiliateIds, 'o'));
+  }
   if (filters.productFamilies?.length) {
     conds.push(Prisma.sql`pr."family" = ANY(${filters.productFamilies})`);
   }
@@ -1070,6 +1084,9 @@ async function topAffiliatesQuery(
   }
   if (filters.mappedAffiliateIds?.length) {
     conds.push(Prisma.sql`o."mappedAffiliateId" = ANY(${filters.mappedAffiliateIds})`);
+  }
+  if (filters.affiliateIds?.length) {
+    conds.push(affiliateSqlCond(filters.affiliateIds, 'o'));
   }
   if (filters.productFamilies?.length) {
     conds.push(Prisma.sql`pr."family" = ANY(${filters.productFamilies})`);
@@ -1222,6 +1239,7 @@ export async function getFunnel(
       parentExternalId: true,
       funnelSessionId: true,
       mappedAffiliateId: true,
+      affiliateId: true,
       grossAmountUsd: true,
       funnelStep: true,
       productType: true,
@@ -1259,6 +1277,8 @@ export async function getFunnel(
     fePlatformSlug: string | null;
     // affiliate_id (NorthScale Afiliados) da FE — dimensão do filtro Afiliado.
     feMapped: string | null;
+    // Conta de afiliado (Affiliate.id) da FE — filtro "Afiliado" da barra.
+    feAffiliate: string | null;
   }
 
   const groups = new Map<string, Group>();
@@ -1277,7 +1297,7 @@ export async function getFunnel(
         upsellsByStep: new Map(),
         downsellsByStep: new Map(),
         feProductExternalId: null, feProductName: null, feProductFamily: null,
-        fePlatformSlug: slug, feMapped: null,
+        fePlatformSlug: slug, feMapped: null, feAffiliate: null,
       };
       groups.set(key, g);
     }
@@ -1297,6 +1317,7 @@ export async function getFunnel(
       g.feProductFamily = o.product.family;
       g.fePlatformSlug = o.platform.slug;
       g.feMapped = o.mappedAffiliateId;
+      g.feAffiliate = o.affiliateId;
     }
   }
 
@@ -1305,10 +1326,16 @@ export async function getFunnel(
   // difira (BuyGoods emite aff_id por produto). Sessões órfãs (sem FE no
   // período) saem: sem FE não há como saber de quem são.
   let orders = fetched;
-  if (filters.mappedAffiliateIds?.length) {
-    const allowed = new Set(filters.mappedAffiliateIds);
+  if (filters.mappedAffiliateIds?.length || filters.affiliateIds?.length) {
+    const allowed = filters.mappedAffiliateIds?.length ? new Set(filters.mappedAffiliateIds) : null;
+    const allowedAcc = filters.affiliateIds?.length ? new Set(filters.affiliateIds) : null;
     const keep = new Set<string>();
-    for (const [key, g] of groups) if (g.hasFE && g.feMapped && allowed.has(g.feMapped)) keep.add(key);
+    for (const [key, g] of groups) {
+      if (!g.hasFE) continue;
+      if (allowed && !(g.feMapped && allowed.has(g.feMapped))) continue;
+      if (allowedAcc && !(g.feAffiliate && allowedAcc.has(g.feAffiliate))) continue;
+      keep.add(key);
+    }
     for (const key of Array.from(groups.keys())) if (!keep.has(key)) groups.delete(key);
     orders = fetched.filter((o) => keep.has(`${o.platform.slug}:${sessionKeyOf(o)}`));
   }
@@ -1658,6 +1685,7 @@ export async function getProductsLegacy(
   if (filters.mappedAffiliateIds?.length) {
     where.mappedAffiliateId = { in: filters.mappedAffiliateIds };
   }
+  addAffiliateWhere(where, filters.affiliateIds);
   if (filters.productExternalIds?.length || filters.productFamilies?.length) {
     where.product = {
       ...(filters.productExternalIds?.length ? { externalId: { in: filters.productExternalIds } } : {}),
@@ -1962,6 +1990,9 @@ export async function getProductsSql(
   if (filters.mappedAffiliateIds?.length) {
     conds.push(Prisma.sql`o."mappedAffiliateId" = ANY(${filters.mappedAffiliateIds})`);
   }
+  if (filters.affiliateIds?.length) {
+    conds.push(affiliateSqlCond(filters.affiliateIds, 'o'));
+  }
   if (filters.productExternalIds?.length) {
     conds.push(Prisma.sql`pr."externalId" = ANY(${filters.productExternalIds})`);
   }
@@ -2217,6 +2248,7 @@ export async function getPlatforms(
   if (filters.mappedAffiliateIds?.length) {
     where.mappedAffiliateId = { in: filters.mappedAffiliateIds };
   }
+  addAffiliateWhere(where, filters.affiliateIds);
   if (filters.productExternalIds?.length || filters.productFamilies?.length) {
     where.product = {
       ...(filters.productExternalIds?.length ? { externalId: { in: filters.productExternalIds } } : {}),
@@ -2448,6 +2480,7 @@ export async function getFulfillmentOverview(
   if (filters.mappedAffiliateIds?.length) {
     where.mappedAffiliateId = { in: filters.mappedAffiliateIds };
   }
+  addAffiliateWhere(where, filters.affiliateIds);
   if (filters.productExternalIds?.length || filters.productFamilies?.length) {
     where.product = {
       ...(filters.productExternalIds?.length ? { externalId: { in: filters.productExternalIds } } : {}),
@@ -2562,6 +2595,7 @@ export async function getCostsOverview(
   if (filters.mappedAffiliateIds?.length) {
     where.mappedAffiliateId = { in: filters.mappedAffiliateIds };
   }
+  addAffiliateWhere(where, filters.affiliateIds);
   if (filters.productExternalIds?.length || filters.productFamilies?.length) {
     where.product = {
       ...(filters.productExternalIds?.length ? { externalId: { in: filters.productExternalIds } } : {}),
@@ -2954,6 +2988,7 @@ export async function getAffiliateDetail(
   if (filters.mappedAffiliateIds?.length) {
     periodWhere.mappedAffiliateId = { in: filters.mappedAffiliateIds };
   }
+  addAffiliateWhere(periodWhere, filters.affiliateIds);
   if (filters.productExternalIds?.length || filters.productFamilies?.length) {
     periodWhere.product = {
       ...(filters.productExternalIds?.length ? { externalId: { in: filters.productExternalIds } } : {}),
@@ -2994,6 +3029,7 @@ export async function getAffiliateDetail(
         // Afiliado (sistema) é dimensão de SESSÃO: só as FEs mapeadas pra ele
         // (mesma régua de feSessionStats) — senão o atribuído ignora o filtro.
         ...(filters.mappedAffiliateIds?.length ? { mappedAffiliateId: { in: filters.mappedAffiliateIds } } : {}),
+        ...(filters.affiliateIds?.length ? { AND: [{ affiliateId: { in: filters.affiliateIds } }] } : {}),
       },
       select: {
         parentExternalId: true,
@@ -3301,6 +3337,7 @@ export async function getAffiliatesLegacy(
   if (filters.mappedAffiliateIds?.length) {
     whereInCoverage.mappedAffiliateId = { in: filters.mappedAffiliateIds };
   }
+  addAffiliateWhere(whereInCoverage, filters.affiliateIds);
   if (filters.productExternalIds?.length || filters.productFamilies?.length) {
     whereInCoverage.product = {
       ...(filters.productExternalIds?.length ? { externalId: { in: filters.productExternalIds } } : {}),
@@ -3323,6 +3360,7 @@ export async function getAffiliatesLegacy(
   if (filters.platformSlugs?.length) periodWhere.platform = { slug: { in: filters.platformSlugs } };
   if (filters.countries?.length) periodWhere.country = { in: filters.countries };
   if (filters.mappedAffiliateIds?.length) periodWhere.mappedAffiliateId = { in: filters.mappedAffiliateIds };
+  addAffiliateWhere(periodWhere, filters.affiliateIds);
 
   const [orders, periodOrders, ltvByAff, affiliatesAll] = await Promise.all([
     db.order.findMany({
@@ -3772,6 +3810,9 @@ export async function getAffiliatesSql(
   if (filters.mappedAffiliateIds?.length) {
     directConds.push(Prisma.sql`o."mappedAffiliateId" = ANY(${filters.mappedAffiliateIds})`);
   }
+  if (filters.affiliateIds?.length) {
+    directConds.push(affiliateSqlCond(filters.affiliateIds, 'o'));
+  }
   if (filters.productExternalIds?.length) {
     directConds.push(Prisma.sql`pr."externalId" = ANY(${filters.productExternalIds})`);
   }
@@ -3803,6 +3844,9 @@ export async function getAffiliatesSql(
   // produto não está mapeado sumiria da sessão.
   const feMappedCond = filters.mappedAffiliateIds?.length
     ? Prisma.sql`AND "mappedAffiliateId" = ANY(${filters.mappedAffiliateIds})`
+    : Prisma.empty;
+  const feAccountCond = filters.affiliateIds?.length
+    ? Prisma.sql`AND "affiliateId" = ANY(${filters.affiliateIds})`
     : Prisma.empty;
 
   const [aggRows, sparkRows, countryRows, cpaLatestRows, attRows, ltvByAff, affiliatesAll] =
@@ -3908,7 +3952,7 @@ export async function getAffiliatesSql(
         fe AS (
           SELECT DISTINCT ON (skey) skey, "affiliateId"
           FROM base
-          WHERE "productType" = 'FRONTEND' AND "affiliateId" IS NOT NULL ${feMappedCond}
+          WHERE "productType" = 'FRONTEND' AND "affiliateId" IS NOT NULL ${feMappedCond} ${feAccountCond}
           ORDER BY skey, "orderedAt" ASC, id ASC
         )
         SELECT
@@ -4311,6 +4355,7 @@ export async function getOrders(
   if (filters.mappedAffiliateIds?.length) {
     where.mappedAffiliateId = { in: filters.mappedAffiliateIds };
   }
+  addAffiliateWhere(where, filters.affiliateIds);
   if (filters.productExternalIds?.length || filters.productFamilies?.length) {
     where.product = {
       ...(filters.productExternalIds?.length ? { externalId: { in: filters.productExternalIds } } : {}),
@@ -4469,6 +4514,7 @@ async function fetchOrders(filters: MetricsFilters): Promise<OrderWithJoins[]> {
   if (filters.mappedAffiliateIds?.length) {
     where.mappedAffiliateId = { in: filters.mappedAffiliateIds };
   }
+  addAffiliateWhere(where, filters.affiliateIds);
   if (filters.productExternalIds?.length || filters.productFamilies?.length) {
     where.product = {
       ...(filters.productExternalIds?.length ? { externalId: { in: filters.productExternalIds } } : {}),

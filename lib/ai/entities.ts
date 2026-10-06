@@ -62,16 +62,18 @@ const CATALOG_TTL_MS = 60_000;
 let catalogCache: { at: number; promise: Promise<ScopeCatalog> } | null = null;
 
 async function fetchCatalog(): Promise<ScopeCatalog> {
-  const [options, spellings, entries, states] = await Promise.all([
+  const [options, spellings, entries, states, mappedCounts] = await Promise.all([
     getFilterOptions(),
     db.product.groupBy({ by: ['family'], where: { family: { not: null } }, _count: { _all: true } }),
     getDynamicFamilyEntries(),
     db.affiliateMappingState.findMany({ select: { affiliateId: true, name: true } }),
+    // Afiliados do NorthScale Afiliados (affiliate_ids das tools) — o filtro
+    // da barra virou conta de plataforma, então a contagem vem direto daqui.
+    db.order.groupBy({ by: ['mappedAffiliateId'], where: { mappedAffiliateId: { not: null } }, _count: { _all: true } }),
   ]);
-  const ordersById = new Map(options.affiliates.map((a) => [a.id, a.orderCount]));
+  const ordersById = new Map(mappedCounts.map((a) => [a.mappedAffiliateId as string, a._count._all]));
   const ns = new Map<string, { id: string; name: string; orders: number }>();
   for (const s of states) ns.set(s.affiliateId, { id: s.affiliateId, name: s.name, orders: ordersById.get(s.affiliateId) ?? 0 });
-  for (const a of options.affiliates) if (!ns.has(a.id)) ns.set(a.id, { id: a.id, name: a.label, orders: a.orderCount });
   return {
     platforms: options.platforms.map((p) => ({ slug: p.id, label: p.label })),
     familySpellings: spellings.filter((s) => s.family).map((s) => ({ value: s.family as string, skus: s._count._all })),

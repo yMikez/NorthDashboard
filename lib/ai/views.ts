@@ -201,9 +201,10 @@ export function overviewKpisSql(f: MetricsFilters): { totals: Prisma.Sql; sessio
   const feConds: Prisma.Sql[] = [Prisma.sql`b."productType" = 'FRONTEND'`, Prisma.sql`b."status" = 'APPROVED'`];
   if (f.productFamilies?.length) feConds.push(Prisma.sql`b."family" = ANY(${f.productFamilies})`);
   if (f.mappedAffiliateIds?.length) feConds.push(Prisma.sql`b."mappedAffiliateId" = ANY(${f.mappedAffiliateIds})`);
+  if (f.affiliateIds?.length) feConds.push(Prisma.sql`b."affiliateId" = ANY(${f.affiliateIds})`);
   const sessions = Prisma.sql`
     WITH base AS (
-      SELECT o."productType", o."status", o."grossAmountUsd", o."netAmountUsd", o."mappedAffiliateId",
+      SELECT o."productType", o."status", o."grossAmountUsd", o."netAmountUsd", o."mappedAffiliateId", o."affiliateId",
              pr."family" AS family, ${SESSION_KEY_SQL} AS skey
       FROM "Order" o
       JOIN "Platform" pl ON o."platformId" = pl.id

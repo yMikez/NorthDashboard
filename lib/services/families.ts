@@ -6,6 +6,7 @@
 import type { Prisma } from '@prisma/client';
 import { db } from '../db';
 import type { MetricsFilters } from './metrics';
+import { addAffiliateWhere } from '../shared/affiliateFilter';
 
 export interface FamilyAggregate {
   family: string;
@@ -85,6 +86,7 @@ export async function getFamilies(
   if (filters.platformSlugs?.length) where.platform = { slug: { in: filters.platformSlugs } };
   if (filters.countries?.length) where.country = { in: filters.countries };
   if (filters.mappedAffiliateIds?.length) where.mappedAffiliateId = { in: filters.mappedAffiliateIds };
+  addAffiliateWhere(where, filters.affiliateIds);
   if (filters.productFamilies?.length) {
     where.product = {
       family: { in: filters.productFamilies },

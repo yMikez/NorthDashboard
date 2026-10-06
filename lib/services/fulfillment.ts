@@ -66,6 +66,8 @@ export interface FulfillmentFilters {
   productFamilies?: string[];
   /** affiliate_id do NorthScale Afiliados (Order.mappedAffiliateId) — usado pela IA; a aba não manda. */
   mappedAffiliateIds?: string[];
+  /** Filtro "Afiliado" da barra: contas de plataforma (Affiliate.id). */
+  affiliateIds?: string[];
 }
 
 export interface FulfillmentKpis {
@@ -497,6 +499,7 @@ export async function getFulfillment(filters: FulfillmentFilters): Promise<Fulfi
     // Mesmo where nas 3 consultas (período, anterior, janela da previsão) —
     // os números do afiliado ficam coerentes entre si.
     ...(filters.mappedAffiliateIds?.length ? { mappedAffiliateId: { in: filters.mappedAffiliateIds } } : {}),
+    ...(filters.affiliateIds?.length ? { affiliateId: { in: filters.affiliateIds } } : {}),
   };
 
   const [periodOrders, prevAgg, windowOrders, familyCosts] = await Promise.all([

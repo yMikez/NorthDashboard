@@ -9,6 +9,7 @@ import { respondCached } from '@/lib/shared/metricsResponse';
 import { affiliateIdsParam, csvParam } from '@/lib/shared/queryParams';
 import { parseAnalysisParams } from '@/lib/shared/affiliateAnalysisParams';
 import { getFunnelSequence } from '@/lib/services/funnelSequence';
+import { resolveAffiliateFilter } from '@/lib/shared/affiliateFilter';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -20,6 +21,7 @@ export async function GET(req: Request) {
   const { searchParams } = new URL(req.url);
   const p = parseAnalysisParams(searchParams);
   if (!p.window) return NextResponse.json({ error: 'window deve ser um inteiro de 1 a 90' }, { status: 400 });
+  const affiliateIds = await resolveAffiliateFilter(searchParams.get('aff'));
   return respondCached('funnel/sequence', searchParams, () =>
     getFunnelSequence({
       window: p.window!, count: p.count, anchor: p.anchor, includeToday: p.includeToday,
@@ -27,6 +29,7 @@ export async function GET(req: Request) {
       countries: csvParam(searchParams.get('countries')),
       productExternalIds: csvParam(searchParams.get('products')),
       mappedAffiliateIds: affiliateIdsParam(searchParams.get('affiliate_id')),
+      affiliateIds,
     }),
   );
 }

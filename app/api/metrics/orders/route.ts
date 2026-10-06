@@ -4,6 +4,7 @@ import { requireTab } from '@/lib/auth/guard';
 import { logger } from '@/lib/logger';
 import { affiliateIdsParam, csvParam, stagesParam } from '@/lib/shared/queryParams';
 import { respondCached } from '@/lib/shared/metricsResponse';
+import { resolveAffiliateFilter } from '@/lib/shared/affiliateFilter';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -32,6 +33,8 @@ export async function GET(req: Request) {
   const productExternalIds = csvParam(searchParams.get('products'));
   const productFamilies = csvParam(searchParams.get('families'));
   const mappedAffiliateIds = affiliateIdsParam(searchParams.get('affiliate_id'));
+  // Filtro "Afiliado" da barra (contas de plataforma / pessoa unificada).
+  const affiliateIds = await resolveAffiliateFilter(searchParams.get('aff'));
   const productTypes = stagesParam(searchParams.get('stages'));
   const status = searchParams.get('status') ?? undefined;
   const productType = searchParams.get('product_type') ?? undefined;
@@ -42,7 +45,7 @@ export async function GET(req: Request) {
   try {
     return await respondCached('orders', searchParams, () =>
       getOrders(
-        { startDate, endDate, platformSlugs, countries, productExternalIds, productFamilies, productTypes, mappedAffiliateIds },
+        { startDate, endDate, platformSlugs, countries, productExternalIds, productFamilies, productTypes, mappedAffiliateIds, affiliateIds },
         { status, productType, search, limit, offset },
       ),
     );

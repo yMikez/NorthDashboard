@@ -10,6 +10,7 @@ import { requireTab } from '@/lib/auth/guard';
 import { respondCached } from '@/lib/shared/metricsResponse';
 import { parseAnalysisParams } from '@/lib/shared/affiliateAnalysisParams';
 import { getAffiliateAnalysis } from '@/lib/services/affiliateAnalysis';
+import { resolveAffiliateFilter } from '@/lib/shared/affiliateFilter';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -25,7 +26,8 @@ export async function GET(req: Request) {
   // Contato/e-mail só pra admin → a chave de cache precisa distinguir.
   const cacheParams = new URLSearchParams(searchParams);
   cacheParams.set('_contact', includeContact ? '1' : '0');
+  const affiliateIds = await resolveAffiliateFilter(searchParams.get('aff'));
   return respondCached('affiliate-analysis', cacheParams, () =>
-    getAffiliateAnalysis({ ...p, window: p.window!, includeContact }),
+    getAffiliateAnalysis({ ...p, window: p.window!, includeContact, affiliateIds }),
   );
 }

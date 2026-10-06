@@ -415,6 +415,13 @@ function DateRangeChip({ period, onChange }: { period: Period; onChange: (p: Per
 // ---------------------------------------------------------------------------
 // MultiSelect (checkboxes, fica aberto enquanto marca)
 // ---------------------------------------------------------------------------
+// Normaliza pra busca: minúsculas e sem acento.
+const fold = (t: string | undefined) => String(t ?? '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+const PICK_LIMIT = 150;
+
+// pick = lista grande em que se ESCOLHE (afiliado): de "Todos", clicar marca
+// só aquele; desmarcar o último volta a "Todos". Com mais de 12 opções
+// aparece a busca. Mesmo comportamento do seletor da SPA (shell.jsx).
 function MultiSelect({
   label,
   icon,
@@ -422,6 +429,7 @@ function MultiSelect({
   selected,
   onChange,
   status = 'ready',
+  pick = false,
 }: {
   label: string;
   icon: NsIconName;
@@ -429,8 +437,11 @@ function MultiSelect({
   selected: string[];
   onChange: (next: string[]) => void;
   status?: LoadState;
+  pick?: boolean;
 }) {
-  const pop = usePopover(220);
+  const pop = usePopover(pick ? 300 : 220);
+  const [q, setQ] = React.useState('');
+  React.useEffect(() => { if (!pop.open) setQ(''); }, [pop.open]);
 
   // Selecionado que não está na lista (veio da URL, ou opções ainda
   // carregando) continua visível pra poder ser desmarcado.
@@ -441,13 +452,25 @@ function MultiSelect({
 
   const isAll =
     selected.length === 0 ||
-    (extras.length === 0 && options.length > 0 && options.every((o) => sel.has(o.id)));
+    (!pick && extras.length === 0 && options.length > 0 && options.every((o) => sel.has(o.id)));
   const pill = isAll ? 'Todos' : String(selected.length);
+  const fq = fold(q.trim());
+  let shown = fq ? rows.filter((o) => fold(o.label).includes(fq) || fold(o.meta).includes(fq)) : rows;
+  if (pick && !fq && selected.length) shown = [...shown.filter((o) => sel.has(o.id)), ...shown.filter((o) => !sel.has(o.id))];
+  const cut = pick && shown.length > PICK_LIMIT;
+  if (cut) shown = shown.slice(0, PICK_LIMIT);
 
   // Mesmo modelo da SPA: vazio = TODOS (tudo marcado). Desmarcar a partir de
   // TODOS seleciona o resto; marcar tudo volta pra vazio. Sem "Nenhum":
   // desmarcar o último também volta pra TODOS.
   function toggle(id: string) {
+    if (pick) {
+      const next = new Set(selected);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      onChange(Array.from(next));
+      return;
+    }
     const eff = new Set(selected.length === 0 ? options.map((o) => o.id) : selected);
     if (eff.has(id)) eff.delete(id);
     else eff.add(id);
@@ -490,6 +513,19 @@ function MultiSelect({
           className="filter-pop"
           style={{ ...pop.popStyle, padding: 6 }}
         >
+          {options.length > 12 && (
+            <div style={{ padding: '2px 2px 6px' }}>
+              <input
+                autoFocus
+                value={q}
+                onChange={(e) => setQ(e.target.value)}
+                placeholder={`Buscar ${label.toLowerCase()}…`}
+                aria-label={`Buscar ${label.toLowerCase()}`}
+                className="w-full rounded-[6px] border px-2 py-1.5 text-[13px]"
+                style={{ background: 'var(--bg-raised)', borderColor: 'var(--border-strong)', color: 'var(--fg1)' }}
+              />
+            </div>
+          )}
           <div style={{ display: 'flex', justifyContent: 'space-between', padding: '2px 4px', marginBottom: 4 }}>
             <button
               type="button"
@@ -498,17 +534,22 @@ function MultiSelect({
               onClick={() => onChange([])}
               title={`Mostrar todos (limpa o filtro de ${label.toLowerCase()})`}
             >
-              Todos
+              {pick ? 'Limpar (todos)' : 'Todos'}
             </button>
+            {pick && !isAll && (
+              <span style={{ fontFamily: 'var(--f-mono)', fontSize: 10, color: 'var(--fg5)', alignSelf: 'center' }}>
+                {selected.length} escolhido{selected.length === 1 ? '' : 's'}
+              </span>
+            )}
           </div>
           <div style={{ maxHeight: 280, overflowY: 'auto' }}>
-            {rows.length === 0 && (
+            {shown.length === 0 && (
               <div className="px-2 py-1.5 text-xs" style={{ color: 'var(--fg5)' }}>
-                {emptyText}
+                {rows.length === 0 ? emptyText : 'Nada encontrado.'}
               </div>
             )}
-            {rows.map((opt) => {
-              const on = selected.length === 0 ? true : sel.has(opt.id);
+            {shown.map((opt) => {
+              const on = pick ? sel.has(opt.id) : selected.length === 0 ? true : sel.has(opt.id);
               return (
                 <label
                   key={opt.id}
@@ -532,7 +573,7 @@ function MultiSelect({
                       style={{ width: 10, height: 10, borderRadius: 3, background: opt.swatch, flexShrink: 0 }}
                     />
                   )}
-                  <span style={{ flex: 1 }}>{opt.label}</span>
+                  <span style={{ flex: 1, minWidth: 0, overflowWrap: 'anywhere' }}>{opt.label}</span>
                   {opt.meta && (
                     <span style={{ fontFamily: 'var(--f-mono)', fontSize: 10, color: 'var(--fg5)' }}>
                       {opt.meta}
@@ -541,6 +582,11 @@ function MultiSelect({
                 </label>
               );
             })}
+            {cut && (
+              <div className="px-2 py-1.5 text-[11px]" style={{ color: 'var(--fg5)' }}>
+                Mostrando {PICK_LIMIT} — busque pelo nome ou ID pra achar os outros.
+              </div>
+            )}
           </div>
         </div>
       )}
@@ -598,16 +644,12 @@ export function FilterChips({ filters, onChange }: FilterChipsProps) {
   );
   const affiliateOpts = React.useMemo<Option[]>(
     () =>
-      (opts?.affiliates ?? []).map((a) => ({
-        id: a.id,
-        label: a.label,
-        meta: a.removed ? 'removido' : a.status === 'active' ? 'ativo' : 'inativo',
-      })),
+      (opts?.affiliates ?? []).map((a) => ({ id: a.id, label: a.label, meta: a.meta })),
     [opts],
   );
-  // A IA aplica o affiliate_id nas tools de pedido (aiTools.ts AFFILIATE_PROP);
-  // como na SPA, o seletor só aparece quando há afiliado mapeado ou um já escolhido.
-  const showAffiliate = affiliateOpts.length > 0 || filters.affiliates.length > 0;
+  // Pessoa (p:) ou conta de plataforma (a:) — a rota do chat resolve pras
+  // contas e a IA filtra com affiliate_accounts (aiTools.ts).
+  const showAffiliate = true;
 
   return (
     <div
@@ -661,6 +703,7 @@ export function FilterChips({ filters, onChange }: FilterChipsProps) {
           options={affiliateOpts}
           status={load}
           selected={filters.affiliates}
+          pick
           onChange={(affiliates) => onChange({ ...filters, affiliates })}
         />
       )}
