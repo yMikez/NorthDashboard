@@ -5355,7 +5355,7 @@ const coInputStyle = {
 };
 const coFieldLabel = { display: 'grid', gap: 4, fontSize: 11, color: 'var(--fg3)' };
 
-function RecoveryManage({ affs, onChanged }) {
+function RecoveryManage({ affs, sugs, onChanged }) {
   const [ext, setExt] = useState('');
   const [plat, setPlat] = useState('digistore24');
   const [pct, setPct] = useState(25);
@@ -5451,6 +5451,33 @@ function RecoveryManage({ affs, onChanged }) {
         registradas com a taxa antiga e um novo contador começa com a nova.
       </div>
       {msg && <div style={{ fontSize: 11, color: 'var(--fg3)', marginTop: 6 }}>{msg}</div>}
+      {(sugs || []).length > 0 && (
+        <div style={{ marginTop: 12, padding: '10px 12px', borderRadius: 8, border: '1px solid color-mix(in srgb, var(--warning) 40%, transparent)', background: 'color-mix(in srgb, var(--warning) 8%, transparent)' }}>
+          <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--fg1)' }}>Parecem de recuperação e não estão marcadas</div>
+          <div style={{ fontSize: 10, color: 'var(--fg5)', marginTop: 2 }}>
+            Vendas dos últimos 90 dias. Enquanto não forem marcadas, entram como venda comum e sem comissão de recuperação.
+            Confira e use <strong>Preencher</strong> pra levar a conta pro formulário acima.
+          </div>
+          {sugs.map((g) => (
+            <div key={g.affiliateId} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10, padding: '6px 0', borderTop: '1px solid var(--border-soft)', marginTop: 6 }}>
+              <div style={{ minWidth: 0 }}>
+                <div className="cell-mono" style={{ fontSize: 12 }}>{g.nickname || g.affiliateExternalId}<span style={{ color: 'var(--fg5)' }}> · {g.affiliateExternalId} · {g.platformSlug}</span></div>
+                <div style={{ fontSize: 10, color: 'var(--fg4)', marginTop: 2 }}>
+                  {[
+                    g.reasons.includes('offer') && `vendeu oferta de recuperação (${g.offerProducts.join(', ')})`,
+                    g.reasons.includes('sibling') && `mesmo nome de uma conta marcada da ${g.suggestedPartner}`,
+                  ].filter(Boolean).join(' · ')} · {g.orders} {g.orders === 1 ? 'venda' : 'vendas'} · {fmtCurrency(g.grossUsd, 'USD', 2)}
+                </div>
+              </div>
+              <button className="btn btn-ghost" style={{ padding: '4px 10px', flexShrink: 0 }} onClick={() => {
+                setPlat(g.platformSlug); setExt(g.affiliateExternalId); setSemVenda(null);
+                if (g.suggestedPartner) setEmpresa(g.suggestedPartner);
+                setMsg(`Conta ${g.affiliateExternalId} no formulário — confira empresa e % e clique em Marcar.`);
+              }}>Preencher</button>
+            </div>
+          ))}
+        </div>
+      )}
       <Paginated items={affs} label="afiliados">
         {(pageRows, pager) => (<>
           <div style={{ marginTop: 12 }}>
@@ -5501,6 +5528,7 @@ function RecoveryPage({ filters }) {
   // Empresas abertas no acordeão (o detalhe por conta).
   const [openCo, setOpenCo] = useState(() => new Set());
   const [affs, setAffs] = useState([]);
+  const [sugs, setSugs] = useState([]);
   const [refresh, setRefresh] = useState(0);
   const [manage, setManage] = useState(false);
 
@@ -5511,7 +5539,7 @@ function RecoveryPage({ filters }) {
       window.NSApi.fetchRecovery(filters),
       window.NSApi.fetchRecoveryAffiliates().catch(() => ({ affiliates: [] })), // admin-only; membro só vê métricas
     ])
-      .then(([m, a]) => { if (!cancelled) { setData({ status: 'ready', m, err: null }); setAffs(a.affiliates || []); } })
+      .then(([m, a]) => { if (!cancelled) { setData({ status: 'ready', m, err: null }); setAffs(a.affiliates || []); setSugs(a.suggestions || []); } })
       .catch((err) => { if (!cancelled) setData({ status: 'error', m: null, err: err.message || 'erro' }); });
     return () => { cancelled = true; };
   }, [filters.dateRange.start.getTime(), filters.dateRange.end.getTime(), refresh, Array.from(filters.affiliates || []).join(',')]);
@@ -5534,7 +5562,15 @@ function RecoveryPage({ filters }) {
       </div>
 
       {data.status === 'error' && <div className="panel" style={{ color: 'var(--danger)', marginBottom: 12 }}>Erro: {data.err}</div>}
-      {manage && <RecoveryManage affs={affs} onChanged={reload}/>}
+      {!manage && sugs.length > 0 && (
+        <div className="panel" style={{ marginBottom: 12, display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, flexWrap: 'wrap', borderColor: 'color-mix(in srgb, var(--warning) 45%, var(--border))' }}>
+          <span style={{ fontSize: 12, color: 'var(--fg2)' }}>
+            <Icon name="alert-triangle" size={12}/> {sugs.length === 1 ? '1 conta parece' : `${sugs.length} contas parecem`} de recuperação e não {sugs.length === 1 ? 'está marcada' : 'estão marcadas'} — as vendas dela{sugs.length === 1 ? '' : 's'} entram como venda comum.
+          </span>
+          <button className="btn btn-ghost" onClick={() => setManage(true)}>Ver contas</button>
+        </div>
+      )}
+      {manage && <RecoveryManage affs={affs} sugs={sugs} onChanged={reload}/>}
 
       {data.status === 'loading' && !m && (
         <>

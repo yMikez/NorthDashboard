@@ -248,6 +248,42 @@ model RecoveryRatePeriod {
   @@index([recoveryAffiliateId, effectiveFrom])
 }
 
+// Backfill da recuperação que NÃO chega por IPN. Fonte: relatório "Customers"
+// do painel da BuyGoods (cliente + Affiliate Name + Lifetime Value), importado
+// por POST /api/admin/recovery-report. Existe porque as vendas BuyGoods da
+// MailX nunca mandaram IPN (out/2026: só pedidos de teste de US$ 0) — sem isso
+// a comissão dela lá é invisível. Ainda SEM tela (decisão do dono,
+// 2026-10-07): leitura pelo GET da mesma rota.
+//
+// Sem dado pessoal: o e-mail vira md5(lower(trim(email))), a mesma chave que
+// casa com Customer.email em SQL. O nome nunca é gravado.
+//
+// Uma linha por plataforma × afiliado do relatório × cliente. O LTV é
+// acumulado, então um relatório MAIS NOVO atualiza o valor e um mais velho
+// não sobrescreve. createdFrom/createdTo = janela (rr_createdate) do relatório
+// em que o cliente apareceu pela 1ª vez, em dia de calendário da plataforma.
+model RecoveryReportCustomer {
+  id               String    @id @default(cuid())
+  platformSlug     String
+  // Como veio no relatório (login do afiliado na plataforma, ex.: lusk1nha).
+  affiliateName    String
+  // Empresa de recuperação (= RecoveryAffiliate.note). Reimport sem o mapa
+  // herda o que o import anterior gravou pro mesmo affiliateName.
+  partner          String?
+  emailHash        String
+  lifetimeValueUsd Decimal   @db.Decimal(12, 2)
+  balanceUsd       Decimal   @db.Decimal(12, 2)
+  createdFrom      DateTime? @db.Date
+  createdTo        DateTime? @db.Date
+  reportDate       DateTime  @db.Date
+  importBatch      String
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+
+  @@unique([platformSlug, affiliateName, emailHash])
+  @@index([partner])
+}
+
 // Registro da separação das contas BuyGoods por loja (migração
 // 20261001120000_buygoods_affiliate_per_store). A BuyGoods numera o aff_id
 // POR LOJA; a conta antiga somava pessoas diferentes. Uma linha por

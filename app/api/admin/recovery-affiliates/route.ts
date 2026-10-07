@@ -1,5 +1,6 @@
 // /api/admin/recovery-affiliates
-//   GET  → lista afiliados marcados como recuperação.
+//   GET  → lista afiliados marcados como recuperação + sugestões de conta
+//          ainda não marcada (recoverySuggestions).
 //   POST → marca um afiliado (externalId + plataforma) como recuperação com %.
 //          { affiliateExternalId, platformSlug, commissionPct, note?,
 //            nickname?, createIfMissing? }
@@ -25,6 +26,7 @@ import { requireAdmin } from '@/lib/auth/guard';
 import { checkIngestSecret } from '@/lib/ingest/auth';
 import { clearResponseCache } from '@/lib/cache/responseCache';
 import { listRecoveryAffiliates, upsertRecoveryAffiliate } from '@/lib/services/recovery';
+import { recoverySuggestions } from '@/lib/services/recoveryReport';
 import { logger } from '@/lib/logger';
 
 export const runtime = 'nodejs';
@@ -41,7 +43,10 @@ async function authorize(req: Request): Promise<{ denied: NextResponse } | { act
 export async function GET(req: Request) {
   const who = await authorize(req);
   if ('denied' in who) return who.denied;
-  return NextResponse.json({ affiliates: await listRecoveryAffiliates() });
+  // suggestions: contas NÃO marcadas que parecem de recuperação (venderam
+  // oferta *sms* na BuyGoods ou têm o nome de uma conta marcada).
+  const [affiliates, suggestions] = await Promise.all([listRecoveryAffiliates(), recoverySuggestions()]);
+  return NextResponse.json({ affiliates, suggestions });
 }
 
 export async function POST(req: Request) {
