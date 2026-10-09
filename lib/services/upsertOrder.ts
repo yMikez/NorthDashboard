@@ -328,11 +328,14 @@ export async function upsertOrder(normalized: NormalizedOrder): Promise<UpsertOr
         lastName: normalized.customerLastName,
         language: normalized.customerLanguage,
         country: normalized.country,
+        phone: normalized.customerPhone ?? null,
         firstSeenAt: normalized.orderedAt,
         lastOrderAt: normalized.orderedAt,
       },
       update: {
         email: normalized.customerEmail ?? undefined,
+        // Número novo substitui o antigo; evento sem telefone não apaga.
+        phone: normalized.customerPhone ?? undefined,
         lastOrderAt: normalized.orderedAt,
       },
       select: { id: true },

@@ -19,6 +19,7 @@
 
 import { wallClockToUtc } from '../../shared/datetime';
 import { classifyProduct } from '../../services/productClassification';
+import { normalizePhone } from '../../shared/phone';
 
 // Fuso do WEBHOOK (dateCreated): America/New_York. Confirmado pela hora de
 // chegada — o CRM posta 21–26 min depois do evento; com qualquer fuso mais a
@@ -45,6 +46,8 @@ export interface SalesboundTxnRow {
   agentName: string | null;
   customerId: string | null;
   email: string | null;
+  /** Só dígitos; null quando o export não tem a coluna phoneNumber. */
+  phone: string | null;
   sourcePlatform: string | null;
   merchant: string | null;
   response: string | null;
@@ -156,6 +159,7 @@ export function parseSalesboundTransactionsCsv(text: string): SalesboundCsvParse
       agentName: str(get(r, 'orderAgentName')),
       customerId: str(get(r, 'customerId')),
       email: str(get(r, 'emailAddress'))?.toLowerCase() ?? null,
+      phone: normalizePhone(get(r, 'phoneNumber')),
       sourcePlatform: sourcePlatformOf(get(r, 'custom3')),
       merchant: str(get(r, 'merchantName')),
       response: str(get(r, 'response')),

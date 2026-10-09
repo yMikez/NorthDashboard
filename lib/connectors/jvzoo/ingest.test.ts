@@ -193,3 +193,10 @@ describe('parseJvzooIngest — instante do estorno (eventAt)', () => {
     expect(parseJvzooIngest({ ...sale, transaction_type: 'BILL', transaction_id: 'R1' }).eventAt).toBeNull();
   });
 });
+
+describe('parseJvzooIngest — telefone do cliente', () => {
+  it('customer_phone vira só dígitos', () => {
+    expect(parseJvzooIngest({ ...sale, customer_phone: '555-123-4567' }).customerPhone).toBe('5551234567');
+    expect(parseJvzooIngest({ ...sale, customer_phone: '' }).customerPhone).toBeNull();
+  });
+});

@@ -135,6 +135,7 @@ export async function POST(req: Request) {
         customer_email: str(row['Customer Email']).toLowerCase(),
         customer_first_name: str(row['Customer First Name']),
         customer_last_name: str(row['Customer Last Name']),
+        customer_phone: str(row['Phone Number']),
         delivery_country: str(row['Customer Country']),
         total: total.toFixed(2),
         tax_total: str(row['Tax Amount']) || '0.00',

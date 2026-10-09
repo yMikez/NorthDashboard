@@ -30,6 +30,7 @@ import type {
 } from '../../shared/types';
 import { wallClockToUtc } from '../../shared/datetime';
 import type { BuyGoodsPayload } from './types';
+import { normalizePhone } from '../../shared/phone';
 import { buyGoodsAffiliateKey, buyGoodsStore } from './affiliateKey';
 
 export function parseBuyGoodsIngest(payload: BuyGoodsPayload): NormalizedOrder {
@@ -82,6 +83,7 @@ export function parseBuyGoodsIngest(payload: BuyGoodsPayload): NormalizedOrder {
     customerLastName:
       notEmpty(payload.customer_lastname) ?? notEmpty(payload.billing_lastname),
     customerLanguage: notEmpty(payload.lang),
+    customerPhone: normalizePhone(payload.customer_phone),
 
     status,
     eventType: action || 'unknown',

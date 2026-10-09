@@ -60,3 +60,10 @@ describe('salesboundWebhookDate', () => {
     expect(salesboundWebhookDate('', '10:00:00')).toBeNull();
   });
 });
+
+describe('parseSalesboundWebhookSale — telefone', () => {
+  it('phoneNumber do evento vai pro razão só com dígitos', () => {
+    expect(parseSalesboundWebhookSale(real)!.phone).toBe('15056608654');
+    expect(parseSalesboundWebhookSale({ ...real, phoneNumber: '' })!.phone).toBeNull();
+  });
+});

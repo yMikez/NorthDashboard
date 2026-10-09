@@ -172,3 +172,9 @@ describe('parseClickBankIngest — cliente', () => {
     expect(parseClickBankIngest(p).customerExternalId).toBeNull();
   });
 });
+
+describe('parseClickBankIngest — telefone do cliente', () => {
+  it('billing.phoneNumber vira só dígitos', () => {
+    expect(parseClickBankIngest(frontend).customerPhone).toBe('15555550000');
+  });
+});

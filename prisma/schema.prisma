@@ -312,6 +312,10 @@ model Customer {
   lastName    String?
   language    String?
   country     String?
+  // Só dígitos, DDI quando a origem manda (lib/shared/phone.ts). Vem do
+  // IPN de cada plataforma; antigos preenchidos por
+  // /api/admin/backfill-customer-phones (2026-10-09).
+  phone       String?
   firstSeenAt DateTime
   lastOrderAt DateTime?
 
@@ -320,6 +324,7 @@ model Customer {
 
   @@unique([platformId, externalId])
   @@index([email])
+  @@index([phone])
 }
 
 enum OrderStatus {
@@ -1598,6 +1603,9 @@ model SalesboundTransaction {
   agentName      String?
   customerId     String?
   email          String?
+  // Telefone do cliente, só dígitos (webhook: phoneNumber; export: coluna
+  // phoneNumber quando existir). Import sem telefone não apaga o que há.
+  phone          String?
   // De onde veio o cliente (custom3 do CRM: "JVZoo Order" → 'jvzoo').
   sourcePlatform String?
   merchant       String?

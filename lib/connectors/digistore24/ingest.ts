@@ -5,6 +5,7 @@ import type {
   NormalizedProductType,
 } from '../../shared/types';
 import type { DigistorePayload } from './types';
+import { firstPhone } from '../../shared/phone';
 
 export function parseDigistoreIngest(payload: DigistorePayload): NormalizedOrder {
   const event = normalizeEvent(payload.event);
@@ -47,6 +48,8 @@ export function parseDigistoreIngest(payload: DigistorePayload): NormalizedOrder
     customerFirstName: payload.buyer_first_name || payload.address_first_name || null,
     customerLastName: payload.buyer_last_name || payload.address_last_name || null,
     customerLanguage: payload.buyer_language || payload.language || null,
+    // Os *_mobile_no chegam sempre vazios; o número vem nos *_phone_no.
+    customerPhone: firstPhone(payload.buyer_address_phone_no, payload.address_phone_no, payload.billing_phone_no),
 
     status: mapStatus(event),
     eventType: event,

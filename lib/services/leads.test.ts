@@ -73,6 +73,9 @@ describe('aba Leads no Postgres (PGlite com as migrações)', () => {
     await order('o8', { platformId: 'p_cb', productId: 'pr_cb', grossAmountUsd: 300, originalGrossUsd: 300, orderedAt: daysAgo(5), country: 'CA' });
     await ins('IngestLog', { id: 'l1', source: 'webhook', platformSlug: 'clickbank', eventType: 'SALE', externalId: 'o8', receivedAt: daysAgo(5),
       payload: JSON.stringify({ customer: { billing: { email: ' Dani@X.com', firstName: 'Dani', lastName: 'Reis' } }, orderLanguage: 'EN' }) });
+    // Telefones: o do funil (já normalizado) e o do call center (cru, mais recente).
+    await pg.exec(`UPDATE "Customer" SET phone = '15551112222' WHERE id = 'c_ana_bg'`);
+    await pg.exec(`UPDATE "CallCenterSale" SET phone = '(555) 999-8888' WHERE id = 'cc1'`);
   }, 60_000);
 
   afterAll(async () => { await pg?.close(); });
@@ -164,6 +167,31 @@ describe('aba Leads no Postgres (PGlite com as migrações)', () => {
     // Reembolso da SalesBound herda o produto da venda do mesmo pedido.
     expect(d.products.find((p) => p.product === 'Bundle 12')).toMatchObject({ times: 1, grossUsd: 500, refundedUsd: 200 });
     expect(d.products.some((p) => p.product === '(sem nome)')).toBe(false);
+  });
+
+  it('telefone: MV guarda o mais recente de qualquer fonte (call center normalizado), busca acha por número e a ficha lista todos', async () => {
+    const { rows } = await pg.query<{ email: string; phone: string | null }>(`SELECT email, phone FROM lead_summary ORDER BY email`);
+    expect(rows).toEqual([
+      { email: 'ana@x.com', phone: '5559998888' },
+      { email: 'bia@x.com', phone: null },
+      { email: 'carla@x.com', phone: null },
+      { email: 'dani@x.com', phone: null },
+    ]);
+    const emails = async (f: LeadFilters) => (await q(leadListSql(f))).map((r) => r.email);
+    expect(await emails({ ...ALL, q: '999-8888' })).toEqual(['ana@x.com']);
+    expect(await emails({ ...ALL, q: '(555) 999' })).toEqual(['ana@x.com']);
+    // Texto com letras não vira busca por telefone.
+    expect(await emails({ ...ALL, q: 'x9998888' })).toEqual([]);
+
+    const email = 'ana@x.com';
+    const asDates = (rs: Record<string, unknown>[]) => rs.map((r) => ({ ...r, at: new Date(r.at as string), refundedAt: r.refundedAt ? new Date(r.refundedAt as string) : null }));
+    const d = buildLeadDetail(
+      email,
+      asDates(await q(leadOrderEventsSql(email))) as never,
+      asDates(await q(leadCallCenterEventsSql(email))) as never,
+      asDates(await q(leadSalesboundEventsSql(email))) as never,
+    );
+    expect(d.phones).toEqual(['5559998888', '15551112222']);
   });
 
   it('ficha: Digistore em linha extra vira evento de estorno; pendente aparece sem contar', async () => {

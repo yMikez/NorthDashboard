@@ -112,7 +112,12 @@ export async function importSalesboundCsv(text: string): Promise<SalesboundImpor
         sourcePlatform: r.sourcePlatform, merchant: r.merchant, response: r.response,
         items: r.items as unknown as Prisma.InputJsonValue, family: r.family, bottles: r.bottles,
       };
-      return db.salesboundTransaction.upsert({ where: { transactionId: r.transactionId }, create: { transactionId: r.transactionId, ...data }, update: data });
+      // Export sem a coluna de telefone não apaga o que o webhook gravou.
+      return db.salesboundTransaction.upsert({
+        where: { transactionId: r.transactionId },
+        create: { transactionId: r.transactionId, ...data, phone: r.phone },
+        update: { ...data, ...(r.phone ? { phone: r.phone } : {}) },
+      });
     });
     await db.$transaction(ops);
   }
@@ -155,8 +160,12 @@ export async function recordSalesboundWebhook(payload: Record<string, unknown>):
   const sale = parseSalesboundWebhookSale(payload);
   if (!sale) return { status: 'skipped', clientTxnId: null };
 
-  const existing = await db.salesboundTransaction.findUnique({ where: { clientTxnId: sale.clientTxnId }, select: { id: true, source: true } });
-  if (existing?.source === 'csv') return { status: 'kept-csv', clientTxnId: sale.clientTxnId };
+  const existing = await db.salesboundTransaction.findUnique({ where: { clientTxnId: sale.clientTxnId }, select: { id: true, source: true, phone: true } });
+  if (existing?.source === 'csv') {
+    // A linha do export manda em tudo — menos no telefone que ela não tenha.
+    if (!existing.phone && sale.phone) await db.salesboundTransaction.update({ where: { id: existing.id }, data: { phone: sale.phone } });
+    return { status: 'kept-csv', clientTxnId: sale.clientTxnId };
+  }
 
   // Estorno ancora na venda do mesmo pedido (se ela já estiver no razão).
   let saleAt: Date | null = sale.txnAt;
@@ -171,7 +180,7 @@ export async function recordSalesboundWebhook(payload: Record<string, unknown>):
     clientTxnId: sale.clientTxnId, source: 'webhook',
     orderId: sale.orderId, type: sale.type, result: 'SUCCESS',
     amountUsd: new Prisma.Decimal(sale.amountUsd), txnAt: sale.txnAt, saleAt,
-    chargedback: false, agentName: null, customerId: sale.customerId, email: sale.email,
+    chargedback: false, agentName: null, customerId: sale.customerId, email: sale.email, phone: sale.phone,
     sourcePlatform: null, merchant: null,
     // Rastro do que o webhook mandou como id (o export chama esses campos de
     // txnId e de orderId-da-URL).
@@ -204,7 +213,7 @@ const MERGE_TOLERANCE_MS = 100 * 60_000;
 export async function mergeWebhookIntoCsv(dryRun = false): Promise<{ candidates: number; merged: number; pairs: Array<{ clientTxnId: string | null; orderId: string; txnAt: string; amountUsd: number }> }> {
   const webhookRows = await db.salesboundTransaction.findMany({
     where: { source: 'webhook' },
-    select: { id: true, clientTxnId: true, orderId: true, txnAt: true, amountUsd: true, type: true },
+    select: { id: true, clientTxnId: true, orderId: true, txnAt: true, amountUsd: true, type: true, phone: true },
   });
   const pairs: Array<{ clientTxnId: string | null; orderId: string; txnAt: string; amountUsd: number }> = [];
   let merged = 0;
@@ -214,7 +223,7 @@ export async function mergeWebhookIntoCsv(dryRun = false): Promise<{ candidates:
         source: 'csv', orderId: w.orderId, amountUsd: w.amountUsd, type: w.type,
         txnAt: { gte: new Date(w.txnAt.getTime() - MERGE_TOLERANCE_MS), lte: new Date(w.txnAt.getTime() + MERGE_TOLERANCE_MS) },
       },
-      select: { id: true, clientTxnId: true, txnAt: true, saleAt: true },
+      select: { id: true, clientTxnId: true, txnAt: true, saleAt: true, phone: true },
     });
     // O mais próximo no tempo; e nunca uma linha que já é par de outro webhook.
     const twin = candidates
@@ -230,6 +239,7 @@ export async function mergeWebhookIntoCsv(dryRun = false): Promise<{ candidates:
         where: { id: twin.id },
         data: {
           ...(twin.clientTxnId ? {} : { clientTxnId: w.clientTxnId }),
+          ...(!twin.phone && w.phone ? { phone: w.phone } : {}),
           // a hora boa é a do webhook (ancorada pela chegada do evento)
           ...(twin.txnAt.getTime() !== w.txnAt.getTime() ? { txnAt: w.txnAt, ...(sameSaleAt ? { saleAt: w.txnAt } : {}) } : {}),
         },

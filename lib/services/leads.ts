@@ -8,14 +8,17 @@
 // lead (a 1ª compra): "leads adquiridos no período por X, quanto valem hoje".
 // A busca por e-mail/nome ignora os filtros — quem procura alguém quer achar.
 //
-// Ainda fora (fase 2/3): SMS (só telefone; o dash não guarda o do cliente),
-// e-mail marketing (nada chega do Mautic) e o backfill de recuperação da
-// BuyGoods (só hash do e-mail, sem tela por decisão do dono).
+// Telefone: guardado desde 2026-10-09 (Customer.phone, SalesboundTransaction
+// .phone, CallCenterSale.phone) e mostrado na ficha/busca — ainda NÃO casa
+// com os SMS (decisão do dono: por enquanto só guardar).
+// Ainda fora: SMS, e-mail marketing (nada chega do Mautic) e o backfill de
+// recuperação da BuyGoods (só hash do e-mail, sem tela por decisão do dono).
 
 import { Prisma } from '@prisma/client';
 import { db } from '../db';
 import { logger } from '../logger';
 import { clearResponseCache } from '../cache/responseCache';
+import { normalizePhone } from '../shared/phone';
 
 // ---------- Frescor da MV ----------
 
@@ -77,7 +80,13 @@ export function leadWhereSql(f: LeadFilters): Prisma.Sql {
   const q = (f.q ?? '').trim().toLowerCase();
   if (q) {
     const like = `%${q.replace(/[\\%_]/g, (m) => `\\${m}`)}%`;
-    return Prisma.sql`WHERE (ls.email LIKE ${like} OR lower(COALESCE(ls.name, '')) LIKE ${like})`;
+    // Busca que é só número (6+ dígitos) também procura no telefone, que é
+    // guardado só com dígitos.
+    const digits = q.replace(/\D/g, '');
+    const byPhone = digits.length >= 6 && /^[\d\s()+.-]+$/.test(q)
+      ? Prisma.sql` OR ls.phone LIKE ${`%${digits}%`}`
+      : Prisma.empty;
+    return Prisma.sql`WHERE (ls.email LIKE ${like} OR lower(COALESCE(ls.name, '')) LIKE ${like}${byPhone})`;
   }
   const conds: Prisma.Sql[] = [Prisma.sql`ls.first_at >= ${f.startDate}`, Prisma.sql`ls.first_at <= ${f.endDate}`];
   if (f.platforms?.length) conds.push(Prisma.sql`ls.origin_platform = ANY(${f.platforms})`);
@@ -295,7 +304,7 @@ export function leadOrderEventsSql(email: string): Prisma.Sql {
            pr.name AS product, pr.family, o."bottlesShipped" AS bottles, o."orderedAt" AS at,
            COALESCE(o."refundedAt", o."chargebackAt") AS "refundedAt",
            COALESCE(a.nickname, a."externalId") AS affiliate,
-           NULLIF(trim(concat_ws(' ', c."firstName", c."lastName")), '') AS name, o.country,
+           NULLIF(trim(concat_ws(' ', c."firstName", c."lastName")), '') AS name, o.country, c.phone,
            (o.status IN ('APPROVED', 'REFUNDED', 'CHARGEBACK')) AS counted,
            (pl.slug = 'digistore24' AND o.status IN ('REFUNDED', 'CHARGEBACK')) AS "extraRow",
            (CASE WHEN pl.slug = 'digistore24' AND o.status IN ('REFUNDED', 'CHARGEBACK') THEN 0
@@ -317,7 +326,7 @@ export function leadCallCenterEventsSql(email: string): Prisma.Sql {
   return Prisma.sql`
     SELECT s."externalKey" AS ref, s.provider, s.status, s."productName" AS product, s.family, s.bottles,
            s."purchasedAt" AS at, s."refundedAt", s."agentName" AS agent,
-           NULLIF(trim(concat_ws(' ', s."firstName", s."lastName")), '') AS name, s.country,
+           NULLIF(trim(concat_ws(' ', s."firstName", s."lastName")), '') AS name, s.country, s.phone,
            s."amountUsd"::float AS sale,
            (CASE WHEN s.status IN ('REFUNDED', 'CHARGEBACK') THEN COALESCE(s."refundedUsd", s."amountUsd")
                  ELSE COALESCE(s."refundedUsd", 0) END)::float AS refunded
@@ -329,15 +338,15 @@ export function leadCallCenterEventsSql(email: string): Prisma.Sql {
 export function leadSalesboundEventsSql(email: string): Prisma.Sql {
   return Prisma.sql`
     SELECT t."transactionId" AS ref, t."orderId", t.type, t."amountUsd"::float AS amount, t.items, t.family, t.bottles,
-           t."txnAt" AS at, t."agentName" AS agent, t."sourcePlatform"
+           t."txnAt" AS at, t."agentName" AS agent, t."sourcePlatform", t.phone
     FROM "SalesboundTransaction" t
     WHERE lower(trim(t.email)) = ${email} AND t.result = 'SUCCESS' AND t.type IN ('SALE', 'REFUND', 'VOID')
     ORDER BY t."txnAt"`;
 }
 
-interface OrderEv { ref: string; platform: string; status: string; stage: string | null; product: string | null; family: string | null; bottles: number | null; at: Date; refundedAt: Date | null; affiliate: string | null; name: string | null; country: string | null; counted: boolean; extraRow: boolean; sale: number; refunded: number }
-interface CcEv { ref: string; provider: string; status: string; product: string | null; family: string | null; bottles: number | null; at: Date; refundedAt: Date | null; agent: string | null; name: string | null; country: string | null; sale: number; refunded: number }
-interface SbEv { ref: string; orderId: string; type: string; amount: number; items: unknown; family: string | null; bottles: number | null; at: Date; agent: string | null; sourcePlatform: string | null }
+interface OrderEv { ref: string; platform: string; status: string; stage: string | null; product: string | null; family: string | null; bottles: number | null; at: Date; refundedAt: Date | null; affiliate: string | null; name: string | null; country: string | null; phone?: string | null; counted: boolean; extraRow: boolean; sale: number; refunded: number }
+interface CcEv { ref: string; provider: string; status: string; product: string | null; family: string | null; bottles: number | null; at: Date; refundedAt: Date | null; agent: string | null; name: string | null; country: string | null; phone?: string | null; sale: number; refunded: number }
+interface SbEv { ref: string; orderId: string; type: string; amount: number; items: unknown; family: string | null; bottles: number | null; at: Date; agent: string | null; sourcePlatform: string | null; phone?: string | null }
 
 function sbProduct(items: unknown): string | null {
   if (!Array.isArray(items) || !items.length) return null;
@@ -414,10 +423,19 @@ export function buildLeadDetail(email: string, orders: OrderEv[], cc: CcEv[], sb
 
   const name = [...orders, ...cc].map((x) => x.name).filter(Boolean).pop() ?? null;
   const country = [...orders, ...cc].map((x) => x.country).filter(Boolean)[0] ?? null;
+  // Telefones de todas as fontes, o mais recente primeiro. O call center
+  // guarda cru: normaliza aqui com a mesma regra (lib/shared/phone.ts).
+  const phones = [...new Set(
+    [...orders.map((o) => ({ at: o.at, p: o.phone })), ...cc.map((s) => ({ at: s.at, p: s.phone })), ...sb.map((t) => ({ at: t.at, p: t.phone }))]
+      .sort((a, b) => b.at.getTime() - a.at.getTime())
+      .map((x) => normalizePhone(x.p))
+      .filter((p): p is string => !!p),
+  )];
   return {
     email,
     name,
     country,
+    phones,
     found: events.length > 0,
     summary: {
       firstAt: sales[0]?.at ?? null,

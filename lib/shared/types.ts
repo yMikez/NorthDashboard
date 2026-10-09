@@ -37,6 +37,9 @@ export interface NormalizedOrder {
   customerFirstName: string | null;
   customerLastName: string | null;
   customerLanguage: string | null;
+  // Telefone do comprador, só dígitos (lib/shared/phone.ts). Opcional: quem
+  // não informa não apaga o que o Customer já tem.
+  customerPhone?: string | null;
 
   status: NormalizedOrderStatus;
   eventType: string;

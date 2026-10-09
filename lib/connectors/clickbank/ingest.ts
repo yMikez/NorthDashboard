@@ -10,6 +10,8 @@ import type {
   ClickBankTransactionType,
 } from './types';
 
+import { firstPhone } from '../../shared/phone';
+
 export function parseClickBankIngest(payload: ClickBankIngestPayload): NormalizedOrder {
   const primary = payload.lineItems[0];
   if (!primary) {
@@ -68,6 +70,7 @@ export function parseClickBankIngest(payload: ClickBankIngestPayload): Normalize
     customerFirstName: payload.customer?.billing?.firstName ?? null,
     customerLastName: payload.customer?.billing?.lastName ?? null,
     customerLanguage: payload.orderLanguage?.toLowerCase() ?? null,
+    customerPhone: firstPhone(payload.customer?.billing?.phoneNumber, payload.customer?.shipping?.phoneNumber),
 
     status,
     eventType: payload.transactionType,

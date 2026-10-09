@@ -247,3 +247,10 @@ describe('parseCartpandaWebhook — eventos e edge cases', () => {
       .toThrow(/order\.id/);
   });
 });
+
+describe('parseCartpandaWebhook — telefone do cliente', () => {
+  it('customer.phone primeiro, order.phone de reserva', () => {
+    const wh = { ...paidSingleFE, order: { ...paidSingleFE.order, phone: '+55 11 98888-7777', customer: { ...paidSingleFE.order.customer, phone: '' } } } as CartpandaWebhook;
+    expect(parseCartpandaWebhook(wh)[0].customerPhone).toBe('5511988887777');
+  });
+});

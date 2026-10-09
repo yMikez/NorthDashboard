@@ -30,6 +30,7 @@ import type {
   NormalizedProductType,
 } from '../../shared/types';
 import type { CartpandaWebhook, CartpandaOrder, CartpandaLineItem } from './types';
+import { firstPhone } from '../../shared/phone';
 
 export function parseCartpandaWebhook(wh: CartpandaWebhook): NormalizedOrder[] {
   const order = wh.order;
@@ -189,6 +190,7 @@ function buildOrder(a: BuildArgs): NormalizedOrder {
     customerFirstName: notEmpty(a.cust.first_name),
     customerLastName: notEmpty(a.cust.last_name),
     customerLanguage: null,
+    customerPhone: firstPhone(a.cust.phone, a.order.phone),
 
     status: a.status,
     eventType: a.event || 'order.paid',

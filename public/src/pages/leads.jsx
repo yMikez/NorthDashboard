@@ -208,6 +208,11 @@ function LeadDrawer({ email, onClose }) {
           <div className="panel-eyebrow" style={{ fontSize: 10 }}>Lead</div>
           <div style={{ fontSize: 18, fontWeight: 700, overflowWrap: 'anywhere' }}>{d?.name || email}</div>
           <div className="panel-sub" style={{ fontSize: 12, overflowWrap: 'anywhere' }}>{email}{d?.country ? ` · ${d.country}` : ''}</div>
+          {d?.phones?.length > 0 && (
+            <div className="cell-mono" style={{ fontSize: 12, color: 'var(--fg3)', marginTop: 2 }} title="Telefones informados nas compras (o mais recente primeiro)">
+              {d.phones.map((p) => `+${p}`).join(' · ')}
+            </div>
+          )}
         </div>
         <button className="btn btn-ghost" onClick={onClose} aria-label="Fechar" title="Fechar"><Icon name="x" size={14}/></button>
       </div>
@@ -382,7 +387,7 @@ function LeadsPage({ filters }) {
         <div style={{ flex: 1 }}/>
         <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12 }}>
           <Icon name="search" size={13}/>
-          <input value={qInput} onChange={(e) => setQInput(e.target.value)} placeholder="buscar e-mail ou nome…" aria-label="Buscar lead" style={{ width: 210 }}/>
+          <input value={qInput} onChange={(e) => setQInput(e.target.value)} placeholder="buscar e-mail, nome ou telefone…" aria-label="Buscar lead" style={{ width: 210 }}/>
         </label>
         <select value={sort} onChange={(e) => setSort(e.target.value)} aria-label="Ordenar">
           {LEAD_SORTS.map((s) => <option key={s.id} value={s.id}>{s.label}</option>)}

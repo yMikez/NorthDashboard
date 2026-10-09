@@ -32,6 +32,7 @@
 import type { NormalizedBillingType, NormalizedOrder, NormalizedOrderStatus, NormalizedProductType } from '../../shared/types';
 import { wallClockToUtc } from '../../shared/datetime';
 import type { JvzooPayload, JvzooPayout } from './types';
+import { normalizePhone } from '../../shared/phone';
 
 // País vem como enum verboso ("UNITED_STATES"). Mapeia pros ISO2 usados
 // pelas outras plataformas (filtro de país da UI é um só). Fora do mapa,
@@ -209,6 +210,7 @@ export function parseJvzooIngest(payload: JvzooPayload): NormalizedOrder {
     customerExternalId: payload.customer_email || null,
     customerEmail: payload.customer_email || null,
     customerFirstName: payload.customer_first_name || null,
+    customerPhone: normalizePhone(payload.customer_phone),
     customerLastName: payload.customer_last_name || null,
     customerLanguage: null,
 

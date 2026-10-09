@@ -18,6 +18,7 @@
 import { wallClockToUtc } from '../../shared/datetime';
 import { classifyProduct } from '../../services/productClassification';
 import { SALESBOUND_TIMEZONE, type SalesboundItem } from './transactionsCsv';
+import { normalizePhone } from '../../shared/phone';
 
 export interface SalesboundWebhookSale {
   clientTxnId: string;
@@ -26,6 +27,7 @@ export interface SalesboundWebhookSale {
   amountUsd: number;
   txnAt: Date;
   email: string | null;
+  phone: string | null;
   customerId: string | null;
   gatewayTxnId: string | null;
   crmOrderId: string | null;
@@ -85,6 +87,7 @@ export function parseSalesboundWebhookSale(payload: Record<string, unknown>): Sa
     amountUsd: Math.round(Math.abs(total) * 100) / 100,
     txnAt,
     email: str(payload.emailAddress)?.toLowerCase() ?? null,
+    phone: normalizePhone(payload.phoneNumber),
     customerId: str(payload.customerId),
     gatewayTxnId: str(payload.transactionId),
     crmOrderId: str(payload.orderId),

@@ -209,3 +209,10 @@ describe('parseBuyGoodsIngest', () => {
     expect(parseBuyGoodsIngest({ ...realPayload, account_id: '12592,12592' }).vendorAccount).toBe('12592');
   });
 });
+
+describe('parseBuyGoodsIngest — telefone do cliente', () => {
+  it('customer_phone vira só dígitos; vazio não manda nada', () => {
+    expect(parseBuyGoodsIngest({ ...realPayload, customer_phone: '+1 (555) 123-4567' }).customerPhone).toBe('15551234567');
+    expect(parseBuyGoodsIngest({ ...realPayload, customer_phone: '' }).customerPhone).toBeNull();
+  });
+});

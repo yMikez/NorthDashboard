@@ -230,3 +230,12 @@ describe('parseDigistoreEventTimestamp — data do ESTORNO', () => {
       .toBe('2026-04-24T01:56:54.000Z');
   });
 });
+
+describe('parseDigistoreIngest — telefone do cliente', () => {
+  it('lê os *_phone_no na ordem buyer_address → address → billing', () => {
+    const p = { ...payment, buyer_address_phone_no: '', address_phone_no: '0049 30 1234567', billing_phone_no: '111 222 3333' } as DigistorePayload;
+    expect(parseDigistoreIngest(p).customerPhone).toBe('49301234567');
+    const none = { ...payment, buyer_address_phone_no: '', address_phone_no: '', billing_phone_no: '' } as DigistorePayload;
+    expect(parseDigistoreIngest(none).customerPhone).toBeNull();
+  });
+});
