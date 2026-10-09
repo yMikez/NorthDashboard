@@ -68,6 +68,16 @@ export const NAV_GROUPS: NavGroup[] = [
     ]
   },
   {
+    "label": "Clientes",
+    "items": [
+      {
+        "id": "leads",
+        "label": "Leads",
+        "icon": "user"
+      }
+    ]
+  },
+  {
     "label": "Catálogo",
     "items": [
       {
@@ -139,6 +149,7 @@ export const NS_ICON_SVG = {
   "message-square": "<path d=\"M4 6.5A2.5 2.5 0 0 1 6.5 4h11A2.5 2.5 0 0 1 20 6.5v8a2.5 2.5 0 0 1-2.5 2.5H9l-5 4z\"/><path d=\"M8 9.5h8M8 12.8h5\"/>",
   "ns-recuperacao": "<path d=\"M4 12a8 8 0 1 0 2.3-5.6M4 3.5V7h3.5\"/><path d=\"M12 8.5V12l2.5 1.5\"/>",
   "target": "<path d=\"M12 22a10 10 0 1 0 0-20 10 10 0 0 0 0 20Z\"/><path d=\"M12 18a6 6 0 1 0 0-12 6 6 0 0 0 0 12Z\"/><path d=\"M12 14a2 2 0 1 0 0-4 2 2 0 0 0 0 4Z\"/>",
+  "user": "<path d=\"M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2\"/><path d=\"M12 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8\"/>",
   "package": "<path d=\"M12 3.5 20 8v8l-8 4.5L4 16V8z\"/><path d=\"M4.5 8.2 12 12.5l7.5-4.3M12 12.5v8\"/>",
   "receipt": "<path d=\"M4 8h13M14 4.5 17.5 8 14 11.5\"/><path d=\"M20 16H7M10 12.5 6.5 16l3.5 3.5\"/>",
   "ns-networks": "<circle cx=\"5.5\" cy=\"12\" r=\"2.5\"/><circle cx=\"18.5\" cy=\"5.5\" r=\"2.5\"/><circle cx=\"18.5\" cy=\"18.5\" r=\"2.5\"/><path d=\"M7.8 10.8l8.4-4.2M7.8 13.2l8.4 4.2\"/>",

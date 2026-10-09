@@ -4150,6 +4150,7 @@ const TAB_CATALOG = [
   { group: 'Afiliados', id: 'affiliate-crm',  label: 'CRM' },
   { group: 'Captação',  id: 'recovery',       label: 'Recuperação' },
   { group: 'Captação',  id: 'tauk',           label: 'Call Center' },
+  { group: 'Clientes',  id: 'leads',          label: 'Leads' },
   { group: 'Catálogo',  id: 'products',       label: 'Produtos' },
   { group: 'Catálogo',  id: 'transactions',   label: 'Transações' },
   { group: 'Sistema',   id: 'platforms',      label: 'Plataformas' },

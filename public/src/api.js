@@ -521,6 +521,22 @@ function fetchRecovery(filters) {
   if (filters.affiliates?.size) qs.set('aff', Array.from(filters.affiliates).join(','));
   return coGet(`/api/metrics/recovery?${qs}`);
 }
+// ---------- Leads ----------
+// Lista/KPIs/quebra por origem (MV lead_summary). Filtros globais valem pra
+// 1ª compra do lead; `q` busca em todos os leads.
+function fetchLeads(filters, { segment = 'all', sort = 'ltv', group = 'channel', page = 1, q = '' } = {}) {
+  return fetchJSON('/api/metrics/leads', {
+    start_date: toISODate(filters.dateRange.start),
+    end_date: toISODate(filters.dateRange.end),
+    platforms: setToCSV(filters.platforms), families: setToCSV(filters.families),
+    countries: setToCSV(filters.countries), aff: setToCSV(filters.affiliates),
+    segment, sort, group, page: String(page), q: q || null,
+  });
+}
+// Ficha de um lead — sem cache client-side (é o dado mais fresco da aba).
+function fetchLeadDetail(email) {
+  return coGet(`/api/metrics/leads/detail?email=${encodeURIComponent(email)}`);
+}
 // Tauk Solutions (recuperação por telefone/SMS) — aba própria.
 // Aba Call Center (Tauk + Logicall). Endpoint segue /api/metrics/tauk (id da
 // tab preservado). `provider` = 'all' | 'tauk' | 'logicall'.
@@ -692,6 +708,8 @@ function _wrapMutations(api) {
 }
 
 window.NSApi = _wrapMutations({
+  fetchLeads,
+  fetchLeadDetail,
   fetchRecovery,
   fetchTauk,
   adminLogicallSync,

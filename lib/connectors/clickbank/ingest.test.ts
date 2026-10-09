@@ -159,3 +159,16 @@ describe('parseClickBankIngest — DW heuristic for downsells', () => {
     expect(parseClickBankIngest(p).productType).toBe('UPSELL');
   });
 });
+
+describe('parseClickBankIngest — cliente', () => {
+  it('a ClickBank não manda ID de cliente: a chave é o e-mail normalizado', () => {
+    const p = { ...frontend, customer: { ...frontend.customer, billing: { ...frontend.customer?.billing, email: '  Fulano@Example.COM ' } } } as ClickBankIngestPayload;
+    const n = parseClickBankIngest(p);
+    expect(n.customerExternalId).toBe('fulano@example.com');
+  });
+
+  it('sem e-mail não cria chave (o pedido segue sem cliente)', () => {
+    const p = { ...frontend, customer: { billing: {}, shipping: {} } } as unknown as ClickBankIngestPayload;
+    expect(parseClickBankIngest(p).customerExternalId).toBeNull();
+  });
+});

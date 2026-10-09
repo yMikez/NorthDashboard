@@ -59,7 +59,11 @@ export function parseClickBankIngest(payload: ClickBankIngestPayload): Normalize
     affiliateExternalId: payload.affiliate ?? null,
     affiliateNickname: payload.affiliate ?? null,
 
-    customerExternalId: null,
+    // A ClickBank não manda ID de cliente: o e-mail normalizado é a chave.
+    // Sem isso o upsertOrder não criava Customer e o e-mail se perdia (aba
+    // Leads, 2026-10-09 — os pedidos antigos ganham cliente pelo backfill
+    // /api/admin/backfill-clickbank-customers).
+    customerExternalId: clickbankCustomerKey(payload),
     customerEmail: payload.customer?.billing?.email ?? payload.customer?.shipping?.email ?? null,
     customerFirstName: payload.customer?.billing?.firstName ?? null,
     customerLastName: payload.customer?.billing?.lastName ?? null,
@@ -104,6 +108,13 @@ export function parseClickBankIngest(payload: ClickBankIngestPayload): Normalize
 // downsell SKUs (e.g. NeuroMindPro-5-DW1-V1) get sent as lineItemType="UPSELL".
 // Override to DOWNSELL when the itemNo carries a downsell marker.
 const DOWNSELL_ITEM_PATTERN = /(?:^|[-_])(dw\d*|down(?:sell)?|ds\d*)(?:[-_]|$)/i;
+
+/** Chave do Customer na ClickBank: e-mail em minúsculas, sem espaço; null sem e-mail. */
+export function clickbankCustomerKey(payload: ClickBankIngestPayload): string | null {
+  const raw = payload.customer?.billing?.email ?? payload.customer?.shipping?.email ?? '';
+  const email = raw.trim().toLowerCase();
+  return email.includes('@') ? email : null;
+}
 
 function mapProductType(
   lineItemType: ClickBankLineItemType,

@@ -32,6 +32,12 @@ function Sidebar({ active, onNav, user, open, onClose }) {
       ]
     },
     {
+      label: 'Clientes',
+      items: [
+        { id: 'leads', label: 'Leads', icon: 'user' },
+      ]
+    },
+    {
       label: 'Catálogo',
       items: [
         { id: 'products', label: 'Produtos', icon: 'package' },
@@ -401,6 +407,8 @@ function MultiSelect({ label, options, selected, onChange, icon, pick, searchabl
 const ROUTES_WITH_COMPARE = new Set(['overview']);
 // Rotas que não aplicam Etapa/País do filtro global (a aba VSLs tem etapa própria UP01…DOWN03).
 const ROUTES_WITHOUT_STAGE_COUNTRY = new Set(['vsl']);
+// Leads: os filtros valem pra 1ª compra do lead; "etapa" não tem sentido pra pessoa.
+const ROUTES_WITHOUT_STAGE = new Set(['leads']);
 // Filtro "Afiliado" (conta de plataforma ou pessoa unificada): vale em todas
 // as abas de venda. Onde não se aplica, o seletor fica apagado com o motivo
 // — a escolha continua na URL e volta a valer ao trocar de aba.
@@ -684,8 +692,10 @@ function FilterBar({ filters, setFilters, options, route }) {
       <MultiSelect label="Produto" icon="package" options={familyOpts} selected={filters.families}
         onChange={(s) => setFilters(f => ({ ...f, families: s }))}/>
       {!ROUTES_WITHOUT_STAGE_COUNTRY.has(route) && (<>
-        <MultiSelect label="Etapa" icon="layers" options={stageOpts} selected={filters.stages || new Set()}
-          onChange={(s) => setFilters(f => ({ ...f, stages: s }))}/>
+        {!ROUTES_WITHOUT_STAGE.has(route) && (
+          <MultiSelect label="Etapa" icon="layers" options={stageOpts} selected={filters.stages || new Set()}
+            onChange={(s) => setFilters(f => ({ ...f, stages: s }))}/>
+        )}
         <MultiSelect label="País" icon="globe" options={countryOpts} selected={filters.countries}
           onChange={(s) => setFilters(f => ({ ...f, countries: s }))}/>
       </>)}

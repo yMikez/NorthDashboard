@@ -16,6 +16,7 @@ export type TabId =
   | 'affiliate-crm'
   | 'recovery'
   | 'tauk'
+  | 'leads'
   | 'products'
   | 'transactions'
   | 'platforms'
@@ -24,7 +25,7 @@ export type TabId =
 export interface TabSpec {
   id: TabId;
   label: string;
-  group: 'Análise' | 'Afiliados' | 'Captação' | 'Catálogo' | 'Sistema';
+  group: 'Análise' | 'Afiliados' | 'Captação' | 'Clientes' | 'Catálogo' | 'Sistema';
 }
 
 export const AVAILABLE_TABS: TabSpec[] = [
@@ -43,6 +44,9 @@ export const AVAILABLE_TABS: TabSpec[] = [
   { id: 'recovery',       label: 'Recuperação',         group: 'Captação' },
   // id 'tauk' preservado (permissões) — a aba virou Call Center (Tauk + Logicall).
   { id: 'tauk',           label: 'Call Center',         group: 'Captação' },
+  // Leads: a pessoa (e-mail) cruzando funil, call center e SalesBound — mostra
+  // e-mail e nome de cliente, então só quem o admin liberar.
+  { id: 'leads',          label: 'Leads',               group: 'Clientes' },
   { id: 'products',       label: 'Produtos',            group: 'Catálogo' },
   { id: 'transactions',   label: 'Transações',          group: 'Catálogo' },
   { id: 'platforms',      label: 'Plataformas',         group: 'Sistema' },

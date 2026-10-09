@@ -12,6 +12,7 @@ const ROUTES = {
   'affiliate-crm':  { title: 'CRM',          em: 'de afiliados', crumbs: ['Afiliados', 'CRM'] },
   'recovery':       { title: 'Recuperação', em: 'de vendas',   crumbs: ['Captação', 'Recuperação'] },
   'tauk':           { title: 'Call Center', em: 'Tauk + Logicall', crumbs: ['Captação', 'Call Center'] },
+  'leads':          { title: 'Leads',       em: 'e LTV',       crumbs: ['Clientes', 'Leads'] },
   'products':       { title: 'Produtos',     em: '',            crumbs: ['Catálogo', 'Produtos'] },
   'transactions':   { title: 'Transações',  em: 'do ledger',   crumbs: ['Catálogo', 'Transações'] },
   'platforms':      { title: 'Plataformas', em: 'conectadas',  crumbs: ['Sistema', 'Plataformas'] },
@@ -306,6 +307,7 @@ function App({ user }) {
           {hashState.route === 'affiliate-crm' && <AffiliateCrmPage user={user} filters={filters}/>}
           {hashState.route === 'recovery'       && <RecoveryPage filters={filters}/>}
           {hashState.route === 'tauk'           && <CallCenterPage filters={filters} user={user}/>}
+          {hashState.route === 'leads'          && <LeadsPage filters={filters}/>}
           {hashState.route === 'products'       && <ProductsPage filters={filters}/>}
           {hashState.route === 'transactions'   && <TransactionsPage filters={filters}/>}
           {hashState.route === 'platforms'      && <IntegrationsPage filters={filters}/>}
