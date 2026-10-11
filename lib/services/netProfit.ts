@@ -29,7 +29,7 @@ import { mappedIdentityMap } from './affiliateMapping';
 import { measureSalesbound } from './salesboundLedger';
 import {
   FRONT_STAGES, STAGE_LABELS, computeNetProfit, defaultParams, diffParams, normalizeParams, emptyStage, emptyStages,
-  type AffiliateInput, type FrontStage, type NetProfitInputs, type NetProfitParams, type NetProfitResult,
+  type AffiliateBackendInput, type AffiliateInput, type BackendSource, type FrontStage, type NetProfitInputs, type NetProfitParams, type NetProfitResult,
   type PlatformFrontInput, type ProductInput, type RecoveryAffiliateInput, type StageAgg,
 } from './netProfitCore';
 
@@ -463,6 +463,100 @@ export async function evaluateNetProfit(start: Date, end: Date, params: NetProfi
   const result = computeNetProfit(inputs, params);
   const needs = await computeNeeds(inputs, params, result);
   return { result, needs, inputs };
+}
+
+// ---------------------------------------------------------------------
+// Visão "Realizado" dos afiliados (pedido do usuário, 2026-10-11)
+// ---------------------------------------------------------------------
+// Só vendas com 48h+: até lá o backend (call center, SalesBound) ainda não
+// alcançou o lead. O FIM do período é cortado em agora − 48h pra front e
+// backend saírem da mesma safra. Corte arredondado pra hora cheia (cache).
+export const REALIZED_MATURE_HOURS = 48;
+
+export function realizedCutoff(now = new Date()): Date {
+  const hour = Math.floor(now.getTime() / 3600_000) * 3600_000;
+  return new Date(hour - REALIZED_MATURE_HOURS * 3600_000);
+}
+
+/**
+ * Backend atribuído por afiliado. Lead = e-mail do cliente da venda de FE do
+ * funil (FRONTEND real; linha sintética de estorno da Digistore fora). Cada
+ * venda de backend (CallCenterSale, SalesboundTransaction SUCCESS; estorno e
+ * void da SalesBound pela data da VENDA que anulam) vai pra FE mais recente
+ * do mesmo e-mail ANTES dela — então conta só o que veio depois da compra, e
+ * um cliente que voltou por outro afiliado passa a render pro novo. Conta tudo
+ * que já aconteceu até agora (sem teto de janela).
+ */
+export function affiliateBackendSql(start: Date, end: Date): Prisma.Sql {
+  return Prisma.sql`
+    WITH backend AS (
+      SELECT lower(trim(s.email)) AS email, s."purchasedAt" AS at, s.provider AS source, s."amountUsd" AS gross,
+             CASE WHEN s.status IN ('REFUNDED', 'CHARGEBACK') THEN COALESCE(s."refundedUsd", s."amountUsd")
+                  ELSE COALESCE(s."refundedUsd", 0) END AS refunded
+      FROM "CallCenterSale" s
+      WHERE s.email LIKE '%@%' AND s.provider IN ('tauk', 'logicall')
+      UNION ALL
+      SELECT lower(trim(t.email)), COALESCE(t."saleAt", t."txnAt"), 'salesbound',
+             CASE WHEN t.type = 'SALE' THEN t."amountUsd" ELSE 0 END,
+             CASE WHEN t.type IN ('REFUND', 'VOID') THEN t."amountUsd" ELSE 0 END
+      FROM "SalesboundTransaction" t
+      WHERE t.result = 'SUCCESS' AND t.type IN ('SALE', 'REFUND', 'VOID') AND t.email LIKE '%@%'
+    ),
+    fe AS (
+      SELECT o."affiliateId", o."orderedAt" AS at, lower(trim(c.email)) AS email,
+             LEAD(o."orderedAt") OVER (PARTITION BY lower(trim(c.email)) ORDER BY o."orderedAt", o.id) AS next_at
+      FROM "Order" o
+      JOIN "Customer" c ON c.id = o."customerId"
+      JOIN "Platform" pl ON pl.id = o."platformId"
+      WHERE o."productType" = 'FRONTEND' AND o.status IN ('APPROVED', 'REFUNDED', 'CHARGEBACK')
+        AND NOT (pl.slug = 'digistore24' AND o.status IN ('REFUNDED', 'CHARGEBACK'))
+        AND lower(trim(c.email)) IN (SELECT email FROM backend)
+    ),
+    credited AS (
+      SELECT f."affiliateId" AS aff, f.email, b.source, b.gross, b.refunded
+      FROM backend b
+      JOIN fe f ON f.email = b.email AND b.at >= f.at AND (f.next_at IS NULL OR b.at < f.next_at)
+      WHERE f.at >= ${start} AND f.at <= ${end} AND f."affiliateId" IS NOT NULL
+    )
+    SELECT aff AS "affiliateId", source, SUM(gross)::float AS gross, SUM(refunded)::float AS refunds,
+           COUNT(*) FILTER (WHERE gross > 0)::int AS sales, COUNT(DISTINCT email)::int AS leads
+    FROM credited GROUP BY GROUPING SETS ((aff, source), (aff))`;
+}
+
+async function measureAffiliateBackend(start: Date, end: Date): Promise<AffiliateBackendInput[]> {
+  const rows = await db.$queryRaw<Array<{ affiliateId: string; source: BackendSource | null; gross: number; refunds: number; sales: number; leads: number }>>(affiliateBackendSql(start, end));
+  return reduceAffiliateBackend(rows);
+}
+
+/** Linhas do GROUPING SETS → uma entrada por afiliado (source null = total de leads). */
+export function reduceAffiliateBackend(rows: Array<{ affiliateId: string; source: BackendSource | null; gross: number; refunds: number; sales: number; leads: number }>): AffiliateBackendInput[] {
+  const by = new Map<string, AffiliateBackendInput>();
+  for (const r of rows) {
+    const a = by.get(r.affiliateId) ?? { affiliateId: r.affiliateId, leads: 0, bySource: [] };
+    if (r.source == null) a.leads = Number(r.leads);
+    else a.bySource.push({ source: r.source, gross: r2(Number(r.gross)), refunds: r2(Number(r.refunds)), sales: Number(r.sales) });
+    by.set(r.affiliateId, a);
+  }
+  return [...by.values()];
+}
+
+const realizedCache = new Map<string, { at: number; promise: Promise<AffiliateBackendInput[]> }>();
+
+export async function evaluateNetProfitRealized(start: Date, end: Date, params: NetProfitParams, now = new Date()): Promise<{ cutoff: string; end: string; empty: boolean; result: NetProfitResult | null }> {
+  const cutoff = realizedCutoff(now);
+  const clampedEnd = end.getTime() > cutoff.getTime() ? cutoff : end;
+  if (clampedEnd.getTime() <= start.getTime()) return { cutoff: cutoff.toISOString(), end: clampedEnd.toISOString(), empty: true, result: null };
+  const key = `${start.toISOString()}|${clampedEnd.toISOString()}`;
+  let hit = realizedCache.get(key);
+  if (!hit || Date.now() - hit.at >= INPUTS_TTL_MS) {
+    hit = { at: Date.now(), promise: measureAffiliateBackend(start, clampedEnd) };
+    realizedCache.set(key, hit);
+    hit.promise.catch(() => realizedCache.delete(key));
+    if (realizedCache.size > 40) realizedCache.delete([...realizedCache.keys()][0]);
+  }
+  const [inputs, affiliateBackend] = await Promise.all([loadNetProfitInputs(start, clampedEnd), hit.promise]);
+  const result = computeNetProfit({ ...inputs, affiliateBackend }, params);
+  return { cutoff: cutoff.toISOString(), end: clampedEnd.toISOString(), empty: false, result };
 }
 
 // Por dia (§10.8): a MESMA fórmula aplicada a cada dia do período (fatias de

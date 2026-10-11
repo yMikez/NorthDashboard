@@ -132,6 +132,21 @@ export interface NetProfitInputs {
   products?: ProductInput[];
   // Razão importado do export do CRM da SalesBound; null = nunca importado.
   salesbound: { measured: SalesboundMeasuredInput | null };
+  // Visão "Realizado" dos afiliados: backend que os LEADS de cada afiliado
+  // já renderam (só carregado por evaluateNetProfitRealized). Ausente = a
+  // visão de projeção de sempre.
+  affiliateBackend?: AffiliateBackendInput[];
+}
+
+// Backend atribuído a um afiliado: vendas de call center / SalesBound do
+// cliente (e-mail) de uma venda de FE do funil dele, feitas DEPOIS dessa FE
+// e antes da próxima FE do mesmo cliente (com qualquer afiliado). Valores
+// brutos do parceiro; a parcela da NS sai dos parâmetros da aba no núcleo.
+export type BackendSource = 'tauk' | 'logicall' | 'salesbound';
+export interface AffiliateBackendInput {
+  affiliateId: string;
+  leads: number;          // leads distintos com alguma venda de backend
+  bySource: Array<{ source: BackendSource; gross: number; refunds: number; sales: number }>;
 }
 
 // ---------------------------------------------------------------------
@@ -313,6 +328,24 @@ export interface AffiliateResult {
   projectionTotalPerFe: number | null;
   shareOfRevenuePct: number;   // da receita econômica TOTAL
   shareOfChannelPct: number;   // do bruto do próprio canal
+  // REALIZADO (pedido do usuário, 2026-10-11): o que os leads deste afiliado
+  // JÁ renderam no backend, pelos parâmetros da aba (mesma conta do canal:
+  // bruto − estornos do parceiro − parcela do parceiro − produto se houver).
+  //   total        = profit (lucro pós FE) + backendProfit
+  //   marginTotalPct = total ÷ (gross + backendRevenue)  — receita econômica
+  //   totalPerFe   = total ÷ FEs do funil do afiliado
+  // null quando a visão realizada não foi pedida.
+  realized: AffiliateRealized | null;
+}
+export interface AffiliateRealized {
+  backendGross: number;
+  backendRevenue: number;      // parcela da NS (receita econômica do backend)
+  backendProfit: number;
+  backendLeads: number;
+  backendSales: number;
+  total: number;
+  marginTotalPct: number;
+  totalPerFe: number | null;
 }
 export interface ProductResult {
   family: string;
@@ -356,6 +389,9 @@ export interface NetProfitResult {
   // faturamento) — o que os parâmetros nulos usam e a sugestão da UI.
   observedProductCostPct: { front: Record<FrontStage, number | null>; recovery: number | null; sms: number | null };
   salesbound: { mode: 'measured' | 'manual' | 'none'; coverage: SalesboundMeasuredInput['coverage'] | null; voids: number; refundsCohort: number | null };
+  // Visão realizada: total do backend atribuído (inclui afiliado que não
+  // entrou na lista por não ter venda aprovada no período). null = não pedida.
+  realizedBackend: { gross: number; revenue: number; profit: number; leads: number; sales: number } | null;
   warnings: string[];
 }
 
@@ -638,6 +674,44 @@ export function computeNetProfit(inputs: NetProfitInputs, params: NetProfitParam
     projectionTotal: fes > 0 ? r2(profit + fes * backendPerFe) : null,
     projectionTotalPerFe: fes > 0 ? r2(profit / fes + backendPerFe) : null,
   });
+  // ── Realizado: backend que os leads de cada afiliado já renderam ─────
+  // Mesma conta do canal de backend (backendLines), venda a venda: a parcela
+  // do parceiro e o estorno saem dos PARÂMETROS da aba.
+  const partnerPctOf = (source: BackendSource): number => (source === 'salesbound'
+    ? params.commissionPct.salesbound ?? 0
+    : params.commissionPct[source] ?? inputs.callcenters.find((c) => c.provider === source)?.commissionPct ?? 0);
+  const backendCostPctOf = (source: BackendSource) => (source === 'salesbound' ? params.productCostPct.salesbound : params.productCostPct.callcenter);
+  const backendValue = (b: AffiliateBackendInput | undefined) => {
+    let gross = 0, revenue = 0, profit = 0, sales = 0;
+    for (const x of b?.bySource ?? []) {
+      const base = x.gross - (params.backendNetOfRefunds ? Math.min(x.refunds, x.gross) : 0);
+      const nsRevenue = base * (1 - partnerPctOf(x.source) / 100);
+      const costPct = backendCostPctOf(x.source);
+      gross += x.gross; revenue += nsRevenue; sales += x.sales;
+      profit += nsRevenue - (costPct != null && costPct > 0 ? base * (costPct / 100) : 0);
+    }
+    return { gross, revenue, profit, sales, leads: b?.leads ?? 0 };
+  };
+  const backendBy = new Map((inputs.affiliateBackend ?? []).map((b) => [b.affiliateId, b]));
+  const realizedFor = (affiliateId: string, profit: number, gross: number, fes: number): AffiliateRealized | null => {
+    if (!inputs.affiliateBackend) return null;
+    const v = backendValue(backendBy.get(affiliateId));
+    const total = r2(profit + v.profit);
+    return {
+      backendGross: r2(v.gross), backendRevenue: r2(v.revenue), backendProfit: r2(v.profit), backendLeads: v.leads, backendSales: v.sales,
+      total, marginTotalPct: pctOf(total, gross + v.revenue), totalPerFe: fes > 0 ? r2(total / fes) : null,
+    };
+  };
+  let realizedBackend: NetProfitResult['realizedBackend'] = null;
+  if (inputs.affiliateBackend) {
+    const acc = { gross: 0, revenue: 0, profit: 0, leads: 0, sales: 0 };
+    for (const b of inputs.affiliateBackend) {
+      const v = backendValue(b);
+      acc.gross += v.gross; acc.revenue += v.revenue; acc.profit += v.profit; acc.leads += v.leads; acc.sales += v.sales;
+    }
+    realizedBackend = { gross: r2(acc.gross), revenue: r2(acc.revenue), profit: r2(acc.profit), leads: acc.leads, sales: acc.sales };
+  }
+
   const affiliates: AffiliateResult[] = [];
   for (const a of inputs.affiliates) {
     const f = frontSlice(a.platformSlug, a.byStage, a.refundsObserved);
@@ -651,6 +725,7 @@ export function computeNetProfit(inputs: NetProfitInputs, params: NetProfitParam
       profitPerFe: feCount > 0 ? r2(prof / feCount) : null,
       ...withBackend(prof, feCount),
       shareOfRevenuePct: pctOf(f.tot.gross, revenue), shareOfChannelPct: pctOf(f.tot.gross, front.gross),
+      realized: realizedFor(a.affiliateId, prof, f.tot.gross, feCount),
     });
   }
   for (const a of inputs.recoveryAffiliates) {
@@ -666,6 +741,7 @@ export function computeNetProfit(inputs: NetProfitInputs, params: NetProfitParam
       profitPerFe: a.feOrders > 0 ? r2(prof / a.feOrders) : null,
       ...withBackend(prof, a.feOrders),
       shareOfRevenuePct: pctOf(a.gross, revenue), shareOfChannelPct: pctOf(a.gross, recovery.gross),
+      realized: realizedFor(a.affiliateId, prof, a.gross, a.feOrders),
     });
   }
   affiliates.sort((x, y) => y.gross - x.gross);
@@ -708,6 +784,7 @@ export function computeNetProfit(inputs: NetProfitInputs, params: NetProfitParam
       voids: r2(sbMeasured?.voids ?? 0),
       refundsCohort: sbMeasured?.refundsCohort ?? null,
     },
+    realizedBackend,
     warnings: [...new Set(warnings)],
   };
 }

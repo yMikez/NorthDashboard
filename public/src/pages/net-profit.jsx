@@ -849,23 +849,66 @@ function NpProducts({ rows, cur }) {
 const NP_PROJ_HINT = 'Projeção do lucro TOTAL que o faturamento do afiliado gera pra operação: o Lucro (front, com os parâmetros desta aba) + o backend que esses clientes rendem (lucro de call centers + SalesBound por FE de plataforma no período × FEs do afiliado).';
 const NP_PROJ_BACK_HINT = 'Backend que esses clientes rendem: lucro de call centers + SalesBound por FE de plataforma (taxa da operação no período) × FEs do afiliado.';
 
-function NpAffiliates({ rows, cur, onlyLoss, setOnlyLoss, backendPerFe }) {
+// Visão "Realizado" (pedido do usuário, 2026-10-11): em vez de projetar o
+// backend pela taxa da operação, mostra o que os LEADS de cada afiliado já
+// renderam — vendas de call center e SalesBound do mesmo cliente depois da
+// compra de FE. Só vendas com 48h+ (o período é cortado em agora − 48h).
+const NP_REAL_BACK_HINT = 'Lucro que os leads deste afiliado JÁ deram no backend: vendas de call center (Tauk, Logicall) e SalesBound do mesmo cliente (e-mail) feitas depois da compra de FE com ele, até a próxima compra de FE do cliente com outro afiliado. Parcela do parceiro, estornos e custo pelos parâmetros da aba.';
+const NP_MARGIN_TOTAL_HINT = '(Lucro pós FE + backend realizado) ÷ (gross + parcela da NorthScale no backend) — a mesma régua da margem oficial da aba.';
+const NP_REAL_PER_FE_HINT = '(Lucro pós FE + backend realizado) ÷ vendas de FrontEnd do funil deste afiliado.';
+
+function NpAffiliates({ rows, cur, onlyLoss, setOnlyLoss, backendPerFe, filters, params }) {
   const [q, setQ] = useStateNP('');
   const [detail, setDetail] = useStateNP(false);
+  const [mode, setMode] = useStateNP('projecao');
+  const [real, setReal] = useStateNP({ status: 'idle', data: null, error: null });
+  const realized = mode === 'realizado';
+  const paramsKey = JSON.stringify(params);
+
+  useEffectNP(() => {
+    if (!realized || !params) return;
+    let cancelled = false;
+    setReal((s) => ({ ...s, status: 'loading', error: null }));
+    const t = setTimeout(() => {
+      window.NSApi.computeNetProfitRealized(filters, params)
+        .then((d) => { if (!cancelled) setReal({ status: 'ready', data: d, error: null }); })
+        .catch((err) => { if (!cancelled) setReal({ status: 'error', data: null, error: err.message }); });
+    }, 400);
+    return () => { cancelled = true; clearTimeout(t); };
+  }, [realized, filters.dateRange.start.getTime(), filters.dateRange.end.getTime(), paramsKey]);
+
+  const source = realized ? (real.data?.result?.affiliates || []) : rows;
+  const valueOf = (a) => (realized ? (a.realized ? a.realized.total : a.profit) : a.profit);
   const qn = q.trim().toLowerCase();
-  const list = rows
-    .filter((a) => !onlyLoss || a.profit < 0)
+  const list = source
+    .filter((a) => !onlyLoss || valueOf(a) < 0)
     .filter((a) => !qn || (a.nickname || '').toLowerCase().includes(qn) || a.externalId.toLowerCase().includes(qn) || (a.mappedName || '').toLowerCase().includes(qn));
-  const lossCount = rows.filter((a) => a.profit < 0).length;
-  const cols = 8 + (detail ? 7 : 0);
+  const lossCount = source.filter((a) => valueOf(a) < 0).length;
+  const cols = realized ? 9 + (detail ? 7 : 0) : 8 + (detail ? 7 : 0);
+  const rb = real.data?.result?.realizedBackend;
+  const realLoading = realized && (real.status === 'loading' || real.status === 'idle') && !real.data;
+
   return (
     <div className="panel" style={{ marginBottom: 14 }}>
       <div className="panel-head" style={{ flexWrap: 'wrap' }}>
         <div className="panel-title">
           <span className="panel-eyebrow">Margem por afiliado</span>
-          <div className="panel-sub">{fmtInt(rows.length)} contas com venda no período · Lucro = só o front, com os parâmetros da aba · Projeção = Lucro + backend que esses clientes rendem{backendPerFe != null ? ` (${npMoney(backendPerFe, cur, 2)} por FE no período)` : ''}</div>
+          {realized ? (
+            <div className="panel-sub">
+              {real.data?.empty
+                ? 'Nenhuma venda com 48h ou mais neste período.'
+                : <>Realizado: só vendas com 48h ou mais{real.data ? ` (até ${fmtDateTime(real.data.end)})` : ''} · backend = o que os leads de cada afiliado já renderam em call center e SalesBound
+                  {rb ? ` · ${npMoney(rb.profit, cur)} de lucro de backend em ${fmtInt(rb.leads)} leads` : ''}</>}
+            </div>
+          ) : (
+            <div className="panel-sub">{fmtInt(rows.length)} contas com venda no período · Lucro pós FE = só o front, com os parâmetros da aba · Projeção = Lucro pós FE + backend que esses clientes rendem{backendPerFe != null ? ` (${npMoney(backendPerFe, cur, 2)} por FE no período)` : ''}</div>
+          )}
         </div>
         <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+          <div className="seg" role="group" aria-label="Análise">
+            <button className={!realized ? 'is-active' : ''} onClick={() => setMode('projecao')} title="Backend projetado pela taxa da operação (lucro de backend por FE no período)">Projeção</button>
+            <button className={realized ? 'is-active' : ''} onClick={() => setMode('realizado')} title="Só dados concretos: o backend que os leads de cada afiliado já renderam (vendas com 48h+)">Realizado</button>
+          </div>
           <div className="select-btn" style={{ padding: '0 10px', width: 'min(220px, 100%)' }}>
             <Icon name="search" size={13}/>
             <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Buscar afiliado…" style={{ background: 'transparent', border: 0, color: 'var(--fg1)', outline: 'none', flex: 1, fontFamily: 'var(--f-body)', fontSize: 12 }}/>
@@ -874,12 +917,14 @@ function NpAffiliates({ rows, cur, onlyLoss, setOnlyLoss, backendPerFe }) {
             <button className={!detail ? 'is-active' : ''} onClick={() => setDetail(false)}>resumo</button>
             <button className={detail ? 'is-active' : ''} onClick={() => setDetail(true)}>linha a linha</button>
           </div>
-          <button className={`btn ${onlyLoss ? 'btn-primary' : 'btn-ghost'}`} style={{ fontSize: 11 }} onClick={() => setOnlyLoss(!onlyLoss)} title="mostrar só quem fechou o período no vermelho">
+          <button className={`btn ${onlyLoss ? 'btn-primary' : 'btn-ghost'}`} style={{ fontSize: 11 }} onClick={() => setOnlyLoss(!onlyLoss)} title={realized ? 'mostrar só quem fechou no vermelho mesmo com o backend realizado' : 'mostrar só quem fechou o período no vermelho'}>
             só prejuízo{lossCount ? ` (${fmtInt(lossCount)})` : ''}
           </button>
+          {realized && real.status === 'loading' && real.data && <span style={{ fontSize: 11, color: 'var(--fg5)', fontFamily: 'var(--f-mono)' }}>recalculando…</span>}
         </div>
       </div>
-      <Paginated items={list} label="afiliados" resetKey={`${qn}|${onlyLoss}`}>
+      {realized && real.status === 'error' && <div style={{ color: 'var(--danger)', fontSize: 12, padding: '0 0 10px' }}>Erro: {real.error}</div>}
+      <Paginated items={list} label="afiliados" resetKey={`${qn}|${onlyLoss}|${mode}`}>
         {(pageRows, pager, pg) => (<>
           {/* key = página: trocar de página remonta a caixa com rolagem e ela volta ao topo */}
           <div key={`p${pg.page}`} className="tbl-wrap" style={{ margin: 0, padding: 0, maxHeight: 640, overflowY: 'auto' }}>
@@ -893,18 +938,27 @@ function NpAffiliates({ rows, cur, onlyLoss, setOnlyLoss, backendPerFe }) {
                     <th className="num" title="front: CPA pago · recuperação: comissão">CPA / comissão</th>
                     <th className="num">Reembolso</th><th className="num">Fee</th><th className="num">Produto</th><th className="num">Reserva</th>
                   </>}
-                  <th className="num">Lucro</th>
-                  <th className="num" title={NP_PROJ_HINT}>Projeção</th>
-                  {detail && <th className="num" title={NP_PROJ_BACK_HINT}>Proj. back</th>}
-                  <th className="num">Margem</th>
-                  <th className="num">Lucro/FE</th>
-                  {detail && <th className="num" title={NP_PROJ_HINT}>Proj./FE</th>}
+                  {detail && realized && <>
+                    <th className="num" title="leads deste afiliado com alguma venda de backend">Leads c/ back</th>
+                    <th className="num" title="faturamento bruto do parceiro nessas vendas (antes da parcela dele)">Back bruto</th>
+                  </>}
+                  <th className="num" title="lucro do front (funil nas plataformas) com os parâmetros da aba">Lucro pós FE</th>
+                  {realized
+                    ? <th className="num" title={NP_REAL_BACK_HINT}>Backend realizado</th>
+                    : <th className="num" title={NP_PROJ_HINT}>Projeção</th>}
+                  {detail && !realized && <th className="num" title={NP_PROJ_BACK_HINT}>Proj. back</th>}
+                  <th className="num" title="Lucro pós FE ÷ gross">Margem FE</th>
+                  {realized && <th className="num" title={NP_MARGIN_TOTAL_HINT}>Margem Total</th>}
+                  <th className="num" title={realized ? NP_REAL_PER_FE_HINT : 'Lucro pós FE ÷ vendas de FrontEnd do funil'}>Lucro/FE</th>
+                  {detail && !realized && <th className="num" title={NP_PROJ_HINT}>Proj./FE</th>}
                 </tr>
               </thead>
               <tbody>
-                {list.length === 0 && <tr><td colSpan={cols} style={{ textAlign: 'center', padding: 20, opacity: 0.6 }}>{onlyLoss ? 'Nenhum afiliado no prejuízo' : 'Nenhum afiliado'}</td></tr>}
-                {pageRows.map((a) => {
+                {realLoading && <tr><td colSpan={cols} style={{ textAlign: 'center', padding: 20, opacity: 0.6 }}>Cruzando os leads de cada afiliado com o backend…</td></tr>}
+                {!realLoading && list.length === 0 && <tr><td colSpan={cols} style={{ textAlign: 'center', padding: 20, opacity: 0.6 }}>{onlyLoss ? 'Nenhum afiliado no prejuízo' : realized && real.data?.empty ? 'Nenhuma venda com 48h ou mais neste período' : 'Nenhum afiliado'}</td></tr>}
+                {!realLoading && pageRows.map((a) => {
                   const pb = platBadge(a.platformSlug);
+                  const r = a.realized;
                   return (
                     <tr key={a.affiliateId}>
                       <td>
@@ -921,12 +975,21 @@ function NpAffiliates({ rows, cur, onlyLoss, setOnlyLoss, backendPerFe }) {
                         <td className="num cell-mono">{npMoney(a.productCost, cur)}</td>
                         <td className="num cell-mono">{npMoney(a.allowance, cur)}</td>
                       </>}
+                      {detail && realized && <>
+                        <td className="num cell-mono">{r && r.backendLeads ? fmtInt(r.backendLeads) : '—'}</td>
+                        <td className="num cell-mono">{r && r.backendGross ? npMoney(r.backendGross, cur) : '—'}</td>
+                      </>}
                       <td className="num cell-mono" style={{ fontWeight: 700, color: npTone(a.profit) }}>{npMoney(a.profit, cur)}</td>
-                      <td className="num cell-mono" style={{ fontWeight: 600, color: a.projectionTotal == null ? 'var(--fg5)' : npTone(a.projectionTotal) }} title={NP_PROJ_HINT}>{a.projectionTotal == null ? '—' : npMoney(a.projectionTotal, cur)}</td>
-                      {detail && <td className="num cell-mono" style={{ color: a.backendProjection == null ? 'var(--fg5)' : 'var(--money)' }}>{a.backendProjection == null ? '—' : npMoney(a.backendProjection, cur)}</td>}
+                      {realized
+                        ? <td className="num cell-mono" style={{ fontWeight: 600, color: r && r.backendProfit ? 'var(--money)' : 'var(--fg5)' }} title={r ? `${fmtInt(r.backendSales)} vendas de backend · ${fmtInt(r.backendLeads)} leads` : ''}>{r && r.backendProfit ? npMoney(r.backendProfit, cur) : '—'}</td>
+                        : <td className="num cell-mono" style={{ fontWeight: 600, color: a.projectionTotal == null ? 'var(--fg5)' : npTone(a.projectionTotal) }} title={NP_PROJ_HINT}>{a.projectionTotal == null ? '—' : npMoney(a.projectionTotal, cur)}</td>}
+                      {detail && !realized && <td className="num cell-mono" style={{ color: a.backendProjection == null ? 'var(--fg5)' : 'var(--money)' }}>{a.backendProjection == null ? '—' : npMoney(a.backendProjection, cur)}</td>}
                       <td className="num cell-mono" style={{ color: a.marginPct >= 0 ? 'var(--fg1)' : 'var(--danger)' }}>{npPct(a.marginPct)}</td>
-                      <td className="num cell-mono">{a.profitPerFe == null ? '—' : npMoney(a.profitPerFe, cur, 2)}</td>
-                      {detail && <td className="num cell-mono" style={{ color: a.projectionTotalPerFe == null ? 'var(--fg5)' : npTone(a.projectionTotalPerFe) }}>{a.projectionTotalPerFe == null ? '—' : npMoney(a.projectionTotalPerFe, cur, 2)}</td>}
+                      {realized && <td className="num cell-mono" style={{ fontWeight: 600, color: r && r.marginTotalPct < 0 ? 'var(--danger)' : 'var(--fg1)' }}>{r ? npPct(r.marginTotalPct) : '—'}</td>}
+                      {realized
+                        ? <td className="num cell-mono" style={{ color: r && r.totalPerFe != null ? npTone(r.totalPerFe) : 'var(--fg5)' }}>{r && r.totalPerFe != null ? npMoney(r.totalPerFe, cur, 2) : '—'}</td>
+                        : <td className="num cell-mono">{a.profitPerFe == null ? '—' : npMoney(a.profitPerFe, cur, 2)}</td>}
+                      {detail && !realized && <td className="num cell-mono" style={{ color: a.projectionTotalPerFe == null ? 'var(--fg5)' : npTone(a.projectionTotalPerFe) }}>{a.projectionTotalPerFe == null ? '—' : npMoney(a.projectionTotalPerFe, cur, 2)}</td>}
                     </tr>
                   );
                 })}
@@ -965,7 +1028,7 @@ function NpLossAlert({ affiliates, cur, onOpen }) {
         <div style={{ marginTop: 12, paddingTop: 10, borderTop: '1px solid var(--border-soft)' }}>
           <div className="tbl-wrap" style={{ margin: 0, padding: 0 }}>
             <table className="tbl" style={{ fontSize: 12 }}>
-              <thead><tr><th>Afiliado</th><th>Plat.</th><th className="num">Gross</th><th className="num">CPA</th><th className="num">Lucro</th><th className="num">Margem</th><th className="num" title={NP_PROJ_HINT}>Projeção</th></tr></thead>
+              <thead><tr><th>Afiliado</th><th>Plat.</th><th className="num">Gross</th><th className="num">CPA</th><th className="num">Lucro pós FE</th><th className="num">Margem FE</th><th className="num" title={NP_PROJ_HINT}>Projeção</th></tr></thead>
               <tbody>
                 {top.map((a) => {
                   const pb = platBadge(a.platformSlug);
@@ -1218,7 +1281,7 @@ function NetProfitPage({ filters }) {
       )}
       {view === 'dias' && !loading && params && <NpDaily filters={filters} params={params} cur={cur}/>}
       {view === 'produtos' && !loading && <NpProducts rows={result.products || []} cur={cur}/>}
-      {view === 'afiliados' && !loading && <NpAffiliates rows={result.affiliates} cur={cur} onlyLoss={onlyLoss} setOnlyLoss={setOnlyLoss} backendPerFe={k.backendPerFe}/>}
+      {view === 'afiliados' && !loading && <NpAffiliates rows={result.affiliates} cur={cur} onlyLoss={onlyLoss} setOnlyLoss={setOnlyLoss} backendPerFe={k.backendPerFe} filters={filters} params={params}/>}
       {view === 'projecoes' && !loading && (
         <NpScenarios scenarios={scenarios} current={k} cur={cur} busy={busy} onDelete={deleteScenario}
           onApply={(p) => { setParams(p); setDrawer(true); setMsg({ ok: true, text: 'parâmetros da projeção carregados (não salvos)' }); }}/>

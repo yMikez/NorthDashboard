@@ -600,6 +600,11 @@ function fetchNetProfit(filters) {
 function computeNetProfit(filters, params) {
   return coSend('/api/admin/net-profit', 'POST', { start_date: toISODate(filters.dateRange.start), end_date: toISODate(filters.dateRange.end), params });
 }
+// Visão "Realizado" dos afiliados: período cortado em agora − 48h + backend
+// que os leads de cada afiliado já renderam.
+function computeNetProfitRealized(filters, params) {
+  return coSend('/api/admin/net-profit/realized', 'POST', { start_date: toISODate(filters.dateRange.start), end_date: toISODate(filters.dateRange.end), params });
+}
 function computeNetProfitDaily(filters, params) {
   return coSend('/api/admin/net-profit/daily', 'POST', { start_date: toISODate(filters.dateRange.start), end_date: toISODate(filters.dateRange.end), params });
 }
@@ -741,6 +746,7 @@ window.NSApi = _wrapMutations({
   fetchNetProfit,
   computeNetProfit,
   computeNetProfitDaily,
+  computeNetProfitRealized,
   adminImportSalesbound,
   adminSaveNetProfitParams,
   adminListNetProfitScenarios,

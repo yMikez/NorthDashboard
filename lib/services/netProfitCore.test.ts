@@ -404,3 +404,53 @@ describe('normalizeParams e histórico de premissas', () => {
 });
 
 function r2sum(list: number[]): number { return Math.round(list.reduce((s, v) => s + v, 0) * 100) / 100; }
+
+describe('REALIZADO por afiliado: backend que os leads dele já renderam', () => {
+  const base = (affiliateBackend?: NetProfitInputs['affiliateBackend']) => inputs({
+    platforms: [platform({ byStage: { ...emptyStages(), FRONTEND: st({ gross: 6000, cpa: 2000, orders: 20 }) } })],
+    affiliates: [
+      { affiliateId: 'a1', externalId: 'maria', nickname: 'Maria', platformSlug: 'digistore24', mappedName: null, byStage: { ...emptyStages(), FRONTEND: st({ gross: 4500, cpa: 1500, orders: 15 }) }, refundsObserved: 0 },
+      { affiliateId: 'a2', externalId: 'joao', nickname: 'João', platformSlug: 'digistore24', mappedName: null, byStage: { ...emptyStages(), FRONTEND: st({ gross: 1500, cpa: 500, orders: 5 }) }, refundsObserved: 0 },
+    ],
+    callcenters: [cc({ provider: 'tauk', commissionPct: 30 }), cc({ provider: 'logicall', label: 'Logicall', commissionPct: 30 })],
+    affiliateBackend,
+  });
+  const backend: NetProfitInputs['affiliateBackend'] = [
+    { affiliateId: 'a1', leads: 3, bySource: [
+      { source: 'tauk', gross: 1000, refunds: 0, sales: 2 },
+      { source: 'salesbound', gross: 2000, refunds: 500, sales: 1 },
+    ] },
+    // afiliado sem venda aprovada no período: fica fora da lista, mas entra no total
+    { affiliateId: 'fora', leads: 1, bySource: [{ source: 'logicall', gross: 100, refunds: 0, sales: 1 }] },
+  ];
+  const params = () => { const p = defaultParams(); p.commissionPct.salesbound = 65; return p; };
+
+  it('sem a visão pedida, nada muda (realized null)', () => {
+    const r = computeNetProfit(base(), params());
+    expect(r.realizedBackend).toBeNull();
+    expect(r.affiliates.every((a) => a.realized === null)).toBe(true);
+  });
+
+  it('parcela NS venda a venda pelos parâmetros: total, Margem Total sobre a receita econômica e Lucro/FE', () => {
+    const r = computeNetProfit(base(backend), params());
+    const maria = r.affiliates.find((a) => a.affiliateId === 'a1')!;
+    expect(maria.profit).toBe(2550);   // Lucro pós FE (mesma conta da visão de projeção)
+    // Tauk: 1.000 × 70% = 700 · SalesBound: (2.000 − 500) × 35% = 525
+    expect(maria.realized).toEqual({
+      backendGross: 3000, backendRevenue: 1225, backendProfit: 1225, backendLeads: 3, backendSales: 3,
+      total: 3775, marginTotalPct: 65.94, totalPerFe: 251.67,   // 3.775 ÷ (4.500 + 1.225) · 3.775 ÷ 15
+    });
+    const joao = r.affiliates.find((a) => a.affiliateId === 'a2')!;
+    expect(joao.realized).toMatchObject({ backendProfit: 0, backendLeads: 0, total: joao.profit, marginTotalPct: joao.marginPct, totalPerFe: joao.profitPerFe });
+    expect(r.realizedBackend).toEqual({ gross: 3100, revenue: 1295, profit: 1295, leads: 4, sales: 4 });
+  });
+
+  it('segue os parâmetros da aba: parcela, estorno do parceiro e custo de produto do backend', () => {
+    const p = params(); p.commissionPct.salesbound = 50; p.productCostPct.callcenter = 10;
+    const maria = computeNetProfit(base(backend), p).affiliates.find((a) => a.affiliateId === 'a1')!;
+    // Tauk 700 de receita − 10% de 1.000 = 600 · SalesBound 1.500 × 50% = 750
+    expect(maria.realized).toMatchObject({ backendRevenue: 1450, backendProfit: 1350 });
+    const p2 = params(); p2.backendNetOfRefunds = false;
+    expect(computeNetProfit(base(backend), p2).affiliates.find((a) => a.affiliateId === 'a1')!.realized!.backendRevenue).toBe(700 + 700);
+  });
+});
