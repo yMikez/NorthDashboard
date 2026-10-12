@@ -19,6 +19,7 @@ import { db } from '../db';
 import { logger } from '../logger';
 import { clearResponseCache } from '../cache/responseCache';
 import { normalizePhone } from '../shared/phone';
+import { estimateBottlesFromAmount, leadStock, type BottlePurchase } from './leadStock';
 
 // ---------- Frescor da MV ----------
 
@@ -52,9 +53,9 @@ export async function ensureLeadSummaryFresh(): Promise<Date | null> {
 
 // ---------- Lista / KPIs / quebra ----------
 
-export const LEAD_SORTS = ['ltv', 'recent', 'new', 'purchases', 'refunds'] as const;
+export const LEAD_SORTS = ['ltv', 'recent', 'new', 'purchases', 'refunds', 'stock'] as const;
 export type LeadSort = (typeof LEAD_SORTS)[number];
-export const LEAD_SEGMENTS = ['all', 'repeat', 'multichannel', 'callcenter', 'salesbound', 'refunded', 'single'] as const;
+export const LEAD_SEGMENTS = ['all', 'repeat', 'multichannel', 'callcenter', 'salesbound', 'refunded', 'single', 'stock_low', 'stock_out'] as const;
 export type LeadSegment = (typeof LEAD_SEGMENTS)[number];
 export const LEAD_GROUPS = ['channel', 'platform', 'affiliate', 'family', 'country'] as const;
 export type LeadGroup = (typeof LEAD_GROUPS)[number];
@@ -100,6 +101,9 @@ export function leadWhereSql(f: LeadFilters): Prisma.Sql {
     case 'callcenter': conds.push(Prisma.sql`'callcenter' = ANY(ls.channels)`); break;
     case 'salesbound': conds.push(Prisma.sql`'salesbound' = ANY(ls.channels)`); break;
     case 'refunded': conds.push(Prisma.sql`ls.refunded_usd > 0`); break;
+    // Estoque (30 dias por pote): acabando nos próximos 15 dias · acabou nos últimos 30.
+    case 'stock_low': conds.push(Prisma.sql`ls.stock_until >= now() AND ls.stock_until < now() + interval '15 days'`); break;
+    case 'stock_out': conds.push(Prisma.sql`ls.stock_until < now() AND ls.stock_until >= now() - interval '30 days'`); break;
     default: break;
   }
   return Prisma.sql`WHERE ${Prisma.join(conds, ' AND ')}`;
@@ -111,6 +115,8 @@ const ORDER_BY: Record<LeadSort, Prisma.Sql> = {
   new: Prisma.sql`ls.first_at DESC, ls.email`,
   purchases: Prisma.sql`ls.purchases DESC, ls.ltv_usd DESC, ls.email`,
   refunds: Prisma.sql`ls.refunded_usd DESC, ls.email`,
+  // Quem ainda tem estoque, o que acaba antes primeiro; depois os que já acabaram (mais recente primeiro).
+  stock: Prisma.sql`(ls.stock_until IS NULL), (ls.stock_until < now()), CASE WHEN ls.stock_until >= now() THEN ls.stock_until END ASC, ls.stock_until DESC, ls.email`,
 };
 
 export function leadListSql(f: LeadFilters): Prisma.Sql {
@@ -123,7 +129,8 @@ export function leadListSql(f: LeadFilters): Prisma.Sql {
            ls.origin_channel AS "originChannel", ls.origin_platform AS "originPlatform", ls.origin_family AS "originFamily",
            ls.origin_product AS "originProduct", ls.origin_affiliate_id AS "originAffiliateId",
            COALESCE(a.nickname, a."externalId") AS "originAffiliate",
-           ls.channels, ls.families,
+           ls.channels, ls.families, ls.phone,
+           ls.bottles, ls.bottles_estimated AS "bottlesEstimated", ls.stock_until AS "stockUntil", ls.stock_family AS "stockFamily",
            COUNT(*) OVER()::int AS total
     FROM lead_summary ls
     LEFT JOIN "Affiliate" a ON a.id = ls.origin_affiliate_id
@@ -154,6 +161,12 @@ export function leadKpisSql(f: LeadFilters): Prisma.Sql {
            COUNT(*) FILTER (WHERE 'callcenter' = ANY(ls.channels))::int AS "callcenterLeads",
            COUNT(*) FILTER (WHERE 'salesbound' = ANY(ls.channels))::int AS "salesboundLeads",
            COUNT(*) FILTER (WHERE ls.refunded_usd > 0)::int AS "refundedLeads",
+           COALESCE(SUM(ls.bottles), 0)::int AS bottles,
+           COALESCE(SUM(ls.bottles_estimated), 0)::int AS "bottlesEstimated",
+           COUNT(*) FILTER (WHERE ls.bottles > 0)::int AS "leadsWithBottles",
+           COUNT(*) FILTER (WHERE ls.stock_until >= now())::int AS "leadsWithStock",
+           COUNT(*) FILTER (WHERE ls.stock_until >= now() AND ls.stock_until < now() + interval '15 days')::int AS "stockLowLeads",
+           COUNT(*) FILTER (WHERE ls.stock_until < now() AND ls.stock_until >= now() - interval '30 days')::int AS "stockOutLeads",
            COALESCE(AVG(ls.ltv_24h), 0)::float AS "ltv_24hAvg",
            ${windowAvg('ltv_30d', 30)},
            ${windowAvg('ltv_90d', 90)},
@@ -186,7 +199,8 @@ export function leadBreakdownSql(f: LeadFilters, groupBy: LeadGroup): Prisma.Sql
            SUM(ls.gross_usd)::float AS "grossUsd",
            SUM(ls.refunded_usd)::float AS "refundedUsd",
            SUM(ls.ltv_usd)::float AS "ltvUsd",
-           SUM(ls.callcenter_usd + ls.salesbound_usd)::float AS "postSaleUsd"
+           SUM(ls.callcenter_usd + ls.salesbound_usd)::float AS "postSaleUsd",
+           AVG(ls.bottles) FILTER (WHERE ls.bottles > 0)::float AS "bottlesAvg"
     FROM lead_summary ls
     LEFT JOIN "Affiliate" a ON a.id = ls.origin_affiliate_id
     ${leadWhereSql(f)}
@@ -217,6 +231,11 @@ export interface LeadRow {
   originAffiliate: string | null;
   channels: string[];
   families: string[];
+  phone: string | null;
+  bottles: number;
+  bottlesEstimated: number;
+  stockUntil: string | null;
+  stockFamily: string | null;
 }
 
 const iso = (d: unknown) => (d ? new Date(d as string).toISOString() : null);
@@ -246,6 +265,9 @@ export async function getLeads(f: LeadFilters) {
       repeatLeads: k.repeatLeads, repeatRate: ratio(k.repeatLeads, k.leads),
       multichannelLeads: k.multichannelLeads, callcenterLeads: k.callcenterLeads, salesboundLeads: k.salesboundLeads,
       refundedLeads: k.refundedLeads,
+      bottles: k.bottles, bottlesEstimated: k.bottlesEstimated, leadsWithBottles: k.leadsWithBottles,
+      bottlesAvg: k.leadsWithBottles > 0 ? r2(k.bottles / k.leadsWithBottles) : null,
+      leadsWithStock: k.leadsWithStock, stockLowLeads: k.stockLowLeads, stockOutLeads: k.stockOutLeads,
       ltv24hAvg: r2(k.ltv_24hAvg),
       ltv30Avg: r2(k.ltv_30dAvg), ltv30Eligible: k.ltv_30dEligible,
       ltv90Avg: r2(k.ltv_90dAvg), ltv90Eligible: k.ltv_90dEligible,
@@ -266,11 +288,12 @@ export async function getLeads(f: LeadFilters) {
       refundRate: ratio(g.refundedUsd as number, g.grossUsd as number),
       ltvUsd: r2(g.ltvUsd as number),
       postSaleShare: ratio(g.postSaleUsd as number, g.ltvUsd as number),
+      bottlesAvg: r2(g.bottlesAvg as number | null),
     })),
     page: Math.max(1, Math.trunc(f.page ?? 1)),
     pageSize: LEADS_PAGE_SIZE,
     total,
-    leads: rows.map(({ total: _t, ...r }) => ({ ...r, firstAt: iso(r.firstAt)!, lastAt: iso(r.lastAt)! })),
+    leads: rows.map(({ total: _t, ...r }) => ({ ...r, firstAt: iso(r.firstAt)!, lastAt: iso(r.lastAt)!, stockUntil: iso(r.stockUntil), bottles: Number(r.bottles ?? 0), bottlesEstimated: Number(r.bottlesEstimated ?? 0) })),
   };
 }
 
@@ -288,6 +311,8 @@ export interface LeadEvent {
   product: string | null;
   family: string | null;
   bottles: number | null;
+  /** true = potes estimados pelo valor (Tauk não informa). */
+  bottlesEstimated: boolean;
   saleUsd: number;
   refundedUsd: number;
   /** false = não entra no LTV (pendente/cancelado). */
@@ -301,7 +326,9 @@ export interface LeadEvent {
 export function leadOrderEventsSql(email: string): Prisma.Sql {
   return Prisma.sql`
     SELECT o."externalId" AS ref, pl.slug AS platform, o.status::text AS status, o."productType"::text AS stage,
-           pr.name AS product, pr.family, o."bottlesShipped" AS bottles, o."orderedAt" AS at,
+           pr.name AS product, pr.family,
+           COALESCE(NULLIF(o."bottlesShipped", 0), NULLIF(COALESCE(pr.bottles, 0) + COALESCE(pr."bonusBottles", 0), 0)) AS bottles,
+           o."orderedAt" AS at,
            COALESCE(o."refundedAt", o."chargebackAt") AS "refundedAt",
            COALESCE(a.nickname, a."externalId") AS affiliate,
            NULLIF(trim(concat_ws(' ', c."firstName", c."lastName")), '') AS name, o.country, c.phone,
@@ -365,16 +392,25 @@ export function buildLeadDetail(email: string, orders: OrderEv[], cc: CcEv[], sb
       : 'venda';
     events.push({
       at: o.at.toISOString(), channel: 'funil', source: o.platform, kind, status: o.status, stage: o.stage,
-      product: o.product, family: o.family, bottles: o.bottles,
+      product: o.product, family: o.family, bottles: o.extraRow ? null : o.bottles, bottlesEstimated: false,
       saleUsd: o.sale, refundedUsd: o.counted ? o.refunded : 0, counted: o.counted,
       refundedAt: o.refundedAt ? o.refundedAt.toISOString() : null,
       affiliate: o.affiliate, agent: null, ref: o.ref,
     });
   }
+  // Potes pro estoque: mesma regra da MV (lib/services/leadStock.ts).
+  const purchases: BottlePurchase[] = [];
+  for (const o of orders) {
+    if (o.counted && !o.extraRow && (o.bottles ?? 0) > 0) purchases.push({ family: o.family, at: o.at, bottles: o.bottles!, estimated: false });
+  }
   for (const s of cc) {
+    const known = (s.bottles ?? 0) > 0;
+    const bottles = known ? s.bottles! : estimateBottlesFromAmount(s.sale);
+    if (bottles > 0) purchases.push({ family: s.family, at: s.at, bottles, estimated: !known });
     events.push({
       at: s.at.toISOString(), channel: 'callcenter', source: s.provider, kind: 'venda', status: s.status, stage: null,
-      product: s.product, family: s.family, bottles: s.bottles, saleUsd: s.sale, refundedUsd: s.refunded, counted: true,
+      product: s.product, family: s.family, bottles: bottles > 0 ? bottles : null, bottlesEstimated: !known && bottles > 0,
+      saleUsd: s.sale, refundedUsd: s.refunded, counted: true,
       refundedAt: s.refundedAt ? s.refundedAt.toISOString() : null, affiliate: null, agent: s.agent, ref: s.ref,
     });
   }
@@ -385,11 +421,20 @@ export function buildLeadDetail(email: string, orders: OrderEv[], cc: CcEv[], sb
     const name = sbProduct(t.items);
     if (t.type === 'SALE' && name && !sbSaleProduct.has(t.orderId)) sbSaleProduct.set(t.orderId, name);
   }
+  // SalesBound: potes item a item, cada um na família dele; pedido anulado (void) fora.
+  const sbVoided = new Set(sb.filter((t) => t.type === 'VOID').map((t) => t.orderId));
+  for (const t of sb) {
+    if (t.type !== 'SALE' || sbVoided.has(t.orderId) || !Array.isArray(t.items)) continue;
+    for (const it of t.items as Array<{ family?: string | null; qty?: number; bottles?: number | null }>) {
+      const bottles = Math.round(Number(it.qty ?? 0) * Number(it.bottles ?? 1));
+      if (bottles > 0) purchases.push({ family: it.family ?? null, at: t.at, bottles, estimated: false });
+    }
+  }
   for (const t of sb) {
     const kind: LeadEventKind = t.type === 'SALE' ? 'venda' : t.type === 'VOID' ? 'void' : 'estorno';
     events.push({
       at: t.at.toISOString(), channel: 'salesbound', source: 'salesbound', kind, status: t.type, stage: null,
-      product: sbProduct(t.items) ?? sbSaleProduct.get(t.orderId) ?? null, family: t.family, bottles: t.type === 'SALE' ? t.bottles : null,
+      product: sbProduct(t.items) ?? sbSaleProduct.get(t.orderId) ?? null, family: t.family, bottles: t.type === 'SALE' ? t.bottles : null, bottlesEstimated: false,
       saleUsd: t.type === 'SALE' ? t.amount : 0, refundedUsd: t.type === 'SALE' ? 0 : t.amount, counted: true,
       refundedAt: null, affiliate: null, agent: t.agent, ref: t.ref,
     });
@@ -409,13 +454,13 @@ export function buildLeadDetail(email: string, orders: OrderEv[], cc: CcEv[], sb
 
   // Produtos comprados: agrupa por nome (o mesmo pote em canais diferentes
   // fica em linhas diferentes só se o nome diferir).
-  const products = new Map<string, { product: string; family: string | null; channels: Set<string>; times: number; bottles: number; grossUsd: number; refundedUsd: number; lastAt: string }>();
+  const products = new Map<string, { product: string; family: string | null; channels: Set<string>; times: number; bottles: number; estimatedBottles: number; grossUsd: number; refundedUsd: number; lastAt: string }>();
   for (const e of counted) {
     if (e.saleUsd <= 0 && e.refundedUsd <= 0) continue;
     const name = e.product ?? '(sem nome)';
-    const p = products.get(name) ?? { product: name, family: e.family, channels: new Set<string>(), times: 0, bottles: 0, grossUsd: 0, refundedUsd: 0, lastAt: e.at };
+    const p = products.get(name) ?? { product: name, family: e.family, channels: new Set<string>(), times: 0, bottles: 0, estimatedBottles: 0, grossUsd: 0, refundedUsd: 0, lastAt: e.at };
     p.channels.add(e.channel);
-    if (e.saleUsd > 0) { p.times++; p.bottles += e.bottles ?? 0; p.lastAt = e.at > p.lastAt ? e.at : p.lastAt; }
+    if (e.saleUsd > 0) { p.times++; p.bottles += e.bottles ?? 0; if (e.bottlesEstimated) p.estimatedBottles += e.bottles ?? 0; p.lastAt = e.at > p.lastAt ? e.at : p.lastAt; }
     p.grossUsd = r2(p.grossUsd + e.saleUsd)!;
     p.refundedUsd = r2(p.refundedUsd + e.refundedUsd)!;
     products.set(name, p);
@@ -436,6 +481,7 @@ export function buildLeadDetail(email: string, orders: OrderEv[], cc: CcEv[], sb
     name,
     country,
     phones,
+    stock: leadStock(purchases),
     found: events.length > 0,
     summary: {
       firstAt: sales[0]?.at ?? null,

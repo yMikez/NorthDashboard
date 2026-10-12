@@ -2,8 +2,8 @@
 //
 //   ?start_date&end_date             → 1ª compra do lead no período (origem)
 //   ?platforms&families&countries&aff → filtros da origem (mesmos do dash)
-//   ?segment=all|repeat|single|multichannel|callcenter|salesbound|refunded
-//   ?sort=ltv|recent|new|purchases|refunds   ?page=1   ?group=channel|platform|affiliate|family|country
+//   ?segment=all|repeat|single|multichannel|callcenter|salesbound|refunded|stock_low|stock_out
+//   ?sort=ltv|recent|new|purchases|refunds|stock   ?page=1   ?group=channel|platform|affiliate|family|country
 //   ?q=texto                         → busca e-mail/nome em TODOS os leads (ignora filtros)
 
 import { NextResponse } from 'next/server';
