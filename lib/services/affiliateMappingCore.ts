@@ -1,5 +1,5 @@
 // Núcleo PURO da integração com o NorthScale Afiliados (sem DB, sem HTTP).
-// Contrato: integration-dashboard.md. Tudo que dá pra testar sem banco
+// Contrato: docs/integracoes/northscale-afiliados.md. Tudo que dá pra testar sem banco
 // vive aqui: normalização do external_id, extração dos candidatos por
 // plataforma, resolução contra um índice, validação do webhook
 // affiliate.updated / item do mapping, decisão de idempotência

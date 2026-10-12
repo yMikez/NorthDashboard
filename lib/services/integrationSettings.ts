@@ -23,7 +23,7 @@ export const SETTING_KEYS = {
   logicallApiKey: 'logicall.apiKey',
   logicallCommissionPct: 'logicall.commissionPct',
   taukCommissionPct: 'tauk.commissionPct',
-  // Integração NorthScale Afiliados (integration-dashboard.md §2/§3):
+  // Integração NorthScale Afiliados (docs/integracoes/northscale-afiliados.md §2/§3):
   //   apiUrl            base da API de afiliados (GET …/mapping)
   //   integrationApiKey chave que o DASHBOARD ENVIA no X-Api-Key do mapping
   //                     (= INTEGRATION_API_KEY do lado deles)
@@ -235,7 +235,7 @@ export async function getProviderCommission(
   // Tauk: 35% é o acordo real (memória do projeto). Logicall: ainda não
   // informado — assume o mesmo e marca como ASSUMIDO. SalesBound: 65% é o
   // acordo REAL (usuário confirmou em 2026-09-18; a NorthScale fica com 35%,
-  // e não com os 50% que o exemplo do calculo_margem_northscale.md usava).
+  // e não com os 50% que o exemplo do docs/specs/calculo-margem.md usava).
   if (provider === 'salesbound') return { pct: 0.65, assumed: false, source: 'default' };
   return { pct: DEFAULT_COMMISSION_PCT, assumed: provider !== 'tauk', source: 'default' };
 }

@@ -7,7 +7,7 @@
 
    Os componentes shadcn usam `hsl(var(--background))` etc. Aqui esses
    tokens (triplets HSL "H S% L%") recebem os valores do DS1 (ver
-   DESIGN-SYSTEM.md e /styles/colors_and_type.css). Claro/escuro via
+   docs/design-system.md e /styles/colors_and_type.css). Claro/escuro via
    [data-theme] no <html>, o mesmo gatilho da SPA legada, então o toggle
    daqui propaga pro resto do app.
 

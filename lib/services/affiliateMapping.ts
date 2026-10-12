@@ -1,5 +1,5 @@
 // Espelho do mapeamento de afiliados (NorthScale Afiliados → dashboard) —
-// camada de banco. Contrato: integration-dashboard.md.
+// camada de banco. Contrato: docs/integracoes/northscale-afiliados.md.
 //
 //   affiliate_mapping_state   último estado aplicado por afiliado (occurred_at)
 //   affiliate_mappings        (platform, external_id) → affiliate_id, UNIQUE

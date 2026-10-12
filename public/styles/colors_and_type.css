@@ -6,7 +6,7 @@
 
 /* NorthScale Design System 1.0 (setembro/2026) — fonte: pasta "North Scale"
    no Drive (Manual de Marca + Design System + northscale.tokens.json).
-   Referência no repo: DESIGN-SYSTEM.md.
+   Referência no repo: docs/design-system.md.
 
    Decisões do dono do produto que DESVIAM do pacote, de propósito:
    - tema escuro: o DS1 é só claro; este escuro é DERIVADO dos neutros e do
@@ -639,7 +639,7 @@ hr {
    NORTH EDITORIAL — CAMADA DE COMPATIBILIDADE (v4)
    §1: glassmorphism PROIBIDO. Mata todo backdrop-filter legado
    (badges de plataforma, sidebar, dropdowns) num golpe só —
-   equivale ao "--blur: 0px global" do DESIGN-SYSTEM.md §9.
+   equivale ao "--blur: 0px global" do docs/design-system.md §9.
    ============================================================ */
 * {
   backdrop-filter: none !important;

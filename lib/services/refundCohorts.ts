@@ -1,4 +1,4 @@
-// Cohort de reembolso — spec do usuário em Cohort.md (2026-08-18).
+// Cohort de reembolso — spec do usuário em docs/specs/cohort-reembolso.md (2026-08-18).
 //
 // A pergunta que isto responde: "das vendas do dia X, quantas voltaram até o
 // dia X+N?" — taxa POR COORTE DE VENDA, imune ao viés que quebra a taxa
@@ -62,7 +62,7 @@ export interface CohortRow {
   // index = dias desde a venda (0..horizon); null = censurado (coorte
   // ainda não viveu esse dia).
   cells: Array<CohortCell | null>;
-  // FASE 2 (Cohort.md): onde esta coorte deve ESTABILIZAR ao completar o
+  // FASE 2 (docs/specs/cohort-reembolso.md): onde esta coorte deve ESTABILIZAR ao completar o
   // horizonte. Coorte madura (age >= horizon): projeção == observado.
   projection: CohortProjection | null;
 }
@@ -340,7 +340,7 @@ export function assembleRefundCohorts(input: CohortAssemblyInput): RefundCohorts
   return { todayBrt, horizonDays, cohorts, curve, totals, projection };
 }
 
-// ─── FASE 2: projeção de maturidade (Cohort.md §Fase 2) ─────────────────────
+// ─── FASE 2: projeção de maturidade (docs/specs/cohort-reembolso.md §Fase 2) ─────────────────────
 //
 // Pergunta: "onde a taxa desta coorte AINDA IMATURA deve estabilizar quando
 // completar o horizonte?" Dois métodos atuariais de triângulo de sinistros:

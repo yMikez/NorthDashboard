@@ -1,5 +1,5 @@
 // POST /api/integrations/affiliates/webhook — evento affiliate.updated do
-// NorthScale Afiliados (contrato integration-dashboard.md §6).
+// NorthScale Afiliados (contrato docs/integracoes/northscale-afiliados.md §6).
 //
 // Auth: X-Api-Key == DASHBOARD_API_KEY (env) ou setting
 // affiliates.dashboardApiKey — comparação em tempo constante; 503 sem

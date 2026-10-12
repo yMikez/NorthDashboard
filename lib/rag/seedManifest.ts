@@ -1,6 +1,6 @@
 // Lista FECHADA dos documentos de docs/kb que entram na base GLOBAL. Lista
 // explícita (e não "todo .md da pasta") pra que nada entre por acidente —
-// DEPLOY.md, notas de desenvolvimento e exports com dado de cliente nunca
+// docs/deploy.md, notas de desenvolvimento e exports com dado de cliente nunca
 // vão pro contexto do modelo. Arquivo tirado daqui sai da base no próximo
 // seed. Cada arquivo declara title/kind/description/effectiveDate no
 // frontmatter (validado no seed e em teste).

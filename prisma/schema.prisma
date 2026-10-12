@@ -1452,7 +1452,7 @@ model FamilyAlias {
 
 // ============================================================
 // INTEGRAÇÃO NORTHSCALE AFILIADOS — espelho do mapeamento de identidade
-// (contrato: integration-dashboard.md). O sistema de afiliados é a FONTE
+// (contrato: docs/integracoes/northscale-afiliados.md). O sistema de afiliados é a FONTE
 // DE VERDADE de quem é cada afiliado e quais IDs ele tem em cada
 // plataforma; o dashboard só espelha (webhook affiliate.updated + pull do
 // mapping) e resolve o affiliate_id de cada venda por (platform,
@@ -1561,7 +1561,7 @@ model NetProfitScenario {
 
 // Histórico das premissas do Lucro real — cada "Salvar como padrão" grava o
 // snapshot e o diff (caminho → antes/depois). Regra do cálculo de margem:
-// taxa não muda sem registro de data (calculo_margem_northscale.md §10.5).
+// taxa não muda sem registro de data (docs/specs/calculo-margem.md §10.5).
 model NetProfitParamsLog {
   id          String   @id @default(cuid())
   params      Json

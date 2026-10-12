@@ -7,7 +7,7 @@
 //
 // Auth: sessão ADMIN (o formulário da aba) OU bearer INGEST_SECRET (curl) —
 // o mesmo par das outras rotas de escrita (logicall-sync, backfills,
-// integration-settings). Esta era a única exceção, e a API.md já dizia que a
+// integration-settings). Esta era a única exceção, e a docs/api.md já dizia que a
 // chave de operação abre tudo.
 //
 // commissionPct vem em PERCENTUAL (30) e é guardado como fração.

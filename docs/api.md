@@ -298,7 +298,7 @@ valor. Cabeçalhos úteis: `X-Period`, `X-Period-From`, `X-Period-To`, `X-Cache`
 A resposta fica em cache por **5 minutos**.
 
 O `affiliate_id` aqui é o do sistema de afiliados, não o ID da plataforma. Contrato completo
-em [`integration-dashboard.md`](integration-dashboard.md).
+em [`integracoes/northscale-afiliados.md`](integracoes/northscale-afiliados.md).
 
 ### 3.3 Lucro e margem de contribuição
 
@@ -313,7 +313,7 @@ O `GET` devolve `result.kpis` (receita econômica, custos variáveis, lucro de c
 margem oficial, lucro por FE, CPA médio), `result.channels` (plataformas, call centers,
 recuperação, SalesBound), `result.products`, `result.affiliates`, `needs` (o que falta
 informar) e `history` (quem mudou qual taxa e quando). A régua está em
-[`calculo_margem_northscale.md`](calculo_margem_northscale.md).
+[`specs/calculo-margem.md`](specs/calculo-margem.md).
 
 > As premissas (reembolso %, custo de produto %, comissões) são definidas por quem opera o
 > dashboard. **Leia** por aqui; mudar (`PUT …/params`) altera o número que todo mundo vê.

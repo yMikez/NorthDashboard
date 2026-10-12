@@ -1,6 +1,6 @@
 // GET /api/integrations/affiliates/metrics?period=7d|30d|mtd|custom&from=&to=
 // Métricas agregadas por affiliate_id pro ranking do NorthScale Afiliados
-// (contrato integration-dashboard.md §7). Auth: X-Api-Key (mesma chave do
+// (contrato docs/integracoes/northscale-afiliados.md §7). Auth: X-Api-Key (mesma chave do
 // webhook). Resposta: lista JSON [{affiliate_id, gross_sales, refunds,
 // net_sales, orders_count, refund_rate}] — cache de 5 min por período.
 

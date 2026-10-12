@@ -1,6 +1,6 @@
 // Backfill one-shot: separa VENDA × ESTORNO nas linhas estornadas das
 // plataformas in-place — o pré-requisito de dados do cohort de reembolso
-// (Cohort.md).
+// (docs/specs/cohort-reembolso.md).
 //
 // O que estava errado até 2026-08-18: nessas plataformas o IPN de estorno
 // REESCREVE a linha da venda, e o upsert antigo deixava:

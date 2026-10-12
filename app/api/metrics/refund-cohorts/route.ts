@@ -1,5 +1,5 @@
 // GET /api/metrics/refund-cohorts — matriz de coorte de reembolso + curva
-// de maturação (spec: Cohort.md). Auth pela tab 'refund-cohorts'.
+// de maturação (spec: docs/specs/cohort-reembolso.md). Auth pela tab 'refund-cohorts'.
 //
 //   ?start_date&end_date  → intervalo dos DIAS DE VENDA (linhas da matriz)
 //   ?horizon=30           → colunas 0..N dias desde a venda (7..180)

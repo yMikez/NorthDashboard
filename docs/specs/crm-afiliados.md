@@ -75,7 +75,7 @@ Resolução, nesta ordem: **manual no dash** → **o que a plataforma de afiliad
 mandar** → (só pro tier) **inferido pelo CPA pago** → Base.
 
 O que precisamos do sistema de afiliados no payload do webhook/mapping
-(opcional e não destrutivo — ver `API.md` §5.2):
+(opcional e não destrutivo — ver [`docs/api.md`](../api.md) §5.2):
 
 ```json
 { "affiliate_id": "...", "phone": "+55 11 98888-7777", "tier": "North" }

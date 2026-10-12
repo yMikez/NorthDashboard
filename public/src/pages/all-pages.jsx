@@ -1101,7 +1101,7 @@ function AffiliateDrawer({ affiliateId, filters, onClose }) {
   );
 }
 
-// ---------- REFUND COHORTS (Cohort.md) ----------
+// ---------- REFUND COHORTS (docs/specs/cohort-reembolso.md) ----------
 // Matriz: linha = dia da VENDA, coluna = dias desde a venda, célula = %
 // ACUMULADO estornado (reembolso+chargeback). Censura: coorte que ainda não
 // viveu o dia N fica em branco (≠ 0%). Curva de maturação agrega só coortes
@@ -1111,7 +1111,7 @@ function RefundCohortsPage({ filters }) {
   const [view, setView] = useState('painel');      // 'painel' | 'ajuda'
   const [metric, setMetric] = useState('count');   // 'count' | 'usd'
   const [horizon, setHorizon] = useState(30);
-  const [minN, setMinN] = useState(30);            // amostra mínima (Cohort.md §4)
+  const [minN, setMinN] = useState(30);            // amostra mínima (docs/specs/cohort-reembolso.md §4)
   const [state, setState] = useState({ status: 'loading', data: null, error: null });
 
   useEffect(() => {

@@ -1,7 +1,7 @@
 // Lucro real — núcleo PURO (sem DB). Aba admin-only "Lucro real".
 //
 // Desde 2026-09-16 segue o CÁLCULO DE MARGEM padronizado
-// (calculo_margem_northscale.md): MARGEM DE CONTRIBUIÇÃO da operação, sem
+// (docs/specs/calculo-margem.md): MARGEM DE CONTRIBUIÇÃO da operação, sem
 // OPEX fixo, sempre com as mesmas taxas e a mesma lógica.
 //
 //   PLATAFORMAS (front + recuperação — vendas que passam pela plataforma)

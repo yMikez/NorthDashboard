@@ -23,8 +23,6 @@ public/uploads/contracts/
 # SPA pré-compilada (scripts/build-spa.mjs) — artefato de build, não versionar.
 public/dist/
 
-# Snapshots de paridade pré/pós-deploy (dados de negócio, artefato local).
-docs/perf/parity/
 .claude/scheduled_tasks.lock
 
 # ── Dado de cliente NUNCA entra no git (o repositório é público) ──────────

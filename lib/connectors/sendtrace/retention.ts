@@ -1,5 +1,5 @@
 // Parser PURO da resposta de GET /api/retencao do SendTrace (contrato
-// proposto em RESPOSTA_SENDTRACE.md §4 e aceito por eles em 25/09).
+// proposto em docs/integracoes/sendtrace.md §4 e aceito por eles em 25/09).
 //
 // Formato esperado:
 //   { "itens": [ { id, transacao_id, plataforma, email, degrau_oferecido,

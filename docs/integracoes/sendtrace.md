@@ -1,6 +1,6 @@
 # Resposta às pendências do SendTrace — API do dash
 
-Referente a `Dash API — Pendências` (22/09/2026). Os quatro itens estão resolvidos ou respondidos, e as três perguntas têm resposta abaixo. Guia completo da API em [`API.md`](API.md).
+Referente a `Dash API — Pendências` (22/09/2026). Os quatro itens estão resolvidos ou respondidos, e as três perguntas têm resposta abaixo. Guia completo da API em [`docs/api.md`](../api.md).
 
 **O que mudou na prática:** você ganha uma chave própria, três endpoints novos em `/api/integrations/*` e dois campos que faltavam no dump.
 
@@ -174,7 +174,7 @@ sem afetar nada da ingestão, e qualquer outra rota a ignora.
 No `.env` de vocês ela é o `DASH_API_KEY`. Se vazar ou quiserem trocar, é uma
 chamada — sem janela de indisponibilidade.
 
-## 2. `API.md` atualizado
+## 2. `docs/api.md` atualizado
 
 Feito. O que mudou desde a versão que vocês leram:
 
@@ -209,7 +209,7 @@ Anotado e **já construído** do nosso lado — o dash puxa, como vocês prefere
 
 Enquanto `retencao_ofertas` estiver vazia, o pull devolve zero e não faz nada —
 pode subir o endpoint quando quiser que a gente já está do outro lado. Formato
-completo e campos obrigatórios em `API.md` §5.3.
+completo e campos obrigatórios em `docs/api.md` §5.3.
 
 **Uma condição, e ela é firme:** a URL precisa ser **HTTPS**. A resposta carrega
 e-mail de cliente e a nossa chave vai no header — na 4400 em HTTP puro isso

@@ -1,6 +1,6 @@
 /* global React, Icon, fmtCurrency, fmtInt, fmtDateTime, platBadge, SkelTableRows, Paginated, RefundCoverageNotice */
 /* Lucro real (admin-only) — redesign 2026-09-16 + cálculo de margem
-   padronizado (calculo_margem_northscale.md, mesmo dia).
+   padronizado (docs/specs/calculo-margem.md, mesmo dia).
    Tela inicial = MARGEM DE CONTRIBUIÇÃO: receita econômica (plataformas +
    parcela NorthScale do backend), custos variáveis, lucro, margem oficial,
    lucro por FE e buffer de risco separado. Detalhe por demanda: clicar num

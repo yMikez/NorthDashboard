@@ -1,5 +1,5 @@
 // Peças de UI compartilhadas pelas abas do painel admin da IA
-// (KnowledgeSheet). Seguem o DS1 (DESIGN-SYSTEM.md): controle 36 px (44 px em
+// (KnowledgeSheet). Seguem o DS1 (docs/design-system.md): controle 36 px (44 px em
 // toque), foco visível de 2 px, estados de leitura vazio · carregando ·
 // parcial · falha com as classes .ns-readstate da SPA, paginação com as
 // classes .ns-pager (dashboard.css já é carregado pela layout do chat).

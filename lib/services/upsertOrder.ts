@@ -266,7 +266,7 @@ export async function upsertOrder(normalized: NormalizedOrder): Promise<UpsertOr
   const cogs = await calcCogs(eff.family, eff.bottles, eff.bonus, product.fulfillmentSupplier, eff.combo);
 
   let affiliateId: string | null = null;
-  // affiliate_id do NorthScale Afiliados (contrato integration-dashboard.md):
+  // affiliate_id do NorthScale Afiliados (contrato docs/integracoes/northscale-afiliados.md):
   // resolvido por (plataforma, identificador do payload) contra o espelho
   // do mapeamento. Não mapeado → fila unmapped_affiliate_events; nunca
   // falha o IPN.

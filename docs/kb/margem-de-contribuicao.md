@@ -9,7 +9,7 @@ effectiveDate: 2026-09-18
 
 ## Objetivo e escopo
 
-Padroniza o cálculo diário da MARGEM DE CONTRIBUIÇÃO da operação, sempre com as mesmas taxas e a mesma lógica. Não inclui OPEX fixo da empresa (folha, softwares, jurídico, escritório): o resultado é margem de contribuição, não lucro líquido contábil. É a regra da aba Lucro real (admin) e da tool get_net_profit (só admin). Especificação original do dono em calculo_margem_northscale.md, adotada no dashboard em 2026-09-16.
+Padroniza o cálculo diário da MARGEM DE CONTRIBUIÇÃO da operação, sempre com as mesmas taxas e a mesma lógica. Não inclui OPEX fixo da empresa (folha, softwares, jurídico, escritório): o resultado é margem de contribuição, não lucro líquido contábil. É a regra da aba Lucro real (admin) e da tool get_net_profit (só admin). Especificação original do dono em docs/specs/calculo-margem.md, adotada no dashboard em 2026-09-16.
 
 ## Fórmula resumida
 

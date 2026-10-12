@@ -1,273 +1,117 @@
-# Northscale Operations Dashboard
+# NorthScale Dashboard
 
-Consolida vendas de afiliados internacional das plataformas ClickBank e Digistore24
-em um painel único, com ingestão em tempo real via N8N + reconciliação por API.
+Painel de operação da NorthScale (nutra, afiliados internacionais). Junta num
+lugar só as vendas de todas as plataformas e parceiros, calcula funil, reembolso,
+margem e LTV, e dá as ferramentas do dia a dia (afiliados, VSLs, recuperação,
+call center, chat com IA).
 
-## Fase atual: 1 (backend-first)
+Produção: <https://dash.thenorthscales.com> · deploy automático a cada push em `main`.
 
-- Schema Prisma + Postgres
-- Ingestão ClickBank (`/api/ingest/clickbank`)
-- Ingestão Digistore24 (`/api/ingest/digistore24`) com validação SHA-512
-- Health check (`/api/health`)
-- Front estático legado servido de `public/` — será reescrito na Fase 2
+## O que tem no painel
+
+| Grupo | Aba | Para que serve |
+| --- | --- | --- |
+| Análise | Visão geral | Faturamento, pedidos, AOV, reembolso e lucro do período |
+| | Funil | Front, upsells e downsells: conversão e AOV por sessão |
+| | VSLs | Qual VSL roda em cada página do funil, testes A/B e desempenho |
+| | Reembolsos | Coorte de reembolso por dia da venda (curva de maturação) |
+| Afiliados | Afiliados | Ranking e diretório, com o modelo de lucro por CPA |
+| | Análise | Janelas de 3 a 60 dias contra o período anterior, com os motivos |
+| | CRM | Régua de relacionamento por WhatsApp (disparo manual) |
+| Captação | Recuperação | Vendas de afiliados de recuperação e comissão devida |
+| | Call Center | Tauk, Logicall e SalesBound |
+| Clientes | Leads | Cada cliente (e-mail) com LTV, potes, estoque e linha do tempo |
+| Catálogo | Produtos, Transações | Catálogo por família e o razão de pedidos |
+| Sistema | Plataformas, Saúde do dado | Integrações, taxas e alertas de qualidade dos dados |
+| IA | Análise (IA) | Chat que consulta os dados do painel |
+| Admin | Usuários, Lucro real | Permissões por aba e margem de contribuição da operação |
+
+Cada aba (menos as de Admin) é liberada por usuário em **Usuários**; o admin vê tudo.
+
+## De onde vêm os dados
+
+| Fonte | Como chega | Onde fica |
+| --- | --- | --- |
+| BuyGoods, Digistore24, JVZoo, ClickBank, Cartpanda | IPN/webhook → `/api/ingest/<plataforma>` (via n8n) | `Order`, `Customer`, `Product`, `Affiliate` |
+| PagAmerican | webhook (fase 1: só captura) | `IngestLog` |
+| Tauk | webhook → n8n → `/api/ingest/tauk` | `CallCenterSale` |
+| Logicall | o dash consulta a API a cada 30 min | `CallCenterSale` |
+| SalesBound | webhook + import do export do CRM | `SalesboundTransaction` |
+| SMS (Mautic/Twilio) | eventos → `/api/ingest/sms-events` | `SmsEvent`, `SmsCampaign` |
+| NorthScale Afiliados | webhook + reconciliação diária | `AffiliateMapping*` |
+| SendTrace (retenção) | o dash consulta a cada 30 min | `RetentionOffer` |
+
+Todo aviso recebido é gravado cru em `IngestLog` antes de ser processado (dá pra
+reprocessar). Detalhes em [`docs/arquitetura.md`](docs/arquitetura.md).
 
 ## Stack
 
-- Next.js 15 (App Router) — API + front
-- Prisma + Postgres 16
-- Zod (validação), Pino (logs)
-- Vitest (testes)
-- Node 20+
+Next.js 15 (rotas de API, login e chat) · SPA legada em React (`public/src`,
+pré-compilada) · Prisma 5 + PostgreSQL 16 · Vitest + PGlite (Postgres embutido
+nos testes) · Docker Compose na VPS · Anthropic (chat) e Voyage (busca semântica).
 
-## Rodar local
+## Rodar localmente
 
-Pré-requisitos: Node 20+, Docker (pra Postgres), npm.
+Pré-requisitos: Node 20+, npm e um PostgreSQL 16.
 
 ```bash
-# 1. Dependências
 npm install
-
-# 2. Postgres local via Docker (ajuste senha/porta se quiser)
-docker run -d --name dashboard-pg \
-  -e POSTGRES_USER=dashboard \
-  -e POSTGRES_PASSWORD=dashboard \
-  -e POSTGRES_DB=dashboard \
-  -p 5432:5432 postgres:16-alpine
-
-# 3. Configurar .env
-cp .env.example .env
-# Editar: DATABASE_URL, INGEST_SECRET, DIGISTORE24_IPN_PASSPHRASE
-
-# 4. Migrations
-npm run prisma:migrate -- --name init
-
-# 5. Dev server
-npm run dev
+cp .env.example .env          # preencha DATABASE_URL e INGEST_SECRET (o resto é opcional)
+npx prisma migrate deploy     # aplica as migrações
+npm run create:admin          # cria o primeiro usuário admin
+npm run dev                   # compila a SPA e sobe em http://localhost:3000
 ```
 
-Acesso:
-- `http://localhost:3000/` → front legado (redirecionado pra `/index.html`)
-- `http://localhost:3000/api/health` → JSON com status do DB
-- `http://localhost:3000/api/ingest/clickbank` → POST só (401 sem `X-Ingest-Secret`)
+Variáveis de ambiente: [`docs/configuracao.md`](docs/configuracao.md).
 
-## Testes
+## Comandos
 
-```bash
-npm run test           # run once
-npm run test:watch     # watch mode
-```
-
-Cobre parsers dos dois connectors + validação de assinatura Digistore24
-com fixtures extraídas de payloads reais de produção.
-
-## Testar ingestão manualmente
-
-### ClickBank
-
-```bash
-curl -X POST http://localhost:3000/api/ingest/clickbank \
-  -H "Content-Type: application/json" \
-  -H "X-Ingest-Secret: $INGEST_SECRET" \
-  -d @lib/connectors/clickbank/__fixtures__/neuromind-frontend.json
-```
-
-### Digistore24
-
-```bash
-# Converte fixture JSON → form-urlencoded
-node -e "const d=require('./lib/connectors/digistore24/__fixtures__/glyco-on-payment.json'); \
-  console.log(new URLSearchParams(d).toString())" \
-  | curl -X POST http://localhost:3000/api/ingest/digistore24 \
-      -H "Content-Type: application/x-www-form-urlencoded" \
-      -H "X-Ingest-Secret: $INGEST_SECRET" \
-      --data-binary @-
-```
-
-Sem `DIGISTORE24_IPN_PASSPHRASE` correta, responde `401 invalid signature`.
-A fixture tem `sha_sign` válido só com a passphrase real de produção — em dev,
-esvazie o campo `sha_sign` da fixture pra que o endpoint aceite como `signatureOk=null`.
-
-## Configuração do N8N
-
-Cada plataforma tem um workflow que recebe o payload e encaminha pra cá via HTTP Request:
-
-```
-N8N webhook → HTTP Request
-  URL:     https://dash.thenorthscales.com/api/ingest/{platform}
-  Header:  X-Ingest-Secret: {{ $env.INGEST_SECRET }}
-  Body:    {{ $json }} (ClickBank: JSON; Digistore24: form-urlencoded)
-  Retry:   3x, exponential backoff
-```
-
-### ClickBank
-
-Upstream: endpoint decifrador (externo) recebe AES-256-CBC do ClickBank INS v8,
-decifra com Secret Key e encaminha JSON em claro pro N8N. O dash recebe JSON puro.
-
-### Digistore24
-
-Connection type = **"Generic IPN"** (NÃO "Webhook" — este último manda schema
-mínimo). Campo "IPN password" no painel Digistore = SHA passphrase (nomenclatura
-enganosa). A mesma passphrase tem que estar em `DIGISTORE24_IPN_PASSPHRASE` aqui.
+| Comando | O que faz |
+| --- | --- |
+| `npm run dev` | Servidor de desenvolvimento (compila a SPA antes) |
+| `npm run dev:spa` | Recompila a SPA a cada mudança em `public/src` |
+| `npm test` | Roda todos os testes (inclui SQL real no PGlite, sem Docker) |
+| `npx tsc --noEmit -p .` | Checagem de tipos |
+| `npm run build` | Build de produção (SPA + Next) |
+| `npm run prisma:migrate` | Cria uma migração nova a partir do `schema.prisma` |
+| `node scripts/gen-chat-nav.mjs` | Regenera o mapa de abas do chat (o build falha se ficar desatualizado) |
 
 ## Estrutura
 
-```
-app/
-├── api/
-│   ├── health/route.ts
-│   └── ingest/
-│       ├── clickbank/route.ts
-│       └── digistore24/route.ts
-├── layout.tsx
-└── page.tsx                    (redirect → /index.html)
+```text
+app/                rotas do Next: api/ (ingest, metrics, admin, integrations, chat…), login, chat
+components/         componentes React do chat (Next) e UI compartilhada
 lib/
-├── db.ts                       (Prisma client singleton)
-├── logger.ts                   (Pino + email masking)
-├── connectors/
-│   ├── clickbank/
-│   │   ├── ingest.ts
-│   │   ├── types.ts
-│   │   ├── ingest.test.ts
-│   │   └── __fixtures__/
-│   └── digistore24/
-│       ├── ingest.ts
-│       ├── signature.ts
-│       ├── types.ts
-│       ├── ingest.test.ts
-│       ├── signature.test.ts
-│       └── __fixtures__/
-├── ingest/auth.ts              (X-Ingest-Secret timing-safe compare)
-├── services/upsertOrder.ts     (normalized → DB)
-└── shared/types.ts             (NormalizedOrder)
-prisma/
-└── schema.prisma
-public/                          (front legado — Fase 2 reescreve)
-├── index.html
-├── src/
-├── styles/
-└── assets/
+  connectors/       um parser por plataforma/parceiro → NormalizedOrder
+  services/         regras de negócio (métricas, lucro, leads, recuperação…)
+  auth/ ingest/     sessão, permissões por aba, chave de operação
+  rag/ chat/ ai/    chat com IA: base de conhecimento, ferramentas, prompts
+  shared/ cache/    tipos, filtros, cache de resposta
+public/src/         SPA legada (JSX → public/dist via scripts/build-spa.mjs)
+prisma/             schema e migrações (aplicadas no boot do container)
+scripts/            build da SPA, seeds e backfills de linha de comando
+docs/               documentação (ver docs/README.md)
+Planilhas/          catálogo de produtos de referência (seed)
+arquivos/           pasta LOCAL para exports e documentos de trabalho (fora do git)
 ```
 
-## Adicionar nova plataforma
+## Deploy
 
-1. Criar `lib/connectors/{slug}/` com `types.ts`, `ingest.ts`, `ingest.test.ts`, fixtures
-2. Implementar função que retorna `NormalizedOrder`
-3. Criar `app/api/ingest/{slug}/route.ts` seguindo o padrão existente
-4. Se a plataforma assina payloads, criar também `signature.ts`
-5. Adicionar fixture de payload real (com PII anonimizada) e testes
+Push em `main` → GitHub Actions roda os testes → entra por SSH na VPS, atualiza o
+código e reconstrói o container (`docker compose up -d --build app`) → espera
+`/api/health` responder. As migrações rodam no boot do container. Passo a passo, servidor e recuperação: [`docs/deploy.md`](docs/deploy.md).
 
-## Debug de ingestão
+## Regras do repositório
 
-Toda request que chega em `/api/ingest/*` cria um registro em `IngestLog` com o
-payload completo, antes mesmo de tentar processar. Útil pra replay:
+- **Nenhum dado de cliente entra no git.** Exports das plataformas (CSV/XLSX),
+  relatórios e respostas a parceiros vão para `arquivos/` (ignorada pelo git).
+  O `.gitignore` já barra `*.csv` e `*.xlsx` fora de `Planilhas/`.
+- **Nenhuma chave real entra no git.** O `.env` fica só na máquina e no servidor;
+  o `.env.example` tem só texto de exemplo.
+- **`public/` é servido sem login.** Nada de arquivo de trabalho lá.
+- A chave de operação (`INGEST_SECRET`) nunca vai para terceiros: parceiro recebe
+  uma chave própria de leitura (ver [`docs/api.md`](docs/api.md)).
 
-```sql
-SELECT id, event_type, external_id, processed_ok, error, received_at
-FROM "IngestLog"
-WHERE platform_slug = 'digistore24' AND processed_ok = false
-ORDER BY received_at DESC LIMIT 20;
-```
+## Documentação
 
-Campo `signatureOk`:
-- `true` — assinatura válida
-- `false` — assinatura inválida (payload rejeitado)
-- `null` — assinatura ausente (Digistore sem passphrase configurada; ClickBank não usa aqui)
-
-## API para sistemas externos
-
-Guia de quem vai consumir o dashboard de fora (autenticação, endpoints de leitura,
-filtros, semântica dos números): [`API.md`](API.md).
-
-## Integração NorthScale Afiliados (sistema de afiliados)
-
-Contrato completo em [`integration-dashboard.md`](integration-dashboard.md). O sistema de
-afiliados (`https://api.thenorthscales.com`) é a **fonte de verdade da identidade** do
-afiliado (`affiliate_id` + IDs em cada plataforma); o dashboard espelha o mapeamento e
-resolve o `affiliate_id` de cada venda de BuyGoods, Digistore24 e JVZoo.
-
-| Sentido | Endpoint | Auth |
-| --- | --- | --- |
-| Eles → nós | `POST /api/integrations/affiliates/webhook` (evento `affiliate.updated`) | `X-Api-Key` = `DASHBOARD_API_KEY` |
-| Eles → nós | `GET /api/integrations/affiliates/metrics?period=7d\|30d\|mtd\|custom&from=&to=` | `X-Api-Key` = `DASHBOARD_API_KEY` |
-| Nós → eles | `GET {AFFILIATES_API_URL}/api/integrations/affiliates/mapping` (reconciliação diária + carga inicial) | enviamos `X-Api-Key` = `INTEGRATION_API_KEY` |
-
-Configuração: env vars `DASHBOARD_API_KEY`, `INTEGRATION_API_KEY`, `AFFILIATES_API_URL`
-(ver `.env.example`) **ou** pelo painel (Plataformas → *Sistema de afiliados* → Chaves),
-que grava em `IntegrationSetting`; a env var tem precedência. Sem chave de entrada, os
-dois endpoints respondem 503 (como o contrato prevê).
-
-Como funciona:
-
-- `affiliate_mappings` / `affiliate_mapping_state`: espelho do mapping (UNIQUE em
-  `platform + external_id`, normalizado `trim + lower`). Webhook e mapping aplicam o
-  **estado completo** do afiliado; evento com `occurred_at` menor que o gravado é
-  ignorado com 2xx (idempotência por `occurred_at`).
-- Ingest (`upsertOrder`): resolve por plataforma — BuyGoods `aff_id` → `aff_name`;
-  Digistore24 `affiliate_name` (Digistore ID) → `affiliate_id`; JVZoo `affiliate_id` →
-  `affiliate_name` — e grava `Order.mappedAffiliateId` (+ cache em
-  `Affiliate.mappedAffiliateId`). Sem mapeamento → `unmapped_affiliate_events`
-  (contador, primeiro/último visto, último pedido). Quando o mapeamento chega, as
-  contas afetadas são reprocessadas automaticamente.
-- Reconciliação: scheduler in-process (45 s após o boot; depois a cada
-  `AFFILIATES_SYNC_INTERVAL_MIN`, padrão diário). Manual:
-  `POST /api/admin/affiliate-mapping {"action":"sync","full":true}` e
-  `{"action":"backfill"}` (histórico), com sessão admin ou `Authorization: Bearer $INGEST_SECRET`.
-- Métricas pro ranking deles: faturado por data da venda, estornos (refund + chargeback)
-  por data do estorno, `net_sales = gross − refunds`, `orders_count` = pedidos reais
-  (linha sintética da Digistore fora), `refund_rate` em % 0–100. Cache de 5 min por
-  período; dia = `America/Sao_Paulo`.
-- UI: filtro global **Afiliado** (aplica em Visão geral, Funil, Afiliados, Produtos,
-  Transações, Plataformas), agrupamento **sistema** na aba Afiliados, coluna *Afiliado
-  (sistema)* em Transações, painel *Sistema de afiliados* em Plataformas (fila de não
-  mapeados, mapeados, ações).
-
-Teste rápido (curls da seção 6/7 do contrato):
-
-```bash
-curl -i -X POST "https://dash.thenorthscales.com/api/integrations/affiliates/webhook"   -H "Content-Type: application/json" -H "X-Api-Key: $DASHBOARD_API_KEY"   -H "X-Event-Id: teste1" -H "X-Event-Type: affiliate.updated" -H "X-Webhook-Attempt: 1"   -d '{"event":"affiliate.updated","affiliate_id":"cmfgq1x2a0000v8l4h3k9d2pw","name":"Maria Silva","status":"active","platforms":[{"platform":"jvzoo","external_id":"1234567"}],"occurred_at":"2026-09-12T13:37:00.123Z"}'
-
-curl -s "https://dash.thenorthscales.com/api/integrations/affiliates/metrics?period=7d" -H "X-Api-Key: $DASHBOARD_API_KEY"
-```
-
-## Aba "Lucro real" (admin-only)
-
-`/net-profit` — lucro líquido da empresa por canal, cada linha de custo isolada:
-
-| Canal | Fórmula |
-| --- | --- |
-| Front-end / plataformas | Faturamento − CPA − Reembolso/CB − Taxa da plataforma − Custo de produto − Allowance |
-| Call centers (Tauk, Logicall) | Faturamento − Comissão − Reembolso/CB − Custo de produto |
-| Recuperação (Skill99 e-mail/SMS, SMS próprio) | Faturamento − Comissão − Custo de produto − Reembolso/CB |
-| SalesBound | Faturamento − Reembolso/CB − Comissão − Custo de produto |
-
-Total = Σ lucros; margem = lucro ÷ faturamento. KPIs (faturado, custos, lucro, margem), participação % de
-cada canal no faturamento e no lucro, e a mesma fórmula por afiliado (com % do faturamento total).
-
-Parâmetros (painel na aba, salvos em `NetProfitParams`; projeções salvas em `NetProfitScenario`):
-reembolso **observado** (valor já calculado no dashboard, por data do estorno) ou **% manual** por canal;
-custo de produto em % por canal/etapa (vazio = real observado dos snapshots COGS+frete); comissões
-(Tauk/Logicall/recuperação/SMS/SalesBound); override de taxa/allowance por plataforma; SalesBound manual
-(faturamento, vendas, estornos) enquanto o postback não traz eventos; toggle que subtrai a receita de
-recuperação/SMS do front-end (evita dupla contagem). Tudo recalcula ao digitar (`POST /api/admin/net-profit`
-com os inputs medidos em cache 60s). Núcleo puro e testado: `lib/services/netProfitCore.ts`.
-
-## Postback SalesBound (cross-sell) — fase 1: captura
-
-URL entregue à SalesBound (GET com macros na querystring **ou** POST JSON/form — tudo é aceito):
-
-```
-https://dash.thenorthscales.com/api/ingest/salesbound?token=<SALESBOUND_POSTBACK_TOKEN>
-```
-
-Auth pelo `token` da querystring (tempo constante; env `SALESBOUND_POSTBACK_TOKEN` ou setting
-`salesbound.postbackToken`). Cada chamada vira um `IngestLog` (`platformSlug=salesbound`) com o
-payload inteiro (query + body + `_meta`); `eventType`/`externalId` são extraídos de chaves comuns
-(`event`/`type`/`status`, `order_id`/`transaction_id`/`id`). Resposta 200 sempre que gravou; 401 token
-errado; 503 sem token. Inspeção: `GET /api/admin/ingest-logs?platform=salesbound` (bearer). A
-modelagem (CallCenterSale `salesbound`, lucro BACK, aba) vem na fase 2 por replay desses logs.
-
-## Deploy (Fase de produção)
-
-Planejado: Docker + Traefik + Postgres + Redis na VPS Hostinger KVM 4 (São Paulo),
-compartilhada com o projeto supportchat existente. Detalhes chegam na Fase 2.
+Índice completo em [`docs/README.md`](docs/README.md).
