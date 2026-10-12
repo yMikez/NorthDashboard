@@ -26,3 +26,17 @@ public/dist/
 # Snapshots de paridade pré/pós-deploy (dados de negócio, artefato local).
 docs/perf/parity/
 .claude/scheduled_tasks.lock
+
+# ── Dado de cliente NUNCA entra no git (o repositório é público) ──────────
+# Exports das plataformas (CSV/XLSX) e documentos de trabalho ficam em
+# arquivos/ (local, ver arquivos/README.md). O catálogo em Planilhas/ e as
+# fixtures de teste são a exceção.
+*.csv
+*.xlsx
+*.xls
+!Planilhas/*.csv
+!lib/**/__fixtures__/**
+arquivos/*
+!arquivos/README.md
+# public/ é servido sem login: nada de upload manual lá (contratos vêm do volume).
+public/uploads/*
