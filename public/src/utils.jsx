@@ -67,6 +67,7 @@ const PLATFORM_BADGE = {
   buygoods:     { short: 'BG',  cls: 'plat-bg',  upper: 'BUYGOODS' },
   cartpanda:    { short: 'CP',  cls: 'plat-cp',  upper: 'CARTPANDA' },
   jvzoo:        { short: 'JVZ', cls: 'plat-jvz', upper: 'JVZOO' },
+  vupim:        { short: 'VP',  cls: 'plat-vp',  upper: 'VUPIM' },
 };
 function platBadge(slug) {
   return PLATFORM_BADGE[slug] || { short: (slug || '??').slice(0,3).toUpperCase(), cls: 'plat-cb', upper: (slug || '').toUpperCase() };

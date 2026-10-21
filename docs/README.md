@@ -25,6 +25,7 @@ regra, atualize aqui junto.
 | --- | --- |
 | [integracoes/northscale-afiliados.md](integracoes/northscale-afiliados.md) | Contrato com o sistema NorthScale Afiliados (webhook, mapeamento, métricas) |
 | [integracoes/sendtrace.md](integracoes/sendtrace.md) | Respostas e acordos com o SendTrace (API de leitura, retenção) |
+| [integracoes/vupim.md](integracoes/vupim.md) | Checkout Vupim: webhook assinado, eventos, mapeamento e o workflow do n8n |
 
 ## Base de conhecimento do chat (`kb/`)
 

@@ -32,7 +32,7 @@ Cada aba (menos as de Admin) é liberada por usuário em **Usuários**; o admin 
 
 | Fonte | Como chega | Onde fica |
 | --- | --- | --- |
-| BuyGoods, Digistore24, JVZoo, ClickBank, Cartpanda | IPN/webhook → `/api/ingest/<plataforma>` (via n8n) | `Order`, `Customer`, `Product`, `Affiliate` |
+| BuyGoods, Digistore24, JVZoo, ClickBank, Cartpanda, Vupim | IPN/webhook → `/api/ingest/<plataforma>` (via n8n) | `Order`, `Customer`, `Product`, `Affiliate` |
 | PagAmerican | webhook (fase 1: só captura) | `IngestLog` |
 | Tauk | webhook → n8n → `/api/ingest/tauk` | `CallCenterSale` |
 | Logicall | o dash consulta a API a cada 30 min | `CallCenterSale` |

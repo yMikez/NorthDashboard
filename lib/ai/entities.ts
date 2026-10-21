@@ -97,7 +97,7 @@ export function loadScopeCatalog(): Promise<ScopeCatalog> {
 
 // ── Plataforma ───────────────────────────────────────────────────────────
 
-export const KNOWN_PLATFORMS = ['clickbank', 'digistore24', 'buygoods', 'cartpanda', 'jvzoo'];
+export const KNOWN_PLATFORMS = ['clickbank', 'digistore24', 'buygoods', 'cartpanda', 'jvzoo', 'vupim'];
 
 // "cb" num campo de PLATAFORMA é ClickBank; fora dele pode ser chargeback
 // (resolve_entities devolve os dois).
@@ -107,6 +107,7 @@ const PLATFORM_SYNONYMS: Record<string, string> = {
   bg: 'buygoods', buygoods: 'buygoods', buygood: 'buygoods',
   cp: 'cartpanda', cartpanda: 'cartpanda', panda: 'cartpanda',
   jvz: 'jvzoo', jvzoo: 'jvzoo', jv: 'jvzoo',
+  vp: 'vupim', vupim: 'vupim',
 };
 
 export function matchPlatform(raw: string, platforms: Array<{ slug: string; label: string }>): string | null {

@@ -14,7 +14,7 @@ import { logger } from '@/lib/logger';
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
-const VALID_PLATFORMS = new Set(['clickbank', 'digistore24', 'buygoods', 'cartpanda', 'jvzoo']);
+const VALID_PLATFORMS = new Set(['clickbank', 'digistore24', 'buygoods', 'cartpanda', 'jvzoo', 'vupim']);
 
 export async function GET() {
   const auth = await requireAdmin();

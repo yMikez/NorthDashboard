@@ -1,4 +1,4 @@
-export type PlatformSlug = 'clickbank' | 'digistore24' | 'buygoods' | 'cartpanda' | 'jvzoo';
+export type PlatformSlug = 'clickbank' | 'digistore24' | 'buygoods' | 'cartpanda' | 'jvzoo' | 'vupim';
 
 export type NormalizedProductType = 'FRONTEND' | 'UPSELL' | 'DOWNSELL' | 'BUMP';
 
@@ -89,6 +89,7 @@ export type IngestSource =
   | 'n8n-digistore24'
   | 'n8n-buygoods'
   | 'n8n-cartpanda'
+  | 'n8n-vupim'
   | 'polling-clickbank'
   | 'polling-digistore24'
   | 'polling-buygoods'

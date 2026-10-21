@@ -32,6 +32,7 @@ export const PHONE_SOURCES: Record<string, { email: string; phone: string }> = {
     email: `COALESCE(NULLIF(l.payload#>>'{customer,billing,email}', ''), l.payload#>>'{customer,shipping,email}')`,
     phone: `COALESCE(${norm(`l.payload#>>'{customer,billing,phoneNumber}'`)}, ${norm(`l.payload#>>'{customer,shipping,phoneNumber}'`)})`,
   },
+  vupim: { email: `l.payload#>>'{data,customer,email}'`, phone: norm(`l.payload#>>'{data,customer,phone}'`) },
   salesbound: { email: `l.payload->>'emailAddress'`, phone: norm(`l.payload->>'phoneNumber'`) },
 };
 

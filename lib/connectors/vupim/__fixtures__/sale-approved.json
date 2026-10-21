@@ -1,0 +1,30 @@
+{
+  "id": "01929f3a-6c1e-7b52-9d0a-2f4c8e6a1b3d",
+  "event": "sale.approved",
+  "timestamp": "2026-10-15T21:03:12.401Z",
+  "data": {
+    "transactionId": "01929f3a-5b7d-7e10-8c3f-7a2b9d4e6f01",
+    "checkoutSessionId": "8b1e2c3d-4f5a-4b6c-9d7e-0f1a2b3c4d5e",
+    "status": "approved",
+    "currency": "USD",
+    "amount": 9700,
+    "paymentMethod": "credit_card",
+    "country": "US",
+    "productId": "prod_7f3a9c",
+    "productName": "Keto Guide",
+    "offerId": "off_2b8d41",
+    "offerName": "Keto Guide — 3 months",
+    "affiliateId": "usr_5c1e77",
+    "commission": 6267,
+    "affiliateCommission": 2910,
+    "customer": { "name": "Jane Doe", "email": "jane@example.com", "phone": "+15551234567" },
+    "utmSource": "facebook",
+    "utmMedium": "cpc",
+    "utmCampaign": "keto-us",
+    "utmContent": null,
+    "utmTerm": null,
+    "clickId": "6740c3f2a1b2",
+    "createdAt": "2026-10-15T21:02:58.112Z",
+    "taxAmount": 0
+  }
+}

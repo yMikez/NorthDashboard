@@ -3702,7 +3702,7 @@ function IntegrationsPage({ filters }) {
   const cur = filters.currency || 'USD';
   const platforms = state.data?.platforms || [];
 
-  const PLATFORM_SHORT = { digistore24: 'D24', clickbank: 'CB', buygoods: 'BG', cartpanda: 'CP', jvzoo: 'JVZ' };
+  const PLATFORM_SHORT = { digistore24: 'D24', clickbank: 'CB', buygoods: 'BG', cartpanda: 'CP', jvzoo: 'JVZ', vupim: 'VP' };
   const comingSoon = [
     { slug: 'maxweb', displayName: 'MaxWeb', short: 'MW', desc: 'Connector pendente · credenciais não configuradas' },
     { slug: 'stickyio', displayName: 'Sticky.io', short: 'SK', desc: 'Connector em desenvolvimento' },

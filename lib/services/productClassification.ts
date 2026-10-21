@@ -475,7 +475,8 @@ function classifyCartpanda(sku: string, name?: string | null): BaseClassificatio
 
 // Plataformas cujo PAPEL no funil (productType/funnelStep) vem do CONNECTOR,
 // nunca do nome do produto: Cartpanda (up_sell_id).
-export const CONNECTOR_ROLE_PLATFORMS = new Set(['cartpanda']);
+// Vupim: o papel vem do `origin` do webhook (direct/upsell) — ver connectors/vupim.
+export const CONNECTOR_ROLE_PLATFORMS = new Set(['cartpanda', 'vupim']);
 
 export function classifyProduct(
   sku: string,

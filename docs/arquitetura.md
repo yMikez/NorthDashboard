@@ -27,8 +27,8 @@ de tempos em tempos (ver [Rotinas automáticas](#rotinas-automáticas)).
 ## Ingestão
 
 1. **Autenticação.** `X-Ingest-Secret` (comparação em tempo constante,
-   `lib/ingest/auth.ts`). Digistore também confere a assinatura SHA-512 do IPN;
-   SalesBound usa um token próprio.
+   `lib/ingest/auth.ts`). Digistore também confere a assinatura SHA-512 do IPN e a
+   Vupim o HMAC-SHA256 do corpo cru; SalesBound usa um token próprio.
 2. **`IngestLog` primeiro.** Todo aviso é gravado cru antes de qualquer
    processamento, então dá pra reprocessar depois (vários backfills fazem isso).
 3. **Parser por fonte.** `lib/connectors/<fonte>/ingest.ts` transforma o payload
@@ -48,6 +48,7 @@ de tempos em tempos (ver [Rotinas automáticas](#rotinas-automáticas)).
 | Digistore24 | Berlim | **Linha extra** (a venda continua aprovada) | transação pai | `buyer_id` |
 | ClickBank | Pacific | Na própria linha | recibo original | **e-mail** (não manda ID) |
 | Cartpanda | BRT | Na própria linha | `order.id` (1 pedido por item) | e-mail |
+| Vupim | UTC | Na própria linha | `checkoutSessionId` | e-mail |
 
 BuyGoods numera o afiliado **por loja**: a conta é `aff_id@loja`.
 

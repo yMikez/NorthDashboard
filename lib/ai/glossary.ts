@@ -25,7 +25,7 @@ import { CANONICAL_FAMILY_NAMES } from '../chat/skills.generated';
 type Covers<All extends string, Listed extends All> = [Exclude<All, Listed>] extends [never] ? true : false;
 type AssertTrue<T extends true> = T;
 
-export const PLATFORM_SLUGS = ['clickbank', 'digistore24', 'buygoods', 'cartpanda', 'jvzoo'] as const satisfies readonly PlatformSlug[];
+export const PLATFORM_SLUGS = ['clickbank', 'digistore24', 'buygoods', 'cartpanda', 'jvzoo', 'vupim'] as const satisfies readonly PlatformSlug[];
 type _PlatformsCovered = AssertTrue<Covers<PlatformSlug, (typeof PLATFORM_SLUGS)[number]>>;
 
 export const CALL_CENTER_PROVIDERS = ['tauk', 'logicall', 'salesbound'] as const satisfies readonly CallCenterProvider[];
@@ -37,6 +37,7 @@ const PLATFORM_ABBR: Record<PlatformSlug, string> = {
   buygoods: 'BG',
   cartpanda: 'CP',
   jvzoo: 'JVZ',
+  vupim: 'VP',
 };
 
 export type GlossaryUnit = 'usd' | 'usd_per_fe' | 'count' | 'fraction' | 'percent' | 'text';
@@ -513,7 +514,7 @@ export const GLOSSARY = {
   platforms: {
     group: 'dados',
     label: 'Plataformas (slugs dos filtros)',
-    aliases: ['plataforma', 'slug', 'clickbank', 'digistore', 'buygoods', 'cartpanda', 'jvzoo'],
+    aliases: ['plataforma', 'slug', 'clickbank', 'digistore', 'buygoods', 'cartpanda', 'jvzoo', 'vupim'],
     definition: `Slugs exatos: ${PLATFORM_LIST}.`,
     unit: 'text',
     whereToRead: ['get_platforms', 'resolve_entities'],

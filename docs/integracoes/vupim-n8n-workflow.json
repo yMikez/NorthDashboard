@@ -1,0 +1,92 @@
+{
+  "name": "Vupim → Dashboard",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "vupim-northscale",
+        "responseMode": "responseNode",
+        "options": {
+          "rawBody": true
+        }
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [0, 0],
+      "id": "33f4cda3-8675-48be-8c22-c6e692dc5867",
+      "name": "Webhook",
+      "webhookId": "840bb76e-3b2d-478e-bd3d-eef01cd3734a"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://dash.thenorthscales.com/api/ingest/vupim",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "Content-Type", "value": "application/json" },
+            { "name": "X-Webhook-Signature", "value": "={{ $json.headers['x-webhook-signature'] || '' }}" },
+            { "name": "X-Ingest-Secret", "value": "={{ $env.INGEST_SECRET }}" }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "binaryData",
+        "inputDataFieldName": "data",
+        "options": {
+          "timeout": 8000
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [260, 0],
+      "id": "d40b01e2-a958-43c9-b971-08a044fcaa09",
+      "name": "Enviar pro dash",
+      "onError": "continueErrorOutput",
+      "notes": "Repassa o corpo CRU (binário) — a assinatura da Vupim só vale sobre os bytes exatos. Timeout de 8 s porque a Vupim espera resposta em até 10 s."
+    },
+    {
+      "parameters": {
+        "respondWith": "noData",
+        "options": {
+          "responseCode": 200
+        }
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [520, -100],
+      "id": "111cae6b-c442-4fcc-8658-3049f8caabac",
+      "name": "Responder 200"
+    },
+    {
+      "parameters": {
+        "respondWith": "text",
+        "responseBody": "dash indisponivel - a Vupim vai tentar de novo",
+        "options": {
+          "responseCode": 502
+        }
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [520, 100],
+      "id": "f9b1efd2-3faf-472d-a1ca-97e9f5acda15",
+      "name": "Responder 502 (Vupim tenta de novo)"
+    }
+  ],
+  "connections": {
+    "Webhook": {
+      "main": [
+        [{ "node": "Enviar pro dash", "type": "main", "index": 0 }]
+      ]
+    },
+    "Enviar pro dash": {
+      "main": [
+        [{ "node": "Responder 200", "type": "main", "index": 0 }],
+        [{ "node": "Responder 502 (Vupim tenta de novo)", "type": "main", "index": 0 }]
+      ]
+    }
+  },
+  "pinData": {},
+  "meta": {
+    "instanceId": "f6f205ba41bb8a37fe260a4017960c6a4726851d337565aa9a229dcc7d4c68ae"
+  }
+}

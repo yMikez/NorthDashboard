@@ -29,6 +29,7 @@ ela tem precedência sobre o valor da tela.
 | `DIGISTORE24_IPN_PASSPHRASE` | Confere a assinatura SHA-512 do IPN. No painel da Digistore se chama "IPN password". |
 | `CLICKBANK_API_KEY_READ`, `CLICKBANK_API_KEY_WRITE` | API da ClickBank (reconciliação) |
 | `CLICKBANK_VENDORS` | Contas vendor que a chave enxerga, separadas por vírgula |
+| `VUPIM_WEBHOOK_SECRET` | Segredo do webhook da Vupim (`whsec_…`): confere a assinatura HMAC de cada aviso. Aceita mais de um, separados por vírgula, durante a troca. Com ele, a Vupim pode chamar o dash direto. |
 
 BuyGoods, JVZoo e Cartpanda não precisam de chave própria: autenticam pelo
 `INGEST_SECRET` que o n8n envia.

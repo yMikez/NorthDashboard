@@ -13,7 +13,7 @@ const LEAD_CHANNELS = {
 };
 const LEAD_SOURCE_LABEL = {
   buygoods: 'BuyGoods', jvzoo: 'JVZoo', digistore24: 'Digistore24', clickbank: 'ClickBank', cartpanda: 'Cartpanda',
-  pagamerican: 'PagAmerican', tauk: 'Tauk', logicall: 'Logicall', salesbound: 'SalesBound',
+  pagamerican: 'PagAmerican', vupim: 'Vupim', tauk: 'Tauk', logicall: 'Logicall', salesbound: 'SalesBound',
 };
 // Atalhos da lista, em três grupos pra leitura rápida.
 const LEAD_SEGMENT_GROUPS = [

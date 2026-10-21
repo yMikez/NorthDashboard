@@ -39,6 +39,8 @@ const PLATFORM_DISPLAY_NAMES: Record<string, string> = {
   // Sessão via anchor: parentExternalId = prekey (receipt da FE) — não
   // entra em SESSION_GROUPED_PLATFORMS.
   jvzoo: 'JVZoo',
+  // Sessão = checkoutSessionId (parentExternalId), igual à Cartpanda.
+  vupim: 'Vupim',
 };
 
 // Plataformas cuja sessão de funil é agrupada por funnelSessionId (não pelo
