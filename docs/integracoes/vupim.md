@@ -77,8 +77,10 @@ A Vupim entrega "pelo menos uma vez" e pode entregar fora de ordem. O dash:
 ## Configuração
 
 1. **n8n:** importar [`vupim-n8n-workflow.json`](vupim-n8n-workflow.json) (substitui o
-   webhook vazio `vupim-northscale`) e ativar. Usa `$env.INGEST_SECRET`, como os
-   outros workflows.
+   webhook vazio `vupim-northscale`) e ativar. A chave de operação vai pela credencial
+   Header Auth "Autenticação Webhook" (a mesma do Reporting JVzoo) — o n8n bloqueia
+   `$env` nos nós ("access to env vars denied"), e com `$env` toda entrega voltava 502.
+   No ar desde 22/10/2026 como "Vupim → Dashboard".
 2. **Vupim:** Integrations → Webhooks → New webhook
    - Endereço: a URL de **produção** do webhook do n8n (`…/webhook/vupim-northscale`).
    - Produto: todos os seus (um webhook só = um segredo só).
@@ -88,6 +90,8 @@ A Vupim entrega "pelo menos uma vez" e pode entregar fora de ordem. O dash:
    `.env` do servidor como `VUPIM_WEBHOOK_SECRET=whsec_…`; depois
    `docker compose up -d app`. Na troca de segredo, dá para pôr os dois separados por
    vírgula por alguns minutos.
+   O segredo do `.env` tem que ser o **mesmo** que está salvo no webhook da Vupim:
+   assinatura que não bate volta 401 do dash e 502 do n8n (a Vupim tenta de novo).
 4. **Teste:** botão *Send test* no painel da Vupim → deve responder 200.
 5. **Histórico:** *Send past sales* manda as vendas do período escolhido (até 1 ano),
    com estornos, chargebacks e o desfecho — sem duplicar (mesmo `eventId`).

@@ -21,12 +21,13 @@
       "parameters": {
         "method": "POST",
         "url": "https://dash.thenorthscales.com/api/ingest/vupim",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
             { "name": "Content-Type", "value": "application/json" },
-            { "name": "X-Webhook-Signature", "value": "={{ $json.headers['x-webhook-signature'] || '' }}" },
-            { "name": "X-Ingest-Secret", "value": "={{ $env.INGEST_SECRET }}" }
+            { "name": "X-Webhook-Signature", "value": "={{ $json.headers['x-webhook-signature'] || '' }}" }
           ]
         },
         "sendBody": true,
@@ -41,6 +42,9 @@
       "position": [260, 0],
       "id": "d40b01e2-a958-43c9-b971-08a044fcaa09",
       "name": "Enviar pro dash",
+      "credentials": {
+        "httpHeaderAuth": { "id": "fd5KsRhyu7Iqbwct", "name": "Autenticação Webhook" }
+      },
       "onError": "continueErrorOutput",
       "notes": "Repassa o corpo CRU (binário) — a assinatura da Vupim só vale sobre os bytes exatos. Timeout de 8 s porque a Vupim espera resposta em até 10 s."
     },
