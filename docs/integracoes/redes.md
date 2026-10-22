@@ -125,11 +125,28 @@ pendentes há mais de 1 hora). SQL em `lib/services/networkMetrics.ts`.
 As tabelas `Network*` antigas (programa de sub-afiliados, sem uso desde agosto/2026)
 ficam no schema com os dados guardados; não têm relação com estas.
 
-## Pendências e suposições
+## Reenvio de IPNs ao NorthAffiliates
 
-- O `affiliate_id` da leitura de checkouts é tratado como o `member_id` do
-  integrante. Se for o ID público, o filtro de integrante não casa com a contagem
-  lida (os eventos continuam certos).
+O NorthAffiliates recebe a IPN de vendedor pelo nó "NorthAffiliates (redes)" do
+workflow "Reporting JVzoo". IPN que não chegou lá (nó fora do ar, rascunho não
+publicado) é reenviada **pelo dashboard**, a partir do `IngestLog` — o retry do
+n8n rodaria o workflow inteiro e mandaria e-mail e SMS de novo ao comprador.
+
+```text
+POST /api/admin/networks-ipn-replay?since=2026-10-14[&accounts=3649735][&send=1]
+```
+
+- Sem `send=1` só lista o que seria enviado (simulação).
+- `accounts` padrão = contas numéricas das redes no diretório.
+- Uma IPN por transação × tipo (venda, rebill, estorno…), em ordem de chegada.
+- Mesmo formato do nó: corpo form-urlencoded, `X-Api-Key` = `JVZOO_IPN_FORWARD_KEY`
+  (env) ou o setting `affiliates.jvzooIpnForwardApiKey`.
+- O NorthAffiliates não duplica; depois do envio o dash roda a conferência completa.
+
+## Pendências
+
+- O `affiliate_id` da leitura de checkouts é o `member_id` do integrante
+  (confirmado pelo NorthAffiliates em 22/10/2026).
 - A conferência do `cverify` na IPN de vendedor (contrato §8) não foi feita no dash.
 - Modo "página única" (`go.thenorthscales.com`, `cid`) não existe ainda; quando
   existir, a venda chega pelo mesmo `network_sales`.

@@ -119,13 +119,18 @@ function checkoutsCte(f: NetworkFilters): Prisma.Sql {
 export function networkAggSql(f: NetworkFilters): Prisma.Sql {
   return Prisma.sql`
     WITH ${salesCte(f)},
+    fo AS (
+      -- Pedidos do funil de cada venda: o raiz e os filhos (dois joins por
+      -- índice — um OR no join vira varredura da tabela por venda).
+      SELECT a.network_id, a.member_id, a.sold_at, o2.id, o2.status, o2."grossAmountUsd" AS gross
+      FROM a JOIN "Order" o2 ON o2."platformId" = a.platform_id AND o2."externalId" = a.session_key
+      UNION ALL
+      SELECT a.network_id, a.member_id, a.sold_at, o2.id, o2.status, o2."grossAmountUsd"
+      FROM a JOIN "Order" o2 ON o2."platformId" = a.platform_id AND o2."parentExternalId" = a.session_key
+    ),
     so AS (
-      -- Pedidos do funil de cada venda; um pedido conta uma vez só (a venda mais antiga da sessão).
-      SELECT DISTINCT ON (o2.id) a.network_id, a.member_id, o2.status, o2."grossAmountUsd" AS gross
-      FROM a
-      JOIN "Order" o2 ON o2."platformId" = a.platform_id
-        AND (o2."externalId" = a.session_key OR o2."parentExternalId" = a.session_key)
-      ORDER BY o2.id, a.sold_at
+      -- Um pedido conta uma vez só (a venda mais antiga da sessão).
+      SELECT DISTINCT ON (id) network_id, member_id, status, gross FROM fo ORDER BY id, sold_at
     ),
     rev AS (
       SELECT network_id, member_id,

@@ -32,6 +32,9 @@ export const SETTING_KEYS = {
   affiliatesApiUrl: 'affiliates.apiUrl',
   affiliatesIntegrationApiKey: 'affiliates.integrationApiKey',
   affiliatesDashboardApiKey: 'affiliates.dashboardApiKey',
+  //   jvzooIpnForwardApiKey chave do POST …/networks/jvzoo-ipn (= JVZOO_IPN_FORWARD_KEY
+  //                     do lado deles) — só pro reenvio de IPNs das redes
+  affiliatesJvzooIpnForwardApiKey: 'affiliates.jvzooIpnForwardApiKey',
   // SalesBound (cross-sell): token do postback GET|POST /api/ingest/salesbound?token=
   salesboundPostbackToken: 'salesbound.postbackToken',
   // Parcela que a SalesBound leva sobre cada venda (a NorthScale fica com o
@@ -138,6 +141,14 @@ export async function getAffiliatesOutboundKey(): Promise<string | null> {
   const env = process.env.INTEGRATION_API_KEY?.trim();
   if (env) return env;
   const v = await getSetting(SETTING_KEYS.affiliatesIntegrationApiKey);
+  return v?.trim() || null;
+}
+
+/** Chave do reenvio de IPNs das redes (X-Api-Key do …/jvzoo-ipn): env JVZOO_IPN_FORWARD_KEY > banco > null. */
+export async function getJvzooIpnForwardKey(): Promise<string | null> {
+  const env = process.env.JVZOO_IPN_FORWARD_KEY?.trim();
+  if (env) return env;
+  const v = await getSetting(SETTING_KEYS.affiliatesJvzooIpnForwardApiKey);
   return v?.trim() || null;
 }
 

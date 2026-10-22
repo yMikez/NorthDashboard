@@ -177,29 +177,55 @@ export function networkAccountsSql(index: Map<string, string>): [Prisma.Sql, Pri
   ];
 }
 
-/** SQL da marcação (exportado pra teste). `transactionIds` limita o passo da marca. */
+/**
+ * SQL da marcação (exportado pra teste). `transactionIds` limita o passo da marca.
+ *
+ * Cada passo parte do conjunto PEQUENO (contas de rede, marcas, pedidos de
+ * rede), materializado, e casa com Order por índice. Juntar Order com Order
+ * pela expressão COALESCE(parentExternalId, externalId) não tem índice e, com
+ * a coluna nova sem estatística, o planner varria a tabela por pedido (prod,
+ * 2026-10-22: o passo do funil rodou 9 min até ser cancelado).
+ */
 export function markNetworkOrdersSql(transactionIds?: string[]): Prisma.Sql[] {
   const scope = transactionIds?.length ? Prisma.sql`AND ns.transaction_id = ANY(${transactionIds}::text[])` : Prisma.empty;
   return [
     // (2) conta do afiliado é conta de rede
     Prisma.sql`
+      WITH a AS MATERIALIZED (SELECT id, "networkId" FROM "Affiliate" WHERE "networkId" IS NOT NULL)
       UPDATE "Order" o SET "networkId" = COALESCE(o."networkId", a."networkId"), "mappedAffiliateId" = NULL
-      FROM "Affiliate" a
-      WHERE o."affiliateId" = a.id AND a."networkId" IS NOT NULL
+      FROM a
+      WHERE o."affiliateId" = a.id
         AND (o."networkId" IS NULL OR o."mappedAffiliateId" IS NOT NULL)`,
     // (1) marca do n8n/conferência (vence a conta)
     Prisma.sql`
-      UPDATE "Order" o SET "networkId" = ns.network_id, "mappedAffiliateId" = NULL
-      FROM network_sales ns, "Platform" pl
-      WHERE pl.slug = 'jvzoo' AND o."platformId" = pl.id AND o."externalId" = ns.transaction_id
-        AND (o."networkId" IS DISTINCT FROM ns.network_id OR o."mappedAffiliateId" IS NOT NULL) ${scope}`,
-    // (3) funil da venda principal (mesma sessão: parentExternalId ou ela mesma)
+      WITH m AS MATERIALIZED (
+        SELECT ns.transaction_id, ns.network_id, pl.id AS platform_id
+        FROM network_sales ns, "Platform" pl
+        WHERE pl.slug = 'jvzoo' ${scope}
+      )
+      UPDATE "Order" o SET "networkId" = m.network_id, "mappedAffiliateId" = NULL
+      FROM m
+      WHERE o."platformId" = m.platform_id AND o."externalId" = m.transaction_id
+        AND (o."networkId" IS DISTINCT FROM m.network_id OR o."mappedAffiliateId" IS NOT NULL)`,
+    // (3) funil da venda principal (mesma sessão: o pedido raiz e os filhos dele)
     Prisma.sql`
-      UPDATE "Order" o SET "networkId" = p."networkId", "mappedAffiliateId" = NULL
-      FROM "Order" p, "Platform" pl
-      WHERE pl.slug = 'jvzoo' AND p."platformId" = pl.id AND o."platformId" = pl.id
-        AND p."networkId" IS NOT NULL AND o."networkId" IS NULL AND o.id <> p.id
-        AND COALESCE(o."parentExternalId", o."externalId") = COALESCE(p."parentExternalId", p."externalId")`,
+      WITH k AS MATERIALIZED (
+        SELECT DISTINCT ON (p."platformId", COALESCE(p."parentExternalId", p."externalId"))
+               p."platformId" AS platform_id, COALESCE(p."parentExternalId", p."externalId") AS key, p."networkId" AS network_id
+        FROM "Order" p JOIN "Platform" pl ON pl.id = p."platformId" AND pl.slug = 'jvzoo'
+        WHERE p."networkId" IS NOT NULL
+        ORDER BY p."platformId", COALESCE(p."parentExternalId", p."externalId"), p."orderedAt"
+      ),
+      t AS MATERIALIZED (
+        SELECT o.id, k.network_id FROM k JOIN "Order" o ON o."platformId" = k.platform_id AND o."externalId" = k.key
+        WHERE o."networkId" IS NULL
+        UNION
+        SELECT o.id, k.network_id FROM k JOIN "Order" o ON o."platformId" = k.platform_id AND o."parentExternalId" = k.key
+        WHERE o."networkId" IS NULL
+      )
+      UPDATE "Order" o SET "networkId" = t.network_id, "mappedAffiliateId" = NULL
+      FROM t
+      WHERE o.id = t.id AND o."networkId" IS NULL`,
   ];
 }
 
