@@ -18,6 +18,7 @@ Produção: <https://dash.thenorthscales.com> · deploy automático a cada push 
 | Afiliados | Afiliados | Ranking e diretório, com o modelo de lucro por CPA |
 | | Análise | Janelas de 3 a 60 dias contra o período anterior, com os motivos |
 | | CRM | Régua de relacionamento por WhatsApp (disparo manual) |
+| | Networks | Vendas das redes de afiliados: CPA devido, repasse, margem e funil |
 | Captação | Recuperação | Vendas de afiliados de recuperação e comissão devida |
 | | Call Center | Tauk, Logicall e SalesBound |
 | Clientes | Leads | Cada cliente (e-mail) com LTV, potes, estoque e linha do tempo |
@@ -39,6 +40,7 @@ Cada aba (menos as de Admin) é liberada por usuário em **Usuários**; o admin 
 | SalesBound | webhook + import do export do CRM | `SalesboundTransaction` |
 | SMS (Mautic/Twilio) | eventos → `/api/ingest/sms-events` | `SmsEvent`, `SmsCampaign` |
 | NorthScale Afiliados | webhook + reconciliação diária | `AffiliateMapping*` |
+| Redes de afiliados (NorthAffiliates) | n8n → `/api/ingest/jvzoo/network` + conferência a cada 15 min | `network_sales`, `network_checkouts`, `affiliate_networks*` |
 | SendTrace (retenção) | o dash consulta a cada 30 min | `RetentionOffer` |
 
 Todo aviso recebido é gravado cru em `IngestLog` antes de ser processado (dá pra

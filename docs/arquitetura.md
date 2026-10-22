@@ -21,7 +21,11 @@ Plataformas / parceiros ──► n8n ──► /api/ingest/<fonte> ──► In
                          /api/metrics/*  (cache de 30 s)  ──►  SPA (public/src)
 ```
 
-Logicall e SendTrace são o caminho inverso: o próprio dash consulta a API deles
+Pedido JVZoo de **rede de afiliados** (conta da rede na JVZoo) ganha uma marca
+por `/api/ingest/jvzoo/network` e sai das abas dos afiliados individuais — ver
+[integracoes/redes.md](integracoes/redes.md).
+
+Logicall, SendTrace e as redes são o caminho inverso: o próprio dash consulta a API deles
 de tempos em tempos (ver [Rotinas automáticas](#rotinas-automáticas)).
 
 ## Ingestão
@@ -112,6 +116,7 @@ Iniciadas no boot (`instrumentation-node.ts`), dentro do próprio processo:
 | --- | --- |
 | Logicall: busca vendas novas | a cada 30 min |
 | NorthScale Afiliados: reconcilia o mapeamento | 45 s após o boot, depois diário |
+| Redes de afiliados: conferência com o NorthAffiliates | 60 s após o boot, depois a cada 15 min (a 1ª do dia lê 45 dias) |
 | SendTrace: busca ofertas de retenção | a cada 30 min (só com URL e chave configuradas) |
 | Base de conhecimento do chat: indexa `docs/kb` | 20 s após o boot (só o que mudou) |
 | Anexos do chat vencidos | 10 min após o boot, depois a cada 6 h |

@@ -10,6 +10,7 @@ const ROUTES = {
   'all-affiliates': { title: 'Diretório',   em: 'de afiliados', crumbs: ['Afiliados', 'Todos'] },
   'affiliate-analysis': { title: 'Análise', em: 'de afiliados', crumbs: ['Afiliados', 'Análise'] },
   'affiliate-crm':  { title: 'CRM',          em: 'de afiliados', crumbs: ['Afiliados', 'CRM'] },
+  'networks':       { title: 'Networks',     em: 'redes de afiliados', crumbs: ['Afiliados', 'Networks'] },
   'recovery':       { title: 'Recuperação', em: 'de vendas',   crumbs: ['Captação', 'Recuperação'] },
   'tauk':           { title: 'Call Center', em: 'Tauk + Logicall', crumbs: ['Captação', 'Call Center'] },
   'leads':          { title: 'Leads',       em: 'e LTV',       crumbs: ['Clientes', 'Leads'] },
@@ -305,6 +306,7 @@ function App({ user }) {
           {hashState.route === 'all-affiliates' && <LeaderboardPage filters={filters} onOpenAffiliate={setDrawerAff} user={user}/>}
           {hashState.route === 'affiliate-analysis' && <AffiliateAnalysisPage filters={filters} user={user}/>}
           {hashState.route === 'affiliate-crm' && <AffiliateCrmPage user={user} filters={filters}/>}
+          {hashState.route === 'networks'       && <NetworksPage filters={filters} user={user}/>}
           {hashState.route === 'recovery'       && <RecoveryPage filters={filters}/>}
           {hashState.route === 'tauk'           && <CallCenterPage filters={filters} user={user}/>}
           {hashState.route === 'leads'          && <LeadsPage filters={filters}/>}

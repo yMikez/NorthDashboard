@@ -47,6 +47,7 @@ BuyGoods, JVZoo e Cartpanda não precisam de chave própria: autenticam pelo
 | `INTEGRATION_API_KEY` | sim | Chave que o dash **envia** ao ler o mapeamento deles |
 | `DASHBOARD_API_KEY` | sim | Chave que o dash **aceita** no webhook e nas métricas (sem ela: 503) |
 | `AFFILIATES_SYNC_INTERVAL_MIN`, `AFFILIATES_SYNC_ENABLED` | — | Frequência da reconciliação (padrão diário) e liga/desliga |
+| `NETWORKS_SYNC_ENABLED` | — | `0` desliga a conferência das redes (usa a mesma URL e chave acima). Ver [integracoes/redes.md](integracoes/redes.md) |
 
 As chaves de **leitura** entregues a parceiros (`X-Api-Key` de `/api/integrations/*`)
 ficam em `IntegrationSetting` (`partner.<nome>.apiKey`, gravada pela tela) ou na

@@ -14,6 +14,7 @@ import { rebalanceSessionFulfillment } from './sessionFulfillment';
 import { scheduleDailyMetricsRefresh } from './dailyMetrics';
 import { autoLinkAffiliateByEmail } from './affiliateIdentity';
 import { resolveForIngest } from './affiliateMapping';
+import { getNetworkAccountIndex, networkForJvzooOrder } from './networks';
 import { logger } from '../logger';
 
 export interface UpsertOrderResult {
@@ -273,6 +274,11 @@ export async function upsertOrder(normalized: NormalizedOrder): Promise<UpsertOr
   // do mapeamento. Não mapeado → fila unmapped_affiliate_events; nunca
   // falha o IPN.
   let mappedAffiliateId: string | null = null;
+  // Redes de afiliados (docs/integracoes/redes.md): conta JVZoo de rede não é
+  // afiliado individual — sem affiliate_id do mapeamento, fora da fila.
+  const networkIndex = normalized.platformSlug === 'jvzoo' ? await getNetworkAccountIndex() : null;
+  const accountNetworkId = (normalized.affiliateExternalId && networkIndex?.get(normalized.affiliateExternalId)) || null;
+  let affiliateNetworkId: string | null = accountNetworkId;
   if (normalized.affiliateExternalId) {
     const affiliate = await db.affiliate.upsert({
       where: {
@@ -288,16 +294,19 @@ export async function upsertOrder(normalized: NormalizedOrder): Promise<UpsertOr
         email: normalized.affiliateEmail ?? undefined,
         firstSeenAt: normalized.orderedAt,
         lastOrderAt: normalized.orderedAt,
+        networkId: accountNetworkId ?? undefined,
       },
       update: {
         nickname: normalized.affiliateNickname ?? undefined,
         email: normalized.affiliateEmail ?? undefined,
         lastOrderAt: normalized.orderedAt,
+        ...(accountNetworkId ? { networkId: accountNetworkId, mappedAffiliateId: null } : {}),
       },
-      select: { id: true, partnerId: true, mappedAffiliateId: true, isInternal: true },
+      select: { id: true, partnerId: true, mappedAffiliateId: true, isInternal: true, networkId: true },
     });
     affiliateId = affiliate.id;
-    mappedAffiliateId = await resolveForIngest(
+    affiliateNetworkId = affiliate.networkId ?? accountNetworkId;
+    mappedAffiliateId = affiliateNetworkId ? null : await resolveForIngest(
       normalized.platformSlug,
       { externalId: normalized.affiliateExternalId, nickname: normalized.affiliateNickname },
       { accountId: affiliate.id, orderExternalId: normalized.externalId, at: normalized.orderedAt, currentMapped: affiliate.mappedAffiliateId, isInternal: affiliate.isInternal },
@@ -428,7 +437,19 @@ export async function upsertOrder(normalized: NormalizedOrder): Promise<UpsertOr
     }
   }
 
+  // Rede do pedido (só JVZoo): conta de rede, marca do n8n ou pedido pai.
+  const networkId = normalized.platformSlug === 'jvzoo'
+    ? await networkForJvzooOrder({
+      platformId: platform.id,
+      externalId: normalized.externalId,
+      parentExternalId: normalized.parentExternalId,
+      accountNetworkId: affiliateNetworkId,
+    })
+    : null;
+  if (networkId) mappedAffiliateId = null;
+
   const orderData = {
+    ...(networkId ? { networkId } : {}),
     platformId: platform.id,
     externalId: normalized.externalId,
     parentExternalId: normalized.parentExternalId,
@@ -529,9 +550,9 @@ export async function upsertOrder(normalized: NormalizedOrder): Promise<UpsertOr
         classificationPending: existing.classificationPending,
         funnelSessionId: existing.funnelSessionId,
         // Estorno sem afiliado no payload não apaga a atribuição da venda.
-        mappedAffiliateId: orderData.mappedAffiliateId ?? existing.mappedAffiliateId,
+        mappedAffiliateId: networkId ? null : (orderData.mappedAffiliateId ?? existing.mappedAffiliateId),
       }
-      : { ...orderData, mappedAffiliateId: orderData.mappedAffiliateId ?? existing.mappedAffiliateId };
+      : { ...orderData, mappedAffiliateId: networkId ? null : (orderData.mappedAffiliateId ?? existing.mappedAffiliateId) };
     await db.order.update({ where: { id: existing.id }, data: updateData });
     result = {
       created: false,

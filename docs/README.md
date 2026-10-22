@@ -24,6 +24,7 @@ regra, atualize aqui junto.
 | Documento | Parceiro |
 | --- | --- |
 | [integracoes/northscale-afiliados.md](integracoes/northscale-afiliados.md) | Contrato com o sistema NorthScale Afiliados (webhook, mapeamento, métricas) |
+| [integracoes/redes.md](integracoes/redes.md) | Redes de afiliados do NorthAffiliates: marca da venda, conferência e a aba Networks |
 | [integracoes/sendtrace.md](integracoes/sendtrace.md) | Respostas e acordos com o SendTrace (API de leitura, retenção) |
 | [integracoes/vupim.md](integracoes/vupim.md) | Checkout Vupim: webhook assinado, eventos, mapeamento e o workflow do n8n |
 

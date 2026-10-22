@@ -186,6 +186,8 @@ export async function loadRaw(opts: AnalysisOptions, affiliateIds?: string[], co
 
   const conds: Prisma.Sql[] = [
     Prisma.sql`o."affiliateId" IS NOT NULL`,
+    // Venda de REDE (docs/integracoes/redes.md) fica na aba Networks.
+    Prisma.sql`o."networkId" IS NULL`,
     Prisma.sql`o."orderedAt" >= ${coverageStart}`,
     Prisma.sql`o."orderedAt" <= ${end}`,
   ];
@@ -734,7 +736,7 @@ async function loadNewAffiliates(
     FROM "Order" o
     JOIN "Affiliate" a ON a."id" = o."affiliateId"
     JOIN "Platform" pl ON pl."id" = a."platformId"
-    WHERE o."status" = 'APPROVED' AND o."productType" = 'FRONTEND' ${platCond}
+    WHERE o."status" = 'APPROVED' AND o."productType" = 'FRONTEND' AND o."networkId" IS NULL ${platCond}
     GROUP BY a."id", a."externalId", a."nickname", a."partnerId", a."isInternal", pl."slug"
     HAVING MIN(o."orderedAt") >= ${start} AND MIN(o."orderedAt") < ${end}
   `);

@@ -22,6 +22,8 @@ function Sidebar({ active, onNav, user, open, onClose }) {
         { id: 'leaderboard', label: 'Afiliados', icon: 'ns-ranking' },
         { id: 'affiliate-analysis', label: 'Análise', icon: 'trending-up' },
         { id: 'affiliate-crm', label: 'CRM', icon: 'message-square' },
+        // Redes de afiliados (NorthAffiliates) — separadas dos individuais.
+        { id: 'networks', label: 'Networks', icon: 'link' },
       ]
     },
     {
@@ -409,6 +411,9 @@ const ROUTES_WITH_COMPARE = new Set(['overview']);
 const ROUTES_WITHOUT_STAGE_COUNTRY = new Set(['vsl']);
 // Leads: os filtros valem pra 1ª compra do lead; "etapa" não tem sentido pra pessoa.
 const ROUTES_WITHOUT_STAGE = new Set(['leads']);
+// Networks: a aba tem filtros próprios (rede, integrante, produto, tráfego);
+// do filtro global só o período vale.
+const ROUTES_PERIOD_ONLY = new Set(['networks']);
 // Filtro "Afiliado" (conta de plataforma ou pessoa unificada): vale em todas
 // as abas de venda. Onde não se aplica, o seletor fica apagado com o motivo
 // — a escolha continua na URL e volta a valer ao trocar de aba.
@@ -687,6 +692,7 @@ function FilterBar({ filters, setFilters, options, route }) {
 
       <div style={{ flex: 1 }}/>
 
+      {!ROUTES_PERIOD_ONLY.has(route) && (<>
       <MultiSelect label="Plataforma" icon="plug" options={platformOpts} selected={filters.platforms}
         onChange={(s) => setFilters(f => ({ ...f, platforms: s }))}/>
       <MultiSelect label="Produto" icon="package" options={familyOpts} selected={filters.families}
@@ -702,6 +708,7 @@ function FilterBar({ filters, setFilters, options, route }) {
       <MultiSelect label="Afiliado" icon="users" options={affiliateOpts} selected={filters.affiliates || new Set()}
         pick searchable disabledReason={affiliateNA}
         onChange={(s) => setFilters(f => ({ ...f, affiliates: s }))}/>
+      </>)}
     </div>
   );
 }

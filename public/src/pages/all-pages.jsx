@@ -4148,6 +4148,7 @@ const TAB_CATALOG = [
   { group: 'Afiliados', id: 'all-affiliates', label: 'Todos os afiliados' },
   { group: 'Afiliados', id: 'affiliate-analysis', label: 'Análise' },
   { group: 'Afiliados', id: 'affiliate-crm',  label: 'CRM' },
+  { group: 'Afiliados', id: 'networks',       label: 'Networks' },
   { group: 'Captação',  id: 'recovery',       label: 'Recuperação' },
   { group: 'Captação',  id: 'tauk',           label: 'Call Center' },
   { group: 'Clientes',  id: 'leads',          label: 'Leads' },
@@ -6217,4 +6218,5 @@ Object.assign(window, {
   HealthPage,
   ChatPage, ChatWidget,
   RecoveryPage, CallCenterPage,
+  TransactionDrawer,
 });

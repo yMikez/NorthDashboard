@@ -1071,10 +1071,12 @@ async function topAffiliatesQuery(
   limit: number,
 ): Promise<OverviewResponse['topAffiliates']> {
   // Single GROUP BY query with the same filter shape — no full Order rows.
+  // Venda de REDE (docs/integracoes/redes.md) não é afiliado individual.
   const conds: Prisma.Sql[] = [
     Prisma.sql`o."orderedAt" >= ${filters.startDate}`,
     Prisma.sql`o."orderedAt" <= ${filters.endDate}`,
     Prisma.sql`o."affiliateId" IS NOT NULL`,
+    Prisma.sql`o."networkId" IS NULL`,
   ];
   if (filters.platformSlugs?.length) {
     conds.push(Prisma.sql`pl."slug" = ANY(${filters.platformSlugs})`);
@@ -3327,6 +3329,7 @@ export async function getAffiliatesLegacy(
   const whereInCoverage: Prisma.OrderWhereInput = {
     orderedAt: { gte: coverageStart, lte: filters.endDate },
     affiliateId: { not: null },
+    networkId: null,
   };
   if (filters.platformSlugs?.length) {
     whereInCoverage.platform = { slug: { in: filters.platformSlugs } };
@@ -3398,7 +3401,7 @@ export async function getAffiliatesLegacy(
     }),
     db.order.groupBy({
       by: ['affiliateId'],
-      where: { affiliateId: { not: null }, status: 'APPROVED' },
+      where: { affiliateId: { not: null }, networkId: null, status: 'APPROVED' },
       _sum: { grossAmountUsd: true },
       _count: { _all: true },
     }),
@@ -3798,6 +3801,8 @@ export async function getAffiliatesSql(
   // legacy): janela de cobertura + todos os filtros do dashboard.
   const directConds: Prisma.Sql[] = [
     Prisma.sql`o."affiliateId" IS NOT NULL`,
+    // Venda de REDE (docs/integracoes/redes.md) fica na aba Networks.
+    Prisma.sql`o."networkId" IS NULL`,
     Prisma.sql`o."orderedAt" >= ${coverageStart}`,
     Prisma.sql`o."orderedAt" <= ${filters.endDate}`,
   ];
@@ -3941,7 +3946,7 @@ export async function getAffiliatesSql(
         fulfillment: Prisma.Decimal;
       }>>(Prisma.sql`
         WITH base AS (
-          SELECT o.id, o."affiliateId", o."mappedAffiliateId", o."productType", o."status", o."orderedAt",
+          SELECT o.id, o."affiliateId", o."mappedAffiliateId", o."networkId", o."productType", o."status", o."orderedAt",
                  o."grossAmountUsd", o."netAmountUsd", o."cpaPaidUsd", o."cogsUsd", o."fulfillmentUsd",
                  ${NOT_SYNTHETIC_ROW} AS is_real,
                  ${SESSION_KEY_SQL} AS skey
@@ -3952,7 +3957,7 @@ export async function getAffiliatesSql(
         fe AS (
           SELECT DISTINCT ON (skey) skey, "affiliateId"
           FROM base
-          WHERE "productType" = 'FRONTEND' AND "affiliateId" IS NOT NULL ${feMappedCond} ${feAccountCond}
+          WHERE "productType" = 'FRONTEND' AND "affiliateId" IS NOT NULL AND "networkId" IS NULL ${feMappedCond} ${feAccountCond}
           ORDER BY skey, "orderedAt" ASC, id ASC
         )
         SELECT
@@ -3971,7 +3976,7 @@ export async function getAffiliatesSql(
       `),
       db.order.groupBy({
         by: ['affiliateId'],
-        where: { affiliateId: { not: null }, status: 'APPROVED' },
+        where: { affiliateId: { not: null }, networkId: null, status: 'APPROVED' },
         _sum: { grossAmountUsd: true },
         _count: { _all: true },
       }),

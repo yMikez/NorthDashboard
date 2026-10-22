@@ -533,6 +533,29 @@ function fetchLeads(filters, { segment = 'all', sort = 'ltv', group = 'channel',
     segment, sort, group, page: String(page), q: q || null,
   });
 }
+// Aba Networks (redes de afiliados do NorthAffiliates). `opts` = filtros
+// próprios da aba (rede, integrante, produto, tráfego, testes, página).
+function fetchNetworks(filters, opts = {}) {
+  return fetchJSON('/api/metrics/networks', {
+    start_date: toISODate(filters.dateRange.start),
+    end_date: toISODate(filters.dateRange.end),
+    network: opts.network || null, member: opts.member || null, product: opts.product || null,
+    utm_source: opts.utmSource || null, utm_campaign: opts.utmCampaign || null, sub1: opts.sub1 || null,
+    tests: opts.includeTests ? '1' : null, page: String(opts.page || 1),
+  });
+}
+// Conferência com o NorthAffiliates (admin): estado e "conferir agora".
+async function adminNetworksSyncStatus() {
+  const res = await fetch('/api/admin/networks-sync', { headers: { Accept: 'application/json' } });
+  if (!res.ok) throw new Error(`${res.status} networksSync`);
+  return res.json();
+}
+async function adminNetworksSync(mode = 'quick') {
+  const res = await fetch(`/api/admin/networks-sync?mode=${encodeURIComponent(mode)}`, { method: 'POST', headers: { Accept: 'application/json' } });
+  const body = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(body.message || body.error || `${res.status} networksSync`);
+  return body;
+}
 // Ficha de um lead — sem cache client-side (é o dado mais fresco da aba).
 function fetchLeadDetail(email) {
   return coGet(`/api/metrics/leads/detail?email=${encodeURIComponent(email)}`);
@@ -714,6 +737,9 @@ function _wrapMutations(api) {
 
 window.NSApi = _wrapMutations({
   fetchLeads,
+  fetchNetworks,
+  adminNetworksSyncStatus,
+  adminNetworksSync,
   fetchLeadDetail,
   fetchRecovery,
   fetchTauk,

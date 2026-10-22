@@ -54,6 +54,10 @@ export const SETTING_KEYS = {
 export const INTERNAL_SETTING_KEYS = {
   affiliatesSyncSince: 'affiliates.sync.since',
   retentionSyncSince: 'sendtrace.retention.since',
+  // Conferência das redes (lib/services/networksSync.ts): resumo da última
+  // rodada (JSON) e o dia BRT da última leitura de 45 dias.
+  networksSyncStatus: 'networks.sync.status',
+  networksSyncFullDay: 'networks.sync.fullDay',
 } as const;
 export type InternalSettingKey = (typeof INTERNAL_SETTING_KEYS)[keyof typeof INTERNAL_SETTING_KEYS];
 

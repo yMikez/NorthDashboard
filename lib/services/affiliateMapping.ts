@@ -162,6 +162,8 @@ export const prismaMappingRepo: MappingRepo = {
       FROM "Affiliate" a
       JOIN "Platform" pl ON a."platformId" = pl.id
       WHERE pl."slug" = ANY(${platforms})
+        -- Conta de REDE (docs/integracoes/redes.md) nunca é afiliado individual.
+        AND a."networkId" IS NULL
         AND (LOWER(BTRIM(a."externalId")) = ANY(${ids}) OR LOWER(BTRIM(COALESCE(a."nickname", ''))) = ANY(${ids})
              -- BuyGoods: conta \`aff_id@loja\`, par publicado com o aff_id cru.
              OR (pl."slug" = 'buygoods' AND position('@' IN a."externalId") > 0
@@ -174,7 +176,8 @@ export const prismaMappingRepo: MappingRepo = {
   },
   async listAccounts(platforms) {
     const rows = await db.affiliate.findMany({
-      where: { platform: { slug: { in: [...platforms] } } },
+      // Conta de REDE (docs/integracoes/redes.md) fica fora do mapeamento e da fila.
+      where: { platform: { slug: { in: [...platforms] } }, networkId: null },
       select: { id: true, externalId: true, nickname: true, mappedAffiliateId: true, isInternal: true, platform: { select: { slug: true } } },
     });
     return rows.map((r) => ({ id: r.id, platformSlug: r.platform.slug, externalId: r.externalId, nickname: r.nickname, mappedAffiliateId: r.mappedAffiliateId, isInternal: r.isInternal }));

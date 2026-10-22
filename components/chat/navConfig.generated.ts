@@ -49,6 +49,11 @@ export const NAV_GROUPS: NavGroup[] = [
         "id": "affiliate-crm",
         "label": "CRM",
         "icon": "message-square"
+      },
+      {
+        "id": "networks",
+        "label": "Networks",
+        "icon": "link"
       }
     ]
   },
@@ -147,6 +152,7 @@ export const NS_ICON_SVG = {
   "ns-ranking": "<path d=\"M9 20.5V10h6v10.5M3.5 20.5v-6H9M15 20.5v-8h5.5v8M3 20.5h18\"/><path d=\"M12 3.5l.9 1.8 2 .3-1.4 1.4.3 2-1.8-1-1.8 1 .3-2-1.4-1.4 2-.3z\" fill=\"currentColor\" stroke=\"none\"/>",
   "trending-up": "<path d=\"M3.5 20.5 9 12l4 4 7.5-10\"/><path d=\"M20.5 6v4.5M20.5 6H16\"/>",
   "message-square": "<path d=\"M4 6.5A2.5 2.5 0 0 1 6.5 4h11A2.5 2.5 0 0 1 20 6.5v8a2.5 2.5 0 0 1-2.5 2.5H9l-5 4z\"/><path d=\"M8 9.5h8M8 12.8h5\"/>",
+  "link": "<path d=\"M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71\"/><path d=\"M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71\"/>",
   "ns-recuperacao": "<path d=\"M4 12a8 8 0 1 0 2.3-5.6M4 3.5V7h3.5\"/><path d=\"M12 8.5V12l2.5 1.5\"/>",
   "target": "<path d=\"M12 22a10 10 0 1 0 0-20 10 10 0 0 0 0 20Z\"/><path d=\"M12 18a6 6 0 1 0 0-12 6 6 0 0 0 0 12Z\"/><path d=\"M12 14a2 2 0 1 0 0-4 2 2 0 0 0 0 4Z\"/>",
   "user": "<path d=\"M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2\"/><path d=\"M12 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8\"/>",
@@ -197,7 +203,6 @@ export const NS_ICON_SVG = {
   "filter": "<path d=\"M4.5 6.5h15M7.5 12h9M10.5 17.5h3\"/>",
   "refresh": "<path d=\"M23 4v6h-6\"/><path d=\"M1 20v-6h6\"/><path d=\"M3.5 9a9 9 0 0 1 15-3.4L23 10\"/><path d=\"M20.5 15a9 9 0 0 1-15 3.4L1 14\"/>",
   "download": "<path d=\"M12 15V4M8 7.5 12 3.5l4 4\"/><path d=\"M4.5 14v4A2.5 2.5 0 0 0 7 20.5h10a2.5 2.5 0 0 0 2.5-2.5v-4\"/>",
-  "link": "<path d=\"M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71\"/><path d=\"M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71\"/>",
   "sun": "<circle cx=\"12\" cy=\"12\" r=\"4.5\"/><path d=\"M12 2.5V5M12 19v2.5M2.5 12H5M19 12h2.5M4.9 4.9 6.7 6.7M17.3 17.3l1.8 1.8M19.1 4.9l-1.8 1.8M6.7 17.3l-1.8 1.8\"/>",
   "moon": "<path d=\"M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79Z\"/>",
   "external-link": "<path d=\"M15 3h6v6\"/><path d=\"M10 14 21 3\"/><path d=\"M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6\"/>",
