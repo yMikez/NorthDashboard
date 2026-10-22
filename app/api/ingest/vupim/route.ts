@@ -4,16 +4,20 @@
 // pelo n8n com o CORPO CRU (a assinatura só vale sobre os bytes exatos).
 //
 // Auth: X-Ingest-Secret (caminho n8n) OU assinatura válida da Vupim
-// (X-Webhook-Signature, HMAC-SHA256 com VUPIM_WEBHOOK_SECRET) — com a
-// assinatura configurada, a Vupim pode apontar direto pra cá. Assinatura
-// configurada e INVÁLIDA = 401 mesmo com a chave de operação certa.
+// (X-Webhook-Signature, HMAC-SHA256 com VUPIM_WEBHOOK_SECRET, formato com data
+// "t=,v1=" ou o antigo "sha256=") — com a assinatura configurada, a Vupim pode
+// apontar direto pra cá. Assinatura configurada e INVÁLIDA ou com t a mais de
+// 5 min do relógio = 401 mesmo com a chave de operação certa.
 //
 // Entrega "pelo menos uma vez" e fora de ordem (doc da Vupim):
-//   - mesma entrega (envelope.id) já processada → 200 sem refazer;
-//   - aprovação antiga chegando depois de estorno/chargeback → ignorada;
+//   - mesmo evento (eventId; envelope.id no webhook antigo) já processado →
+//     200 sem refazer (cobre retry, Resend e Send past sales);
+//   - evento com `version` menor ou igual à gravada na venda → ignorado (sem
+//     versão: aprovação antiga depois de estorno/chargeback é ignorada);
 //   - estorno chegando antes da venda → grava a venda e aplica o estorno.
+// livemode=false (Send test, venda-teste do checkout) nunca vira pedido.
 // Eventos que não viram pedido (sale.created, declined, shipped,
-// subscription.*, checkout.*) ficam só no IngestLog e respondem 200.
+// subscription.* fora renewed, checkout.*) ficam só no IngestLog e respondem 200.
 
 import { NextResponse } from 'next/server';
 import { db } from '@/lib/db';
@@ -31,8 +35,9 @@ export async function POST(req: Request) {
   const rawBody = await req.text();
   const signature = verifyVupimSignature(rawBody, req.headers.get('x-webhook-signature'), vupimSecrets(process.env.VUPIM_WEBHOOK_SECRET));
   const ingestOk = checkIngestSecret(req.headers.get('x-ingest-secret'));
-  if (signature === 'INVALID' || (!ingestOk && signature !== 'VALID')) {
-    return NextResponse.json({ error: signature === 'INVALID' ? 'invalid signature' : 'unauthorized' }, { status: 401 });
+  if (signature === 'INVALID' || signature === 'EXPIRED' || (!ingestOk && signature !== 'VALID')) {
+    const error = signature === 'INVALID' ? 'invalid signature' : signature === 'EXPIRED' ? 'signature expired' : 'unauthorized';
+    return NextResponse.json({ error }, { status: 401 });
   }
 
   let env: VupimEnvelope;
@@ -46,11 +51,16 @@ export async function POST(req: Request) {
   }
   const event = vupimEventKey(env.event);
   const deliveryId = typeof env.id === 'string' ? env.id : null;
+  const eventId = typeof env.eventId === 'string' && env.eventId ? env.eventId : null;
 
-  // Mesma entrega já processada (retry/reenvio): responde 200 sem refazer.
-  if (deliveryId) {
+  // Mesmo evento já processado (retry/Resend/Send past sales): 200 sem refazer.
+  if (eventId || deliveryId) {
     const dup = await db.ingestLog.findFirst({
-      where: { platformSlug: 'vupim', processedOk: true, payload: { path: ['id'], equals: deliveryId } },
+      where: {
+        platformSlug: 'vupim',
+        processedOk: true,
+        payload: eventId ? { path: ['eventId'], equals: eventId } : { path: ['id'], equals: deliveryId! },
+      },
       select: { id: true },
     });
     if (dup) return NextResponse.json({ ok: true, event, duplicate: true });
@@ -72,19 +82,27 @@ export async function POST(req: Request) {
     db.ingestLog.update({ where: { id: log.id }, data: { processedOk: !extra.error, processedAt: new Date(), error: extra.error ?? null } });
 
   const status = VUPIM_ORDER_EVENTS[event];
-  if (!status) {
+  // Teste (Send test, venda-teste do checkout): só registra, não conta.
+  if (!status || env.livemode === false) {
     await done();
-    return NextResponse.json({ ok: true, event, action: event === 'webhook.test' ? 'test' : 'logged', signature });
+    return NextResponse.json({ ok: true, event, action: event === 'webhook.test' || env.livemode === false ? 'test' : 'logged', signature });
   }
 
   try {
     const order = parseVupimOrder(env);
     const existing = await db.order.findFirst({
       where: { externalId: order.externalId, platform: { slug: 'vupim' } },
-      select: { status: true, grossAmountUsd: true },
+      select: { status: true, grossAmountUsd: true, rawMetadata: true },
     });
     const reversed = Math.abs(order.grossAmountUsd);
-    if (!vupimShouldApply(status as 'APPROVED' | 'REFUNDED' | 'CHARGEBACK', existing && { status: existing.status, grossAmountUsd: Number(existing.grossAmountUsd) }, reversed)) {
+    const storedVersion = (existing?.rawMetadata as { vupimVersion?: unknown } | null)?.vupimVersion;
+    const apply = vupimShouldApply(
+      status as 'APPROVED' | 'REFUNDED' | 'CHARGEBACK',
+      existing && { status: existing.status, grossAmountUsd: Number(existing.grossAmountUsd), version: typeof storedVersion === 'number' ? storedVersion : null },
+      reversed,
+      { version: typeof data.version === 'number' ? data.version : null, chargebackWon: event === 'sale.chargeback_won' },
+    );
+    if (!apply) {
       await done();
       logger.info({ platform: 'vupim', event, externalId: order.externalId, existing: existing?.status }, 'vupim evento antigo ignorado');
       return NextResponse.json({ ok: true, event, action: 'stale' });
