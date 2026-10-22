@@ -48,6 +48,16 @@ Dashboard ──GET──▶ NorthAffiliates /api/integrations/networks/{directo
 - CPA, repasse e margem são os da hora da venda — o dash não recalcula.
 - `raw` guarda o último corpo do evento (com postback e tráfego); a leitura só o
   grava quando a venda nasce por ela.
+- **`paykey`**: o postback S2S da conta da rede manda o paykey do pagamento
+  (`WP-…`, `AP-…`), não o `transaction_id` da IPN, que é o `Order.externalId`.
+  - O NorthAffiliates acha a venda pelos dois números e devolve o da IPN em
+    `sale.transaction_id`, com o paykey em `sale.paykey`.
+  - Postback que chega antes da IPN vem `pending`, com o paykey nos dois campos.
+    A marca fica gravada por ele (órfã).
+  - Quando a venda aparece com `sale.paykey`, pelo evento ou pela conferência, a
+    órfã é juntada a ela e apagada (`foldPaykeyMark`). Só o tráfego (`tid`, utm,
+    sub, ad clicks, `transaction_type`) e o `raw` vêm da órfã; atribuição e
+    valores, nunca.
 
 ## Classificação do pedido (`lib/services/networks.ts`)
 

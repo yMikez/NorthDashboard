@@ -16,7 +16,7 @@ import { Prisma } from '@prisma/client';
 import { db } from '../db';
 import { logger } from '../logger';
 import {
-  mergeNetworkSale, type MemberRef, type NetworkRef, type NetworkSaleSource, type ParsedNetworkCheckout,
+  foldPaykeyMark, mergeNetworkSale, type MemberRef, type NetworkRef, type NetworkSaleSource, type ParsedNetworkCheckout,
   type ParsedNetworkSale, type StoredNetworkSale,
 } from './networksCore';
 
@@ -77,6 +77,11 @@ export async function upsertMemberRef(m: MemberRef, now = new Date()): Promise<v
 // ---------- Venda e checkout ----------
 
 export async function applyNetworkSale(parsed: ParsedNetworkSale, source: NetworkSaleSource, raw: unknown): Promise<'created' | 'updated'> {
+  // Marca gravada pelo paykey (o postback chegou antes da venda): junta a esta.
+  const orphan = parsed.paykey && parsed.paykey !== parsed.transactionId
+    ? await db.networkSale.findUnique({ where: { transactionId: parsed.paykey } })
+    : null;
+  if (orphan) parsed = { ...parsed, fields: foldPaykeyMark(parsed.fields, orphan as unknown as StoredNetworkSale) };
   const existing = await db.networkSale.findUnique({ where: { transactionId: parsed.transactionId } });
   const stored: StoredNetworkSale | null = existing
     ? {
@@ -90,28 +95,30 @@ export async function applyNetworkSale(parsed: ParsedNetworkSale, source: Networ
   const data = mergeNetworkSale(stored, parsed.fields, source);
   // A mescla nunca devolve nulo (nulo não apaga) — os tipos só não sabem disso.
   // `raw` guarda o último corpo do EVENTO (tem postback e tráfego); a leitura
-  // só o grava quando a venda nasce por ela.
-  const keepRaw = existing != null && source === 'read';
+  // só o grava quando a venda nasce por ela. O da marca órfã é de evento.
+  const keepRaw = existing != null && source === 'read' && !orphan;
+  const rawBody = source === 'read' && orphan ? orphan.raw : raw;
   const prismaData = {
     ...data,
     isTest: data.isTest ?? undefined,
     adClick: data.adClick ? (data.adClick as Prisma.InputJsonValue) : undefined,
-    ...(keepRaw ? {} : { raw: (raw ?? {}) as Prisma.InputJsonValue }),
+    ...(keepRaw ? {} : { raw: (rawBody ?? {}) as Prisma.InputJsonValue }),
   } as Prisma.NetworkSaleUncheckedUpdateInput;
   if (existing) {
     await db.networkSale.update({ where: { transactionId: parsed.transactionId }, data: prismaData });
-    return 'updated';
+  } else {
+    await db.networkSale.create({
+      data: {
+        ...(prismaData as Prisma.NetworkSaleUncheckedCreateInput),
+        transactionId: parsed.transactionId,
+        networkId: parsed.fields.networkId,
+        attributionStatus: data.attributionStatus ?? 'pending',
+        isTest: parsed.fields.isTest ?? false,
+      },
+    });
   }
-  await db.networkSale.create({
-    data: {
-      ...(prismaData as Prisma.NetworkSaleUncheckedCreateInput),
-      transactionId: parsed.transactionId,
-      networkId: parsed.fields.networkId,
-      attributionStatus: data.attributionStatus ?? 'pending',
-      isTest: parsed.fields.isTest ?? false,
-    },
-  });
-  return 'created';
+  if (orphan) await db.networkSale.deleteMany({ where: { transactionId: orphan.transactionId } });
+  return existing ? 'updated' : 'created';
 }
 
 export async function applyNetworkCheckout(parsed: ParsedNetworkCheckout, raw: unknown): Promise<'created' | 'updated'> {

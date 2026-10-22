@@ -68,6 +68,8 @@ export interface NetworkSaleFields {
 
 export interface ParsedNetworkSale {
   transactionId: string;
+  /** paykey da venda (WP-…/AP-…): é o transaction_id do postback S2S */
+  paykey: string | null;
   network: NetworkRef;
   member: MemberRef | null;
   fields: NetworkSaleFields;
@@ -157,6 +159,7 @@ export function parseNetworkSale(body: unknown): ParsedNetworkSale | { error: st
   const adClick = obj(traffic.ad_click);
   return {
     transactionId,
+    paykey: str(sale.paykey),
     network,
     member,
     fields: {
@@ -263,6 +266,28 @@ export function mergeNetworkSale(
     (out as Record<string, unknown>)[key] = value;
   }
   if (!existing) out.attributionStatus = incoming.attributionStatus ?? 'pending';
+  return out;
+}
+
+/** O que só o evento traz (postback): é o que a marca órfã pode completar. */
+const EVENT_ONLY_KEYS: Array<keyof NetworkSaleFields> = [
+  'transactionType', 'tid', 'utmSource', 'utmMedium', 'utmCampaign', 'utmContent', 'utmTerm',
+  'sub1', 'sub2', 'sub3', 'sub4', 'sub5', 'adClick',
+];
+
+/**
+ * O postback S2S da conta da rede manda o paykey (WP-…/AP-…) no lugar do
+ * transaction_id da IPN. O evento que chega antes da venda existir no
+ * NorthAffiliates fica gravado pelo paykey ("pending"); quando a venda
+ * aparece com `sale.paykey`, essa marca órfã é juntada à da venda: o
+ * tráfego que veio vazio é preenchido com o dela. Atribuição e valores
+ * nunca vêm da órfã (ela é sempre pendente).
+ */
+export function foldPaykeyMark(incoming: NetworkSaleFields, orphan: StoredNetworkSale): NetworkSaleFields {
+  const out = { ...incoming };
+  for (const key of EVENT_ONLY_KEYS) {
+    if (out[key] == null && orphan[key] != null) (out as Record<string, unknown>)[key] = orphan[key];
+  }
   return out;
 }
 

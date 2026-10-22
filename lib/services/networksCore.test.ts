@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
-  brtDay, brtDayOffset, mergeNetworkSale, parseNetworkCheckout, parseNetworkSale, type NetworkSaleFields, type StoredNetworkSale,
+  brtDay, brtDayOffset, foldPaykeyMark, mergeNetworkSale, parseNetworkCheckout, parseNetworkSale, type NetworkSaleFields, type StoredNetworkSale,
 } from './networksCore';
 import { checkoutDailyRows } from './networksSync';
 
@@ -56,6 +56,16 @@ describe('parseNetworkSale', () => {
     expect(parseNetworkSale({ ...purchase, sale: {}, postback: {} })).toEqual({ error: 'sale.transaction_id ausente' });
     const p = parseNetworkSale({ ...purchase, member: null });
     expect('error' in p ? null : p.member).toBeNull();
+  });
+
+  it('paykey da venda (é o transaction_id do postback S2S); a chave é o da IPN', () => {
+    const p = parseNetworkSale({
+      ...purchase, sale: { ...purchase.sale, transaction_id: 'TXIPN0001', paykey: 'WP-PAYKEY0001' }, postback: { transaction_id: 'WP-PAYKEY0001' },
+    });
+    if ('error' in p) throw new Error(p.error);
+    expect(p.transactionId).toBe('TXIPN0001');
+    expect(p.paykey).toBe('WP-PAYKEY0001');
+    expect(parseNetworkSale(purchase)).toMatchObject({ paykey: null });
   });
 
   it('junta jvzoo_affiliate_id e jvzoo_affiliate_ids (diretório)', () => {
@@ -114,6 +124,20 @@ describe('mergeNetworkSale', () => {
     expect(out.tid).toBe('tid-9');
     const read = mergeNetworkSale(stored({ state: 'approved' }), fields({ state: 'refunded' }), 'read');
     expect(read.state).toBe('refunded');
+  });
+});
+
+describe('foldPaykeyMark', () => {
+  it('a marca órfã (gravada pelo paykey) completa só o tráfego, nunca atribuição nem valores', () => {
+    const orphan = {
+      ...fields({ attributionStatus: 'pending', attributionReason: 'awaiting_ipn', memberId: null, networkCpa: null, tid: 'tid-orfa', sub1: 'ad-1', transactionType: 'SALE' }),
+      lastSource: 'event',
+    } as StoredNetworkSale;
+    const read = fields({ tid: null, sub1: null, transactionType: null, utmSource: 'ic-fb' });
+    expect(foldPaykeyMark(read, orphan)).toMatchObject({
+      tid: 'tid-orfa', sub1: 'ad-1', transactionType: 'SALE', utmSource: 'ic-fb',
+      attributionStatus: 'attributed', attributionReason: null, memberId: 'mem-1', networkCpa: 230,
+    });
   });
 });
 
