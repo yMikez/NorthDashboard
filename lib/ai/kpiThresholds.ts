@@ -1,6 +1,6 @@
 // Limiares de KPI que a IA usa pra chamar um número de bom/atenção/ruim —
-// os MESMOS da tela. A tela (public/src/pages/overview.jsx: KPI_THRESHOLDS
-// + o monitor 7d do card "Reembolso por pedidos") é JSX clássico sem bundler
+// os MESMOS da tela. A tela (public/src/pages/overview.jsx: KPI_THRESHOLDS)
+// é JSX clássico sem bundler
 // e não importa TS; por isso a fonte da IA vive aqui e o teste
 // kpiThresholds.test.ts avalia as funções `state` de lá e compara ponto a
 // ponto com classifyKpi daqui. Mexeu num lado sem o outro → teste quebra
@@ -59,9 +59,9 @@ export const KPI_THRESHOLDS = {
     warnAt: 0.08,
     dangerAt: 0.1,
     inclusive: false,
-    whereToRead: 'get_profit_split.refunds.valuePct',
+    whereToRead: 'get_overview.screenCards["Reembolso · últimos 60 dias"].value',
     fieldUnit: 'percent',
-    note: 'Meta ≤ 8%, lente de VALOR por data do estorno (card "Taxa de reembolso"); a mesma régua vale pra reembolso por afiliado/plataforma',
+    note: 'Meta ≤ 8%, coorte das vendas dos últimos 60 dias por pedidos (card "Reembolso · últimos 60 dias", régua da aba Reembolsos); a mesma régua vale pra reembolso por afiliado/plataforma',
   },
   cbRate: {
     label: 'Chargeback',
@@ -93,7 +93,7 @@ export const KPI_THRESHOLDS = {
     inclusive: false,
     whereToRead: 'get_profit_split.refunds7d.pct',
     fieldUnit: 'percent',
-    note: 'Janela rolante dos últimos 7 dias a partir de agora, independente do período; > 10% acende o alerta do card',
+    note: 'Janela rolante dos últimos 7 dias a partir de agora (estornos pela data do estorno ÷ pedidos); saiu da tela em 2026-10-23 — só use se perguntarem do monitor de 7 dias',
   },
 } as const satisfies Record<string, KpiThreshold>;
 

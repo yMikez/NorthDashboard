@@ -9,7 +9,7 @@
 //     (admin-only na UI → admin-only aqui: é a única tool nova com gate).
 
 import { db } from '../db';
-import { EXTRA_ROW_REFUND_PLATFORMS, getObservedRefundCbPct, getProfitModelInputs } from '../services/profitModel';
+import { REAL_REFUND_RATE_PLATFORMS, getObservedRefundCbPct, getProfitModelInputs } from '../services/profitModel';
 import { DAILY_MAX_DAYS, evaluateNetProfit, evaluateNetProfitDaily, getNetProfitParams } from '../services/netProfit';
 import type { ToolContext } from './toolTypes';
 import { brtDayOf, resolveInstants } from './compare';
@@ -45,9 +45,9 @@ export async function getProfitModel(): Promise<Record<string, unknown>> {
       const used = inputs.byPlatform.get(p.slug);
       const obs = observed.get(p.slug) ?? null;
       const manual = p.refundCbPct != null ? Number(p.refundCbPct) : null;
-      // Digistore usa a taxa REAL (valor, coorte madura) quando a amostra
-      // basta; as demais, o manual. O valor usado diz qual venceu.
-      const source = EXTRA_ROW_REFUND_PLATFORMS.has(p.slug) && obs != null && used?.refundCbPct === obs.valuePct
+      // Digistore, JVZoo e Vupim usam a taxa REAL (valor, coorte madura)
+      // quando a amostra basta; as demais, o manual. O valor usado diz qual venceu.
+      const source = REAL_REFUND_RATE_PLATFORMS.has(p.slug) && obs != null && used?.refundCbPct === obs.valuePct
         ? 'observed_mature_cohort'
         : 'manual';
       return {

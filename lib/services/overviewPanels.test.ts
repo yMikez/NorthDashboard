@@ -3,8 +3,8 @@ import type { Prisma } from '@prisma/client';
 import type { PGlite } from '@electric-sql/pglite';
 import { migratedPglite } from '../test/pgliteDb';
 import {
-  approvedByChannelSql, assembleOverviewPanels, brtDays, callCenterByDaySql, feSessionsByDaySql, refundWindow,
-  refundsByDaySql, salesboundByDaySql, type ChannelRow,
+  affiliateRefundsSql, approvedByChannelSql, assembleOverviewPanels, brtDays, callCenterByDaySql, feSessionsByDaySql,
+  previousWindow, refundWindow, refundsByDaySql, salesboundByDaySql, type ChannelRow,
 } from './overviewPanels';
 
 const pgValue = (v: unknown) => (Array.isArray(v) ? `{${v.map((x) => JSON.stringify(String(x))).join(',')}}` : v);
@@ -78,6 +78,13 @@ describe('overviewPanels — SQL (PGlite)', () => {
     ]);
   });
 
+  it('reembolso por afiliado (coorte): base com a linha estornada in-place que tem approvedAt', async () => {
+    await order('A1', { affiliateId: 'a_ind', orderedAt: at('10') });
+    await order('A2', { affiliateId: 'a_ind', status: 'REFUNDED', grossAmountUsd: 100, orderedAt: at('10'), approvedAt: at('10'), refundedAt: at('12') });
+    const rows = await q(affiliateRefundsSql(['jvzoo:111', 'jvzoo:nao-existe'], new Date('2026-10-08T03:00:00Z'), new Date('2026-10-31T00:00:00Z')));
+    expect(rows).toEqual([{ key: 'jvzoo:111', baseCount: 2, baseUsd: 200, refundCount: 1, refundUsd: 100 }]);
+  });
+
   it('call center: aprovada menos estorno parcial; SalesBound: venda menos anulação', async () => {
     expect(await q(callCenterByDaySql(OCT))).toEqual([{ day: '2026-10-05', provider: 'tauk', usd: 180 }]);
     expect(await q(salesboundByDaySql(OCT))).toEqual([{ day: '2026-10-06', usd: 400 }]);
@@ -114,7 +121,7 @@ describe('assembleOverviewPanels', () => {
     expect(p.stages.backend).toMatchObject({ usd: 580, available: true });
     expect(p.stages.totalUsd).toBe(840);
     expect(p.daily.map((d) => d.date)).toEqual(['2026-10-05', '2026-10-06', '2026-10-07']);
-    expect(p.daily[0]).toMatchObject({ front: 150, backend: 180, recovery: 80, netAfterCpa: 72.5, feSessions: 1, feRevenue: 150 });
+    expect(p.daily[0]).toMatchObject({ gross: 230, orders: 3, front: 150, backend: 180, recovery: 80, netAfterCpa: 72.5, feSessions: 1, feRevenue: 150 });
     expect(p.daily[2]).toMatchObject({ refundUsd: 70, refundCount: 1, front: 0 });
   });
 
@@ -129,5 +136,7 @@ describe('janelas', () => {
     expect(brtDays(new Date('2026-10-05T03:00:00Z'), new Date('2026-10-07T02:59:59Z'))).toEqual(['2026-10-05', '2026-10-06']);
     const w = refundWindow(new Date('2026-10-23T12:00:00Z'));
     expect(w.start.toISOString()).toBe('2026-08-25T03:00:00.000Z');
+    const p = previousWindow(new Date('2026-10-16T03:00:00Z'), new Date('2026-10-23T02:59:59.999Z'));
+    expect([p.start.toISOString(), p.end.toISOString()]).toEqual(['2026-10-09T03:00:00.000Z', '2026-10-16T02:59:59.999Z']);
   });
 });

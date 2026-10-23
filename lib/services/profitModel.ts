@@ -20,7 +20,10 @@
 // EXCEÇÃO DIGISTORE (decisão 2026-08-06): refund&cb% do MODELO vem dos
 // DADOS REAIS (eventos on_refund/on_chargeback ingeridos), não do campo
 // manual — taxa em VALOR da coorte madura (|$refund+$cb| ÷ $vendas).
-// O manual vira fallback quando a amostra madura é pequena. Faturamento
+// O manual vira fallback quando a amostra madura é pequena. Desde
+// 2026-10-23 a JVZoo e a Vupim seguem a mesma regra (decisão do usuário: o
+// manual de 15% da JVZoo subestimava — a coorte madura dava ~24%); a Vupim
+// usa o manual até ter amostra madura. Faturamento
 // bruto segue INTACTO (a venda reembolsada continua APPROVED — modelo de
 // linha-extra, ver memória project-refund-accounting): o refund só é
 // subtraído aqui, na hora de presumir o NET AFTER CPA.
@@ -31,6 +34,12 @@ import { db } from '../db';
 // APPROVED) em vez de atualizar in-place. Muda o denominador das taxas:
 // APPROVED já é o total de vendas reais.
 export const EXTRA_ROW_REFUND_PLATFORMS = new Set(['digistore24']);
+
+// Plataformas em que o refund&cb% do modelo vem da coorte madura OBSERVADA
+// (quando a amostra basta) em vez do campo manual. Independe do modelo de
+// contabilidade (linha extra × in-place) — getObservedRefundCbPct já trata
+// o denominador de cada uma.
+export const REAL_REFUND_RATE_PLATFORMS = new Set(['digistore24', 'jvzoo', 'vupim']);
 
 /**
  * Pedidos REAIS de um recorte, descontando as linhas sintéticas.
@@ -109,13 +118,13 @@ export async function getProfitModelInputs(): Promise<ProfitModelInputs> {
     },
     byPlatform: new Map(platforms.map((p) => {
       const manual = p.refundCbPct ? Number(p.refundCbPct) : 0;
-      // Digistore: taxa REAL em valor (coorte madura) no lugar do manual.
-      // Propaga automaticamente pros dois consumidores do modelo: a coluna
-      // NET AOV/NET AFTER CPA dos afiliados (metrics.ts) e o lucro FRONT
-      // do overview (profitSplit.ts).
+      // Digistore, JVZoo e Vupim: taxa REAL em valor (coorte madura) no lugar
+      // do manual. Propaga pra todos os consumidores do modelo: a coluna NET
+      // AOV/NET AFTER CPA dos afiliados (metrics.ts), o Net after CPA da
+      // Visão geral (overviewPanels.ts) e o lucro front (profitSplit.ts).
       const obs = observed.get(p.slug);
       const useReal =
-        EXTRA_ROW_REFUND_PLATFORMS.has(p.slug)
+        REAL_REFUND_RATE_PLATFORMS.has(p.slug)
         && obs != null
         && obs.sample >= REAL_RATE_MIN_SAMPLE;
       return [

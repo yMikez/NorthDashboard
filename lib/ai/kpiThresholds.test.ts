@@ -69,7 +69,7 @@ describe('renderThresholdsPrompt', () => {
   it('texto sai das constantes, em %, com o campo e a unidade do campo', () => {
     expect(text).toContain('Taxa de aprovação (get_overview.kpis.approvalRate, fração 0–1): ok ≥ 90%; atenção entre 85% e 90%; ruim < 85%.');
     expect(text).toContain('Chargeback (get_overview.kpis.cbRate, fração 0–1): ok < 1%; atenção entre 1% e 2%; ruim ≥ 2%.');
-    expect(text).toContain('(get_profit_split.refunds.valuePct, pontos percentuais): ok ≤ 8%; atenção entre 8% e 10%; ruim > 10%.');
+    expect(text).toContain('(get_overview.screenCards["Reembolso · últimos 60 dias"].value, pontos percentuais): ok ≤ 8%; atenção entre 8% e 10%; ruim > 10%.');
     expect(text).toContain('Margem estimada (get_overview.kpis.estimatedMarginPct, pontos percentuais): ok ≥ 10%; atenção entre 5% e 10%; ruim < 5%.');
   });
 

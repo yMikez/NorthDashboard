@@ -7,7 +7,7 @@ version: 1
 ---
 ## Passos
 1. Identifique a tela e o campo exato. Mapa tela → tool.campo:
-   Receita bruta → get_overview.kpis.gross (grossOriginal com o toggle "Evento") · Receita líquida → kpis.net · Pedidos aprovados → kpis.approvedCount · AOV → kpis.aov · Taxa de aprovação → kpis.approvalRate · Taxa de reembolso → get_profit_split.refunds.valuePct · Reembolso por pedidos → refunds.pct e refunds7d · Chargeback → get_overview.kpis.cbRate · Net after CPA (modelo) → get_profit_split.front.profitUsd (total com back = totalUsd) · Custos → get_costs_overview.kpis · Afiliados → get_affiliates · Funil → get_funnel · Call Center → get_call_center · Lucro real → get_net_profit (admin).
+   Visão geral → get_overview.screenCards (rótulo exato do card): Receita bruta (kpis.gross; grossOriginal com o toggle "Evento") · Pedidos aprovados · AOV · Net after CPA (modelo) · Taxa de aprovação · Reembolso · últimos 60 dias (coorte, janela fixa) · Chargeback; receita por estágio de captação → get_overview.stages · Custos → get_costs_overview.kpis · Afiliados → get_affiliates · Funil → get_funnel · Call Center → get_call_center · Lucro real → get_net_profit (admin).
 2. Reproduza com os MESMOS instantes e filtros da tela: omita as datas pra usar o intervalo da UI e passe os filtros do Estado da UI.
 3. Número de fora (painel da plataforma, planilha): traga o mesmo período no fuso da fonte — aggregate_orders com o recorte certo (date_axis sale × refund_event, status) — e monte a ponte com calc.
 4. Planilha/CSV anexado: load_skill arquivo-anexado.

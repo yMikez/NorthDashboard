@@ -28,13 +28,14 @@ effectiveDate: 2026-09-30
 - kpis.cogs / fulfillment: incluem pedidos estornados.
 - daily[]: série por dia BRT. deltas.*.pct: variação relativa (fração); deltas.*.pp: diferença em pontos.
 
-## get_profit_split (cards de lucro e de reembolso)
+## get_profit_split (lucro front × back e lente de caixa do reembolso)
 
-- front.profitUsd: Net after CPA (modelo) do front — card da Visão Geral. front.refundCbUsd: quanto o modelo descontou de reembolso&CB.
+- front.profitUsd: Net after CPA (modelo) do front — mesma conta do card da Visão Geral (que vem de get_overview.screenCards). front.refundCbUsd: quanto o modelo descontou de reembolso&CB.
 - back.sources[]: cada fonte do backend (recuperação, tauk, logicall, sms, salesbound indisponível) com grossUsd, costUsd, netUsd. back.profitUsd: soma. totalUsd = front + back.
-- refunds.valuePct (pontos): card "Taxa de reembolso" — |$ estornado no período, pela data do estorno| ÷ $ faturado no período.
-- refunds.pct (pontos): card "Reembolso por pedidos" — estornos no período ÷ pedidos reais do período (chargeback fora).
-- refunds7d: monitor rolante dos últimos 7 dias a partir de agora (limite de alerta 10% dos pedidos; atenção a partir de 8%).
+- refunds.valuePct (pontos): lente de CAIXA — |$ estornado no período, pela data do estorno| ÷ $ faturado no período. Saiu da Visão Geral em 2026-10-23: em período curto passa de 100% (estorno de venda antiga ÷ vendas novas).
+- refunds.pct (pontos): lente de CAIXA por pedidos — estornos no período ÷ pedidos reais do período (chargeback fora). Também fora da tela.
+- O card da Visão Geral é "Reembolso · últimos 60 dias" (get_overview.screenCards): das vendas feitas nos últimos 60 dias, quantas já foram estornadas (coorte, régua da aba Reembolsos), com o % em valor e a projeção ao amadurecer.
+- refunds7d: monitor rolante dos últimos 7 dias a partir de agora (limite de alerta 10% dos pedidos; atenção a partir de 8%). Fora da tela desde 2026-10-23.
 - opexPct (pontos): opex% global do modelo.
 
 ## get_affiliates e get_affiliate_detail (Afiliados)

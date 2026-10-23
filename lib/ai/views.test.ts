@@ -3,7 +3,7 @@ import type { Prisma } from '@prisma/client';
 import { beforeAll, describe, expect, it } from 'vitest';
 import { migratedPglite } from '../test/pgliteDb';
 import type { MetricsFilters, OverviewKPIs, ProductsResponse, OrdersResponse } from '../services/metrics';
-import type { ProfitSplitResponse } from '../services/profitSplit';
+import type { OverviewPanels } from '../services/overviewPanels';
 import { parseBrtEnd, parseBrtStart } from './meta';
 import {
   alignedPreviousWindow,
@@ -28,15 +28,22 @@ const KPIS: OverviewKPIs = {
   orderGroups: 1000, epo: 98, cogs: 9000, fulfillment: 7000, estimatedProfit: 82_000.1, estimatedMarginPct: 53.14,
 };
 
-const SPLIT = {
+const PANELS = {
   range: { start: '', end: '' },
-  opexPct: 10,
-  front: { grossUsd: 150_000, cpaUsd: 40_000, orders: 1000, profitUsd: 61_234.56, refundCbUsd: 15_000 },
-  back: { sources: [], profitUsd: 4_321 },
-  totalUsd: 65_555.56,
-  refunds: { salesCount: 1100, refundedCount: 90, chargebackCount: 12, pct: 8.18, grossUsd: 154_318.2, refundedUsd: 14_000, valuePct: 9.07 },
-  refunds7d: { salesCount: 300, refundedCount: 31, chargebackCount: 2, pct: 10.33, grossUsd: 40_000, refundedUsd: 3_000, valuePct: 7.5 },
-} satisfies ProfitSplitResponse;
+  daily: [],
+  previous: null,
+  netAfterCpa: { usd: 61_234.56, frontGrossUsd: 150_000, frontCpaUsd: 40_000, opexPct: 10 },
+  stages: {
+    totalUsd: 170_000,
+    front: { usd: 150_000, parts: [] },
+    backend: { usd: 15_000, parts: [], available: true },
+    recovery: { usd: 5_000, parts: [] },
+  },
+  refunds60d: {
+    windowDays: 60, start: '', baseCount: 1100, baseUsd: 154_318.2, refundCount: 90, refundUsd: 14_000,
+    pctCount: 0.0818, pctUsd: 0.0907, projectedPctCount: 0.1033, projectedPctUsd: 0.11, tailIncomplete: false,
+  },
+} satisfies OverviewPanels;
 
 describe('overview — visão de IA', () => {
   it('netProfit (net − CPA: CPA contado 2×) sai do payload', () => {
@@ -46,23 +53,22 @@ describe('overview — visão de IA', () => {
   });
 
   it('screenCards: 1:1 com os cards da Visão Geral, fontes e limiares da tela', () => {
-    const cards = buildScreenCards(stripNetProfit(KPIS), SPLIT);
+    const cards = buildScreenCards(stripNetProfit(KPIS), PANELS);
     const by = Object.fromEntries(cards.map((c) => [c.card, c]));
     expect(cards.map((c) => c.card)).toEqual([
-      'Receita bruta', 'Receita líquida', 'Pedidos aprovados', 'AOV', 'Taxa de aprovação', 'Taxa de reembolso',
-      'Reembolso por pedidos', 'Reembolso por pedidos — últimos 7d (limite 10%)', 'Chargeback', 'Net after CPA (modelo)',
-      'Net after CPA (modelo) — total front + back',
+      'Receita bruta', 'Pedidos aprovados', 'AOV', 'Net after CPA (modelo)', 'Taxa de aprovação',
+      'Reembolso · últimos 60 dias', 'Chargeback',
     ]);
     expect(by['Receita bruta']).toMatchObject({ value: 154_318.2, unit: 'usd', detail: { modoEvento: 171_002.5 } });
     expect(by['Taxa de aprovação']).toMatchObject({ value: 88.12, unit: 'pp', state: 'warn' });
-    // Reembolso da tela = profit split (data do ESTORNO), NÃO kpis.refundRate.
-    expect(by['Taxa de reembolso']).toMatchObject({ value: 9.07, unit: 'pp', source: 'get_profit_split.refunds.valuePct' });
-    expect(by['Reembolso por pedidos']).toMatchObject({ value: 8.18, detail: { refundedCount: 90, salesCount: 1100 } });
-    expect(by['Reembolso por pedidos — últimos 7d (limite 10%)']).toMatchObject({ value: 10.33, state: 'danger' });
+    // Reembolso da tela = coorte de 60 dias, NÃO kpis.refundRate.
+    expect(by['Reembolso · últimos 60 dias']).toMatchObject({
+      value: 8.18, unit: 'pp', state: 'warn',
+      detail: { refundCount: 90, baseCount: 1100, emValorPp: 9.07, projecaoAoAmadurecerPp: 10.33 },
+    });
     expect(by['Chargeback']).toMatchObject({ value: 1.23, state: 'warn' });
-    expect(by['Net after CPA (modelo)']).toMatchObject({ value: 61_234.56, source: 'get_profit_split.front.profitUsd' });
+    expect(by['Net after CPA (modelo)']).toMatchObject({ value: 61_234.56, detail: { brutoDoFunilUsd: 150_000, cpaPagoUsd: 40_000 } });
     expect(by['Net after CPA (modelo)'].state).toBeUndefined();
-    expect(by['Net after CPA (modelo) — total front + back']).toMatchObject({ value: 65_555.56, detail: { frontUsd: 61_234.56, backUsd: 4_321 } });
   });
 
   it('deltas prontos: abs, relativo (fração) e pp nas taxas', () => {

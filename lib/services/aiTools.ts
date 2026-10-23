@@ -44,6 +44,7 @@ import { getRecovery } from './recovery';
 import { getFulfillment } from './fulfillment';
 import { getHealth } from './health';
 import { getProfitSplit } from './profitSplit';
+import { getOverviewPanels } from './overviewPanels';
 import { getFamilies } from './families';
 import { getAffiliateAnalysis, getAffiliateExplain, getAffiliateSequence } from './affiliateAnalysis';
 import { getFunnelSequence } from './funnelSequence';
@@ -182,7 +183,7 @@ const WINDOW_PROPS: Record<string, JsonSchema> = {
 const CORE_TOOLS: Anthropic.Tool[] = [
   tool(
     'get_overview',
-    'KPIs globais do período (aba Visão Geral): receita bruta (gross = APPROVED por data da venda, dia BRT) e líquida (net = o que a plataforma credita: JÁ sem fee E sem CPA — nunca subtraia CPA do net), pedidos, AOV de sessão, EPO, COGS/frete, estimatedProfit (net − COGS − frete; NÃO é o card de lucro), top países/afiliados/etapas, série diária (dia BRT) e heatmap hora × dia da semana (BRT). `screenCards` = os cards da tela 1:1 (rótulo exato; % já em pontos percentuais): "Taxa de reembolso" e "Reembolso por pedidos" vêm do profit split e contam o estorno pela DATA DO ESTORNO; "Net after CPA (modelo)" = get_profit_split.front.profitUsd. Cite esses — kpis.refundRate/cbRate/approvalRate são FRAÇÃO de contagem ÷ todas as linhas pela data da venda. compare=true traz `previous` + `deltas` (abs; pct = variação relativa em fração; pp nas taxas). Com hoje parcial o anterior é cortado no MESMO horário (_meta.aligned).',
+    'KPIs globais do período (aba Visão Geral): receita bruta (gross = APPROVED por data da venda, dia BRT) e líquida (net = o que a plataforma credita: JÁ sem fee E sem CPA — nunca subtraia CPA do net), pedidos, AOV de sessão, EPO, COGS/frete, estimatedProfit (net − COGS − frete; NÃO é o card de lucro), top países/afiliados/etapas, série diária (dia BRT) e heatmap hora × dia da semana (BRT). `screenCards` = os cards da tela 1:1 (rótulo exato; % já em pontos percentuais): "Reembolso · últimos 60 dias" é a COORTE das vendas dos últimos 60 dias (régua da aba Reembolsos: cada estorno no dia da venda; janela fixa, não segue o período; detail traz o % em valor e a projeção ao amadurecer); "Net after CPA (modelo)" = modelo da planilha CPA no funil. `stages` = receita por estágio de captação (front/back-end/recuperação). Cite esses — kpis.refundRate/cbRate/approvalRate são FRAÇÃO de contagem ÷ todas as linhas pela data da venda. compare=true traz `previous` + `deltas` (abs; pct = variação relativa em fração; pp nas taxas). Com hoje parcial o anterior é cortado no MESMO horário (_meta.aligned).',
     {
       ...DATE_PROPS, ...SCOPE_PROPS,
       compare: { type: 'boolean', description: 'true = inclui o período anterior de mesma duração (alinhado no mesmo horário quando hoje está na janela) e os deltas prontos.' },
@@ -684,22 +685,19 @@ const HANDLERS: Record<string, Handler> = {
     // dimensões) — o refresh forçado seria só espera. Sem eles, refresh antes
     // (o throttle de 60s dava MV defasada vs dado real; correção > latência).
     const viaMv = !filters.mappedAffiliateIds?.length && !filters.affiliateIds?.length && !filters.productExternalIds?.length;
-    const [data, split, alignedPrev] = await Promise.all([
+    const [data, panels, alignedPrev] = await Promise.all([
       (viaMv ? refreshDailyMetricsNow() : Promise.resolve()).then(() => getOverview(filters, compare && !aligned)),
-      // Mesmo escopo do painel da tela: o profit split não recebe etapa/SKU.
-      getProfitSplit({
-        startDate: filters.startDate, endDate: filters.endDate, platformSlugs: filters.platformSlugs,
-        productFamilies: filters.productFamilies, countries: filters.countries, mappedAffiliateIds: filters.mappedAffiliateIds,
-        affiliateIds: filters.affiliateIds,
-      }),
+      // Mesma fonte dos cards da tela: reembolso de 60 dias, Net after CPA e
+      // receita por estágio de captação (overview-panels).
+      getOverviewPanels(filters, now),
       aligned ? alignedPreviousKpis(filters, aligned) : Promise.resolve(null),
     ]);
     const kpis = stripNetProfit(data.kpis);
     const previous = alignedPrev ?? (data.previous ? stripNetProfit(data.previous) : null);
     const prevWindow = aligned ?? (previous ? servicePreviousWindow(filters.startDate, filters.endDate) : null);
     const notes: string[] = [];
-    if (filters.productTypes?.length || filters.productExternalIds?.length) {
-      notes.push('Cards de reembolso e Net after CPA (screenCards) vêm do profit split, que — como na tela — ignora o filtro de etapa/SKU.');
+    if (!panels.stages.backend.available) {
+      notes.push('Com filtro de plataforma/produto/país/afiliado o back-end (Tauk, Logicall, SalesBound) fica fora de stages — não tem essas dimensões.');
     }
     const meta: ToolMeta = {
       ...(prevWindow ? { previousRange: { startBrt: formatBrt(prevWindow.start), endBrt: formatBrt(prevWindow.end) } } : {}),
@@ -711,7 +709,11 @@ const HANDLERS: Record<string, Handler> = {
       range: data.range,
       kpis,
       ...(previous ? { previous, deltas: kpiDeltas(kpis, previous) } : {}),
-      screenCards: buildScreenCards(kpis, split),
+      screenCards: buildScreenCards(kpis, panels),
+      // Receita por estágio de captação (painel da tela): front (funil),
+      // back-end (call center + SalesBound) e recuperação (afiliados de
+      // recuperação + SMS), com as fontes de cada um.
+      stages: panels.stages,
       daily: data.daily,
       byCountry: data.byCountry,
       byProductType: data.byProductType,

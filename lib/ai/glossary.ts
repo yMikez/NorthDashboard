@@ -351,7 +351,7 @@ export const GLOSSARY = {
       'aggregate_orders (date_axis refund_event)',
       'get_orders (status REFUNDED/CHARGEBACK: o período vale sobre a data do estorno)',
     ],
-    screen: 'Visão Geral › Taxa de reembolso / Reembolso por pedidos',
+    screen: 'Lente de caixa (get_profit_split) — saiu da Visão Geral em 2026-10-23; o card da tela é "Reembolso · últimos 60 dias" (coorte)',
     pitfalls: [
       'get_overview.kpis.refundRate NÃO é o card da tela.',
       'Período curto pega estornos de vendas antigas contra poucas vendas — taxa alta sem significar piora; confira a coorte.',

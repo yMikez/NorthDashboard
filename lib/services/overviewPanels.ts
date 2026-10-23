@@ -24,6 +24,7 @@ import { db } from '../db';
 import { SESSION_KEY_SQL, type MetricsFilters } from './metrics';
 import { getProfitModelInputs } from './profitModel';
 import { getRefundCohorts } from './refundCohorts';
+import { EXTRA_ROW_REFUND_PLATFORMS } from './profitModel';
 import { SMS_UTM_SOURCE } from '../connectors/sms/config';
 import { affiliateSqlCond } from '../shared/affiliateFilter';
 
@@ -155,6 +156,9 @@ export interface PlatformModel { feePct: number; refundCbPct: number }
 export interface Part { key: string; label: string; usd: number }
 export interface OverviewPanelsDay {
   date: string;
+  /** Receita bruta aprovada de todos os canais de pedido (= receita da daily_metrics). */
+  gross: number;
+  orders: number;
   refundUsd: number;
   refundCount: number;
   netAfterCpa: number;
@@ -168,6 +172,8 @@ export interface OverviewPanelsDay {
 export interface OverviewPanels {
   range: { start: string; end: string };
   daily: OverviewPanelsDay[];
+  /** Mesma série no período imediatamente anterior, de mesma duração (dia i ↔ dia i). */
+  previous: { start: string; end: string; daily: OverviewPanelsDay[] } | null;
   netAfterCpa: { usd: number; frontGrossUsd: number; frontCpaUsd: number; opexPct: number };
   stages: {
     totalUsd: number;
@@ -218,17 +224,15 @@ export function assembleOverviewPanels(input: {
   models: Map<string, PlatformModel>;
   opexPct: number;
   recoveryLabels: Map<string, string>;
-}): Omit<OverviewPanels, 'refunds60d'> {
+}): Omit<OverviewPanels, 'refunds60d' | 'previous'> {
   const days = brtDays(input.start, input.end);
-  const byDay = new Map<string, OverviewPanelsDay>(days.map((d) => [d, {
-    date: d, refundUsd: 0, refundCount: 0, netAfterCpa: 0, feSessions: 0, feRevenue: 0, front: 0, backend: 0, recovery: 0,
-  }]));
+  const empty = (d: string): OverviewPanelsDay => ({
+    date: d, gross: 0, orders: 0, refundUsd: 0, refundCount: 0, netAfterCpa: 0, feSessions: 0, feRevenue: 0, front: 0, backend: 0, recovery: 0,
+  });
+  const byDay = new Map<string, OverviewPanelsDay>(days.map((d) => [d, empty(d)]));
   const dayOf = (d: string) => {
     let row = byDay.get(d);
-    if (!row) {
-      row = { date: d, refundUsd: 0, refundCount: 0, netAfterCpa: 0, feSessions: 0, feRevenue: 0, front: 0, backend: 0, recovery: 0 };
-      byDay.set(d, row);
-    }
+    if (!row) { row = empty(d); byDay.set(d, row); }
     return row;
   };
 
@@ -240,6 +244,8 @@ export function assembleOverviewPanels(input: {
   let netAfterCpa = 0;
   for (const r of input.channels) {
     const day = dayOf(r.day);
+    day.gross += r.gross;
+    day.orders += r.orders;
     if (r.channel === 'front') {
       // Modelo da planilha CPA por plataforma (= profitSplit.front.profitUsd).
       const m = input.models.get(r.platform) ?? { feePct: 0, refundCbPct: 0 };
@@ -288,7 +294,7 @@ export function assembleOverviewPanels(input: {
   const recovery = parts(recoveryParts);
   const daily = [...byDay.values()].sort((a, b) => (a.date < b.date ? -1 : 1)).map((d) => ({
     ...d,
-    refundUsd: r2(d.refundUsd), netAfterCpa: r2(d.netAfterCpa), feRevenue: r2(d.feRevenue),
+    gross: r2(d.gross), refundUsd: r2(d.refundUsd), netAfterCpa: r2(d.netAfterCpa), feRevenue: r2(d.feRevenue),
     front: r2(d.front), backend: r2(d.backend), recovery: r2(d.recovery),
   }));
 
@@ -303,6 +309,13 @@ export function assembleOverviewPanels(input: {
       recovery: { usd: sum(recovery), parts: recovery },
     },
   };
+}
+
+/** Período imediatamente anterior, mesma duração: [início − L, início − 1 ms]. */
+export function previousWindow(start: Date, end: Date): { start: Date; end: Date } {
+  const span = end.getTime() - start.getTime();
+  const prevEnd = new Date(start.getTime() - 1);
+  return { start: new Date(prevEnd.getTime() - span), end: prevEnd };
 }
 
 /** Janela dos últimos 60 dias de VENDA (BRT): começa à 00:00 BRT de hoje − 59. */
@@ -326,8 +339,10 @@ export async function getOverviewPanels(f: MetricsFilters, now = new Date()): Pr
   const recoveryIds = recAffs.map((r) => r.affiliateId);
   const recoveryLabels = new Map(recAffs.map((r) => [r.affiliateId, r.note?.trim() || r.affiliate.nickname || r.affiliate.externalId]));
   const win = refundWindow(now);
+  const prevWin = previousWindow(f.startDate, f.endDate);
+  const pf: MetricsFilters = { ...f, startDate: prevWin.start, endDate: prevWin.end };
 
-  const [channels, refunds, sessions, callCenter, salesbound, cohorts] = await Promise.all([
+  const [channels, refunds, sessions, callCenter, salesbound, cohorts, prevChannels, prevRefunds, prevSessions] = await Promise.all([
     db.$queryRaw<ChannelRow[]>(approvedByChannelSql(f, recoveryIds)),
     db.$queryRaw<Array<{ day: string; n: number; usd: number }>>(refundsByDaySql(f)),
     db.$queryRaw<Array<{ day: string; sessions: number; revenue: number }>>(feSessionsByDaySql(f)),
@@ -344,6 +359,10 @@ export async function getOverviewPanels(f: MetricsFilters, now = new Date()): Pr
       mappedAffiliateIds: f.mappedAffiliateIds,
       affiliateIds: f.affiliateIds,
     }, REFUND_WINDOW_DAYS),
+    // Período anterior: só o que o gráfico do topo compara (sem back-end).
+    db.$queryRaw<ChannelRow[]>(approvedByChannelSql(pf, recoveryIds)),
+    db.$queryRaw<Array<{ day: string; n: number; usd: number }>>(refundsByDaySql(pf)),
+    db.$queryRaw<Array<{ day: string; sessions: number; revenue: number }>>(feSessionsByDaySql(pf)),
   ]);
 
   const panels = assembleOverviewPanels({
@@ -358,9 +377,22 @@ export async function getOverviewPanels(f: MetricsFilters, now = new Date()): Pr
     opexPct: pm.opexPct,
     recoveryLabels,
   });
+  const prevPanels = assembleOverviewPanels({
+    start: pf.startDate,
+    end: pf.endDate,
+    channels: prevChannels,
+    refunds: prevRefunds,
+    sessions: prevSessions,
+    callCenter: null,
+    salesbound: null,
+    models: pm.byPlatform,
+    opexPct: pm.opexPct,
+    recoveryLabels,
+  });
   const t = cohorts.totals;
   return {
     ...panels,
+    previous: { start: pf.startDate.toISOString(), end: pf.endDate.toISOString(), daily: prevPanels.daily },
     refunds60d: {
       windowDays: REFUND_WINDOW_DAYS,
       start: win.start.toISOString(),
@@ -374,5 +406,70 @@ export async function getOverviewPanels(f: MetricsFilters, now = new Date()): Pr
       projectedPctUsd: cohorts.projection.periodPctUsd,
       tailIncomplete: cohorts.projection.tailIncomplete,
     },
+  };
+}
+
+// ---------- Reembolso de 60 dias por afiliado (Top 5 da Visão geral) ----------
+
+/**
+ * Coorte dos últimos 60 dias por conta de afiliado, na régua da aba
+ * Reembolsos (getRefundCohorts): base = vendas reais do período (APPROVED +
+ * linha estornada in-place com approvedAt); estorno = linha REFUNDED/CB com
+ * data de evento (sintética na Digistore). `keys` = "plataforma:externalId".
+ */
+export function affiliateRefundsSql(keys: string[], start: Date, end: Date): Prisma.Sql {
+  const extraRow = [...EXTRA_ROW_REFUND_PLATFORMS];
+  return Prisma.sql`
+    WITH k AS (
+      SELECT split_part(x, ':', 1) AS slug, substr(x, length(split_part(x, ':', 1)) + 2) AS ext
+      FROM unnest(${keys}::text[]) AS x
+    ),
+    acc AS (
+      SELECT a.id, pl."slug", a."externalId"
+      FROM "Affiliate" a JOIN "Platform" pl ON pl.id = a."platformId"
+      JOIN k ON k.slug = pl."slug" AND k.ext = a."externalId"
+    )
+    SELECT acc."slug" || ':' || acc."externalId" AS key,
+      COUNT(*) FILTER (WHERE o."status" = 'APPROVED'
+        OR (NOT (acc."slug" = ANY(${extraRow})) AND o."approvedAt" IS NOT NULL AND o."status" IN ('REFUNDED', 'CHARGEBACK')))::int AS "baseCount",
+      COALESCE(SUM(COALESCE(o."originalGrossUsd", ABS(o."grossAmountUsd"))) FILTER (WHERE o."status" = 'APPROVED'
+        OR (NOT (acc."slug" = ANY(${extraRow})) AND o."approvedAt" IS NOT NULL AND o."status" IN ('REFUNDED', 'CHARGEBACK'))), 0)::float8 AS "baseUsd",
+      COUNT(*) FILTER (WHERE o."status" IN ('REFUNDED', 'CHARGEBACK')
+        AND COALESCE(o."refundedAt", o."chargebackAt") IS NOT NULL
+        AND (acc."slug" = ANY(${extraRow}) OR o."approvedAt" IS NOT NULL)
+        AND NOT COALESCE(o."rawMetadata"->>'_source' = 'csv-reconcile' AND o."rawMetadata"->>'matched_original_sale' = 'false', false))::int AS "refundCount",
+      COALESCE(SUM(ABS(o."grossAmountUsd")) FILTER (WHERE o."status" IN ('REFUNDED', 'CHARGEBACK')
+        AND COALESCE(o."refundedAt", o."chargebackAt") IS NOT NULL
+        AND (acc."slug" = ANY(${extraRow}) OR o."approvedAt" IS NOT NULL)
+        AND NOT COALESCE(o."rawMetadata"->>'_source' = 'csv-reconcile' AND o."rawMetadata"->>'matched_original_sale' = 'false', false)), 0)::float8 AS "refundUsd"
+    FROM "Order" o JOIN acc ON o."affiliateId" = acc.id
+    WHERE o."orderedAt" >= ${start} AND o."orderedAt" <= ${end}
+    GROUP BY 1`;
+}
+
+export interface AffiliateRefund60d {
+  key: string;
+  baseCount: number;
+  baseUsd: number;
+  refundCount: number;
+  refundUsd: number;
+  pctCount: number | null;
+  pctUsd: number | null;
+}
+
+export async function getAffiliateRefunds60d(keys: string[], now = new Date()): Promise<{ windowDays: number; start: string; affiliates: AffiliateRefund60d[] }> {
+  const win = refundWindow(now);
+  const clean = [...new Set(keys.map((k) => k.trim()).filter((k) => /^[a-z0-9]+:.+/.test(k)))].slice(0, 50);
+  const rows = clean.length
+    ? await db.$queryRaw<Array<Omit<AffiliateRefund60d, 'pctCount' | 'pctUsd'>>>(affiliateRefundsSql(clean, win.start, win.end))
+    : [];
+  return {
+    windowDays: REFUND_WINDOW_DAYS,
+    start: win.start.toISOString(),
+    affiliates: rows.map((r) => ({
+      ...r,
+      pctCount: r.baseCount > 0 ? Math.round((r.refundCount / r.baseCount) * 10000) / 10000 : null,
+      pctUsd: r.baseUsd > 0 ? Math.round((r.refundUsd / r.baseUsd) * 10000) / 10000 : null,
+    })),
   };
 }

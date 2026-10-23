@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { OverviewResponse, OrdersResponse, AffiliateDetailResponse, ProductsResponse } from './metrics';
 import type { ProfitSplitResponse } from './profitSplit';
+import type { OverviewPanels } from './overviewPanels';
 
 // Serviços e banco mockados: os testes olham a FIAÇÃO (o que chega no
 // serviço e o que volta pro modelo), sem Postgres.
@@ -11,6 +12,7 @@ const m = vi.hoisted(() => ({
   getPlatforms: vi.fn(),
   getProducts: vi.fn(),
   getProfitSplit: vi.fn(),
+  getOverviewPanels: vi.fn(),
   getCallCenterSales: vi.fn(),
   getHealth: vi.fn(),
   refreshDailyMetricsNow: vi.fn(async () => undefined),
@@ -30,6 +32,7 @@ vi.mock('./metrics', async (orig) => ({
 }));
 vi.mock('./dailyMetrics', async (orig) => ({ ...(await orig<typeof import('./dailyMetrics')>()), refreshDailyMetricsNow: m.refreshDailyMetricsNow }));
 vi.mock('./profitSplit', () => ({ getProfitSplit: m.getProfitSplit }));
+vi.mock('./overviewPanels', () => ({ getOverviewPanels: m.getOverviewPanels }));
 vi.mock('./callCenterSales', async (orig) => ({ ...(await orig<typeof import('./callCenterSales')>()), getCallCenterSales: m.getCallCenterSales }));
 vi.mock('./health', () => ({ getHealth: m.getHealth }));
 vi.mock('../db', () => ({ db: { affiliate: { findMany: m.findMany }, $queryRaw: m.queryRaw } }));
@@ -88,6 +91,25 @@ const SPLIT: ProfitSplitResponse = {
   refunds7d: { salesCount: 50, refundedCount: 3, chargebackCount: 0, pct: 6, grossUsd: 5000, refundedUsd: 300, valuePct: 6 },
 };
 
+// Painéis da Visão geral (reembolso 60d, Net after CPA, estágios) — fonte
+// dos screenCards desde 2026-10-23.
+const PANELS: OverviewPanels = {
+  range: { start: '', end: '' },
+  daily: [],
+  previous: null,
+  netAfterCpa: { usd: 432.1, frontGrossUsd: 950, frontCpaUsd: 200, opexPct: 10 },
+  stages: {
+    totalUsd: 1000,
+    front: { usd: 950, parts: [] },
+    backend: { usd: 40, parts: [], available: true },
+    recovery: { usd: 10, parts: [] },
+  },
+  refunds60d: {
+    windowDays: 60, start: '', baseCount: 200, baseUsd: 20_000, refundCount: 17, refundUsd: 1_800,
+    pctCount: 0.085, pctUsd: 0.09, projectedPctCount: 0.1, projectedPctUsd: 0.11, tailIncomplete: false,
+  },
+};
+
 function ordersFixture(n: number): OrdersResponse {
   return {
     orders: Array.from({ length: n }, (_, i) => ({
@@ -103,6 +125,7 @@ function ordersFixture(n: number): OrdersResponse {
 beforeEach(() => {
   vi.clearAllMocks();
   m.getProfitSplit.mockResolvedValue(SPLIT);
+  m.getOverviewPanels.mockResolvedValue(PANELS);
   m.normalizeScope.mockImplementation(async (_tool: string, input: Record<string, unknown>) => ({ input, notes: [] }));
   m.dataQualityFor.mockResolvedValue([]);
 });
@@ -348,10 +371,10 @@ describe('handlers — fiação com os serviços', () => {
     };
     expect(m.refreshDailyMetricsNow).toHaveBeenCalled();
     expect('netProfit' in r.kpis).toBe(false);
-    expect(r.screenCards.find((c) => c.card === 'Taxa de reembolso')!.value).toBe(8.5);
+    expect(r.screenCards.find((c) => c.card === 'Reembolso · últimos 60 dias')!.value).toBe(8.5);
     expect(r.screenCards.find((c) => c.card === 'Net after CPA (modelo)')!.value).toBe(432.1);
     expect(r.hourlyHeatmap[0].dowLabel).toBe('seg');
-    expect(m.getProfitSplit.mock.calls[0][0]).toMatchObject({ startDate: parseBrtStart('2026-09-01'), endDate: parseBrtEnd('2026-09-29') });
+    expect(m.getOverviewPanels.mock.calls[0][0]).toMatchObject({ startDate: parseBrtStart('2026-09-01'), endDate: parseBrtEnd('2026-09-29') });
     expect(r.previous).toBeUndefined();
   });
 

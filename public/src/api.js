@@ -80,6 +80,11 @@ async function fetchOverview(filters) {
   return fetchJSON('/api/metrics/overview', params);
 }
 
+// Reembolso dos últimos 60 dias (coorte) por conta de afiliado — Top 5.
+// keys: ['plataforma:externalId', ...]
+function fetchAffiliateRefunds(keys) {
+  return fetchJSON('/api/metrics/affiliate-refunds', { keys: (keys || []).join(',') || null });
+}
 // Painéis da Visão geral fora da daily_metrics: estágio de captação,
 // reembolso dos últimos 60 dias e séries de reembolso/Net after CPA/AOV.
 function fetchOverviewPanels(filters) {
@@ -753,6 +758,7 @@ function _wrapMutations(api) {
 window.NSApi = _wrapMutations({
   fetchLeads,
   fetchOverviewPanels,
+  fetchAffiliateRefunds,
   fetchNetworks,
   adminNetworksSyncStatus,
   adminNetworksSync,

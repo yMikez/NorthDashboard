@@ -96,7 +96,8 @@ function NSTooltipContent({ active, payload, label, currency, formatFor }) {
 // ---------- NSTimeSeries ----------
 // props:
 //   data:    [{ date: 'YYYY-MM-DD'|Date, <key>: number, ... }]
-//   series:  [{ key, label, color?, kind?: 'area'|'line', stackId?, format? }]
+//   series:  [{ key, label, color?, kind?: 'area'|'line', stackId?, format?, dashed? }]
+//            dashed: linha tracejada (ex.: período anterior) — só em kind 'line'
 //   height=260, currency='USD', format='money' (default das séries)
 //   focusKey: série em destaque — as demais viram linhas finas esmaecidas
 //   toggles:  legenda clicável que esconde/mostra séries
@@ -216,6 +217,7 @@ function NSTimeSeries({
               return (
                 <Line key={s.key} dataKey={s.key} name={s.label} type="monotone"
                   stroke={s.color} strokeWidth={dimmed ? 1.2 : 2} dot={false}
+                  strokeDasharray={s.dashed ? '5 5' : undefined}
                   strokeOpacity={dimmed ? 0.4 : 1}
                   activeDot={{ r: 4, fill: s.color, stroke: 'var(--bg)', strokeWidth: 2 }}
                   animationDuration={350} animationEasing="ease-out"/>

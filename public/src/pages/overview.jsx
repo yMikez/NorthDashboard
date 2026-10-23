@@ -133,20 +133,35 @@ const TS_NOTE = {
   netAfterCpa: 'funil · modelo da planilha CPA (bruto − refund/cb, taxa e opex − CPA pago)',
 };
 
-function TimeSeriesPanel({ metric, setMetric, kpis, prev, buckets, panels, cur, presetLabel }) {
+// Valor de uma métrica num dia do overview-panels (atual ou anterior).
+function panelValue(metric, p) {
+  if (!p) return null;
+  if (metric === 'gross') return p.gross;
+  if (metric === 'orders') return p.orders;
+  if (metric === 'aov') return p.feSessions ? p.feRevenue / p.feSessions : 0;
+  if (metric === 'refunds') return p.refundUsd;
+  return p.netAfterCpa;
+}
+
+function TimeSeriesPanel({ metric, setMetric, kpis, prev, buckets, panels, cur, presetLabel, eventMode }) {
   const byDay = new Map((panels?.daily || []).map((d) => [d.date, d]));
   const needsPanels = metric === 'refunds' || metric === 'netAfterCpa' || metric === 'aov';
   const def = TS_METRICS.find((m) => m.id === metric) || TS_METRICS[0];
+  // Período anterior, dia i <-> dia i. No modo "Evento" o bruto anterior não
+  // existe nessa lente: a linha some só pra essa métrica.
+  const prevDaily = panels?.previous?.daily || null;
+  const showPrev = !!prevDaily && !(eventMode && metric === 'gross');
 
-  const data = buckets.map((b) => {
+  const data = buckets.map((b, i) => {
     const p = byDay.get(b.day);
     const value = metric === 'gross' ? b.gross
       : metric === 'orders' ? b.approvedOrders
-      : metric === 'aov' ? (p && p.feSessions ? p.feRevenue / p.feSessions : 0)
-      : metric === 'refunds' ? (p ? p.refundUsd : 0)
-      : (p ? p.netAfterCpa : 0);
-    return { date: b.date, value };
+      : (panelValue(metric, p) ?? 0);
+    const row = { date: b.date, value };
+    if (showPrev) row.prev = panelValue(metric, prevDaily[i]);
+    return row;
   });
+  const sumPrev = (k) => (prevDaily ? prevDaily.reduce((acc, d) => acc + d[k], 0) : null);
 
   // Valor do período + variação (quando há período anterior comparável).
   let head = null;
@@ -159,10 +174,12 @@ function TimeSeriesPanel({ metric, setMetric, kpis, prev, buckets, panels, cur, 
     const usd = panels.daily.reduce((s, d) => s + d.refundUsd, 0);
     const n = panels.daily.reduce((s, d) => s + d.refundCount, 0);
     head = fmtCurrency(usd, cur, 0);
+    cmp = deltaFor(usd, sumPrev('refundUsd'), 'lower');
     extra = `${fmtInt(n)} estornos no período`;
   }
   if (metric === 'netAfterCpa' && panels) {
     head = fmtCurrency(panels.netAfterCpa.usd, cur, 0);
+    cmp = deltaFor(panels.netAfterCpa.usd, sumPrev('netAfterCpa'));
     extra = `${fmtCurrency(panels.netAfterCpa.frontGrossUsd, cur, 0)} de bruto no funil · CPA ${fmtCurrency(panels.netAfterCpa.frontCpaUsd, cur, 0)}`;
   }
   const cmpClass = cmp ? (cmp.good === true ? 'good' : cmp.good === false ? 'bad' : 'flat') : 'flat';
@@ -196,7 +213,10 @@ function TimeSeriesPanel({ metric, setMetric, kpis, prev, buckets, panels, cur, 
       {needsPanels && !panels
         ? <div style={{ height: 300, display: 'grid', placeItems: 'center', color: 'var(--fg5)', fontSize: 12 }}>carregando…</div>
         : <NSTimeSeries data={data} height={300} currency={cur}
-            series={[{ key: 'value', label: def.label, color, format: def.format }]}/>}
+            series={[
+              { key: 'value', label: showPrev ? 'Este período' : def.label, color, format: def.format },
+              ...(showPrev ? [{ key: 'prev', label: 'Período anterior', color: 'var(--fg4)', kind: 'line', dashed: true, format: def.format }] : []),
+            ]}/>}
     </div>
   );
 }
@@ -327,6 +347,19 @@ function OverviewPage({ filters }) {
     return () => { cancelled = true; };
   }, [filterKey]);
 
+  // Reembolso de 60 dias (coorte) das contas do Top 5: chamada pequena,
+  // depois que o overview diz quem está no Top 5.
+  const [affRefunds, setAffRefunds] = useStateOv({});
+  const topKeys = (state.data?.topAffiliates || []).map((a) => `${a.platformSlug}:${a.externalId}`).join(',');
+  useEffectOv(() => {
+    if (!topKeys) { setAffRefunds({}); return undefined; }
+    let cancelled = false;
+    window.NSApi.fetchAffiliateRefunds(topKeys.split(','))
+      .then((d) => { if (!cancelled) setAffRefunds(Object.fromEntries(d.affiliates.map((a) => [a.key, a]))); })
+      .catch(() => { if (!cancelled) setAffRefunds({}); });
+    return () => { cancelled = true; };
+  }, [topKeys]);
+
   const cur = filters.currency || 'USD';
   const presetLabel = (typeof PRESET_LABEL !== 'undefined' && PRESET_LABEL[filters.preset]) || filters.preset;
 
@@ -394,7 +427,7 @@ function OverviewPage({ filters }) {
       <RefundCoverageNotice platforms={Array.from(filters.platforms || [])}/>
 
       <TimeSeriesPanel metric={metric} setMetric={setMetric} kpis={kpis} prev={prev}
-        buckets={buckets} panels={pd} cur={cur} presetLabel={presetLabel}/>
+        buckets={buckets} panels={pd} cur={cur} presetLabel={presetLabel} eventMode={useEvent}/>
 
       <div className="kpi-grid">
         <KpiCard label="Receita bruta" icon="dollar" index={0} money
@@ -464,6 +497,9 @@ function OverviewPage({ filters }) {
             <span className="panel-eyebrow">Top 5 afiliados</span>
             <div className="panel-sub">Ordenados por receita bruta · redes de afiliados ficam na aba Networks</div>
           </div>
+          <button className="btn btn-ghost" style={{ flexShrink: 0 }} onClick={() => window.NSNavigate('leaderboard')}>
+            Ver ranking completo <Icon name="arrow-up-right" size={12}/>
+          </button>
         </div>
         <div className="tbl-wrap">
           <table className="tbl">
@@ -475,12 +511,13 @@ function OverviewPage({ filters }) {
                 <th className="num">Pedidos</th>
                 <th className="num">Receita</th>
                 <th className="num">Aprovação</th>
+                <th className="num" title="Das vendas da conta nos últimos 60 dias, quantas já foram estornadas (régua da aba Reembolsos; janela fixa)">Reembolso 60d</th>
                 <th className="num" title="NET AFTER CPA do período = (NET AOV − CPA por venda) × FEs aprovadas. Mesma conta do ranking de afiliados.">Net after CPA</th>
               </tr>
             </thead>
             <tbody>
               {topAffiliates.length === 0 && (
-                <tr><td colSpan={7} style={{ textAlign: 'center', opacity: 0.6, padding: 24 }}>
+                <tr><td colSpan={8} style={{ textAlign: 'center', opacity: 0.6, padding: 24 }}>
                   Sem afiliados no período
                 </td></tr>
               )}
@@ -488,6 +525,10 @@ function OverviewPage({ filters }) {
                 const plat = platBadge(a.platformSlug);
                 const apClass = a.approvalRate > 0.7 ? 'val-ok' : a.approvalRate > 0.5 ? 'val-warn' : 'val-bad';
                 const displayName = a.nickname || a.externalId;
+                const rf = affRefunds[`${a.platformSlug}:${a.externalId}`];
+                const rfSmall = rf && rf.baseCount < 20;
+                const rfColor = !rf || rf.pctCount == null || rfSmall ? 'var(--fg5)'
+                  : rf.pctCount > 0.10 ? 'var(--danger)' : rf.pctCount > 0.08 ? 'var(--warning)' : 'var(--fg2)';
                 return (
                   <tr key={`${a.platformSlug}:${a.externalId}`}>
                     <td className="rank">{String(i + 1).padStart(2, '0')}</td>
@@ -504,6 +545,10 @@ function OverviewPage({ filters }) {
                     <td className="num cell-mono">{fmtInt(a.orders)}</td>
                     <td className="num cell-mono">{fmtCurrency(a.revenue, cur, 0)}</td>
                     <td className={`num cell-mono ${apClass}`}>{(a.approvalRate * 100).toFixed(1)}%</td>
+                    <td className="num cell-mono" style={{ color: rfColor }}
+                      title={rf ? `${fmtInt(rf.refundCount)} de ${fmtInt(rf.baseCount)} vendas dos últimos 60 dias${rf.pctUsd != null ? ` · ${(rf.pctUsd * 100).toFixed(1)}% em valor` : ''}${rfSmall ? ' · amostra pequena' : ''}` : 'sem vendas nos últimos 60 dias'}>
+                      {rf && rf.pctCount != null ? `${(rf.pctCount * 100).toFixed(1)}%` : '—'}
+                    </td>
                     <td className="num cell-mono"
                       title={a.netAfterCpaUsd != null
                         ? `${fmtCurrency(a.netAfterCpaUsd, cur, 2)}/venda × ${a.feApprovedCount} FEs aprovadas`

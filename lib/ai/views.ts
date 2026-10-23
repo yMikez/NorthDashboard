@@ -5,8 +5,8 @@
 //
 // Os motivos, um por um:
 //   - Overview: `kpis.netProfit` = net − CPA subtrai o CPA DUAS vezes (o net
-//     já é pós-CPA) — sai. Os cards de reembolso e o "Net after CPA
-//     (modelo)" da tela vêm do profit split, não do overview: `screenCards`
+//     já é pós-CPA) — sai. O "Reembolso · últimos 60 dias" e o "Net after CPA
+//     (modelo)" da tela vêm do overview-panels, não do overview: `screenCards`
 //     traz os cards 1:1, com o rótulo da tela.
 //   - Comparação com hoje parcial: hoje-até-14h contra ontem INTEIRO dava
 //     "queda" falsa. Com a janela atual incluindo agora, o anterior é
@@ -20,7 +20,7 @@
 import { Prisma } from '@prisma/client';
 import { db } from '../db';
 import { SESSION_KEY_SQL, type MetricsFilters, type OverviewKPIs, type OverviewResponse, type ProductsResponse, type OrdersResponse } from '../services/metrics';
-import type { ProfitSplitResponse } from '../services/profitSplit';
+import type { OverviewPanels } from '../services/overviewPanels';
 import { realOrderCount } from '../services/profitModel';
 import { formatBrt } from './meta';
 import { resolveUnit } from './units';
@@ -61,49 +61,45 @@ export interface ScreenCard {
 
 /**
  * Os cards da Visão Geral, 1:1 com public/src/pages/overview.jsx (mesmas
- * fontes e limiares). Os de reembolso contam o estorno pela DATA DO ESTORNO
- * (profit split); aprovação e chargeback são contagem ÷ todas as linhas pela
- * data da VENDA (kpis) — é o que a tela faz.
+ * fontes e limiares — reforma de 2026-10-23). O reembolso é o das vendas dos
+ * ÚLTIMOS 60 DIAS pela régua da aba Reembolsos (cada estorno volta pro dia da
+ * venda) — janela fixa, não segue o período. Aprovação e chargeback são
+ * contagem ÷ todas as linhas pela data da VENDA (kpis), como a tela.
  */
-export function buildScreenCards(k: OverviewKPIs | AiOverviewKpis, split: ProfitSplitResponse): ScreenCard[] {
+export function buildScreenCards(k: OverviewKPIs | AiOverviewKpis, panels: OverviewPanels): ScreenCard[] {
   const approvalPp = round2(k.approvalRate * 100);
   const cbPp = round2(k.cbRate * 100);
-  const cards: ScreenCard[] = [
+  const r = panels.refunds60d;
+  const pp = (v: number | null) => (v == null ? null : round2(v * 100));
+  const refundPp = pp(r.pctCount) ?? 0;
+  const refundDetail: Record<string, number> = { refundCount: r.refundCount, baseCount: r.baseCount, refundUsd: r.refundUsd, baseUsd: r.baseUsd };
+  if (pp(r.pctUsd) != null) refundDetail.emValorPp = pp(r.pctUsd)!;
+  if (pp(r.projectedPctCount) != null) refundDetail.projecaoAoAmadurecerPp = pp(r.projectedPctCount)!;
+  if (r.tailIncomplete) refundDetail.projecaoEhPiso = 1;
+  const nac = panels.netAfterCpa;
+  return [
     { card: 'Receita bruta', value: k.gross, unit: 'usd', source: 'kpis.gross', detail: { modoEvento: k.grossOriginal } },
-    { card: 'Receita líquida', value: k.net, unit: 'usd', source: 'kpis.net' },
     { card: 'Pedidos aprovados', value: k.approvedCount, unit: 'count', source: 'kpis.approvedCount' },
     { card: 'AOV', value: k.aov, unit: 'usd', source: 'kpis.aov' },
+    {
+      card: 'Net after CPA (modelo)', value: nac.usd, unit: 'usd', source: 'overview-panels.netAfterCpa.usd',
+      detail: { brutoDoFunilUsd: nac.frontGrossUsd, cpaPagoUsd: nac.frontCpaUsd, opexPct: nac.opexPct },
+      ...(nac.usd < 0 ? { state: 'danger' as const } : {}),
+    },
     {
       card: 'Taxa de aprovação', value: approvalPp, unit: 'pp', source: 'kpis.approvalRate × 100',
       state: k.approvalRate >= 0.9 ? 'ok' : k.approvalRate >= 0.85 ? 'warn' : 'danger',
     },
     {
-      card: 'Taxa de reembolso', value: split.refunds.valuePct, unit: 'pp', source: 'get_profit_split.refunds.valuePct',
-      detail: { refundedUsd: split.refunds.refundedUsd, grossUsd: split.refunds.grossUsd, modeloDescontaUsd: split.front.refundCbUsd },
-    },
-    {
-      card: 'Reembolso por pedidos', value: split.refunds.pct, unit: 'pp', source: 'get_profit_split.refunds.pct',
-      detail: { refundedCount: split.refunds.refundedCount, salesCount: split.refunds.salesCount },
-    },
-    {
-      card: 'Reembolso por pedidos — últimos 7d (limite 10%)', value: split.refunds7d.pct, unit: 'pp', source: 'get_profit_split.refunds7d.pct',
-      state: split.refunds7d.pct > 10 ? 'danger' : split.refunds7d.pct > 8 ? 'warn' : 'ok',
-      detail: { refundedCount: split.refunds7d.refundedCount, salesCount: split.refunds7d.salesCount },
+      card: 'Reembolso · últimos 60 dias', value: refundPp, unit: 'pp', source: 'coorte das vendas dos últimos 60 dias (régua da aba Reembolsos)',
+      state: refundPp > 10 ? 'danger' : refundPp > 8 ? 'warn' : 'ok',
+      detail: refundDetail,
     },
     {
       card: 'Chargeback', value: cbPp, unit: 'pp', source: 'kpis.cbRate × 100',
       state: k.cbRate >= 0.02 ? 'danger' : k.cbRate >= 0.01 ? 'warn' : 'ok',
     },
-    {
-      card: 'Net after CPA (modelo)', value: split.front.profitUsd, unit: 'usd', source: 'get_profit_split.front.profitUsd',
-      ...(split.front.profitUsd < 0 ? { state: 'danger' as const } : {}),
-    },
-    {
-      card: 'Net after CPA (modelo) — total front + back', value: split.totalUsd, unit: 'usd', source: 'get_profit_split.totalUsd',
-      detail: { frontUsd: split.front.profitUsd, backUsd: split.back.profitUsd },
-    },
   ];
-  return cards;
 }
 
 export interface KpiDelta {
@@ -351,7 +347,7 @@ export function isEmptyResult(tool: string, value: unknown): boolean {
 /** Ressalvas fixas que mudam a leitura do resultado (vão em _meta.notes). */
 export const TOOL_NOTES: Record<string, string[]> = {
   get_overview: [
-    'kpis.approvalRate/refundRate/cbRate = contagem ÷ TODAS as linhas pela data da VENDA (inclui as linhas sintéticas de estorno da Digistore); os cards de reembolso da tela contam pela data do ESTORNO — use screenCards.',
+    'kpis.approvalRate/refundRate/cbRate = contagem ÷ TODAS as linhas pela data da VENDA (inclui as linhas sintéticas de estorno da Digistore); o reembolso da tela é a coorte de 60 dias (screenCards) — nunca cite kpis.refundRate como "a taxa de reembolso".',
     'hourlyHeatmap em horário de Brasília (dow 0 = domingo).',
   ],
   get_products: ['refundRate/cbRate por SKU = contagem pela data da VENDA ÷ realOrders — não é o card de reembolso.'],
