@@ -251,20 +251,11 @@ function SkelOverview() {
   return (
     <div className="page-in">
       <SkelPageHead />
-      <SkelKpiGrid n={8} />
-      <div style={{ marginTop: 14 }}><SkelChartPanel height={260} i={8} /></div>
+      <div style={{ marginBottom: 14 }}><SkelChartPanel height={300} i={0} /></div>
+      <SkelKpiGrid n={7} />
       <div className="grid-2" style={{ marginTop: 14 }}>
         <div className="skel-panel anim-in-soft" style={{ '--i': 9 }}><SkelLine w={160} size="sm" style={{ marginBottom: 14 }} /><SkelDonut /></div>
-        <div className="skel-panel anim-in-soft" style={{ '--i': 10 }}>
-          <SkelLine w={150} size="sm" style={{ marginBottom: 14 }} />
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-            {Array.from({ length: 6 }).map((_, i) => (
-              <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                <Skel w={22} h={16} r={3} /><SkelLine w={`${70 - i * 8}%`} style={{ flex: 1 }} /><SkelLine w={60} size="sm" />
-              </div>
-            ))}
-          </div>
-        </div>
+        <SkelChartPanel height={300} i={10} />
       </div>
       <div style={{ marginTop: 14 }}><SkelTablePanel rows={5} cols={6} i={11} /></div>
     </div>

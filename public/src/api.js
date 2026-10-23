@@ -80,6 +80,21 @@ async function fetchOverview(filters) {
   return fetchJSON('/api/metrics/overview', params);
 }
 
+// Painéis da Visão geral fora da daily_metrics: estágio de captação,
+// reembolso dos últimos 60 dias e séries de reembolso/Net after CPA/AOV.
+function fetchOverviewPanels(filters) {
+  return fetchJSON('/api/metrics/overview-panels', {
+    start_date: toISODate(filters.dateRange.start),
+    end_date: toISODate(filters.dateRange.end),
+    platforms: setToCSV(filters.platforms),
+    countries: setToCSV(filters.countries),
+    products: setToCSV(filters.funnels),
+    families: setToCSV(filters.families),
+    stages: setToCSV(filters.stages),
+    aff: setToCSV(filters.affiliates),
+  });
+}
+
 /**
  * Fetch /api/metrics/orders.
  *
@@ -737,6 +752,7 @@ function _wrapMutations(api) {
 
 window.NSApi = _wrapMutations({
   fetchLeads,
+  fetchOverviewPanels,
   fetchNetworks,
   adminNetworksSyncStatus,
   adminNetworksSync,

@@ -1,8 +1,12 @@
-/* global React, useState, useMemo, Icon, Sparkline, NSTimeSeries, Donut, CountryBars,
-   fmtCurrency, fmtInt, avatarColor, initials */
-/* Overview page: fetches /api/metrics/overview, renders 8 KPIs + charts + tables. */
+/* global React, Icon, Sparkline, NSTimeSeries, Donut, CountUp, SkelOverview, RefundCoverageNotice,
+   fmtCurrency, fmtInt, fmtDateShort, avatarColor, initials, platBadge */
+/* Visão geral (reforma de 2026-10-23): série temporal no topo com seletor de
+   métrica, 7 KPIs, receita por estágio de captação (rosca + dia a dia) e top 5
+   afiliados. Dados: /api/metrics/overview (daily_metrics) +
+   /api/metrics/overview-panels (estágios, reembolso 60d, séries de reembolso,
+   Net after CPA e AOV por sessão). */
 
-const { useEffect: useEffectOv } = React;
+const { useEffect: useEffectOv, useState: useStateOv } = React;
 
 // TODO: thresholds eventualmente vão pra Settings UI. Por enquanto
 // hardcoded — alinhado com operação real do user (validado 2026-04-29).
@@ -13,13 +17,15 @@ const KPI_THRESHOLDS = {
   },
   refundRate: {
     // Sem meta dura — só sinaliza acima de 8% (chargeback amplifica em 1%).
-    label: (v) => v > 0.08 ? `acima da meta (≤8%)` : null,
+    label: (v) => v > 0.08 ? 'acima da meta (≤8%)' : 'meta ≤8%',
     state: (v) => v > 0.10 ? 'danger' : v > 0.08 ? 'warn' : 'ok',
   },
   cbRate: {
     label: () => 'limite 2.0% · atenção 1.0%',
     state: (v) => v >= 0.02 ? 'danger' : v >= 0.01 ? 'warn' : 'ok',
   },
+  // Sem card na tela; fica aqui porque a IA usa a mesma régua
+  // (lib/ai/kpiThresholds.ts — o teste compara as duas).
   estimatedMarginPct: {
     // estimatedMarginPct vem como %, ex: 6.6 = 6.6%
     label: () => null,
@@ -28,7 +34,6 @@ const KPI_THRESHOLDS = {
 };
 
 // Computa display + arrow + good (semântico, baseado em directionPreference).
-// Substitui o deltaFor antigo, mantém retrocompat via aliases.
 function deltaFor(cur, prev, directionPreference = 'higher') {
   if (prev === undefined || prev === null) return { display: '—', delta: '—', trend: 'flat', good: null };
   if (prev === 0) {
@@ -41,7 +46,6 @@ function deltaFor(cur, prev, directionPreference = 'higher') {
   const display = (d >= 0 ? '+' : '') + (d * 100).toFixed(1) + '%';
   if (Math.abs(d) < 0.002) return { display, delta: display, trend: 'flat', good: null };
   const trend = d > 0 ? 'up' : 'down';
-  // good = se a mudança foi pro lado desejado (depende da preference)
   let good = null;
   if (directionPreference === 'higher') good = d > 0;
   else if (directionPreference === 'lower') good = d < 0;
@@ -79,7 +83,7 @@ function KpiCard({
       role={onClick ? 'button' : undefined}
       tabIndex={onClick ? 0 : undefined}
       onKeyDown={onClick ? (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onClick(); } } : undefined}
-      aria-label={onClick ? `${label} — clique pra abrir transações` : undefined}
+      aria-label={onClick ? `${label} — clique pra abrir o detalhe` : undefined}
     >
       <span className="corner-tl"/>
       <span className="corner-br"/>
@@ -92,10 +96,12 @@ function KpiCard({
       </div>
       <div className="kpi-foot">
         <span className="kpi-delta">
-          <span className={`delta ${colorClass}`}>
-            <Icon name={arrowIcon} size={10}/>
-            {display}
-          </span>
+          {prev != null && (
+            <span className={`delta ${colorClass}`}>
+              <Icon name={arrowIcon} size={10}/>
+              {display}
+            </span>
+          )}
           <span className="vs">{hint || 'vs prev'}</span>
         </span>
         {!hideSparkline && sparkData && <Sparkline data={sparkData} color={kpiTone}/>}
@@ -103,8 +109,7 @@ function KpiCard({
       {threshold && threshold.label && (
         <div className={`kpi-threshold ${threshold.state}`}>{threshold.label}</div>
       )}
-      {/* Linha extra neutra (sem semáforo) — ex.: o $ que o modelo CPA
-          desconta de refund no card de taxa de reembolso. */}
+      {/* Linha extra neutra (sem semáforo). */}
       {sub && (
         <div className="kpi-threshold" style={{ color: 'var(--fg4)' }}>{sub}</div>
       )}
@@ -112,156 +117,234 @@ function KpiCard({
   );
 }
 
-const PRODUCT_TYPE_LABELS = {
-  FRONTEND: 'Front-end',
-  UPSELL: 'Upsell',
-  BUMP: 'Bump',
-  DOWNSELL: 'Downsell',
+// ---------- Série temporal (topo) ----------
+const TS_METRICS = [
+  { id: 'gross', label: 'Faturamento bruto', icon: 'dollar', format: 'money' },
+  { id: 'orders', label: 'Pedidos', icon: 'shopping-cart', format: 'int' },
+  { id: 'aov', label: 'AOV', icon: 'trending-up', format: 'money2' },
+  { id: 'refunds', label: 'Reembolso', icon: 'refresh', format: 'money' },
+  { id: 'netAfterCpa', label: 'Net after CPA', icon: 'target', format: 'money' },
+];
+const TS_NOTE = {
+  gross: 'receita bruta das vendas aprovadas, por dia da venda',
+  orders: 'pedidos aprovados por dia',
+  aov: 'receita da sessão de funil ÷ sessões, pelo dia do front',
+  refunds: 'valor devolvido por dia do estorno (inclui vendas de antes do período)',
+  netAfterCpa: 'funil · modelo da planilha CPA (bruto − refund/cb, taxa e opex − CPA pago)',
 };
 
-// DS1: série categórica em --chart-1..4 (antes BUMP=--warning e
-// DOWNSELL=--hot, que são a MESMA cor no DS1 — as fatias se confundiam).
-const PRODUCT_TYPE_COLORS = {
-  FRONTEND: 'var(--chart-1)',
-  UPSELL: 'var(--chart-2)',
-  BUMP: 'var(--chart-3)',
-  DOWNSELL: 'var(--chart-4)', // o Donut pinta o rótulo central com a cor da fatia — --chart-4 (turquesa) passa 4,5:1 nos dois temas
-};
+function TimeSeriesPanel({ metric, setMetric, kpis, prev, buckets, panels, cur, presetLabel }) {
+  const byDay = new Map((panels?.daily || []).map((d) => [d.date, d]));
+  const needsPanels = metric === 'refunds' || metric === 'netAfterCpa' || metric === 'aov';
+  const def = TS_METRICS.find((m) => m.id === metric) || TS_METRICS[0];
 
-const COUNTRY_NAMES = {
-  US: 'United States', CA: 'Canada', UK: 'United Kingdom', GB: 'United Kingdom',
-  AU: 'Australia', DE: 'Germany', NZ: 'New Zealand', IE: 'Ireland', NL: 'Netherlands',
-  FR: 'France', ES: 'Spain', IT: 'Italy', BR: 'Brazil', MX: 'Mexico', JP: 'Japan',
-};
+  const data = buckets.map((b) => {
+    const p = byDay.get(b.day);
+    const value = metric === 'gross' ? b.gross
+      : metric === 'orders' ? b.approvedOrders
+      : metric === 'aov' ? (p && p.feSessions ? p.feRevenue / p.feSessions : 0)
+      : metric === 'refunds' ? (p ? p.refundUsd : 0)
+      : (p ? p.netAfterCpa : 0);
+    return { date: b.date, value };
+  });
 
-const PLATFORM_VARIANTS = {
-  digistore24: { short: 'D24', className: 'plat-d24' },
-  clickbank: { short: 'CB', className: 'plat-cb' },
-};
+  // Valor do período + variação (quando há período anterior comparável).
+  let head = null;
+  let cmp = null;
+  let extra = null;
+  if (metric === 'gross') { head = fmtCurrency(kpis.gross, cur, 0); cmp = deltaFor(kpis.gross, prev.gross); }
+  if (metric === 'orders') { head = fmtInt(kpis.approvedCount); cmp = deltaFor(kpis.approvedCount, prev.approvedCount); }
+  if (metric === 'aov') { head = fmtCurrency(kpis.aov, cur, 2); cmp = deltaFor(kpis.aov, prev.aov); }
+  if (metric === 'refunds' && panels) {
+    const usd = panels.daily.reduce((s, d) => s + d.refundUsd, 0);
+    const n = panels.daily.reduce((s, d) => s + d.refundCount, 0);
+    head = fmtCurrency(usd, cur, 0);
+    extra = `${fmtInt(n)} estornos no período`;
+  }
+  if (metric === 'netAfterCpa' && panels) {
+    head = fmtCurrency(panels.netAfterCpa.usd, cur, 0);
+    extra = `${fmtCurrency(panels.netAfterCpa.frontGrossUsd, cur, 0)} de bruto no funil · CPA ${fmtCurrency(panels.netAfterCpa.frontCpaUsd, cur, 0)}`;
+  }
+  const cmpClass = cmp ? (cmp.good === true ? 'good' : cmp.good === false ? 'bad' : 'flat') : 'flat';
+  const color = metric === 'refunds' ? 'var(--chart-5)' : metric === 'netAfterCpa' ? 'var(--chart-2)' : 'var(--accent)';
 
-// Painel Lucro FRONT × BACK (modelo planilha CPA). Front = funil aprovado
-// SEM fontes de back; back = recuperação + Tauk + SMS (+ SalesBound/email
-// futuros). Total = soma. Endpoint próprio: não depende do /overview.
-function ProfitSplitPanel({ filters, cur, onData }) {
-  const [ps, setPs] = useState({ status: 'loading', d: null });
-  useEffect(() => {
-    let cancelled = false;
-    window.NSApi.fetchProfitSplit(filters)
-      .then((d) => { if (!cancelled) { setPs({ status: 'ready', d }); if (onData) onData(d); } })
-      .catch(() => { if (!cancelled) setPs((s) => ({ status: 'error', d: s.d })); });
-    return () => { cancelled = true; };
-    // Refaz também quando plataforma/família/país mudam — antes o card
-    // ficava travado no global com filtro ativo.
-  }, [
-    filters.dateRange.start.getTime(),
-    filters.dateRange.end.getTime(),
-    Array.from(filters.platforms || []).join(','),
-    Array.from(filters.families || []).join(','),
-    Array.from(filters.countries || []).join(','),
-    Array.from(filters.affiliates || []).join(','),
-  ]);
-  const d = ps.d;
-  if (!d) return null;
   return (
-    <div className="panel" style={{ marginBottom: 14 }}>
-      <div className="panel-head">
-        <div className="panel-title">
-          <span className="panel-eyebrow">Lucro · Front × back (modelo CPA)</span>
-          <div className="panel-metric">
-            {fmtCurrency(d.totalUsd, cur, 0)}
-            <span className="panel-sub" style={{ marginLeft: 8 }}>total = front + back · opex {d.opexPct}% · refund&cb/taxa por plataforma</span>
+    <div className="panel ts-panel" style={{ marginBottom: 14 }}>
+      <div className="ts-tabs" role="tablist" aria-label="Métrica do gráfico">
+        {TS_METRICS.map((m) => (
+          <button key={m.id} role="tab" aria-selected={metric === m.id}
+            className={`ts-tab ${metric === m.id ? 'is-active' : ''}`} onClick={() => setMetric(m.id)}>
+            <span className="ic"><Icon name={m.icon} size={14}/></span>{m.label}
+          </button>
+        ))}
+      </div>
+      <div className="ts-head">
+        <div>
+          <div className="panel-eyebrow">{def.label} · {presetLabel}</div>
+          <div className="ts-value" style={{ color: def.format === 'int' ? 'var(--fg1)' : metric === 'refunds' ? 'var(--danger)' : 'var(--money)' }}>
+            {head ?? '…'}
+            {cmp && cmp.display !== '—' && (
+              <span className={`delta ${cmpClass}`} style={{ marginLeft: 10, fontSize: 12, verticalAlign: 'middle' }}>
+                <Icon name={cmp.trend === 'up' ? 'arrow-up-right' : cmp.trend === 'down' ? 'arrow-down-right' : 'trending-up'} size={10}/>
+                {cmp.display} <span className="vs">vs período anterior</span>
+              </span>
+            )}
+          </div>
+          <div className="panel-sub">{extra ? `${extra} · ` : ''}{TS_NOTE[metric]}</div>
+        </div>
+      </div>
+      {needsPanels && !panels
+        ? <div style={{ height: 300, display: 'grid', placeItems: 'center', color: 'var(--fg5)', fontSize: 12 }}>carregando…</div>
+        : <NSTimeSeries data={data} height={300} currency={cur}
+            series={[{ key: 'value', label: def.label, color, format: def.format }]}/>}
+    </div>
+  );
+}
+
+// ---------- Receita por estágio de captação ----------
+const STAGES = [
+  { key: 'front', label: 'Front (funil)', color: 'var(--chart-1)', sub: 'front + upsells + downsells' },
+  { key: 'backend', label: 'Back-end', color: 'var(--chart-2)', sub: 'Tauk, Logicall e SalesBound' },
+  { key: 'recovery', label: 'Recuperação', color: 'var(--chart-3)', sub: 'afiliados de recuperação e SMS' },
+];
+
+function StagePanels({ panels, cur }) {
+  if (!panels) {
+    return (
+      <div className="grid-2">
+        <div className="panel" style={{ minHeight: 260, display: 'grid', placeItems: 'center', color: 'var(--fg5)', fontSize: 12 }}>carregando…</div>
+        <div className="panel" style={{ minHeight: 260, display: 'grid', placeItems: 'center', color: 'var(--fg5)', fontSize: 12 }}>carregando…</div>
+      </div>
+    );
+  }
+  const st = panels.stages;
+  const total = st.totalUsd || 0;
+  const items = STAGES.map((s) => ({ label: s.label, value: st[s.key].usd, color: s.color, clickable: false }));
+  const outside = total > 0 ? (st.backend.usd + st.recovery.usd) / total : 0;
+  const pct = (v) => (total > 0 ? `${((v / total) * 100).toFixed(0)}%` : '—');
+
+  return (
+    <div className="grid-2">
+      <div className="panel">
+        <div className="panel-head">
+          <div className="panel-title">
+            <span className="panel-eyebrow">Receita por estágio de captação</span>
+            <div className="panel-sub">Vendas aprovadas · receita bruta · {fmtCurrency(total, cur, 0)} no período</div>
           </div>
         </div>
+        <Donut items={items} totalLabel="Total" format={(v) => fmtCurrency(v, cur, 0)}/>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginTop: 14 }}>
+          {STAGES.map((s) => {
+            const g = st[s.key];
+            const parts = g.parts || [];
+            return (
+              <div key={s.key} style={{ borderTop: '1px solid var(--border-soft)', paddingTop: 8 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12.5 }}>
+                  <span style={{ width: 10, height: 10, borderRadius: 3, background: s.color, flexShrink: 0 }}/>
+                  <strong style={{ color: 'var(--fg1)' }}>{s.label}</strong>
+                  <span style={{ color: 'var(--fg5)', fontSize: 11 }}>{s.sub}</span>
+                  <span style={{ flex: 1 }}/>
+                  <span className="cell-mono" style={{ color: 'var(--money)' }}>{fmtCurrency(g.usd, cur, 0)}</span>
+                  <span className="cell-mono" style={{ color: 'var(--fg4)', width: 36, textAlign: 'right' }}>{pct(g.usd)}</span>
+                </div>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 6, paddingLeft: 18 }}>
+                  {s.key === 'backend' && !g.available && (
+                    <span style={{ fontSize: 11, color: 'var(--fg5)' }}>Fora do recorte: call center e SalesBound não têm plataforma, produto nem afiliado.</span>
+                  )}
+                  {parts.length === 0 && (s.key !== 'backend' || g.available) && (
+                    <span style={{ fontSize: 11, color: 'var(--fg5)' }}>Nada no período.</span>
+                  )}
+                  {parts.map((p) => (
+                    <span key={p.key} style={{
+                      fontSize: 11, padding: '2px 10px', borderRadius: 'var(--r-full)',
+                      border: '1px solid var(--border-soft)', background: 'var(--bg-raised)', color: 'var(--fg3)',
+                    }}>
+                      {p.label} · <span className="cell-mono" style={{ color: 'var(--fg1)' }}>{fmtCurrency(p.usd, cur, 0)}</span>
+                    </span>
+                  ))}
+                </div>
+              </div>
+            );
+          })}
+        </div>
       </div>
-      <div className="mini-kpis">
-        <div className="mini-kpi">
-          <div className="l">Lucro front (funil)</div>
-          <div className="v" style={{ color: d.front.profitUsd >= 0 ? 'var(--money)' : 'var(--danger)' }}>{fmtCurrency(d.front.profitUsd, cur, 0)}</div>
-          <div className="s">{fmtCurrency(d.front.grossUsd, cur, 0)} gross × modelo − {fmtCurrency(d.front.cpaUsd, cur, 0)} CPA · {fmtInt(d.front.orders)} pedidos</div>
+
+      <div className="panel">
+        <div className="panel-head">
+          <div className="panel-title">
+            <span className="panel-eyebrow">Captação dia a dia</span>
+            <div className="panel-sub">
+              Receita de cada estágio por dia (empilhada) · {total > 0 ? `${(outside * 100).toFixed(1)}% veio de fora do funil` : 'sem receita no período'}
+            </div>
+          </div>
         </div>
-        <div className="mini-kpi">
-          <div className="l">Lucro back (retenção)</div>
-          <div className="v" style={{ color: 'var(--money)' }}>{fmtCurrency(d.back.profitUsd, cur, 0)}</div>
-          <div className="s">recuperação + call center (Tauk/Logicall) + SMS · líquido de comissões</div>
-        </div>
-        <div className="mini-kpi">
-          <div className="l">Total da operação</div>
-          <div className="v">{fmtCurrency(d.totalUsd, cur, 0)}</div>
-          <div className="s">front {d.totalUsd !== 0 ? Math.round((d.front.profitUsd / d.totalUsd) * 100) : 0}% · back {d.totalUsd !== 0 ? Math.round((d.back.profitUsd / d.totalUsd) * 100) : 0}%</div>
-        </div>
-      </div>
-      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 10 }}>
-        {d.back.sources.map((s) => (
-          <span key={s.key} style={{
-            fontFamily: 'var(--f-mono)', fontSize: 10, padding: '4px 12px', borderRadius: 'var(--r-full)',
-            background: s.available ? 'color-mix(in oklab, var(--accent) 8%, transparent)' : 'var(--bg-raised)',
-            border: `1px solid ${s.available ? 'color-mix(in oklab, var(--accent) 30%, transparent)' : 'var(--border-soft)'}`,
-            color: s.available ? 'var(--fg3)' : 'var(--fg5)', opacity: s.available ? 1 : 0.7,
-          }}>
-            {s.label}{s.available
-              ? <> · <span style={{ color: 'var(--fg3)' }}>{fmtCurrency(s.grossUsd, cur, 0)}</span> → <span style={{ color: 'var(--money)' }}>{fmtCurrency(s.netUsd, cur, 0)}</span></>
-              : ' · em breve'}
-          </span>
-        ))}
+        <NSTimeSeries data={panels.daily} height={300} currency={cur} toggles
+          series={STAGES.map((s) => ({ key: s.key, label: s.label, color: s.color, stackId: 'stage' }))}/>
       </div>
     </div>
   );
 }
 
-function OverviewPage({ filters, setFilters }) {
-  const [state, setState] = useStateApp({ status: 'loading', data: null, error: null });
-  const [metric, setMetric] = useState('gross');
+function OverviewPage({ filters }) {
+  const [state, setState] = useStateOv({ status: 'loading', data: null, error: null });
+  const [panels, setPanels] = useStateOv({ status: 'loading', data: null });
+  const [metric, setMetric] = useStateOv('gross');
   // Modo do gross:
   //  - 'active'  (default): gross = só APPROVED (status atual). Refunds removem
   //    do total. Reflete "receita ativa real" hoje no books.
   //  - 'event'   (CB-style): gross = valor original da venda no dia que ocorreu,
   //    inclui orders que depois foram refundadas. Bate com o "Gross Sale Amount"
   //    do CB Reporting Dashboard.
-  const [grossMode, setGrossMode] = useState('active');
-  // Payload do profit-split (modelo CPA) — alimentado pelo ProfitSplitPanel
-  // via onData; usado no card NET AFTER CPA.
-  const [split, setSplit] = useState(null);
+  const [grossMode, setGrossMode] = useStateOv('active');
+
+  const filterKey = [filters.dateRange.start.getTime(), filters.dateRange.end.getTime(),
+    encodeSet(filters.platforms), encodeSet(filters.countries), encodeSet(filters.funnels),
+    encodeSet(filters.families), encodeSet(filters.stages || new Set()), encodeSet(filters.affiliates || new Set())].join('|');
 
   useEffectOv(() => {
     let cancelled = false;
     setState((s) => ({ ...s, status: 'loading' }));
     window.NSApi.fetchOverview({ ...filters, compare: true })
-      .then((data) => {
-        if (cancelled) return;
-        setState({ status: 'ready', data, error: null });
-      })
+      .then((data) => { if (!cancelled) setState({ status: 'ready', data, error: null }); })
       .catch((err) => {
         if (cancelled) return;
         console.error('fetchOverview failed', err);
         setState({ status: 'error', data: null, error: err.message });
       });
     return () => { cancelled = true; };
-  }, [filters.dateRange.start.getTime(), filters.dateRange.end.getTime(),
-      encodeSet(filters.platforms), encodeSet(filters.countries),
-      encodeSet(filters.funnels), encodeSet(filters.families), encodeSet(filters.affiliates || new Set()), filters.compare]);
+  }, [filterKey]);
+
+  useEffectOv(() => {
+    let cancelled = false;
+    setPanels((s) => ({ ...s, status: 'loading' }));
+    window.NSApi.fetchOverviewPanels(filters)
+      .then((data) => { if (!cancelled) setPanels({ status: 'ready', data }); })
+      .catch((err) => {
+        if (cancelled) return;
+        console.error('fetchOverviewPanels failed', err);
+        setPanels({ status: 'error', data: null });
+      });
+    return () => { cancelled = true; };
+  }, [filterKey]);
 
   const cur = filters.currency || 'USD';
+  const presetLabel = (typeof PRESET_LABEL !== 'undefined' && PRESET_LABEL[filters.preset]) || filters.preset;
 
-  if (state.status === 'loading' && !state.data) {
-    return <SkelOverview/>;
-  }
+  if (state.status === 'loading' && !state.data) return <SkelOverview/>;
   if (state.status === 'error') {
     return <div className="page-in"><div className="panel" style={{ color: 'var(--danger)', display: 'flex', alignItems: 'center', gap: 10 }}>
       <Icon name="alert-triangle" size={16}/> Erro ao carregar: {state.error}
     </div></div>;
   }
 
-  const { kpis: rawKpis, previous: rawPrev, daily, byCountry, byProductType, topAffiliates, platformHealth } = state.data;
-  // grossMode='event' substitui gross por grossOriginal (CB-aligned). KPIs
-  // dependentes (AOV, marginPct) recalculam usando o gross efetivo.
+  const { kpis: rawKpis, previous: rawPrev, daily, topAffiliates } = state.data;
+  const pd = panels.data;
+  // grossMode='event' substitui gross por grossOriginal (CB-aligned).
   const useEvent = grossMode === 'event';
   const kpis = useEvent && rawKpis.grossOriginal != null ? {
     ...rawKpis,
     gross: rawKpis.grossOriginal,
     aov: rawKpis.orderGroups ? rawKpis.grossOriginal / rawKpis.orderGroups : 0,
-    estimatedMarginPct: rawKpis.grossOriginal > 0
-      ? Math.round((rawKpis.estimatedProfit / rawKpis.grossOriginal) * 10000) / 100
-      : 0,
   } : rawKpis;
   const prev = useEvent && rawPrev?.grossOriginal != null ? {
     ...rawPrev,
@@ -270,85 +353,48 @@ function OverviewPage({ filters, setFilters }) {
   } : (rawPrev || {});
 
   const buckets = daily.map((b) => ({
+    day: b.date,
     date: new Date(b.date),
     gross: useEvent && b.grossOriginal != null ? b.grossOriginal : b.gross,
-    net: b.net,
-    cpa: b.cpa,
-    cogs: b.cogs ?? 0,
-    fulfillment: b.fulfillment ?? 0,
-    profit: b.profit ?? 0,
-    orders: b.approvedOrders,
     approvedOrders: b.approvedOrders,
     allOrders: b.allOrders,
   }));
+  const panelByDay = new Map((pd?.daily || []).map((d) => [d.date, d]));
 
+  // Esconde sparklines quando não há histórico suficiente (< 7 dias).
+  const hideSpark = buckets.length < 7;
   const sparkGross = buckets.map((b) => b.gross);
-  const sparkNet = buckets.map((b) => b.net);
   const sparkOrders = buckets.map((b) => b.approvedOrders);
-  const sparkAov = buckets.map((b) => (b.approvedOrders ? b.gross / b.approvedOrders : 0));
+  const sparkAov = buckets.map((b) => { const p = panelByDay.get(b.day); return p && p.feSessions ? p.feRevenue / p.feSessions : 0; });
+  const sparkNet = buckets.map((b) => panelByDay.get(b.day)?.netAfterCpa ?? 0);
   const approvalSpark = buckets.map((b) => (b.allOrders ? b.approvedOrders / b.allOrders : 0));
 
-  // stageId: token do filtro global "Etapa" (filters.stages / param `st`).
-  // BUMP não tem etapa filtrável na UI → segmento não-clicável.
-  const STAGE_TOKEN = { FRONTEND: 'front', UPSELL: 'upsell', DOWNSELL: 'downsell' };
-  const typeItems = ['FRONTEND', 'UPSELL', 'BUMP', 'DOWNSELL'].map((key) => {
-    const found = byProductType.find((x) => x.label === key);
-    return {
-      label: PRODUCT_TYPE_LABELS[key],
-      value: found ? found.value : 0,
-      color: PRODUCT_TYPE_COLORS[key],
-      stageId: STAGE_TOKEN[key] || null,
-      clickable: !!STAGE_TOKEN[key],
-    };
-  });
-
-  const countryData = byCountry.map((c) => ({
-    code: c.code,
-    name: COUNTRY_NAMES[c.code] || c.code,
-    value: c.value,
-    orders: c.orders,
-  }));
-
-  // Esconde sparklines quando não há histórico suficiente pra dar leitura
-  // (< 7 dias na série). Cards "novos" mostram delta='novo' sem o sparkline
-  // achatado no chão.
-  const hideSpark = buckets.length < 7;
+  const r60 = pd?.refunds60d;
+  const r60Pct = r60?.pctCount;
+  const nac = pd?.netAfterCpa;
 
   return (
     <div className="page-in">
       <div className="page-head">
         <div className="lead">
-          {/* whiteSpace normal: em telas estreitas o ribbon quebra limpo em
-              vez de estourar/truncar. */}
-          <span className="eyebrow" style={{ whiteSpace: 'normal' }}>{(typeof PRESET_LABEL !== 'undefined' && PRESET_LABEL[filters.preset]) || filters.preset} · Tier 1 global · USD</span>
+          <span className="eyebrow" style={{ whiteSpace: 'normal' }}>{presetLabel} · USD</span>
           <h2>Operação <em>em tempo real</em></h2>
-          <span className="sub">{fmtRange(filters.dateRange)}<span className="hide-mobile"> · dados unificados ClickBank + Digistore24</span></span>
+          <span className="sub">{fmtRange(filters.dateRange)}<span className="hide-mobile"> · dados unificados de todas as plataformas</span></span>
         </div>
-        {/* Mobile: wrap + flexShrink 0 — nada é cortado na borda; o texto de
-            "Agendar relatório" some ≤820px (fica só o ícone de calendário). */}
         <div className="page-head-actions" style={{ flexWrap: 'wrap' }}>
           <div className="seg" title="Modo de cálculo do gross" style={{ flexShrink: 0 }}>
-            <button
-              className={grossMode === 'active' ? 'is-active' : ''}
-              onClick={() => setGrossMode('active')}
-              aria-label="Receita ativa: só vendas aprovadas"
-            >Ativo</button>
-            <button
-              className={grossMode === 'event' ? 'is-active' : ''}
-              onClick={() => setGrossMode('event')}
-              aria-label="Data do evento: inclui valor original de vendas refundadas (alinha com ClickBank)"
-            >Evento</button>
+            <button className={grossMode === 'active' ? 'is-active' : ''} onClick={() => setGrossMode('active')}
+              aria-label="Receita ativa: só vendas aprovadas">Ativo</button>
+            <button className={grossMode === 'event' ? 'is-active' : ''} onClick={() => setGrossMode('event')}
+              aria-label="Data do evento: inclui valor original de vendas estornadas (alinha com ClickBank)">Evento</button>
           </div>
-          <button className="btn btn-ghost" style={{ flexShrink: 0 }} title="Agendar relatório">
-            <Icon name="calendar" size={12}/> <span className="hide-mobile">Agendar relatório</span>
-          </button>
-          <button className="btn btn-primary" style={{ flexShrink: 0 }}>
-            <Icon name="plus" size={12}/> Nova visão
-          </button>
         </div>
       </div>
       {/* DS1 "dado com contexto": fonte que não reporta estorno = leitura parcial */}
       <RefundCoverageNotice platforms={Array.from(filters.platforms || [])}/>
+
+      <TimeSeriesPanel metric={metric} setMetric={setMetric} kpis={kpis} prev={prev}
+        buckets={buckets} panels={pd} cur={cur} presetLabel={presetLabel}/>
 
       <div className="kpi-grid">
         <KpiCard label="Receita bruta" icon="dollar" index={0} money
@@ -356,20 +402,22 @@ function OverviewPage({ filters, setFilters }) {
           cur={kpis.gross} prev={prev.gross}
           sparkData={sparkGross} hideSparkline={hideSpark}
           onClick={() => window.NSNavigate('transactions')}/>
-        <KpiCard label="Receita líquida" icon="wallet" index={1} money
-          countValue={kpis.net} countFormat={(n) => fmtCurrency(n, cur, 0)}
-          cur={kpis.net} prev={prev.net}
-          sparkData={sparkNet} hideSparkline={hideSpark}
-          onClick={() => window.NSNavigate('transactions')}/>
-        <KpiCard label="Pedidos aprovados" icon="shopping-cart" index={2}
+        <KpiCard label="Pedidos aprovados" icon="shopping-cart" index={1}
           countValue={kpis.approvedCount} countFormat={(n) => fmtInt(n)}
           cur={kpis.approvedCount} prev={prev.approvedCount}
           sparkData={sparkOrders} hideSparkline={hideSpark}
           onClick={() => window.NSNavigate('transactions', { status: 'approved' })}/>
-        <KpiCard label="AOV" icon="trending-up" index={3} money
+        <KpiCard label="AOV" icon="trending-up" index={2} money
           countValue={kpis.aov} countFormat={(n) => fmtCurrency(n, cur, 2)}
           cur={kpis.aov} prev={prev.aov}
-          sparkData={sparkAov} hideSparkline={hideSpark}/>
+          sparkData={sparkAov} hideSparkline={hideSpark || !pd}/>
+        {/* NET AFTER CPA do modelo da planilha CPA — mesma régua da aba Afiliados. */}
+        <KpiCard label="Net after CPA (modelo)" icon="target" index={3} money
+          alert={(nac?.usd ?? 0) < 0}
+          countValue={nac ? nac.usd : 0} countFormat={(n) => nac ? fmtCurrency(n, cur, 0) : '…'}
+          cur={null} prev={null}
+          hint={nac ? `funil · opex ${nac.opexPct}% · CPA ${fmtCurrency(nac.frontCpaUsd, cur, 0)}` : 'carregando modelo CPA…'}
+          sparkData={sparkNet} hideSparkline={hideSpark || !pd}/>
         <KpiCard label="Taxa de aprovação" icon="check" index={4}
           countValue={kpis.approvalRate * 100} countFormat={(n) => n.toFixed(1)} unit="%"
           cur={kpis.approvalRate} prev={prev.approvalRate}
@@ -379,41 +427,24 @@ function OverviewPage({ filters, setFilters }) {
             state: KPI_THRESHOLDS.approvalRate.state(kpis.approvalRate),
           }}
           onClick={() => window.NSNavigate('transactions')}/>
-        {/* Lente de VALOR (decisão 2026-08-06): $ devolvido ÷ $ faturado —
-            "quanto do faturamento representa", a fórmula que a Digistore
-            usa no painel dela. Desde 2026-08-11 o numerador conta pela DATA
-            DO ESTORNO (refundedAt), igual ao painel da plataforma: estorno
-            de hoje aparece hoje mesmo que a venda seja de semanas atrás. A
-            lente por PEDIDOS vive no card seguinte. */}
-        <KpiCard label="Taxa de reembolso" icon="refresh" index={5}
-          countValue={split?.refunds ? split.refunds.valuePct : 0}
-          countFormat={(n) => split?.refunds ? n.toFixed(2) : '…'} unit="%"
-          cur={kpis.refundRate} prev={prev.refundRate}
-          directionPreference="lower"
-          sub={split?.refunds
-            ? `−${fmtCurrency(split.refunds.refundedUsd, cur, 0)} devolvidos de ${fmtCurrency(split.refunds.grossUsd, cur, 0)} faturados${split.front.refundCbUsd > 0 ? ` · modelo desconta −${fmtCurrency(split.front.refundCbUsd, cur, 0)}` : ''}`
-            : null}
-          onClick={() => window.NSNavigate('transactions', { status: 'refunded' })}/>
-        {/* Lente por PEDIDOS ("Reembolsos baseados em pedidos"): estornos
-            OCORRIDOS no período ÷ pedidos feitos no período, denominador
-            honesto (linhas sintéticas da D24 fora). Carrega o ALERTA do
-            usuário: monitor ROLANTE dos últimos 7 dias — limite 10% dos
-            pedidos; acima acende (warn ≥8%). */}
-        <KpiCard label="Reembolso por pedidos" icon="refresh" index={6}
-          countValue={split?.refunds ? split.refunds.pct : 0}
-          countFormat={(n) => split?.refunds ? n.toFixed(2) : '…'} unit="%"
-          cur={null} prev={null}
-          directionPreference="lower"
-          alert={(split?.refunds7d?.pct ?? 0) > 10}
-          threshold={split?.refunds7d && split.refunds7d.salesCount > 0 ? {
-            label: `últimos 7d: ${split.refunds7d.pct.toFixed(1)}% (${fmtInt(split.refunds7d.refundedCount)}/${fmtInt(split.refunds7d.salesCount)}) · limite 10%`,
-            state: split.refunds7d.pct > 10 ? 'danger' : split.refunds7d.pct > 8 ? 'warn' : 'ok',
+        {/* Reembolso pela régua da aba Reembolsos: das vendas feitas nos
+            últimos 60 dias, quantas já voltaram (cada estorno conta no dia da
+            venda). Janela fixa — não segue o período do filtro. */}
+        <KpiCard label="Reembolso · últimos 60 dias" icon="refresh" index={5}
+          countValue={r60Pct != null ? r60Pct * 100 : 0}
+          countFormat={(n) => (r60 ? n.toFixed(2) : '…')} unit="%"
+          cur={null} prev={null} directionPreference="lower"
+          alert={r60Pct != null && r60Pct > 0.10}
+          hint={r60 ? `${fmtInt(r60.refundCount)} de ${fmtInt(r60.baseCount)} vendas` : 'carregando…'}
+          threshold={r60Pct != null ? {
+            label: KPI_THRESHOLDS.refundRate.label(r60Pct),
+            state: KPI_THRESHOLDS.refundRate.state(r60Pct),
           } : null}
-          hint={split?.refunds
-            ? `${fmtInt(split.refunds.refundedCount)} estornos · ${fmtInt(split.refunds.salesCount)} pedidos no período`
-            : 'carregando…'}
-          onClick={() => window.NSNavigate('transactions', { status: 'refunded' })}/>
-        <KpiCard label="Chargeback" icon="alert-triangle" index={7}
+          sub={r60 && r60.projectedPctCount != null
+            ? `~${(r60.projectedPctCount * 100).toFixed(1)}% ao amadurecer${r60.tailIncomplete ? ' (piso)' : ''} · em valor ${r60.pctUsd != null ? (r60.pctUsd * 100).toFixed(1) : '—'}%`
+            : null}
+          onClick={() => window.NSNavigate('refund-cohorts')}/>
+        <KpiCard label="Chargeback" icon="alert-triangle" index={6}
           alert={kpis.cbRate >= 0.02}
           countValue={kpis.cbRate * 100} countFormat={(n) => n.toFixed(2)} unit="%"
           cur={kpis.cbRate} prev={prev.cbRate}
@@ -423,257 +454,69 @@ function OverviewPage({ filters, setFilters }) {
             state: KPI_THRESHOLDS.cbRate.state(kpis.cbRate),
           }}
           onClick={() => window.NSNavigate('transactions', { status: 'chargeback' })}/>
-        {/* Substitui o antigo "Lucro estimado" (net−cogs−frete) pelo NET
-            AFTER CPA do modelo CPA (front do profit-split), a pedido do
-            usuário — mesma régua da aba Afiliados/planilha. */}
-        <KpiCard label="Net after CPA (modelo)" icon="target" index={8} money
-          alert={(split?.front?.profitUsd ?? 0) < 0}
-          countValue={split ? split.front.profitUsd : 0} countFormat={(n) => split ? fmtCurrency(n, cur, 0) : '…'}
-          cur={split ? split.front.profitUsd : 0}
-          prev={null}
-          hint={split
-            ? `front ${fmtCurrency(split.front.profitUsd, cur, 0)} + back ${fmtCurrency(split.back.profitUsd, cur, 0)} = ${fmtCurrency(split.totalUsd, cur, 0)}`
-            : 'carregando modelo CPA…'}
-          threshold={null}/>
       </div>
 
-      <ProfitSplitPanel filters={filters} cur={cur} onData={setSplit}/>
+      <StagePanels panels={pd} cur={cur}/>
 
-      <div className="panel" style={{ marginBottom: 14 }}>
+      <div className="panel">
         <div className="panel-head">
           <div className="panel-title">
-            <span className="panel-eyebrow">Série temporal · Diária</span>
-            <div className="panel-metric">
-              {metric === 'gross' && <>{fmtCurrency(kpis.gross, cur, 0)}
-                <span className={`delta ${deltaFor(kpis.gross, prev.gross).trend}`}>{deltaFor(kpis.gross, prev.gross).delta}</span></>}
-              {metric === 'net' && <>{fmtCurrency(kpis.net, cur, 0)}
-                <span className={`delta ${deltaFor(kpis.net, prev.net).trend}`}>{deltaFor(kpis.net, prev.net).delta}</span></>}
-              {metric === 'orders' && <>{fmtInt(kpis.approvedCount)}
-                <span className={`delta ${deltaFor(kpis.approvedCount, prev.approvedCount).trend}`}>{deltaFor(kpis.approvedCount, prev.approvedCount).delta}</span></>}
-              {metric === 'aov' && <>{fmtCurrency(kpis.aov, cur, 2)}
-                <span className={`delta ${deltaFor(kpis.aov, prev.aov).trend}`}>{deltaFor(kpis.aov, prev.aov).delta}</span></>}
-              {metric === 'approvalRate' && <>{(kpis.approvalRate * 100).toFixed(1)}%
-                <span className={`delta ${deltaFor(kpis.approvalRate, prev.approvalRate).trend}`}>{deltaFor(kpis.approvalRate, prev.approvalRate).delta}</span></>}
-            </div>
-          </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
-            <div className="metric-seg">
-              {[['gross','Bruto'],['net','Líquido'],['profit','Lucro'],['orders','Pedidos'],['aov','AOV'],['approvalRate','Aprovação']].map(([k, l]) => (
-                <button key={k} className={`metric-opt ${metric === k ? 'is-active' : ''}`} onClick={() => setMetric(k)}>{l}</button>
-              ))}
-            </div>
-            <div className="panel-legend">
-              <span className="legend-dot cyan"><span/>{(typeof PRESET_LABEL !== 'undefined' && PRESET_LABEL[filters.preset]) || filters.preset}</span>
-            </div>
+            <span className="panel-eyebrow">Top 5 afiliados</span>
+            <div className="panel-sub">Ordenados por receita bruta · redes de afiliados ficam na aba Networks</div>
           </div>
         </div>
-        {(() => {
-          const MONEY = new Set(['gross', 'net', 'profit']);
-          const chartData = buckets.map((b) => ({
-            date: b.date,
-            gross: b.gross,
-            net: b.net,
-            profit: b.profit ?? 0,
-            orders: b.approvedOrders,
-            aov: b.approvedOrders ? b.gross / b.approvedOrders : 0,
-            approvalRate: b.allOrders ? b.approvedOrders / b.allOrders : 0,
-          }));
-          // Métricas monetárias: 3 séries juntas, a do chip em destaque (área),
-          // as outras como linhas finas de contexto. Demais métricas: série única
-          // (unidades diferentes não dividem eixo).
-          const series = MONEY.has(metric)
-            ? [
-                { key: 'gross', label: 'Bruto', color: 'var(--accent)' },
-                { key: 'net', label: 'Líquido', color: 'var(--hot)' },
-                { key: 'profit', label: 'Lucro', color: 'var(--money)' },
-              ]
-            : [{
-                key: metric,
-                label: metric === 'orders' ? 'Pedidos' : metric === 'aov' ? 'AOV' : 'Aprovação',
-                color: 'var(--accent)',
-                format: metric === 'orders' ? 'int' : metric === 'aov' ? 'money2' : 'pct',
-              }];
-          return (
-            <NSTimeSeries data={chartData} series={series} height={260} currency={cur}
-              focusKey={MONEY.has(metric) ? metric : null}
-              toggles={MONEY.has(metric)}/>
-          );
-        })()}
-      </div>
-
-      <div className="grid-2">
-        <div className="panel">
-          <div className="panel-head">
-            <div className="panel-title">
-              <span className="panel-eyebrow">Receita por tipo de produto</span>
-              <div className="panel-sub">Apenas pedidos aprovados · receita bruta</div>
-            </div>
-          </div>
-          <Donut items={typeItems} totalLabel="Aprovado" format={(v) => fmtCurrency(v, cur, 0)}
-            onItemClick={setFilters ? (it) => {
-              if (!it.stageId) return;
-              setFilters((f) => {
-                const next = new Set(f.stages || []);
-                if (next.has(it.stageId)) next.delete(it.stageId); else next.add(it.stageId);
-                return { ...f, stages: next };
-              });
-            } : null}/>
-        </div>
-
-        <div className="panel">
-          <div className="panel-head">
-            <div className="panel-title">
-              <span className="panel-eyebrow">Receita por país</span>
-              <div className="panel-sub">Top 10 · click filtra · receita bruta aprovada</div>
-            </div>
-          </div>
-          <CountryBars
-            data={countryData}
-            currency={cur}
-            onCountryClick={setFilters ? (code) => {
-              setFilters((f) => {
-                const next = new Set(f.countries);
-                if (next.has(code)) next.delete(code); else next.add(code);
-                return { ...f, countries: next };
-              });
-            } : null}
-          />
-        </div>
-      </div>
-
-      <div className="grid-2-asym">
-        <div className="panel">
-          <div className="panel-head">
-            <div className="panel-title">
-              <span className="panel-eyebrow">Top 5 afiliados</span>
-              <div className="panel-sub">Ordenados por receita bruta</div>
-            </div>
-          </div>
-          <div className="tbl-wrap">
-            <table className="tbl">
-              <thead>
-                <tr>
-                  <th style={{ width: 28 }}>#</th>
-                  <th>Afiliado</th>
-                  <th>Plataforma</th>
-                  <th className="num">Pedidos</th>
-                  <th className="num">Receita</th>
-                  <th className="num">Aprovação</th>
-                  {/* Era "Margem" (net − CPA), uma TERCEIRA definição sob o
-                      mesmo rótulo — divergia do ranking e do drawer. Agora é
-                      o modelo da planilha CPA, igual nas três telas. */}
-                  <th className="num" title="NET AFTER CPA do período = (NET AOV − CPA por venda) × FEs aprovadas. Mesma conta do ranking de afiliados.">Net after CPA</th>
-                </tr>
-              </thead>
-              <tbody>
-                {topAffiliates.length === 0 && (
-                  <tr><td colSpan={7} style={{ textAlign: 'center', opacity: 0.6, padding: 24 }}>
-                    Sem afiliados no período
-                  </td></tr>
-                )}
-                {/* placeholder mantido em PT-BR */}
-                {topAffiliates.map((a, i) => {
-                  const plat = PLATFORM_VARIANTS[a.platformSlug] || { short: a.platformSlug.toUpperCase(), className: 'plat-cb' };
-                  const apClass = a.approvalRate > 0.7 ? 'val-ok' : a.approvalRate > 0.5 ? 'val-warn' : 'val-bad';
-                  const displayName = a.nickname || a.externalId;
-                  return (
-                    <tr key={`${a.platformSlug}:${a.externalId}`}>
-                      <td className="rank">{String(i+1).padStart(2, '0')}</td>
-                      <td>
-                        <span className="cell-aff">
-                          <span className="av" style={{ background: avatarColor(a.externalId) }}>{initials(displayName)}</span>
-                          <span className="meta">
-                            <span className="nm">{displayName}</span>
-                            <span className="id">{a.externalId}</span>
-                          </span>
+        <div className="tbl-wrap">
+          <table className="tbl">
+            <thead>
+              <tr>
+                <th style={{ width: 28 }}>#</th>
+                <th>Afiliado</th>
+                <th>Plataforma</th>
+                <th className="num">Pedidos</th>
+                <th className="num">Receita</th>
+                <th className="num">Aprovação</th>
+                <th className="num" title="NET AFTER CPA do período = (NET AOV − CPA por venda) × FEs aprovadas. Mesma conta do ranking de afiliados.">Net after CPA</th>
+              </tr>
+            </thead>
+            <tbody>
+              {topAffiliates.length === 0 && (
+                <tr><td colSpan={7} style={{ textAlign: 'center', opacity: 0.6, padding: 24 }}>
+                  Sem afiliados no período
+                </td></tr>
+              )}
+              {topAffiliates.map((a, i) => {
+                const plat = platBadge(a.platformSlug);
+                const apClass = a.approvalRate > 0.7 ? 'val-ok' : a.approvalRate > 0.5 ? 'val-warn' : 'val-bad';
+                const displayName = a.nickname || a.externalId;
+                return (
+                  <tr key={`${a.platformSlug}:${a.externalId}`}>
+                    <td className="rank">{String(i + 1).padStart(2, '0')}</td>
+                    <td>
+                      <span className="cell-aff">
+                        <span className="av" style={{ background: avatarColor(a.externalId) }}>{initials(displayName)}</span>
+                        <span className="meta">
+                          <span className="nm">{displayName}</span>
+                          <span className="id">{a.externalId}</span>
                         </span>
-                      </td>
-                      <td><span className={`plat ${plat.className}`}>{plat.short}</span></td>
-                      <td className="num cell-mono">{fmtInt(a.orders)}</td>
-                      <td className="num cell-mono">{fmtCurrency(a.revenue, cur, 0)}</td>
-                      <td className={`num cell-mono ${apClass}`}>{(a.approvalRate * 100).toFixed(1)}%</td>
-                      <td className="num cell-mono"
-                        title={a.netAfterCpaUsd != null
-                          ? `${fmtCurrency(a.netAfterCpaUsd, cur, 2)}/venda × ${a.feApprovedCount} FEs aprovadas`
-                          : 'sem CPA observado no período'}
-                        style={{ color: a.netAfterCpaTotalUsd == null ? 'var(--fg5)'
-                          : a.netAfterCpaTotalUsd > 0 ? 'var(--money)' : 'var(--danger)' }}>
-                        {a.netAfterCpaTotalUsd != null ? fmtCurrency(a.netAfterCpaTotalUsd, cur, 0) : '—'}
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-        </div>
-
-        <div className="panel">
-          <div className="panel-head">
-            <div className="panel-title">
-              <span className="panel-eyebrow">Saúde das plataformas</span>
-              <div className="panel-sub">Status dos connectors em tempo real</div>
-            </div>
-          </div>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-            {platformHealth.map((p) => {
-              const variant = PLATFORM_VARIANTS[p.slug] || { short: p.slug.slice(0,3).toUpperCase() };
-              return (
-                <PlatformHealth
-                  key={p.slug}
-                  name={p.displayName}
-                  short={variant.short}
-                  ok
-                  revenue={p.totalRevenue}
-                  orders={p.totalOrders}
-                  lastSync={p.lastSyncAt ? fmtSyncAgo(p.lastSyncAt) : '—'}
-                  currency={cur}
-                />
-              );
-            })}
-          </div>
-        </div>
-      </div>
-
-      {/* Heatmap movido pro fim — visualização densa, secundária pra
-          decisão rápida. KPIs + série + breakdowns vêm primeiro. */}
-      <div className="panel" style={{ marginTop: 14 }}>
-        <div className="panel-head">
-          <div className="panel-title">
-            <span className="panel-eyebrow">Padrão de compra · Hora × dia da semana</span>
-            <div className="panel-sub">Pedidos aprovados · horário de Brasília · hover pra ver detalhe</div>
-          </div>
-          <div className="panel-legend">
-            <span className="legend-dot cyan"><span/>intensidade = volume</span>
-          </div>
-        </div>
-        <HourHeatmap data={state.data?.hourlyHeatmap || []} metric="orders" currency={cur}/>
-      </div>
-    </div>
-  );
-}
-
-function PlatformHealth({ name, short, ok, revenue, orders, lastSync, currency }) {
-  return (
-    <div className="ph-card">
-      <div className="ph-head">
-        <div className="ph-name">
-          <div className="ph-logo">{short}</div>
-          <div className="txt">
-            <span className="nm">{name}</span>
-            <span className="sync">Synced {lastSync}</span>
-          </div>
-        </div>
-        <span className={`ph-status ${ok ? 'ok' : 'warn'}`}><span className="led"/>{ok ? 'Healthy' : 'Degraded'}</span>
-      </div>
-      <div className="ph-stats">
-        <div className="ph-stat">
-          <div className="l">Revenue · period</div>
-          <div className="v">{fmtCurrency(revenue, currency, 0)}</div>
-        </div>
-        <div className="ph-stat">
-          <div className="l">Orders · approved</div>
-          <div className="v">{fmtInt(orders)}</div>
+                      </span>
+                    </td>
+                    <td><span className={`plat ${plat.cls}`}>{plat.short}</span></td>
+                    <td className="num cell-mono">{fmtInt(a.orders)}</td>
+                    <td className="num cell-mono">{fmtCurrency(a.revenue, cur, 0)}</td>
+                    <td className={`num cell-mono ${apClass}`}>{(a.approvalRate * 100).toFixed(1)}%</td>
+                    <td className="num cell-mono"
+                      title={a.netAfterCpaUsd != null
+                        ? `${fmtCurrency(a.netAfterCpaUsd, cur, 2)}/venda × ${a.feApprovedCount} FEs aprovadas`
+                        : 'sem CPA observado no período'}
+                      style={{ color: a.netAfterCpaTotalUsd == null ? 'var(--fg5)'
+                        : a.netAfterCpaTotalUsd > 0 ? 'var(--money)' : 'var(--danger)' }}>
+                      {a.netAfterCpaTotalUsd != null ? fmtCurrency(a.netAfterCpaTotalUsd, cur, 0) : '—'}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
         </div>
       </div>
     </div>
@@ -685,17 +528,6 @@ function fmtRange(range) {
   const end = range.end instanceof Date ? range.end : new Date(range.end);
   const opts = { month: 'short', day: 'numeric' };
   return `${start.toLocaleDateString('en-US', opts)} → ${end.toLocaleDateString('en-US', opts)}`;
-}
-
-function fmtSyncAgo(iso) {
-  const d = new Date(iso);
-  const mins = Math.round((Date.now() - d.getTime()) / 60000);
-  if (mins < 1) return 'just now';
-  if (mins < 60) return `${mins} min ago`;
-  const hrs = Math.round(mins / 60);
-  if (hrs < 24) return `${hrs}h ago`;
-  const days = Math.round(hrs / 24);
-  return `${days}d ago`;
 }
 
 // encodeSet declared in index.html script scope — fallback here in case of load order

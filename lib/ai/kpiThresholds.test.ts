@@ -51,17 +51,10 @@ describe('KPI_THRESHOLDS × overview.jsx', () => {
     });
   }
 
-  it('monitor 7d do card "Reembolso por pedidos" (inline no JSX) = refunds7dPct', () => {
-    const m = OVERVIEW.match(/split\.refunds7d\.pct (>=?) (\d+(?:\.\d+)?) \? 'danger' : split\.refunds7d\.pct (>=?) (\d+(?:\.\d+)?) \? 'warn'/);
-    expect(m, 'régua do monitor 7d mudou de formato no overview.jsx').not.toBeNull();
-    const t = KPI_THRESHOLDS.refunds7dPct;
-    expect(Number(m![2])).toBe(t.dangerAt);
-    expect(Number(m![4])).toBe(t.warnAt);
-    expect(m![1] === '>=').toBe(t.inclusive);
-    expect(m![3] === '>=').toBe(t.inclusive);
-    const alert = OVERVIEW.match(/alert=\{\(split\?\.refunds7d\?\.pct \?\? 0\) > (\d+(?:\.\d+)?)\}/);
-    expect(Number(alert?.[1])).toBe(t.dangerAt);
-  });
+  // O card "Reembolso por pedidos" (com o monitor de 7 dias) saiu da Visão
+  // geral em 2026-10-23 — o reembolso da tela virou o de 60 dias pela régua
+  // da aba Reembolsos, que usa a faixa refundRate (testada acima). A IA
+  // segue com refunds7dPct pro get_profit_split.
 
   it('alerta do card de chargeback acende na fronteira "ruim"', () => {
     const m = OVERVIEW.match(/alert=\{kpis\.cbRate (>=?) (\d*\.\d+)\}/);
