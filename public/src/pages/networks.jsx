@@ -77,6 +77,7 @@ function NetworksHelp() {
           {item('Rede e integrante', 'Uma rede é um grupo de afiliados (integrantes) com uma conta própria na JVZoo. A NorthScale paga à rede um CPA por venda; o gerente da rede decide quanto disso vai pro integrante — o resto é a margem da rede.')}
           {item('Vendas', 'Vendas atribuídas a uma rede no período (com integrante e CPA), sem as compras-teste. Upsells e recorrências da conta da rede não contam aqui: entram no faturamento do funil.')}
           {item('Faturamento', 'O que entrou de verdade nos pedidos dessas vendas e do funil delas (front + upsells), já sem os estornos — o mesmo critério do resto do dashboard.')}
+          {item('AOV', 'Faturamento ÷ vendas líquidas (as que seguiram de pé): quanto cada venda rende contando os upsells. Com uma rede ou integrante escolhido no filtro, é o AOV dele.')}
         </div>
         <div>
           {item('CPA devido', 'O CPA das vendas aprovadas, retidas e das que já foram pagas ao integrante (mesmo que tenham sido estornadas depois). É o que a NorthScale deve às redes.')}
@@ -120,6 +121,97 @@ function NwCommissionCell({ r }) {
   );
 }
 
+const NW_MODE = { own_pages: 'Páginas próprias', single_page: 'Página única' };
+
+/* Ranking curto (produtos / origens) do perfil da entidade. */
+function NwTopList({ title, items }) {
+  const max = Math.max(1, ...items.map((i) => i.sales));
+  return (
+    <div style={{ minWidth: 0 }}>
+      <div className="panel-eyebrow" style={{ fontSize: 10, marginBottom: 6 }}>{title}</div>
+      {items.length === 0 && <div style={{ fontSize: 12, color: 'var(--fg5)' }}>Nada no período.</div>}
+      {items.map((i) => (
+        <div key={i.label} style={{ marginBottom: 6 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, fontSize: 12 }}>
+            <span style={{ overflowWrap: 'anywhere', color: 'var(--fg2)' }}>{i.label}</span>
+            <span className="cell-mono" style={{ color: 'var(--fg3)' }}>{fmtInt(i.sales)}</span>
+          </div>
+          <div style={{ height: 4, borderRadius: 'var(--r-full)', background: 'var(--border-soft)', marginTop: 3 }}>
+            <div style={{ height: '100%', width: `${(i.sales / max) * 100}%`, borderRadius: 'var(--r-full)', background: 'var(--accent)' }}/>
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+/* Rede ou integrante escolhido no filtro: AOV e números do recorte (totals
+   já vêm filtrados por ele) + perfil de sempre (primeira/última venda). */
+function NwEntityPanel({ selected, t, network, member, netRow, onClear }) {
+  const isMember = selected.kind === 'member';
+  const name = isMember ? (member?.name || selected.id) : (network?.name || selected.id);
+  const status = isMember ? member?.status : network?.status;
+  const stat = (label, value, sub, tone) => (
+    <div style={{ minWidth: 0 }}>
+      <div className="panel-eyebrow" style={{ fontSize: 10 }}>{label}</div>
+      <div className="cell-mono" style={{ fontSize: 16, fontWeight: 600, color: tone || 'var(--fg1)', marginTop: 2 }}>{value}</div>
+      {sub && <div style={{ fontSize: 11, color: 'var(--fg5)', marginTop: 1 }}>{sub}</div>}
+    </div>
+  );
+  const ids = selected.network?.jvzooAffiliateIds || [];
+  const mode = selected.network?.operationMode;
+  const meta = isMember
+    ? [member?.publicId, network?.name ? `rede ${network.name}` : null]
+    : [mode ? (NW_MODE[mode] || mode) : null,
+       ids.length ? `JVZoo ${ids.join(', ')}` : null,
+       netRow ? `${fmtInt(netRow.membersWithSales)} de ${fmtInt(netRow.membersActive)} integrantes venderam` : null];
+  return (
+    <div className="panel" style={{ marginBottom: 12, borderColor: 'color-mix(in srgb, var(--accent) 35%, var(--border))' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 16, flexWrap: 'wrap' }}>
+        <div style={{ minWidth: 0 }}>
+          <div className="panel-eyebrow">{isMember ? 'Integrante selecionado' : 'Rede selecionada'}</div>
+          <div style={{ fontSize: 20, fontWeight: 700, color: 'var(--fg1)', marginTop: 2 }}>{name}</div>
+          <div style={{ fontSize: 11.5, color: 'var(--fg4)', marginTop: 2 }}>
+            {meta.filter(Boolean).join(' · ')}
+            {status && status !== 'active' && <span style={{ color: 'var(--warning)' }}> · {status}</span>}
+          </div>
+        </div>
+        <div style={{ textAlign: 'right' }}>
+          <div className="panel-eyebrow">AOV {isMember ? 'do integrante' : 'da rede'}</div>
+          <div style={{ fontSize: 30, fontWeight: 700, color: 'var(--money)', lineHeight: 1.1 }}>{nwUsd(t.aov, 2)}</div>
+          <div style={{ fontSize: 11, color: 'var(--fg5)' }}>faturamento ÷ {fmtInt(t.netSales)} vendas líquidas</div>
+        </div>
+      </div>
+
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: '12px 18px', marginTop: 14, paddingTop: 12, borderTop: '1px solid var(--border-soft)' }}>
+        {stat('Vendas', fmtInt(t.sales), `${fmtInt(t.netSales)} líquidas`)}
+        {stat('Faturamento', nwUsd(t.revenue), 'com o funil, sem estornos', 'var(--money)')}
+        {stat('Conversão', nwPct(t.conversion), `${fmtInt(t.checkouts)} checkouts`)}
+        {stat('Reembolso / CB', `${nwPct(t.refundPct)} / ${nwPct(t.chargebackPct)}`, `${fmtInt(t.refunds)} / ${fmtInt(t.chargebacks)}`,
+          (t.refunds + t.chargebacks) > 0 ? 'var(--danger)' : undefined)}
+        {isMember
+          ? stat('Repasse', nwUsd(t.memberDue), `${nwUsd(t.memberPaid)} pagos · ${nwUsd(Math.max(0, t.memberDue - t.memberPaid))} a pagar`)
+          : stat('CPA devido', nwUsd(t.cpaDue), `margem da rede ${nwUsd(t.margin)}`)}
+        {stat('Lucro NS', nwUsd(t.profit), 'faturamento − CPA', t.profit < 0 ? 'var(--danger)' : 'var(--money)')}
+        {stat('Primeira venda', selected.firstSaleAt ? fmtDateShort(selected.firstSaleAt) : '—',
+          selected.lastSaleAt ? `última ${fmtDateShort(selected.lastSaleAt)}` : 'nenhuma venda atribuída')}
+        {stat('Vendas de sempre', fmtInt(selected.lifetimeSales),
+          isMember ? `${nwUsd(selected.lifetimeMemberPaid)} já recebidos` : 'atribuídas, sem testes')}
+      </div>
+
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 18, marginTop: 14, paddingTop: 12, borderTop: '1px solid var(--border-soft)' }}>
+        <NwTopList title="Produtos que mais venderam (período)" items={selected.topProducts}/>
+        <NwTopList title="Origens de tráfego (utm_source, período)" items={selected.topSources}/>
+      </div>
+
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10, marginTop: 10, flexWrap: 'wrap' }}>
+        <span style={{ fontSize: 10.5, color: 'var(--fg5)' }}>Os números do período seguem os outros filtros (produto, utm, sub1, testes). Primeira venda e vendas de sempre ignoram o período.</span>
+        <button className="btn btn-ghost" style={{ fontSize: 11.5 }} onClick={onClear}>ver todas as redes</button>
+      </div>
+    </div>
+  );
+}
+
 function NetworkTable({ rows, onOpen, activeId }) {
   return (
     <div className="panel" style={{ padding: 0, overflow: 'hidden', marginBottom: 12 }}>
@@ -128,12 +220,13 @@ function NetworkTable({ rows, onOpen, activeId }) {
         <div className="panel-sub" style={{ fontSize: 11 }}>Clique numa rede pra ver só ela (integrantes, vendas e gráfico).</div>
       </div>
       <div style={{ overflowX: 'auto' }}>
-        <table className="tbl" style={{ fontSize: 12.5, minWidth: 980 }}>
+        <table className="tbl" style={{ fontSize: 12.5, minWidth: 1060 }}>
           <thead>
             <tr>
               <th>Rede</th>
               <th className="num">Vendas</th>
               <th className="num" title="Receita líquida dos pedidos das vendas e do funil delas">Faturamento</th>
+              <th className="num" title="Faturamento ÷ vendas líquidas">AOV</th>
               <th className="num">Checkouts</th>
               <th className="num" title="Vendas ÷ checkouts iniciados">Conversão</th>
               <th className="num">CPA devido</th>
@@ -144,7 +237,7 @@ function NetworkTable({ rows, onOpen, activeId }) {
             </tr>
           </thead>
           <tbody>
-            {rows.length === 0 && <tr><td colSpan={10} style={{ padding: 18, textAlign: 'center', color: 'var(--fg5)' }}>Nenhuma venda de rede neste filtro.</td></tr>}
+            {rows.length === 0 && <tr><td colSpan={11} style={{ padding: 18, textAlign: 'center', color: 'var(--fg5)' }}>Nenhuma venda de rede neste filtro.</td></tr>}
             {rows.map((n) => (
               <tr key={n.networkId} onClick={() => onOpen(n.networkId)} style={{ cursor: 'pointer', background: activeId === n.networkId ? 'color-mix(in oklab, var(--accent) 7%, transparent)' : undefined }}>
                 <td>
@@ -153,6 +246,7 @@ function NetworkTable({ rows, onOpen, activeId }) {
                 </td>
                 <td className="num cell-mono">{fmtInt(n.sales)}</td>
                 <td className="num cell-mono" style={{ color: 'var(--money)' }}>{nwUsd(n.revenue)}</td>
+                <td className="num cell-mono" style={{ fontWeight: 600 }}>{nwUsd(n.aov, 2)}</td>
                 <td className="num cell-mono">{fmtInt(n.checkouts)}</td>
                 <td className="num cell-mono">{nwPct(n.conversion)}</td>
                 <td className="num cell-mono">{nwUsd(n.cpaDue)}</td>
@@ -179,7 +273,7 @@ function MemberTable({ rows, showNetwork, onPick, activeId }) {
         <div className="panel-sub" style={{ fontSize: 11 }}>Ranking por vendas líquidas (vendas − reembolsos − chargebacks). Clique pra filtrar a aba pelo integrante.</div>
       </div>
       <div style={{ overflowX: 'auto' }}>
-        <table className="tbl" style={{ fontSize: 12.5, minWidth: 960 }}>
+        <table className="tbl" style={{ fontSize: 12.5, minWidth: 1040 }}>
           <thead>
             <tr>
               <th>Integrante</th>
@@ -189,13 +283,14 @@ function MemberTable({ rows, showNetwork, onPick, activeId }) {
               <th className="num">Checkouts</th>
               <th className="num">Conversão</th>
               <th className="num">Faturamento</th>
+              <th className="num" title="Faturamento ÷ vendas líquidas">AOV</th>
               <th className="num" title="Repasse devido ao integrante que ainda não foi pago">A receber</th>
               <th className="num" title="Repasse já pago ao integrante">Pago</th>
               <th className="num">Reemb. / CB</th>
             </tr>
           </thead>
           <tbody>
-            {rows.length === 0 && <tr><td colSpan={showNetwork ? 10 : 9} style={{ padding: 18, textAlign: 'center', color: 'var(--fg5)' }}>Nenhum integrante com venda ou checkout neste filtro.</td></tr>}
+            {rows.length === 0 && <tr><td colSpan={showNetwork ? 11 : 10} style={{ padding: 18, textAlign: 'center', color: 'var(--fg5)' }}>Nenhum integrante com venda ou checkout neste filtro.</td></tr>}
             {rows.map((m) => (
               <tr key={`${m.networkId}|${m.memberId || ''}`} onClick={m.memberId ? () => onPick(m) : undefined}
                 style={{ cursor: m.memberId ? 'pointer' : 'default', background: activeId && activeId === m.memberId ? 'color-mix(in oklab, var(--accent) 7%, transparent)' : undefined }}>
@@ -212,6 +307,7 @@ function MemberTable({ rows, showNetwork, onPick, activeId }) {
                 <td className="num cell-mono">{fmtInt(m.checkouts)}</td>
                 <td className="num cell-mono">{nwPct(m.conversion)}</td>
                 <td className="num cell-mono" style={{ color: 'var(--money)' }}>{nwUsd(m.revenue)}</td>
+                <td className="num cell-mono" style={{ fontWeight: 600 }}>{nwUsd(m.aov, 2)}</td>
                 <td className="num cell-mono">{nwUsd(Math.max(0, m.memberDue - m.memberPaid))}</td>
                 <td className="num cell-mono" style={{ color: m.memberPaid > 0 ? 'var(--success)' : 'var(--fg5)' }}>{nwUsd(m.memberPaid)}</td>
                 <td className="num cell-mono" style={{ color: (m.refunds + m.chargebacks) > 0 ? 'var(--danger)' : 'var(--fg5)' }}>
@@ -433,10 +529,24 @@ function NetworksPage({ filters, user }) {
         </div>
       )}
 
+      {t && !noNetworks && data.selected && (() => {
+        const selMember = data.selected.kind === 'member' ? opt.members.find((m) => m.id === data.selected.id) : null;
+        const selNetId = data.selected.kind === 'network' ? data.selected.id : (selMember?.networkId || sel.network);
+        return (
+          <NwEntityPanel selected={data.selected} t={t}
+            network={opt.networks.find((n) => n.id === selNetId)}
+            member={selMember}
+            netRow={data.selected.kind === 'network' ? data.byNetwork.find((n) => n.networkId === data.selected.id) : null}
+            onClear={() => setSel((s) => ({ ...s, network: null, member: null }))}/>
+        );
+      })()}
+
       {t && !noNetworks && (<>
         <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginBottom: 10 }}>
           <NwKpi label="Vendas" value={fmtInt(t.sales)} sub={`${fmtInt(t.netSales)} líquidas (sem reembolso e chargeback)`}/>
           <NwKpi label="Faturamento" value={nwUsd(t.revenue)} sub="pedidos das vendas e do funil, sem estornos" tone="var(--money)"/>
+          <NwKpi label={sel.member ? 'AOV do integrante' : sel.network ? 'AOV da rede' : 'AOV das redes'} value={nwUsd(t.aov, 2)}
+            sub="faturamento ÷ vendas líquidas" tone="var(--money)" hint="Quanto cada venda que seguiu de pé rende no funil (front + upsells)"/>
           <NwKpi label="Checkouts iniciados" value={fmtInt(t.checkouts)}
             sub={data.checkoutsSource === 'events' ? 'só eventos (filtro de tráfego ativo)' : 'abriram o checkout pelo link da rede'}/>
           <NwKpi label="Conversão do checkout" value={nwPct(t.conversion)} sub="vendas ÷ checkouts iniciados"/>

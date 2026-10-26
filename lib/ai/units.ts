@@ -155,7 +155,10 @@ export const UNITS: Record<string, UnitMap> = {
     'daily.date': 'date_brt', 'daily.tauk': 'usd', 'daily.logicall': 'usd', 'daily.salesbound': 'usd',
     purchasedAt: 'iso_utc',
   },
-  get_recovery: { commissionPct: 'fraction', currentPct: 'fraction', effectivePct: 'fraction', pct: 'fraction' },
+  get_recovery: {
+    commissionPct: 'fraction', currentPct: 'fraction', effectivePct: 'fraction', pct: 'fraction',
+    refundPct: 'fraction', sharePct: 'fraction', 'daily.date': 'date_brt',
+  },
   get_sms: { deliveryRate: 'fraction', deliveryRatePrev: 'fraction', stopRate: 'fraction', deliveryRateDeltaPp: 'pp' },
   get_health: {
     successRate24h: 'fraction', approvalRate24h: 'fraction', refundRate24h: 'fraction',

@@ -4,7 +4,7 @@ import type { PGlite } from '@electric-sql/pglite';
 import { migratedPglite } from '../test/pgliteDb';
 import { markNetworkOrdersSql, networkAccountsSql } from './networks';
 import {
-  buildNetworkTables, checkoutAggSql, networkAggSql, networkDailySql, networkDiagnosticsSql, networkRecentSql,
+  buildNetworkTables, checkoutAggSql, entityProfileSql, networkAggSql, networkDailySql, networkDiagnosticsSql, networkRecentSql,
   type AggRow, type CheckoutRow, type NetworkFilters,
 } from './networkMetrics';
 
@@ -167,7 +167,7 @@ describe('métricas da aba Networks (PGlite)', () => {
     expect(totals).toMatchObject({
       sales: 4, refunds: 1, chargebacks: 1, held: 1, heldCpa: 230,
       cpaDue: 560, memberDue: 480, memberPaid: 280, margin: 80,
-      revenue: 235, profit: -325, checkouts: 8, conversion: 0.5, netSales: 2,
+      revenue: 235, profit: -325, checkouts: 8, conversion: 0.5, netSales: 2, aov: 117.5,
     });
     expect(totals.refundPct).toBe(0.25);
   });
@@ -179,7 +179,7 @@ describe('métricas da aba Networks (PGlite)', () => {
       ['net-2', 1, 0, 2, 0, 1],
     ]);
     const ana = byMember.find((m) => m.memberId === 'm1')!;
-    expect(ana).toMatchObject({ publicId: 'AAA', sales: 2, refunds: 1, revenue: 166, checkouts: 5, memberPaid: 200 });
+    expect(ana).toMatchObject({ publicId: 'AAA', sales: 2, refunds: 1, revenue: 166, checkouts: 5, memberPaid: 200, aov: 166 });
     expect(byMember.find((m) => m.memberId === null)).toMatchObject({ name: 'Sem integrante', sales: 0, checkouts: 1 });
   });
 
@@ -196,6 +196,22 @@ describe('métricas da aba Networks (PGlite)', () => {
   it('filtro de rede/integrante', async () => {
     const { totals } = await tables({ ...OCT, networkId: 'net-1', memberId: 'm1' });
     expect(totals).toMatchObject({ sales: 2, checkouts: 5, revenue: 166 });
+  });
+
+  it('perfil do integrante: vendas de sempre, primeira/última, produtos e origens do período', async () => {
+    const q = entityProfileSql({ ...OCT, memberId: 'm1' }, 'member');
+    const [life] = await h.q(q.lifetime);
+    expect(life).toMatchObject({ lifetime_sales: 3, lifetime_member_paid: 200 });
+    // (o PGlite devolve timestamp sem fuso no horário local da máquina; o dia basta)
+    expect(new Date(life.first_sale_at as string).toISOString().slice(0, 10)).toBe('2026-09-15');
+    expect(new Date(life.last_sale_at as string).toISOString().slice(0, 10)).toBe('2026-10-06');
+    expect(await h.q(q.products)).toEqual([{ label: 'NeuroMind Pro', sales: 1 }, { label: '—', sales: 1 }]);
+    expect(await h.q(q.sources)).toEqual([{ label: '(sem utm)', sales: 1 }, { label: 'fb', sales: 1 }]);
+  });
+
+  it('perfil da rede: soma os integrantes', async () => {
+    const [life] = await h.q(entityProfileSql({ ...OCT, networkId: 'net-1' }, 'network').lifetime);
+    expect(life).toMatchObject({ lifetime_sales: 4 });
   });
 
   it('série diária', async () => {

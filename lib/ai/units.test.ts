@@ -96,8 +96,10 @@ const FIXTURES: Record<string, unknown> = {
     providers: [{ commissionPct: 0.35 }],
   } satisfies DeepPartial<CallCenterResponse>,
   get_recovery: {
-    byCompany: [{ effectivePct: 0.3, accounts: [{ commissionPct: 0.3 }] }],
-    byAffiliate: [{ commissionPct: 0.3 }],
+    kpis: { refundPct: 0.05 },
+    byCompany: [{ effectivePct: 0.3, sharePct: 0.6, refundPct: 0.04, accounts: [{ commissionPct: 0.3, refundPct: 0.04 }] }],
+    byAffiliate: [{ commissionPct: 0.3, refundPct: 0.04 }],
+    previous: { kpis: { refundPct: 0.03 } },
   } satisfies DeepPartial<RecoveryResponse>,
   get_sms: {
     kpis: { deliveryRate: 0.97, deliveryRatePrev: 0.95, deliveryRateDeltaPp: 2, stopRate: 0.01 },

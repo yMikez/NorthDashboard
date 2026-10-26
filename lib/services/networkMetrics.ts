@@ -240,6 +240,8 @@ export interface NetworkTotals {
   cpaDue: number; memberDue: number; memberPaid: number; margin: number;
   refunds: number; chargebacks: number; refundPct: number | null; chargebackPct: number | null;
   profit: number; held: number; heldCpa: number; netSales: number;
+  /** Faturamento ÷ vendas líquidas (as que seguem de pé): quanto cada venda da rede/integrante rende no funil. */
+  aov: number | null;
 }
 
 const r2 = (n: number) => Math.round(n * 100) / 100;
@@ -247,7 +249,7 @@ const r2 = (n: number) => Math.round(n * 100) / 100;
 function emptyTotals(): NetworkTotals {
   return {
     sales: 0, revenue: 0, checkouts: 0, conversion: null, cpaDue: 0, memberDue: 0, memberPaid: 0, margin: 0,
-    refunds: 0, chargebacks: 0, refundPct: null, chargebackPct: null, profit: 0, held: 0, heldCpa: 0, netSales: 0,
+    refunds: 0, chargebacks: 0, refundPct: null, chargebackPct: null, profit: 0, held: 0, heldCpa: 0, netSales: 0, aov: null,
   };
 }
 function addAgg(t: NetworkTotals, r: AggRow): void {
@@ -256,8 +258,12 @@ function addAgg(t: NetworkTotals, r: AggRow): void {
   t.memberPaid += r.member_paid; t.margin += r.margin;
 }
 function finish(t: NetworkTotals): NetworkTotals {
+  // O faturamento já vem sem as vendas estornadas (só APPROVED): o divisor
+  // são as vendas que seguiram de pé, senão o estorno derruba o AOV duas vezes.
+  const netSales = t.sales - t.refunds - t.chargebacks;
   return {
     ...t,
+    aov: netSales > 0 ? r2(t.revenue / netSales) : null,
     revenue: r2(t.revenue), cpaDue: r2(t.cpaDue), memberDue: r2(t.memberDue), memberPaid: r2(t.memberPaid),
     margin: r2(t.margin), heldCpa: r2(t.heldCpa),
     conversion: t.checkouts > 0 ? t.sales / t.checkouts : null,
@@ -356,10 +362,79 @@ export async function getNetworkFilterOptions() {
   };
 }
 
+/**
+ * Perfil da entidade selecionada (integrante ou rede): primeira e última
+ * venda atribuída (de sempre), vendas de sempre, e os produtos e origens de
+ * tráfego que mais venderam NO PERÍODO (mesmos filtros da aba).
+ */
+export function entityProfileSql(f: NetworkFilters, kind: 'member' | 'network'): { lifetime: Prisma.Sql; products: Prisma.Sql; sources: Prisma.Sql } {
+  const col = kind === 'member' ? Prisma.sql`ns.member_id` : Prisma.sql`ns.network_id`;
+  const id = kind === 'member' ? f.memberId : f.networkId;
+  const attributed = Prisma.sql`ns.attribution_status = 'attributed'`;
+  return {
+    lifetime: Prisma.sql`
+      SELECT MIN(COALESCE(ns.sold_at, ns.created_at)) AS first_sale_at,
+             MAX(COALESCE(ns.sold_at, ns.created_at)) AS last_sale_at,
+             COUNT(*)::int AS lifetime_sales,
+             COALESCE(SUM(ns.member_amount) FILTER (WHERE ns.commission_status = 'paid'), 0)::float8 AS lifetime_member_paid
+      FROM network_sales ns
+      WHERE ${col} = ${id} AND ${attributed} AND NOT ns.is_test`,
+    products: Prisma.sql`
+      SELECT COALESCE(ns.product_name, ns.jvzoo_product_id, '—') AS label, COUNT(*)::int AS sales
+      FROM network_sales ns
+      WHERE ${salesWhereSql(f)} AND ${attributed}
+      GROUP BY 1 ORDER BY 2 DESC, 1 LIMIT 5`,
+    sources: Prisma.sql`
+      SELECT COALESCE(ns.utm_source, '(sem utm)') AS label, COUNT(*)::int AS sales
+      FROM network_sales ns
+      WHERE ${salesWhereSql(f)} AND ${attributed}
+      GROUP BY 1 ORDER BY 2 DESC, 1 LIMIT 5`,
+  };
+}
+
+export interface EntityProfile {
+  kind: 'member' | 'network';
+  id: string;
+  firstSaleAt: string | null;
+  lastSaleAt: string | null;
+  lifetimeSales: number;
+  lifetimeMemberPaid: number;
+  topProducts: Array<{ label: string; sales: number }>;
+  topSources: Array<{ label: string; sales: number }>;
+  /** Só rede: modo de operação e contas JVZoo. */
+  network?: { operationMode: string | null; jvzooAffiliateIds: string[] } | null;
+}
+
+async function getEntityProfile(f: NetworkFilters): Promise<EntityProfile | null> {
+  const kind = f.memberId ? 'member' : f.networkId ? 'network' : null;
+  if (!kind) return null;
+  const q = entityProfileSql(f, kind);
+  const [lifetime, products, sources, net] = await Promise.all([
+    db.$queryRaw<Array<{ first_sale_at: Date | null; last_sale_at: Date | null; lifetime_sales: number; lifetime_member_paid: number }>>(q.lifetime),
+    db.$queryRaw<Array<{ label: string; sales: number }>>(q.products),
+    db.$queryRaw<Array<{ label: string; sales: number }>>(q.sources),
+    kind === 'network'
+      ? db.affiliateNetwork.findUnique({ where: { id: f.networkId! }, select: { operationMode: true, jvzooAffiliateIds: true } })
+      : Promise.resolve(null),
+  ]);
+  const l = lifetime[0];
+  return {
+    kind,
+    id: (kind === 'member' ? f.memberId : f.networkId)!,
+    firstSaleAt: l?.first_sale_at ? new Date(l.first_sale_at).toISOString() : null,
+    lastSaleAt: l?.last_sale_at ? new Date(l.last_sale_at).toISOString() : null,
+    lifetimeSales: l?.lifetime_sales ?? 0,
+    lifetimeMemberPaid: Math.round((l?.lifetime_member_paid ?? 0) * 100) / 100,
+    topProducts: products,
+    topSources: sources,
+    network: kind === 'network' ? (net ? { operationMode: net.operationMode, jvzooAffiliateIds: net.jvzooAffiliateIds } : null) : undefined,
+  };
+}
+
 export async function getNetworksDashboard(f: NetworkFilters, opts: { page?: number; now?: Date } = {}) {
   const now = opts.now ?? new Date();
   const diag = networkDiagnosticsSql(f, now);
-  const [options, agg, checkouts, daily, recent, unattributed, pending] = await Promise.all([
+  const [options, agg, checkouts, daily, recent, unattributed, pending, selected] = await Promise.all([
     getNetworkFilterOptions(),
     db.$queryRaw<AggRow[]>(networkAggSql(f)),
     db.$queryRaw<CheckoutRow[]>(checkoutAggSql(f)),
@@ -367,6 +442,7 @@ export async function getNetworksDashboard(f: NetworkFilters, opts: { page?: num
     db.$queryRaw<Array<Record<string, unknown> & { total: number }>>(networkRecentSql(f, opts.page ?? 1)),
     db.$queryRaw<Array<{ reason: string; sales: number; amount: number }>>(diag.unattributed),
     db.$queryRaw<Array<Record<string, unknown>>>(diag.pending),
+    getEntityProfile(f),
   ]);
   const tables = buildNetworkTables(agg, checkouts, options.networks, options.members);
   return {
@@ -375,6 +451,9 @@ export async function getNetworksDashboard(f: NetworkFilters, opts: { page?: num
     recent: { page: opts.page ?? 1, pageSize: RECENT_PAGE_SIZE, total: recent[0]?.total ?? 0, rows: recent.map(({ total: _t, ...r }) => r) },
     diagnostics: { unattributed, pending },
     options,
+    // Rede ou integrante escolhido no filtro: o perfil dele (o AOV e os números
+    // do recorte estão em `totals`).
+    selected,
     checkoutsSource: hasTrafficFilter(f) ? 'events' : 'max(events, read)',
   };
 }

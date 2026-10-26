@@ -890,7 +890,14 @@ const HANDLERS: Record<string, Handler> = {
   },
   async get_recovery(input, ctx) {
     const f = parseFilters(input, ctx);
-    return getRecovery({ startDate: f.startDate, endDate: f.endDate });
+    const r = await getRecovery({ startDate: f.startDate, endDate: f.endDate });
+    // A série diária por parceiro é do gráfico da tela; pra IA basta o total
+    // do dia e os KPIs do período anterior (comparação).
+    return {
+      ...r,
+      daily: r.daily.map(({ byCompany: _byCompany, ...d }) => d),
+      previous: r.previous ? { range: r.previous.range, kpis: r.previous.kpis } : null,
+    };
   },
   async get_sms(input, ctx) {
     const f = parseFilters(input, ctx);

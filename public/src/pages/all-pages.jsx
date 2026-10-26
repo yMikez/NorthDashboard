@@ -5525,6 +5525,116 @@ function RecoveryManage({ affs, sugs, onChanged }) {
   );
 }
 
+// ---------- Recuperação (reforma de 2026-10-26, no molde da Visão geral) ----------
+// Parceiros de recuperação (afiliados de recuperação + SMS próprio): gráfico no
+// topo com seletor de métrica (total com período anterior, ou por parceiro),
+// KPIs com variação, AOV e receita por parceiro e a tabela por empresa.
+const REC_METRICS = [
+  { id: 'gross', label: 'Receita', icon: 'dollar', format: 'money' },
+  { id: 'purchases', label: 'Compras', icon: 'shopping-cart', format: 'int' },
+  { id: 'aov', label: 'AOV', icon: 'trending-up', format: 'money2' },
+  { id: 'commission', label: 'Comissão', icon: 'wallet', format: 'money' },
+  { id: 'net', label: 'Líquido', icon: 'target', format: 'money' },
+];
+const REC_NOTE = {
+  gross: 'receita das vendas aprovadas dos parceiros, por dia da venda',
+  purchases: 'compras (cliente que comprou: front + upsells da mesma sessão contam uma vez)',
+  aov: 'receita ÷ compras — quanto cada compra recuperada rende',
+  commission: 'comissão devida aos parceiros (% vigente na data da venda)',
+  net: 'receita − comissão: o que fica pra operação antes dos outros custos',
+};
+const REC_PALETTE = ['var(--chart-1)', 'var(--chart-2)', 'var(--chart-3)', 'var(--chart-4)', 'var(--chart-5)'];
+
+// Valor de uma métrica num recorte {grossUsd, purchases, commissionUsd}.
+function recValue(metric, d) {
+  if (!d) return metric === 'aov' ? null : 0;
+  if (metric === 'gross') return d.grossUsd;
+  if (metric === 'purchases') return d.purchases;
+  if (metric === 'aov') return d.purchases ? d.grossUsd / d.purchases : null;
+  if (metric === 'commission') return d.commissionUsd;
+  return d.grossUsd - d.commissionUsd;
+}
+
+function RecoveryTimeSeries({ m, metric, setMetric, view, setView }) {
+  const def = REC_METRICS.find((x) => x.id === metric) || REC_METRICS[0];
+  const prevDaily = m.previous?.daily || null;
+  const companies = (m.byCompany || []).map((c) => c.company);
+  const top = companies.slice(0, 5);
+  const others = companies.slice(5);
+  const byPartner = view === 'partners' && companies.length > 0;
+
+  let data;
+  let series;
+  if (byPartner) {
+    data = m.daily.map((d) => {
+      const row = { date: d.date };
+      top.forEach((co, i) => { row[`c${i}`] = recValue(metric, d.byCompany[co]); });
+      if (others.length) {
+        const agg = { grossUsd: 0, purchases: 0, commissionUsd: 0 };
+        for (const co of others) {
+          const x = d.byCompany[co];
+          if (x) { agg.grossUsd += x.grossUsd; agg.purchases += x.purchases; agg.commissionUsd += x.commissionUsd; }
+        }
+        row.others = recValue(metric, agg);
+      }
+      return row;
+    });
+    series = top.map((co, i) => ({ key: `c${i}`, label: co, color: REC_PALETTE[i], kind: 'line', format: def.format }));
+    if (others.length) series.push({ key: 'others', label: `Outros (${others.length})`, color: 'var(--fg4)', kind: 'line', format: def.format });
+  } else {
+    data = m.daily.map((d, i) => {
+      const row = { date: d.date, value: recValue(metric, d) };
+      if (prevDaily) row.prev = recValue(metric, prevDaily[i]);
+      return row;
+    });
+    series = [
+      { key: 'value', label: prevDaily ? 'Este período' : def.label, color: 'var(--accent)', format: def.format },
+      ...(prevDaily ? [{ key: 'prev', label: 'Período anterior', color: 'var(--fg4)', kind: 'line', dashed: true, format: def.format }] : []),
+    ];
+  }
+
+  const curVal = recValue(metric, m.kpis);
+  const prevVal = m.previous ? recValue(metric, m.previous.kpis) : null;
+  const cmp = curVal != null ? deltaFor(curVal, prevVal) : null;
+  const cmpClass = cmp ? (cmp.good === true ? 'good' : cmp.good === false ? 'bad' : 'flat') : 'flat';
+  const fmt = (v) => (v == null ? '—' : def.format === 'int' ? fmtInt(v) : fmtCurrency(v, 'USD', def.format === 'money2' ? 2 : 0));
+
+  return (
+    <div className="panel ts-panel" style={{ marginBottom: 14 }}>
+      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap' }}>
+        <div className="ts-tabs" role="tablist" aria-label="Métrica do gráfico">
+          {REC_METRICS.map((x) => (
+            <button key={x.id} role="tab" aria-selected={metric === x.id}
+              className={`ts-tab ${metric === x.id ? 'is-active' : ''}`} onClick={() => setMetric(x.id)}>
+              <span className="ic"><Icon name={x.icon} size={14}/></span>{x.label}
+            </button>
+          ))}
+        </div>
+        <div className="seg" title="Ver o total ou cada parceiro" style={{ flexShrink: 0 }}>
+          <button className={view === 'total' ? 'is-active' : ''} onClick={() => setView('total')}>Total</button>
+          <button className={view === 'partners' ? 'is-active' : ''} onClick={() => setView('partners')}>Por parceiro</button>
+        </div>
+      </div>
+      <div className="ts-head">
+        <div>
+          <div className="panel-eyebrow">{def.label} · recuperação{byPartner ? ' · por parceiro' : ''}</div>
+          <div className="ts-value" style={{ color: def.format === 'int' ? 'var(--fg1)' : 'var(--money)' }}>
+            {fmt(curVal)}
+            {cmp && cmp.display !== '—' && (
+              <span className={`delta ${cmpClass}`} style={{ marginLeft: 10, fontSize: 12, verticalAlign: 'middle' }}>
+                <Icon name={cmp.trend === 'up' ? 'arrow-up-right' : cmp.trend === 'down' ? 'arrow-down-right' : 'trending-up'} size={10}/>
+                {cmp.display} <span className="vs">vs período anterior</span>
+              </span>
+            )}
+          </div>
+          <div className="panel-sub">{REC_NOTE[metric]}</div>
+        </div>
+      </div>
+      <NSTimeSeries data={data} height={300} currency="USD" series={series} toggles={byPartner}/>
+    </div>
+  );
+}
+
 function RecoveryPage({ filters }) {
   const [data, setData] = useState({ status: 'loading', m: null, err: null });
   // Empresas abertas no acordeão (o detalhe por conta).
@@ -5533,6 +5643,8 @@ function RecoveryPage({ filters }) {
   const [sugs, setSugs] = useState([]);
   const [refresh, setRefresh] = useState(0);
   const [manage, setManage] = useState(false);
+  const [metric, setMetric] = useState('gross');
+  const [view, setView] = useState('total');
 
   useEffect(() => {
     let cancelled = false;
@@ -5548,14 +5660,30 @@ function RecoveryPage({ filters }) {
 
   function reload() { setRefresh((n) => n + 1); }
   const m = data.m;
+  const k = m?.kpis;
+  const p = m?.previous?.kpis || null;
+  const hideSpark = !m || m.daily.length < 7;
+  const companies = m?.byCompany || [];
+  const pctTxt = (v) => (v == null ? '—' : `${(v * 100).toFixed(1)}%`);
+  const refundColor = (v) => (v == null ? 'var(--fg5)' : v > 0.10 ? 'var(--danger)' : v > 0.08 ? 'var(--warning)' : 'var(--fg2)');
+
+  // Donut: 5 maiores + "Outros".
+  const donutItems = (() => {
+    const head = companies.slice(0, 5).map((c, i) => ({ label: c.company, value: c.grossUsd, color: REC_PALETTE[i], clickable: false }));
+    const rest = companies.slice(5).reduce((s, c) => s + c.grossUsd, 0);
+    return rest > 0 ? [...head, { label: 'Outros', value: rest, color: 'var(--fg4)', clickable: false }] : head;
+  })();
+  const aovItems = companies.filter((c) => c.aovUsd != null)
+    .slice().sort((a, b) => b.aovUsd - a.aovUsd)
+    .map((c) => ({ label: c.company, value: c.aovUsd, sub: `${fmtInt(c.purchases)} compras` }));
 
   return (
     <div className="page-in">
       <div className="page-head">
         <div className="lead">
-          <span className="eyebrow">Afiliados · Recuperação</span>
+          <span className="eyebrow">Captação · Recuperação</span>
           <h2>Recuperação <em>de vendas</em></h2>
-          <span className="sub">Vendas trazidas por afiliados de recuperação (SMS/email) + comissão devida. Respeita o filtro de período.</span>
+          <span className="sub">Vendas trazidas pelos parceiros de recuperação (SMS/e-mail) e pelo SMS próprio: quanto entra, o AOV de cada parceiro e a comissão devida.</span>
         </div>
         <div className="page-head-actions">
           <button className="btn btn-ghost" onClick={reload}><Icon name="refresh" size={12}/> Recarregar</button>
@@ -5576,45 +5704,109 @@ function RecoveryPage({ filters }) {
 
       {data.status === 'loading' && !m && (
         <>
-          <SkelMiniKpis n={4}/>
-          <div style={{ marginTop: 12 }}><SkelTablePanel rows={5} cols={5} i={1}/></div>
+          <div style={{ marginBottom: 14 }}><SkelChartPanel height={300} i={0}/></div>
+          <SkelKpiGrid n={6}/>
+          <div style={{ marginTop: 12 }}><SkelTablePanel rows={5} cols={8} i={1}/></div>
         </>
       )}
 
       {m && (
         <>
-          <div className="grid-2" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', marginBottom: 12 }}>
-            <CopyKpi label="Vendas recuperadas" value={fmtInt(m.kpis.sales)}/>
-            <CopyKpi label="Receita" value={fmtCurrency(m.kpis.grossUsd, 'USD', 2)}/>
-            <CopyKpi label="Comissão devida" value={fmtCurrency(m.kpis.commissionUsd, 'USD', 2)} tone="danger"/>
-            <CopyKpi label="Líquido (pós-comissão)" value={fmtCurrency(m.kpis.netUsd, 'USD', 2)} tone="ok"/>
+          <RecoveryTimeSeries m={m} metric={metric} setMetric={setMetric} view={view} setView={setView}/>
+
+          <div className="kpi-grid">
+            <KpiCard label="Receita" icon="dollar" index={0} money
+              countValue={k.grossUsd} countFormat={(n) => fmtCurrency(n, 'USD', 0)}
+              cur={k.grossUsd} prev={p?.grossUsd}
+              sparkData={m.daily.map((d) => d.grossUsd)} hideSparkline={hideSpark}/>
+            <KpiCard label="Compras" icon="shopping-cart" index={1}
+              countValue={k.purchases} countFormat={(n) => fmtInt(n)}
+              cur={k.purchases} prev={p?.purchases}
+              sub={`${fmtInt(k.sales)} pedidos (front + upsells)`}
+              sparkData={m.daily.map((d) => d.purchases)} hideSparkline={hideSpark}/>
+            <KpiCard label="AOV" icon="trending-up" index={2} money
+              countValue={k.aovUsd ?? 0} countFormat={(n) => (k.aovUsd == null ? '—' : fmtCurrency(n, 'USD', 2))}
+              cur={k.aovUsd} prev={k.aovUsd != null ? p?.aovUsd : null}
+              sub="receita ÷ compras"
+              sparkData={m.daily.map((d) => (d.purchases ? d.grossUsd / d.purchases : 0))} hideSparkline={hideSpark}/>
+            <KpiCard label="Comissão devida" icon="wallet" index={3} money tone="var(--chart-5)"
+              countValue={k.commissionUsd} countFormat={(n) => fmtCurrency(n, 'USD', 0)}
+              cur={k.commissionUsd} prev={p?.commissionUsd} directionPreference="neutral"
+              sub={k.grossUsd > 0 ? `${((k.commissionUsd / k.grossUsd) * 100).toFixed(1)}% da receita` : null}/>
+            <KpiCard label="Líquido pós-comissão" icon="target" index={4} money
+              countValue={k.netUsd} countFormat={(n) => fmtCurrency(n, 'USD', 0)}
+              cur={k.netUsd} prev={p?.netUsd}
+              sparkData={m.daily.map((d) => d.netUsd)} hideSparkline={hideSpark}/>
+            <KpiCard label="Reembolso" icon="refresh" index={5}
+              countValue={k.refundPct != null ? k.refundPct * 100 : 0}
+              countFormat={(n) => (k.refundPct == null ? '—' : n.toFixed(1))} unit={k.refundPct == null ? null : '%'}
+              cur={k.refundPct} prev={k.refundPct != null ? p?.refundPct : null} directionPreference="lower"
+              alert={k.refundPct != null && k.refundPct > 0.10}
+              threshold={k.refundPct != null ? { label: KPI_THRESHOLDS.refundRate.label(k.refundPct), state: KPI_THRESHOLDS.refundRate.state(k.refundPct) } : null}
+              sub={`${fmtInt(k.refunds)} das vendas do período · ${fmtCurrency(k.refundUsd, 'USD', 0)}`}/>
+          </div>
+
+          <div className="grid-2">
+            <div className="panel">
+              <div className="panel-head">
+                <div className="panel-title">
+                  <span className="panel-eyebrow">AOV por parceiro</span>
+                  <div className="panel-sub">Receita ÷ compras no período · AOV geral {k.aovUsd != null ? fmtCurrency(k.aovUsd, 'USD', 2) : '—'}</div>
+                </div>
+              </div>
+              {aovItems.length
+                ? <NSBarRank items={aovItems} format="money2" currency="USD"/>
+                : <div style={{ padding: 24, color: 'var(--fg5)', fontSize: 12 }}>Sem compras no período.</div>}
+            </div>
+            <div className="panel">
+              <div className="panel-head">
+                <div className="panel-title">
+                  <span className="panel-eyebrow">Receita por parceiro</span>
+                  <div className="panel-sub">Fatia de cada parceiro na receita de recuperação</div>
+                </div>
+              </div>
+              {donutItems.length
+                ? <Donut items={donutItems} totalLabel="Recuperação" format={(v) => fmtCurrency(v, 'USD', 0)}/>
+                : <div style={{ padding: 24, color: 'var(--fg5)', fontSize: 12 }}>Sem receita no período.</div>}
+            </div>
           </div>
 
           <div className="panel" style={{ padding: 0 }}>
             <div className="panel-head" style={{ padding: '12px 14px 0' }}>
-              <div className="panel-title">Por empresa</div>
-              <div className="panel-sub">clique pra ver as contas</div>
+              <div className="panel-title">
+                <span className="panel-eyebrow">Por parceiro</span>
+                <div className="panel-sub">clique pra ver as contas e o histórico de %</div>
+              </div>
             </div>
-            <Paginated items={m.byCompany || []} label="empresas" resetKey={`${filters.dateRange.start.getTime()}|${filters.dateRange.end.getTime()}`}>
+            <Paginated items={companies} label="parceiros" resetKey={`${filters.dateRange.start.getTime()}|${filters.dateRange.end.getTime()}`}>
               {(pageRows, pager) => (<>
                 <div className="tbl-wrap" style={{ margin: 0, padding: '0 4px' }}>
                   <table className="tbl">
-                    <thead><tr><th>Empresa</th><th className="num">% comissão</th><th className="num">Vendas</th><th className="num">Receita</th><th className="num">Comissão devida</th></tr></thead>
+                    <thead><tr>
+                      <th>Parceiro</th>
+                      <th className="num">% comissão</th>
+                      <th className="num" title="Compras (sessões); pedidos no detalhe">Compras</th>
+                      <th className="num" title="Receita ÷ compras">AOV</th>
+                      <th className="num">Receita</th>
+                      <th className="num" title="Fatia da receita de recuperação">Part.</th>
+                      <th className="num">Comissão</th>
+                      <th className="num" title="Receita − comissão">Líquido</th>
+                      <th className="num" title="Das vendas do período, quantas foram estornadas">Reembolso</th>
+                    </tr></thead>
                     <tbody>
-                      {data.status === 'loading' && <SkelTableRows rows={5} cols={5}/>}
-                      {data.status === 'ready' && (m.byCompany || []).length === 0 && (
-                        <tr><td colSpan={5} style={{ textAlign: 'center', padding: 20, opacity: 0.6 }}>
+                      {data.status === 'loading' && <SkelTableRows rows={5} cols={9}/>}
+                      {data.status === 'ready' && companies.length === 0 && (
+                        <tr><td colSpan={9} style={{ textAlign: 'center', padding: 20, opacity: 0.6 }}>
                           Nenhuma venda de recuperação no período.{affs.length === 0 ? ' Marque um afiliado em "Gerenciar afiliados".' : ''}
                         </td></tr>
                       )}
                       {pageRows.map((c) => {
                         const aberta = openCo.has(c.company);
-                        // byCompany.accounts NÃO traz `periods` (lib/services/recovery.ts):
-                        // o histórico de taxa vem de m.byAffiliate, casado por ID + plataforma
-                        // (o mesmo ID pode existir em duas plataformas).
+                        // byCompany.accounts NÃO traz `periods`: o histórico de taxa vem de
+                        // m.byAffiliate, casado por ID + plataforma.
                         const fullOf = (a) => (m.byAffiliate || []).find((x) => x.affiliateExternalId === a.affiliateExternalId && (x.platformSlug || null) === (a.platformSlug || null)) || a;
-                        // Uma conta só e sem histórico de taxa: não há o que abrir.
                         const temDetalhe = c.accounts.length > 1 || (c.accounts[0] ? (fullOf(c.accounts[0]).periods || []).length > 1 : false);
+                        const isSms = c.company === 'SMS próprio';
                         return (
                           <React.Fragment key={c.company}>
                             <tr
@@ -5631,13 +5823,18 @@ function RecoveryPage({ filters }) {
                                 )}
                                 <span style={{ marginLeft: temDetalhe ? 6 : 17 }}>{c.company}</span>
                                 <span style={{ color: 'var(--fg5)', marginLeft: 8, fontSize: 10 }}>
-                                  {c.accounts.length === 1 ? c.accounts[0].platformSlug : `${c.accounts.length} contas`}
+                                  {isSms ? 'sem comissão' : c.accounts.length === 1 ? c.accounts[0].platformSlug : `${c.accounts.length} contas`}
                                 </span>
                               </td>
                               <td className="num cell-mono">{(c.effectivePct * 100).toFixed(0)}%</td>
-                              <td className="num">{fmtInt(c.sales)}</td>
-                              <td className="num">{fmtCurrency(c.grossUsd, 'USD', 2)}</td>
-                              <td className="num" style={{ color: 'var(--money)' }}>{fmtCurrency(c.commissionUsd, 'USD', 2)}</td>
+                              <td className="num" title={`${fmtInt(c.sales)} pedidos`}>{fmtInt(c.purchases)}</td>
+                              <td className="num cell-mono" style={{ fontWeight: 600 }}>{c.aovUsd != null ? fmtCurrency(c.aovUsd, 'USD', 2) : '—'}</td>
+                              <td className="num" style={{ color: 'var(--money)' }}>{fmtCurrency(c.grossUsd, 'USD', 2)}</td>
+                              <td className="num cell-mono">{pctTxt(c.sharePct)}</td>
+                              <td className="num">{fmtCurrency(c.commissionUsd, 'USD', 2)}</td>
+                              <td className="num" style={{ color: 'var(--money)' }}>{fmtCurrency(c.netUsd, 'USD', 2)}</td>
+                              <td className="num cell-mono" style={{ color: refundColor(c.refundPct) }}
+                                title={`${fmtInt(c.refunds)} estornos · ${fmtCurrency(c.refundUsd, 'USD', 2)}`}>{pctTxt(c.refundPct)}</td>
                             </tr>
 
                             {aberta && c.accounts.map((a) => {
@@ -5655,26 +5852,33 @@ function RecoveryPage({ filters }) {
                                       {(a.commissionPct * 100).toFixed(0)}%
                                       {multi && <span style={{ color: 'var(--warning)', marginLeft: 4 }} title="A % mudou dentro do período — contadores por taxa abaixo">*</span>}
                                     </td>
-                                    <td className="num" style={{ fontSize: 11 }}>{fmtInt(a.sales)}</td>
+                                    <td className="num" style={{ fontSize: 11 }} title={`${fmtInt(a.sales)} pedidos`}>{fmtInt(a.purchases)}</td>
+                                    <td className="num cell-mono" style={{ fontSize: 11 }}>{a.aovUsd != null ? fmtCurrency(a.aovUsd, 'USD', 2) : '—'}</td>
                                     <td className="num" style={{ fontSize: 11 }}>{fmtCurrency(a.grossUsd, 'USD', 2)}</td>
-                                    <td className="num" style={{ fontSize: 11, color: 'var(--money)' }}>{fmtCurrency(a.commissionUsd, 'USD', 2)}</td>
+                                    <td className="num cell-mono" style={{ fontSize: 11 }}>{pctTxt(k.grossUsd > 0 ? a.grossUsd / k.grossUsd : null)}</td>
+                                    <td className="num" style={{ fontSize: 11 }}>{fmtCurrency(a.commissionUsd, 'USD', 2)}</td>
+                                    <td className="num" style={{ fontSize: 11 }}>{fmtCurrency(a.netUsd, 'USD', 2)}</td>
+                                    <td className="num cell-mono" style={{ fontSize: 11, color: refundColor(a.refundPct) }}>{pctTxt(a.refundPct)}</td>
                                   </tr>
                                   {/* Contadores por período de taxa: venda feita com a % antiga
                                       fica no contador antigo; a % nova acumula no novo. */}
-                                  {multi && periodos.map((p, i) => {
-                                    const vigente = p.effectiveTo == null;
+                                  {multi && periodos.map((pp, i) => {
+                                    const vigente = pp.effectiveTo == null;
                                     const label = vigente
-                                      ? `desde ${p.effectiveFrom ? fmtDateShort(p.effectiveFrom) : 'sempre'} · vigente`
-                                      : p.effectiveFrom
-                                        ? `${fmtDateShort(p.effectiveFrom)} → ${fmtDateShort(p.effectiveTo)}`
-                                        : `até ${fmtDateShort(p.effectiveTo)}`;
+                                      ? `desde ${pp.effectiveFrom ? fmtDateShort(pp.effectiveFrom) : 'sempre'} · vigente`
+                                      : pp.effectiveFrom
+                                        ? `${fmtDateShort(pp.effectiveFrom)} → ${fmtDateShort(pp.effectiveTo)}`
+                                        : `até ${fmtDateShort(pp.effectiveTo)}`;
                                     return (
                                       <tr key={`${a.affiliateExternalId}-p${i}`}>
                                         <td className="cell-mono" style={{ paddingLeft: 46, fontSize: 10, color: vigente ? 'var(--fg3)' : 'var(--fg5)' }}>{label}</td>
-                                        <td className="num cell-mono" style={{ fontSize: 10, color: vigente ? 'var(--glow-cyan)' : 'var(--fg5)' }}>{(p.commissionPct * 100).toFixed(0)}%</td>
-                                        <td className="num" style={{ fontSize: 10, color: 'var(--fg4)' }}>{fmtInt(p.sales)}</td>
-                                        <td className="num" style={{ fontSize: 10, color: 'var(--fg4)' }}>{fmtCurrency(p.grossUsd, 'USD', 2)}</td>
-                                        <td className="num" style={{ fontSize: 10, color: vigente ? 'var(--money)' : 'var(--fg4)' }}>{fmtCurrency(p.commissionUsd, 'USD', 2)}</td>
+                                        <td className="num cell-mono" style={{ fontSize: 10, color: vigente ? 'var(--accent)' : 'var(--fg5)' }}>{(pp.commissionPct * 100).toFixed(0)}%</td>
+                                        <td className="num" style={{ fontSize: 10, color: 'var(--fg4)' }} title="pedidos">{fmtInt(pp.sales)} ped.</td>
+                                        <td/>
+                                        <td className="num" style={{ fontSize: 10, color: 'var(--fg4)' }}>{fmtCurrency(pp.grossUsd, 'USD', 2)}</td>
+                                        <td/>
+                                        <td className="num" style={{ fontSize: 10, color: vigente ? 'var(--money)' : 'var(--fg4)' }}>{fmtCurrency(pp.commissionUsd, 'USD', 2)}</td>
+                                        <td/><td/>
                                       </tr>
                                     );
                                   })}
@@ -5693,10 +5897,11 @@ function RecoveryPage({ filters }) {
           </div>
 
           <div style={{ marginTop: 10, fontFamily: 'var(--f-mono)', fontSize: 10, color: 'var(--fg5)', lineHeight: 1.6 }}>
-            Comissão = receita × % VIGENTE NA DATA DA VENDA, sobre cada venda APROVADA (FE + upsell).
-            Alterar a % de um afiliado não reescreve o passado: vendas antigas ficam no contador da taxa
-            antiga (linhas com *) e um novo contador acumula com a taxa nova. Split SMS vs email entra
-            quando houver sinal no tracking.
+            Compra = cliente que comprou (front + upsells da mesma sessão contam uma vez); AOV = receita ÷ compras.
+            Comissão = receita × % VIGENTE NA DATA DA VENDA, sobre cada venda APROVADA (front + upsell); alterar a %
+            de um afiliado não reescreve o passado (linhas com *). Reembolso = das vendas feitas no período, quantas já
+            foram estornadas (mesma régua da aba Reembolsos). SMS próprio (Mautic/Twilio) entra sem comissão, como no
+            estágio Recuperação da Visão geral.
           </div>
         </>
       )}
