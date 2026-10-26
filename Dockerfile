@@ -49,8 +49,15 @@ COPY --from=builder /app/Planilhas ./Planilhas
 COPY --from=builder /app/docs/kb ./docs/kb
 COPY --from=builder /app/lib ./lib
 COPY --from=builder /app/tsconfig.json ./tsconfig.json
+# tsx roda pelo próprio dist/cli.mjs: copiar node_modules/.bin/tsx trazia o
+# CLI como arquivo solto em .bin/, onde ele não acha o esbuild (que fica em
+# tsx/node_modules) — o backfill e o seedAdmin falhavam em todo boot.
+# get-tsconfig/resolve-pkg-maps são deps do tsx; bcryptjs é do seedAdmin
+# (o standalone do Next embute o bcryptjs no servidor e não traz o pacote).
 COPY --from=builder /app/node_modules/tsx ./node_modules/tsx
-COPY --from=builder /app/node_modules/.bin/tsx ./node_modules/.bin/tsx
+COPY --from=builder /app/node_modules/get-tsconfig ./node_modules/get-tsconfig
+COPY --from=builder /app/node_modules/resolve-pkg-maps ./node_modules/resolve-pkg-maps
+COPY --from=builder /app/node_modules/bcryptjs ./node_modules/bcryptjs
 
 USER nextjs
 EXPOSE 3000
@@ -61,4 +68,4 @@ ENV HOSTNAME=0.0.0.0
 # requer ADMIN_SEED_EMAIL/PASSWORD em env) → start app.
 # Cada passo é idempotente; falhas em backfill/seed loggam mas não derrubam
 # o container — o app sobe mesmo se um deles tropeçar.
-CMD ["sh", "-c", "node node_modules/prisma/build/index.js migrate deploy && (node_modules/.bin/tsx scripts/backfillClassification.ts || echo '[startup] backfill failed, continuing') && (node_modules/.bin/tsx scripts/seedAdmin.ts || echo '[startup] seedAdmin failed, continuing') && node server.js"]
+CMD ["sh", "-c", "node node_modules/prisma/build/index.js migrate deploy && (node node_modules/tsx/dist/cli.mjs scripts/backfillClassification.ts || echo '[startup] backfill failed, continuing') && (node node_modules/tsx/dist/cli.mjs scripts/seedAdmin.ts || echo '[startup] seedAdmin failed, continuing') && node server.js"]
