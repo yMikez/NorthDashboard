@@ -151,16 +151,39 @@ export const CALL_CENTER_FILL_FROM_PUBLIC = [
 
 const sqlList = (xs: string[]) => xs.map(lit).join(', ');
 
+/**
+ * Ponte da Tauk: a venda oficial (chave tauk:<sale_id>, sem e-mail) e a do
+ * webhook (chave e-mail|data, com e-mail) não têm chave em comum. O que as
+ * liga é o valor + o horário EXATO, ao segundo, com o do webhook 4h à frente
+ * (5h fora do horário de verão americano). Medido em 2026-10-27: 4.557 das
+ * 4.615 vendas do webhook casam 1:1. Só vale quando há exatamente um
+ * candidato; o dado do oficial vence sempre (quando o e-mail chegar lá, a
+ * ponte deixa de ser usada sozinha).
+ */
+export const TAUK_PONTE_HORAS = [4, 5];
+
+function taukPonteSql(): string {
+  const horarios = TAUK_PONTE_HORAS.map((h) => `d."purchasedAt" + interval '${h} hours'`).join(', ');
+  return `  LEFT JOIN LATERAL (\n`
+    + `    SELECT (array_agg(c.id))[1] AS id, count(*) AS n FROM (\n`
+    + `      SELECT t.id FROM ${PUB}."CallCenterSale" t\n`
+    + `      WHERE d.provider = 'tauk' AND t.provider = 'tauk' AND t."amountUsd" = d."amountUsd"\n`
+    + `        AND t."purchasedAt" IN (${horarios})\n`
+    + `      LIMIT 2) c\n`
+    + `  ) tkc ON true\n`
+    + `  LEFT JOIN ${PUB}."CallCenterSale" tk ON tkc.n = 1 AND tk.id = tkc.id`;
+}
+
 export function callCenterViewSql(schema: string, cols: Column[], ofiCols: string[], opts: PainelOptions, t: Typing): string {
   const ofi = new Set(ofiCols);
   const expr = (col: Column) => {
     if (!ofi.has(col.name)) return t.plain('p', col);
     const c = q(col.name);
-    return t.cast(CALL_CENTER_FILL_FROM_PUBLIC.includes(col.name) ? `COALESCE(d.${c}, p.${c})` : `d.${c}`, col, true);
+    return t.cast(CALL_CENTER_FILL_FROM_PUBLIC.includes(col.name) ? `COALESCE(d.${c}, p.${c}, tk.${c})` : `d.${c}`, col, true);
   };
   const plain = selectList(cols, (c) => t.plain('p', c));
   const parts = [
-    `SELECT\n    ${selectList(cols, expr)}\n  FROM ${OFI}."CallCenterSale" d\n  LEFT JOIN ${PUB}."CallCenterSale" p ON p."externalKey" = d."externalKey"\n  WHERE d.provider IN (${sqlList(OFICIAL_CALL_CENTER)})`,
+    `SELECT\n    ${selectList(cols, expr)}\n  FROM ${OFI}."CallCenterSale" d\n  LEFT JOIN ${PUB}."CallCenterSale" p ON p."externalKey" = d."externalKey"\n${taukPonteSql()}\n  WHERE d.provider IN (${sqlList(OFICIAL_CALL_CENTER)})`,
     `SELECT\n    ${plain}\n  FROM ${PUB}."CallCenterSale" p\n  WHERE p.provider NOT IN (${sqlList(OFICIAL_CALL_CENTER)})`,
   ];
   if (opts.tempoReal) {

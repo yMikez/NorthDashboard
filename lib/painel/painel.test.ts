@@ -74,8 +74,14 @@ describe('schema painel (PGlite)', () => {
     await ccs('dados_oficiais', 'logicall:L1', { amountUsd: 210 });
     await ccs('public', 'logicall:L2', { status: 'VOID' });
     await ccs('public', 'logicall:L3', { purchasedAt: new Date('2026-10-09T15:00:00Z') });
-    await ccs('public', 'a@b.test|2026-10-09', { provider: 'tauk', purchasedAt: new Date('2026-10-09T19:00:00Z') });
+    await ccs('public', 'a@b.test|2026-10-09', { provider: 'tauk', email: 'a@b.test', purchasedAt: new Date('2026-10-09T19:00:00Z') });
     await ccs('dados_oficiais', 'tauk:99', { provider: 'tauk' });
+    // Ponte da Tauk: mesma venda, oficial 4h antes e sem e-mail.
+    await ccs('dados_oficiais', 'tauk:100', { provider: 'tauk', firstName: 'Ana', purchasedAt: new Date('2026-10-09T15:00:00Z') });
+    // Dois candidatos no webhook (mesmo valor e horário): ambíguo, não preenche.
+    await ccs('public', 'c@d.test|2026-10-10', { provider: 'tauk', email: 'c@d.test', amountUsd: 99, purchasedAt: new Date('2026-10-10T19:00:00Z') });
+    await ccs('public', 'e@f.test|2026-10-10', { provider: 'tauk', email: 'e@f.test', amountUsd: 99, purchasedAt: new Date('2026-10-10T19:00:00Z') });
+    await ccs('dados_oficiais', 'tauk:101', { provider: 'tauk', amountUsd: 99, purchasedAt: new Date('2026-10-10T15:00:00Z') });
     // SalesBound: S1 nos dois; S2 webhook antigo (fora); S3 novo (tempo real);
     // S4 novo mas o oficial já tem pelo clientTxnId (fora).
     await sb('public', 'S1', { merchant: 'NMI' });
@@ -124,9 +130,19 @@ describe('schema painel (PGlite)', () => {
   });
 
   it('call center: oficial + completa do public; Tauk do public nunca; Logicall em tempo real', async () => {
-    expect(await keys(`SELECT "externalKey" AS k FROM painel."CallCenterSale"`)).toEqual(['logicall:L1', 'logicall:L3', 'tauk:99']);
+    expect(await keys(`SELECT "externalKey" AS k FROM painel."CallCenterSale"`)).toEqual(['logicall:L1', 'logicall:L3', 'tauk:100', 'tauk:101', 'tauk:99']);
     const l1 = (await pg.query<Record<string, unknown>>(`SELECT "amountUsd"::float AS v, email FROM painel."CallCenterSale" WHERE "externalKey" = 'logicall:L1'`)).rows[0];
     expect(l1).toEqual({ v: 210, email: 'cliente@exemplo.test' });
+  });
+
+  it('ponte da Tauk: e-mail do webhook casado por valor + horário exato (4h à frente); ambíguo fica vazio', async () => {
+    const r = (await pg.query<{ k: string; email: string | null; firstName: string | null }>(
+      `SELECT "externalKey" AS k, email, "firstName" FROM painel."CallCenterSale" WHERE provider = 'tauk' ORDER BY 1`)).rows;
+    expect(r).toEqual([
+      { k: 'tauk:100', email: 'a@b.test', firstName: 'Ana' },
+      { k: 'tauk:101', email: null, firstName: null },
+      { k: 'tauk:99', email: null, firstName: null },
+    ]);
   });
 
   it('SalesBound: oficial + tempo real, sem repetir o que o oficial já tem pelo clientTxnId', async () => {
