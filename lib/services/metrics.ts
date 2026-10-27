@@ -1378,10 +1378,6 @@ export async function getFunnel(
     feProductName: string | null;
     feProductFamily: string | null;
     fePlatformSlug: string | null;
-    // affiliate_id (NorthScale Afiliados) da FE — dimensão do filtro Afiliado.
-    feMapped: string | null;
-    // Conta de afiliado (Affiliate.id) da FE — filtro "Afiliado" da barra.
-    feAffiliate: string | null;
   }
 
   const groups = new Map<string, Group>();
@@ -1400,7 +1396,7 @@ export async function getFunnel(
         upsellsByStep: new Map(),
         downsellsByStep: new Map(),
         feProductExternalId: null, feProductName: null, feProductFamily: null,
-        fePlatformSlug: slug, feMapped: null, feAffiliate: null,
+        fePlatformSlug: slug,
       };
       groups.set(key, g);
     }
@@ -1419,28 +1415,16 @@ export async function getFunnel(
       g.feProductName = o.product.name;
       g.feProductFamily = o.product.family;
       g.fePlatformSlug = o.platform.slug;
-      g.feMapped = o.mappedAffiliateId;
-      g.feAffiliate = o.affiliateId;
     }
   }
 
-  // Filtro "Afiliado (sistema)": fica a sessão cuja FE está mapeada pro
-  // afiliado — com os upsells dela, mesmo que o mappedAffiliateId por pedido
-  // difira (BuyGoods emite aff_id por produto). Sessões órfãs (sem FE no
-  // período) saem: sem FE não há como saber de quem são.
+  // Filtro Afiliado: regra em funnelAffiliateFilter (a FE decide a sessão;
+  // sessão sem FE no período fica com os pedidos do próprio afiliado).
   let orders = fetched;
   if (filters.mappedAffiliateIds?.length || filters.affiliateIds?.length) {
-    const allowed = filters.mappedAffiliateIds?.length ? new Set(filters.mappedAffiliateIds) : null;
-    const allowedAcc = filters.affiliateIds?.length ? new Set(filters.affiliateIds) : null;
-    const keep = new Set<string>();
-    for (const [key, g] of groups) {
-      if (!g.hasFE) continue;
-      if (allowed && !(g.feMapped && allowed.has(g.feMapped))) continue;
-      if (allowedAcc && !(g.feAffiliate && allowedAcc.has(g.feAffiliate))) continue;
-      keep.add(key);
-    }
-    for (const key of Array.from(groups.keys())) if (!keep.has(key)) groups.delete(key);
-    orders = fetched.filter((o) => keep.has(`${o.platform.slug}:${sessionKeyOf(o)}`));
+    orders = funnelAffiliateFilter(fetched, (o) => `${o.platform.slug}:${sessionKeyOf(o)}`, filters);
+    const kept = new Set(orders.map((o) => `${o.platform.slug}:${sessionKeyOf(o)}`));
+    for (const key of Array.from(groups.keys())) if (!kept.has(key)) groups.delete(key);
   }
 
   // Pass 1.5: orphan-FE recovery. If a group has no FE in this period (FE
@@ -1621,6 +1605,37 @@ export function classifyOrderInGroup(
   if (productType === 'FRONTEND') return 'SAME_FAMILY';
   if (feFamily == null || orderFamily == null) return 'UNKNOWN';
   return feFamily === orderFamily ? 'SAME_FAMILY' : 'CROSS_SELL';
+}
+
+/**
+ * Filtro Afiliado do funil (conta da barra e/ou affiliate_id do sistema).
+ * A FE decide a sessão: sessão cuja FE é do afiliado fica inteira, com os
+ * upsells dela, mesmo que o afiliado por pedido difira (BuyGoods emite
+ * aff_id por produto). Sessão SEM FE no período (FE ontem, upgrade avulso)
+ * fica só com os pedidos do próprio afiliado — antes ela sumia com o filtro,
+ * e o funil do afiliado ficava abaixo do Ranking e do funil sem filtro.
+ */
+export function funnelAffiliateFilter<
+  T extends { productType: string; affiliateId: string | null; mappedAffiliateId: string | null },
+>(
+  orders: T[],
+  sessionKey: (o: T) => string,
+  filters: Pick<MetricsFilters, 'affiliateIds' | 'mappedAffiliateIds'>,
+): T[] {
+  const acc = filters.affiliateIds?.length ? new Set(filters.affiliateIds) : null;
+  const mapped = filters.mappedAffiliateIds?.length ? new Set(filters.mappedAffiliateIds) : null;
+  if (!acc && !mapped) return orders;
+  const owns = (o: T): boolean =>
+    (!acc || (o.affiliateId != null && acc.has(o.affiliateId)))
+    && (!mapped || (o.mappedAffiliateId != null && mapped.has(o.mappedAffiliateId)));
+  // Primeira FE da sessão decide (a mesma que dá a família no Pass 1).
+  const feOwns = new Map<string, boolean>();
+  for (const o of orders) {
+    if (o.productType !== 'FRONTEND') continue;
+    const k = sessionKey(o);
+    if (!feOwns.has(k)) feOwns.set(k, owns(o));
+  }
+  return orders.filter((o) => feOwns.get(sessionKey(o)) ?? owns(o));
 }
 
 export interface FunnelGroupAgg {

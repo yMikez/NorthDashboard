@@ -40,7 +40,7 @@ effectiveDate: 2026-09-30
 
 ## get_affiliates e get_affiliate_detail (Afiliados)
 
-- revenue, net, cpa, cogs, fulfillment (US$) do afiliado no período, por data da venda.
+- revenue, net, cpa, cogs, fulfillment (US$) do afiliado no período, por data da venda. revenue = só APROVADO (o faturamento do Funil e da Visão Geral); grossChargedUsd = valor COBRADO das vendas pagas (a "Receita" da aba Afiliados). grossChargedUsd − revenue = vendas que foram estornadas depois.
 - feApprovedCount: FEs aprovadas; realOrders: pedidos reais (Digistore sem as linhas extras) — denominador das taxas por afiliado.
 - cpaPerFe: CPA negociado = ÚLTIMO CPA pago numa FE com CPA > 0 no período. cpaPerFeApproved: média ponderada (deflacionada por FEs sem CPA).
 - netAovUsd, netAfterCpaUsd (por FE), netAfterCpaTotalUsd, cpaStatus (saudavel | atencao | renegociar): modelo CPA. null = sem CPA detectado.
@@ -59,6 +59,7 @@ effectiveDate: 2026-09-30
 ## get_funnel e get_funnel_sequence (Funil)
 
 - stages[].takeRate: FRAÇÃO (volume da etapa ÷ sessões com FE). revenue por etapa em US$.
+- Só pedidos APROVADOS. Filtro Afiliado: a FE decide a sessão (vai inteira, com os upsells); sessão sem FE no período (FE ontem, upgrade avulso) entra só com os pedidos do próprio afiliado.
 - summary: aov (de sessão), aovFEOnly, aovWithUpsell, totalRevenue, revenueFeSessions (US$); revenueLiftFromUpsells em FRAÇÃO (AOV com upsell × só-FE, não participação na receita).
 - Sequência: volumeEffect, aovEffect, takeEffectUsd, revenueDelta em US$; fePct, aovPct, revenuePct em FRAÇÃO; takePp em FRAÇÃO (0.05 = +5 pp).
 

@@ -560,11 +560,11 @@ function LeaderboardPage({ filters, onOpenAffiliate, user }) {
           </button>
           <button className="btn btn-ghost" onClick={() => downloadCsv(
             `ranking-afiliados_${isoDateOnly(filters.dateRange.start)}_${isoDateOnly(filters.dateRange.end)}.csv`,
-            ['#', 'Afiliado', 'Afiliado ID', 'Afiliado (sistema)', 'affiliate_id', 'Plataforma', 'Vendas pagas', 'Vendas aprovadas', 'Receita cobrada USD', 'Estornado USD', 'FEs pagos',
+            ['#', 'Afiliado', 'Afiliado ID', 'Afiliado (sistema)', 'affiliate_id', 'Plataforma', 'Vendas pagas', 'Vendas aprovadas', 'Receita cobrada USD', 'Receita aprovada USD', 'Estornado USD', 'FEs pagos',
              'AOV USD', 'Aprovação %', refundMode === 'lucro_real' ? 'Refund&CB Lucro real %' : 'Refund&CB observado %', 'CPA pago USD', 'Custos op %',
              'NET AOV USD', 'CPA por venda USD', 'Net after CPA USD', 'Status CPA'],
             rows.map((r, i) => [
-              i + 1, r.nickname || r.externalId, r.accounts && r.accounts.length > 1 ? r.accounts.map((c) => c.externalId).join(' | ') : r.externalId, r.mapped ? r.mapped.name : '', r.mappedAffiliateId || '', (r.platforms || [r.platformSlug]).join('+'), r.paidOrders, r.orders, r.grossChargedUsd, r.refundedUsd, r.fePaidCount,
+              i + 1, r.nickname || r.externalId, r.accounts && r.accounts.length > 1 ? r.accounts.map((c) => c.externalId).join(' | ') : r.externalId, r.mapped ? r.mapped.name : '', r.mappedAffiliateId || '', (r.platforms || [r.platformSlug]).join('+'), r.paidOrders, r.orders, r.grossChargedUsd, r.revenue, r.refundedUsd, r.fePaidCount,
               aovOf(r), r.approvalRate * 100, r.refundCbPctUsed, r.cpa, r.opexPctUsed,
               r.netAovUsd, r.cpaPerFe, r.netAfterCpaUsd, r.cpaStatus,
             ]),
@@ -681,7 +681,7 @@ function LeaderboardPage({ filters, onOpenAffiliate, user }) {
                     <th>Afiliado</th>
                     <th>Plataforma</th>
                     <th className="num" title="Vendas PAGAS no período: aprovadas + reembolsadas + chargeback (NOT PAID fora; na Digistore a linha de estorno não é venda). Embaixo, só as aprovadas.">Pedidos</th>
-                    <th className="num" title="Valor COBRADO das vendas pagas, inclusive as reembolsadas depois — o reembolso é dedução à parte (coluna Reembolso), como no extrato.">Receita</th>
+                    <th className="num" title="Valor COBRADO das vendas pagas, inclusive as reembolsadas depois — o reembolso é dedução à parte (coluna Reembolso), como no extrato. Embaixo: o aprovado, que é o faturamento do Funil e da Visão geral.">Receita</th>
                     <th className="num" title="AOV = valor cobrado das vendas creditadas a ESTE afiliado (FE + os upsells/downsells em que a plataforma manteve o crédito nele) ÷ FEs PAGOS. Lente direta: cross-sell creditado a outro afiliado não entra. Mesmo AOV que alimenta o NET AOV.">AOV</th>
                     <th title="Aprovadas ÷ vendas pagas do período (NOT PAID fora).">Aprovação</th>
                     <th className="num" title={refundMode === 'lucro_real' ? 'Reembolso + chargeback usado no NET AOV: o % configurado na aba Lucro real.' : 'Reembolso + chargeback usado no NET AOV: o OBSERVADO do afiliado no período (estornos + chargebacks ÷ pedidos reais, por data da venda).'}>Reembolso</th>
@@ -728,7 +728,13 @@ function LeaderboardPage({ filters, onOpenAffiliate, user }) {
                           {fmtInt(r.paidOrders)}
                           <span style={{ display: 'block', fontSize: 10, color: 'var(--fg5)', fontWeight: 400, marginTop: 1 }}>{fmtInt(r.orders)} aprov.</span>
                         </td>
-                        <td className="num cell-mono" style={{ color: 'var(--fg1)' }}>{fmtCurrency(r.grossChargedUsd, cur, 0)}</td>
+                        <td className="num cell-mono" style={{ color: 'var(--fg1)' }}
+                          title={r.grossChargedUsd - r.revenue >= 1 ? `${fmtCurrency(r.grossChargedUsd, cur, 0)} cobrados = ${fmtCurrency(r.revenue, cur, 0)} aprovados + ${fmtCurrency(r.grossChargedUsd - r.revenue, cur, 0)} de vendas estornadas depois.\nO Funil e a Visão geral mostram o aprovado.` : undefined}>
+                          {fmtCurrency(r.grossChargedUsd, cur, 0)}
+                          {r.grossChargedUsd - r.revenue >= 1 && (
+                            <span style={{ display: 'block', fontSize: 10, color: 'var(--fg5)', fontWeight: 400, marginTop: 1 }}>{fmtCurrency(r.revenue, cur, 0)} aprov.</span>
+                          )}
+                        </td>
                         <td className="num cell-mono" style={{ color: 'var(--money)' }}>
                           {aovOf(r) > 0 ? fmtCurrency(aovOf(r), cur, 0) : '—'}
                           {aovOf(r) > 0 && (
@@ -859,6 +865,11 @@ function AffiliateDrawer({ affiliateId, filters, onClose }) {
               <div className="s" title="Valor cobrado de todas as vendas pagas (aprovadas, reembolsadas e chargeback) — o reembolso é dedução à parte, como no extrato.">
                 {fmtInt(k.paidOrders ?? k.orders)} vendas pagas · {fmtInt(k.orders)} aprovadas
               </div>
+              {k.grossChargedUsd != null && k.grossChargedUsd - k.revenue >= 1 && (
+                <div className="s" title="O Funil e a Visão geral mostram o aprovado; a diferença são vendas estornadas depois.">
+                  {fmtCurrency(k.revenue, cur, 0)} aprovados · {fmtCurrency(k.grossChargedUsd - k.revenue, cur, 0)} estornados
+                </div>
+              )}
             </div>
             <div className="mini-kpi">
               <div className="l">Approval rate</div>

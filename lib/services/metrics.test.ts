@@ -289,6 +289,43 @@ describe('classifyOrderInGroup', () => {
   });
 });
 
+import { funnelAffiliateFilter } from './metrics';
+
+describe('funnelAffiliateFilter — filtro Afiliado do funil', () => {
+  type O = { id: string; s: string; productType: string; affiliateId: string | null; mappedAffiliateId: string | null };
+  const o = (id: string, s: string, productType: string, affiliateId: string | null, mappedAffiliateId: string | null = null): O =>
+    ({ id, s, productType, affiliateId, mappedAffiliateId });
+  const ids = (xs: O[]) => xs.map((x) => x.id).sort();
+  const orders = [
+    o('fe1', 's1', 'FRONTEND', 'eric'), o('up1', 's1', 'UPSELL', 'outro'),     // FE do Ericson: sessão inteira
+    o('fe2', 's2', 'FRONTEND', 'outro'), o('up2', 's2', 'UPSELL', 'eric'),     // FE de outro: sessão é do outro
+    o('up3', 's3', 'UPSELL', 'eric'), o('up4', 's3', 'UPSELL', 'outro'),       // sem FE no período: cada um com o seu
+    o('up5', 's4', 'UPSELL', 'eric'),                                          // upgrade avulso (Blessed Kit 27/10)
+  ];
+
+  it('sem filtro devolve tudo', () => {
+    expect(funnelAffiliateFilter(orders, (x) => x.s, {})).toBe(orders);
+  });
+
+  it('a FE decide a sessão; sessão sem FE fica com os pedidos do próprio afiliado', () => {
+    expect(ids(funnelAffiliateFilter(orders, (x) => x.s, { affiliateIds: ['eric'] })))
+      .toEqual(['fe1', 'up1', 'up3', 'up5']);
+    expect(ids(funnelAffiliateFilter(orders, (x) => x.s, { affiliateIds: ['outro'] })))
+      .toEqual(['fe2', 'up2', 'up4']);
+  });
+
+  it('a soma dos afiliados é o funil sem filtro (nenhum pedido some nem duplica)', () => {
+    const eric = funnelAffiliateFilter(orders, (x) => x.s, { affiliateIds: ['eric'] });
+    const outro = funnelAffiliateFilter(orders, (x) => x.s, { affiliateIds: ['outro'] });
+    expect(ids([...eric, ...outro])).toEqual(ids(orders));
+  });
+
+  it('affiliate_id do sistema e conta da barra somam (E)', () => {
+    const xs = [o('fe', 'a', 'FRONTEND', 'eric', 'm1'), o('up', 'b', 'UPSELL', 'eric', 'm2')];
+    expect(ids(funnelAffiliateFilter(xs, (x) => x.s, { affiliateIds: ['eric'], mappedAffiliateIds: ['m1'] }))).toEqual(['fe']);
+  });
+});
+
 describe('affiliateRefundPct — reembolso do NET AOV na aba Afiliados', () => {
   const lucroReal = { front: 20, recovery: null };
   it('observado: valor estornado ÷ valor cobrado das vendas pagas do afiliado', () => {
