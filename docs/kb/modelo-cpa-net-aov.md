@@ -30,7 +30,7 @@ A régua é configurável pelo admin (padrão: saudável a partir de $10 por FE,
 - AOV do afiliado: receita dos pedidos dele (FE + upsells + downsells) ÷ FEs aprovadas dele. Não é o AOV de sessão da Visão Geral.
 - fee%: taxa REAL da plataforma (cadastro da plataforma, % do faturamento).
 - refund&cb%: premissa manual POR PLATAFORMA, porque o evento de estorno chega semanas depois e a taxa recente subestima. Exceção Digistore24: o modelo usa a taxa REAL em valor da coorte madura (vendas de 60 a 150 dias atrás, |$ estornado| ÷ $ vendido), com o valor manual só como reserva quando a amostra madura tem menos de 50 vendas.
-- Override por afiliado: o admin pode fixar um refund&cb% próprio para um afiliado (refundCbPctOverride); a linha mostra qual foi usado (refundCbPctUsed).
+- Na aba Afiliados (desde 2026-10-27) o refund&cb% NÃO é o da plataforma: é o OBSERVADO do próprio afiliado no período (estornos + chargebacks ÷ pedidos reais, por data da venda — período recente ainda vai receber estornos e sai mais baixo). Um botão troca pelo % configurado na aba Lucro real (igual pra todos; conta de recuperação usa o % de recuperação de lá, ou o do front). O override por afiliado deixou de valer nessa aba. A linha mostra o usado em refundCbPctUsed.
 - opex%: percentual global de custos operacionais (padrão 10%), guarda-chuva para custo de produto, frete e operação.
 - reserva%: percentual retido pela plataforma (cadastro da plataforma).
 - CPA negociado (cpaPerFe): o ÚLTIMO CPA pago observado numa FE aprovada com CPA > 0 dentro do período — o CPA de contrato vigente, não a média. Reembolso e chargeback zeram o CPA da venda estornada.

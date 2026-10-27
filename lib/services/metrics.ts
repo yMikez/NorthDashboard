@@ -14,6 +14,7 @@ import {
   realOrderCount, EXTRA_ROW_REFUND_PLATFORMS, ZERO_PLATFORM_PCTS,
 } from './profitModel';
 import { DEFAULT_SUPPLIER } from './cogs';
+import { defaultParams as defaultNetProfitParams, normalizeParams } from './netProfitCore';
 import { addAffiliateWhere, affiliateSqlCond } from '../shared/affiliateFilter';
 
 export interface MetricsFilters {
@@ -41,6 +42,39 @@ export interface MetricsFilters {
   // resolvidas do param `aff` (lib/shared/affiliateFilter). Mesma semântica
   // do mappedAffiliateIds em cada ponto (sessão: a FE decide).
   affiliateIds?: string[];
+  // Aba Afiliados: de onde sai o reembolso do NET AOV (affiliateRefundPct).
+  affiliateRefundSource?: AffiliateRefundSource;
+}
+
+// ── Reembolso do NET AOV na aba Afiliados (decisão do usuário, 2026-10-27) ──
+// 'observado' (padrão): o do próprio afiliado no período — estornos +
+// chargebacks ÷ pedidos reais, por data da VENDA (período recente sai mais
+// baixo: estorno chega até 60–90 dias depois). 'lucro_real': o % das
+// configurações da aba Lucro real (front; conta de recuperação usa o % de
+// recuperação ou, sem ele, o do front — como lá). O % da plataforma e o
+// override por afiliado não entram mais nesta aba.
+export type AffiliateRefundSource = 'observado' | 'lucro_real';
+
+export interface AffiliateRefundCtx {
+  source: AffiliateRefundSource;
+  /** % configurados no Lucro real (null = não informado lá). */
+  lucroReal: { front: number | null; recovery: number | null };
+}
+
+export async function loadAffiliateRefundCtx(source: AffiliateRefundSource = 'observado'): Promise<AffiliateRefundCtx> {
+  const row = await db.netProfitParams.findUnique({ where: { id: 'default' }, select: { params: true } });
+  const p = row ? normalizeParams(row.params) : defaultNetProfitParams();
+  return { source, lucroReal: { front: p.refundPct.front, recovery: p.refundPct.recovery } };
+}
+
+export function affiliateRefundPct(
+  ctx: AffiliateRefundCtx,
+  a: { realOrders: number; refunds: number; chargebacks: number; isRecovery: boolean },
+): number {
+  if (ctx.source === 'lucro_real') {
+    return (a.isRecovery ? ctx.lucroReal.recovery ?? ctx.lucroReal.front : ctx.lucroReal.front) ?? 0;
+  }
+  return a.realOrders > 0 ? Math.round(((a.refunds + a.chargebacks) / a.realOrders) * 10_000) / 100 : 0;
 }
 
 export interface OverviewKPIs {
@@ -422,8 +456,9 @@ export interface AffiliatesResponse {
     netAfterCpaUsd: number | null;       // por pedido
     netAfterCpaTotalUsd: number | null;  // × FEs aprovadas = total do período
     cpaStatus: string | null;
-    // Refund&CB efetivamente usado (override do afiliado ?? default da
-    // plataforma) + o override cru (null = herdando).
+    // Refund&CB usado no NET AOV (observado do afiliado ou % do Lucro real
+    // — affiliateRefundPct). O override por afiliado não vale mais na aba:
+    // sempre null aqui.
     refundCbPctUsed: number;
     refundCbPctOverride: number | null;
     opexPctUsed: number;
@@ -452,6 +487,8 @@ export interface AffiliatesResponse {
     lastOrderAt: string | null;
     sparkline: number[];
   }>;
+  /** De onde saiu o reembolso do NET AOV (e os % do Lucro real, pro botão). */
+  refundSource: AffiliateRefundCtx;
 }
 
 export interface OrdersResponse {
@@ -3003,7 +3040,7 @@ export async function getAffiliateDetail(
     periodWhere.productType = { in: filters.productTypes };
   }
 
-  const [periodOrders, ltvAgg, feSessionKeys, pm] = await Promise.all([
+  const [periodOrders, ltvAgg, feSessionKeys, pm, refundCtx, recoveryRow] = await Promise.all([
     db.order.findMany({
       where: periodWhere,
       select: {
@@ -3045,6 +3082,8 @@ export async function getAffiliateDetail(
     }),
     // %s do modelo CPA (taxa da plataforma, refund&cb, opex, régua de status).
     getProfitModelInputs(),
+    loadAffiliateRefundCtx(filters.affiliateRefundSource),
+    db.recoveryAffiliate.findUnique({ where: { affiliateId: aff.id }, select: { enabled: true } }),
   ]);
 
   // KPIs
@@ -3137,8 +3176,8 @@ export async function getAffiliateDetail(
   const aovDirect = feApprovedCount > 0 ? revenue / feApprovedCount : 0;
   const modelKpis = (() => {
     const ppBase = pm.byPlatform.get(aff.platform.slug) ?? ZERO_PLATFORM_PCTS;
-    const ovr = aff.refundCbPctOverride != null ? Number(aff.refundCbPctOverride) : null;
-    const pp = { feePct: ppBase.feePct, refundCbPct: ovr ?? ppBase.refundCbPct, allowancePct: ppBase.allowancePct };
+    const refundCbPct = affiliateRefundPct(refundCtx, { realOrders, refunds, chargebacks, isRecovery: Boolean(recoveryRow?.enabled) });
+    const pp = { feePct: ppBase.feePct, refundCbPct, allowancePct: ppBase.allowancePct };
     const nAov = netAovUsd(aovDirect, { ...pp, opexPct: pm.opexPct });
     const nAfter = latestCpa > 0 ? round2(nAov - latestCpa) : null;
     return {
@@ -3151,7 +3190,8 @@ export async function getAffiliateDetail(
       netAfterCpaTotalUsd: nAfter != null ? round2(nAfter * feApprovedCount) : null,
       cpaStatus: nAfter != null ? cpaStatus(nAfter, pm.thresholds) : null,
       refundCbPctUsed: pp.refundCbPct,
-      refundCbPctOverride: ovr,
+      refundCbPctOverride: null,
+      refundSource: refundCtx.source,
       opexPctUsed: pm.opexPct,
     };
   })();
@@ -3627,7 +3667,7 @@ export async function getAffiliatesLegacy(
     }
   }
 
-  const pm = await getProfitModelInputs();
+  const [pm, refundCtx] = await Promise.all([getProfitModelInputs(), loadAffiliateRefundCtx(filters.affiliateRefundSource)]);
   const mappedById = await mappedIdentityMap();
 
   // "Ativo" = teve pedido REAL no período. Um afiliado cujo único registro do
@@ -3700,9 +3740,8 @@ export async function getAffiliatesLegacy(
         // AOV padrão do usuário: receita do funil atribuído ÷ FEs APROVADAS.
         const aovGlobal = feCount > 0 ? (a?.revenue ?? 0) / feCount : 0; // RECEITA da linha ÷ FEs (verificável a olho)
         const ppBase = pm.byPlatform.get(aff.platform.slug) ?? ZERO_PLATFORM_PCTS;
-        // Override por afiliado > default da plataforma (decisão do usuário).
-        const ovr = aff.refundCbPctOverride != null ? Number(aff.refundCbPctOverride) : null;
-        const pp = { feePct: ppBase.feePct, refundCbPct: ovr ?? ppBase.refundCbPct, allowancePct: ppBase.allowancePct };
+        const refundCbPct = affiliateRefundPct(refundCtx, { realOrders, refunds, chargebacks, isRecovery: Boolean(aff.recovery?.enabled) });
+        const pp = { feePct: ppBase.feePct, refundCbPct, allowancePct: ppBase.allowancePct };
         const nAov = netAovUsd(aovGlobal, { ...pp, opexPct: pm.opexPct });
         const cpaVal = a ? round2(a.latestCpa) : 0;
         const nAfter = cpaVal > 0 ? round2(nAov - cpaVal) : null;
@@ -3712,7 +3751,7 @@ export async function getAffiliatesLegacy(
           netAfterCpaTotalUsd: nAfter != null ? round2(nAfter * feCount) : null,
           cpaStatus: nAfter != null ? cpaStatus(nAfter, pm.thresholds) : null,
           refundCbPctUsed: pp.refundCbPct,
-          refundCbPctOverride: ovr,
+          refundCbPctOverride: null,
           opexPctUsed: pm.opexPct,
         };
       })(),
@@ -3768,6 +3807,7 @@ export async function getAffiliatesLegacy(
       totalRevenue: round2(totalRevenue),
     },
     affiliates,
+    refundSource: refundCtx,
   };
 }
 
@@ -4053,7 +4093,7 @@ export async function getAffiliatesSql(
       newAff++;
     }
   }
-  const pm = await getProfitModelInputs();
+  const [pm, refundCtx] = await Promise.all([getProfitModelInputs(), loadAffiliateRefundCtx(filters.affiliateRefundSource)]);
   const mappedById = await mappedIdentityMap();
 
   revenues.sort((a, b) => b - a);
@@ -4120,9 +4160,8 @@ export async function getAffiliatesSql(
         // AOV padrão do usuário: receita do funil atribuído ÷ FEs APROVADAS.
         const aovGlobal = feApprovedCount > 0 ? (a ? toNumber(a.revenue) : 0) / feApprovedCount : 0; // RECEITA da linha ÷ FEs
         const ppBase = pm.byPlatform.get(aff.platform.slug) ?? ZERO_PLATFORM_PCTS;
-        // Override por afiliado > default da plataforma (decisão do usuário).
-        const ovr = aff.refundCbPctOverride != null ? Number(aff.refundCbPctOverride) : null;
-        const pp = { feePct: ppBase.feePct, refundCbPct: ovr ?? ppBase.refundCbPct, allowancePct: ppBase.allowancePct };
+        const refundCbPct = affiliateRefundPct(refundCtx, { realOrders, refunds, chargebacks, isRecovery: Boolean(aff.recovery?.enabled) });
+        const pp = { feePct: ppBase.feePct, refundCbPct, allowancePct: ppBase.allowancePct };
         const nAov = netAovUsd(aovGlobal, { ...pp, opexPct: pm.opexPct });
         const cpaVal = latestCpa != null ? round2(latestCpa) : 0;
         const nAfter = cpaVal > 0 ? round2(nAov - cpaVal) : null;
@@ -4133,7 +4172,7 @@ export async function getAffiliatesSql(
           netAfterCpaTotalUsd: nAfter != null ? round2(nAfter * feApprovedCount) : null,
           cpaStatus: nAfter != null ? cpaStatus(nAfter, pm.thresholds) : null,
           refundCbPctUsed: pp.refundCbPct,
-          refundCbPctOverride: ovr,
+          refundCbPctOverride: null,
           opexPctUsed: pm.opexPct,
         };
       })(),
@@ -4172,6 +4211,7 @@ export async function getAffiliatesSql(
       totalRevenue: round2(totalRevenue),
     },
     affiliates,
+    refundSource: refundCtx,
   };
 }
 

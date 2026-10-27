@@ -185,7 +185,18 @@ async function fetchRefundCohorts(filters, horizon) {
   return fetchJSON('/api/metrics/refund-cohorts', params);
 }
 
-async function fetchAffiliates(filters, { unify = false } = {}) {
+// Reembolso do NET AOV na aba Afiliados: 'observado' (padrão) ou
+// 'lucro_real' (% das configurações do Lucro real). Escolha do próprio
+// usuário, lembrada no navegador; vale pra lista e pro detalhe do afiliado.
+const AFF_REFUND_KEY = 'ns-aff-refund';
+function getAffRefundMode() {
+  try { return localStorage.getItem(AFF_REFUND_KEY) === 'lucro_real' ? 'lucro_real' : 'observado'; } catch (e) { return 'observado'; }
+}
+function setAffRefundMode(mode) {
+  try { localStorage.setItem(AFF_REFUND_KEY, mode === 'lucro_real' ? 'lucro_real' : 'observado'); } catch (e) { /* sem storage: vale só nesta tela */ }
+}
+
+async function fetchAffiliates(filters, { unify = false, refund } = {}) {
   const params = {
     start_date: toISODate(filters.dateRange.start),
     end_date: toISODate(filters.dateRange.end),
@@ -198,6 +209,7 @@ async function fetchAffiliates(filters, { unify = false } = {}) {
     // unify=1: contas do mesmo parceiro (Identidades) viram uma linha;
     // unify=mapped: agrupa pelo affiliate_id do NorthScale Afiliados.
     unify: unify === 'mapped' ? 'mapped' : (unify === true || unify === 'partner' || unify === '1') ? '1' : null,
+    refund: (refund || getAffRefundMode()) === 'lucro_real' ? 'lucro_real' : null,
   };
   return fetchJSON('/api/metrics/affiliates', params);
 }
@@ -258,6 +270,7 @@ async function fetchAffiliateDetail(externalId, filters, platformHint) {
     stages: setToCSV(filters.stages),
     aff: setToCSV(filters.affiliates),
     platform: platformHint || null,
+    refund: getAffRefundMode() === 'lucro_real' ? 'lucro_real' : null,
   };
   return fetchJSON(`/api/metrics/affiliates/${encodeURIComponent(externalId)}`, params);
 }
@@ -768,6 +781,8 @@ function _wrapMutations(api) {
 window.NSApi = _wrapMutations({
   fetchLeads,
   fetchOverviewPanels,
+  getAffRefundMode,
+  setAffRefundMode,
   fetchOficial,
   fetchAffiliateRefunds,
   fetchNetworks,

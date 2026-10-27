@@ -44,7 +44,7 @@ effectiveDate: 2026-09-30
 - feApprovedCount: FEs aprovadas; realOrders: pedidos reais (Digistore sem as linhas extras) — denominador das taxas por afiliado.
 - cpaPerFe: CPA negociado = ÚLTIMO CPA pago numa FE com CPA > 0 no período. cpaPerFeApproved: média ponderada (deflacionada por FEs sem CPA).
 - netAovUsd, netAfterCpaUsd (por FE), netAfterCpaTotalUsd, cpaStatus (saudavel | atencao | renegociar): modelo CPA. null = sem CPA detectado.
-- refundCbPctUsed / opexPctUsed (pontos): premissas usadas no NET AOV; refundCbPctOverride: override do afiliado.
+- refundCbPctUsed / opexPctUsed (pontos): premissas usadas no NET AOV (na aba Afiliados, refundCbPctUsed = reembolso observado do afiliado ou o % do Lucro real — refundSource diz qual); refundCbPctOverride: sempre null na aba Afiliados desde 2026-10-27.
 - attributed* (Revenue, Net, Cpa, Cogs, Fulfillment, Profit): lucro atribuído à sessão (FE do afiliado + backend da sessão); attributedMarginPct em pontos.
 - mappedAffiliateId: id do sistema NorthScale Afiliados (o filtro "Afiliado" da tela). isRecovery: afiliado de recuperação.
 

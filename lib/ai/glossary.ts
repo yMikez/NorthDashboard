@@ -242,7 +242,7 @@ export const GLOSSARY = {
     screen: 'Afiliados › NET AOV',
     pitfalls: [
       'A reserva (allowance) entra na fórmula desde 2026-09-23.',
-      'refund&cb% = override do afiliado ou taxa da plataforma (Digistore: observada em coorte madura) — é premissa; veja refundCbPctUsed.',
+      'refund&cb% na aba Afiliados (desde 2026-10-27) = o OBSERVADO do próprio afiliado no período (estornos + chargebacks ÷ pedidos reais, por data da venda — período recente sai baixo) ou, se o usuário escolher, o % das configurações do Lucro real (refundSource). Veja refundCbPctUsed. Visão geral e Análise de afiliados seguem a taxa da plataforma.',
       'Percentuais em pontos (15 = 15%).',
     ],
   },

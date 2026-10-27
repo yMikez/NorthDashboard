@@ -44,6 +44,7 @@ export async function GET(
   const affiliateIds = await resolveAffiliateFilter(searchParams.get('aff'));
   const productTypes = stagesParam(searchParams.get('stages'));
   const platformHint = searchParams.get('platform') ?? undefined;
+  const affiliateRefundSource = searchParams.get('refund') === 'lucro_real' ? 'lucro_real' as const : 'observado' as const;
 
   try {
     // Cache manual (não usa respondCached): o caminho 404 não pode ser
@@ -55,7 +56,7 @@ export async function GET(
     const t0 = Date.now();
     const data = await getAffiliateDetail(
       decodeURIComponent(externalId),
-      { startDate, endDate, platformSlugs, countries, productExternalIds, productFamilies, productTypes, mappedAffiliateIds, affiliateIds },
+      { startDate, endDate, platformSlugs, countries, productExternalIds, productFamilies, productTypes, mappedAffiliateIds, affiliateIds, affiliateRefundSource },
       platformHint,
     );
     if (!data) {

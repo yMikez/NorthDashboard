@@ -49,6 +49,8 @@ export async function GET(req: Request) {
   const unifyMapped = unifyRaw === 'mapped';
   // Contato visível pra quem tem a aba (mesma regra de quem pode unificar).
   const includeContact = !!auth.user;
+  // Reembolso do NET AOV: observado do afiliado (padrão) ou % do Lucro real.
+  const affiliateRefundSource = searchParams.get('refund') === 'lucro_real' ? 'lucro_real' as const : 'observado' as const;
   const cacheParams = new URLSearchParams(searchParams);
   if (unify) cacheParams.set('_contact', includeContact ? '1' : '0');
 
@@ -63,6 +65,7 @@ export async function GET(req: Request) {
         productFamilies,
         mappedAffiliateIds,
         affiliateIds,
+        affiliateRefundSource,
       });
       if (unifyMapped) return unifyAffiliatesByMapping(data, platformSlugs);
       return unify ? unifyAffiliates(data, includeContact, platformSlugs) : data;

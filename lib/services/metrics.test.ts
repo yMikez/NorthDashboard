@@ -5,6 +5,7 @@
 
 import { describe, expect, it } from 'vitest';
 import {
+  affiliateRefundPct,
   dailyFromRows,
   byCountryFromRows,
   byProductTypeFromRows,
@@ -280,5 +281,21 @@ describe('classifyOrderInGroup', () => {
     expect(classifyOrderInGroup('UPSELL', null, 'GlycoPulse')).toBe('UNKNOWN');
     expect(classifyOrderInGroup('UPSELL', 'NeuroMindPro', null)).toBe('UNKNOWN');
     expect(classifyOrderInGroup('UPSELL', null, null)).toBe('UNKNOWN');
+  });
+});
+
+describe('affiliateRefundPct — reembolso do NET AOV na aba Afiliados', () => {
+  const lucroReal = { front: 20, recovery: null };
+  it('observado: estornos + chargebacks ÷ pedidos reais do afiliado', () => {
+    const ctx = { source: 'observado' as const, lucroReal };
+    expect(affiliateRefundPct(ctx, { realOrders: 200, refunds: 30, chargebacks: 4, isRecovery: false })).toBe(17);
+    expect(affiliateRefundPct(ctx, { realOrders: 0, refunds: 0, chargebacks: 0, isRecovery: false })).toBe(0);
+  });
+  it('Lucro real: o % configurado; recuperação sem % próprio usa o do front', () => {
+    const ctx = { source: 'lucro_real' as const, lucroReal };
+    expect(affiliateRefundPct(ctx, { realOrders: 200, refunds: 30, chargebacks: 4, isRecovery: false })).toBe(20);
+    expect(affiliateRefundPct(ctx, { realOrders: 10, refunds: 0, chargebacks: 0, isRecovery: true })).toBe(20);
+    expect(affiliateRefundPct({ source: 'lucro_real', lucroReal: { front: 20, recovery: 8 } }, { realOrders: 10, refunds: 0, chargebacks: 0, isRecovery: true })).toBe(8);
+    expect(affiliateRefundPct({ source: 'lucro_real', lucroReal: { front: null, recovery: null } }, { realOrders: 10, refunds: 5, chargebacks: 0, isRecovery: false })).toBe(0);
   });
 });

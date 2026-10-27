@@ -430,83 +430,6 @@ function ProfitConfigPanel() {
   );
 }
 
-// Modal de override do refund&cb% de UM afiliado (modelo CPA). Vazio ou
-// "Voltar a herdar" → null (usa o default da plataforma).
-function AffiliateRefundModal({ aff, onCancel, onSaved }) {
-  const [value, setValue] = useState(aff.refundCbPctOverride != null ? String(aff.refundCbPctOverride) : '');
-  const [saving, setSaving] = useState(false);
-  const [error, setError] = useState(null);
-
-  function submit(v) {
-    setError(null);
-    let parsed = null;
-    if (v != null) {
-      parsed = Number(String(v).replace(',', '.'));
-      if (!Number.isFinite(parsed) || parsed < 0 || parsed > 100) {
-        setError('Valor deve estar entre 0 e 100'); return;
-      }
-    }
-    setSaving(true);
-    window.NSApi.patchAffiliateRefundOverride({
-      platformSlug: aff.platformSlug,
-      externalId: aff.externalId,
-      refundCbPct: parsed,
-    })
-      .then(onSaved)
-      .catch((err) => { setError(err.message); setSaving(false); });
-  }
-
-  const platformDefault = aff.refundCbPctOverride != null
-    ? null // usado ≠ default quando tem override; não sabemos o default aqui
-    : aff.refundCbPctUsed;
-
-  return (
-    <div onClick={onCancel} style={{
-      position: 'fixed', inset: 0, zIndex: 100, background: 'color-mix(in srgb, var(--ns-black) 72%, transparent)',
-      display: 'grid', placeItems: 'center',
-    }}>
-      <div onClick={(e) => e.stopPropagation()} className="panel" style={{ width: 'min(380px, 92vw)', padding: 22 }}>
-        <div className="eyebrow" style={{ fontSize: 10, color: 'var(--glow-cyan)', marginBottom: 4 }}>
-          Refund & chargeback · modelo CPA
-        </div>
-        <h3 style={{ margin: '0 0 4px', fontSize: 18 }}>{aff.nickname || aff.externalId}</h3>
-        <p style={{ fontSize: 11, color: 'var(--fg4)', marginBottom: 16 }}>
-          Taxa usada no NET AOV <b>só deste afiliado</b>. Em uso agora:{' '}
-          <b style={{ color: 'var(--fg2)' }}>{aff.refundCbPctUsed}%</b>{' '}
-          ({aff.refundCbPctOverride != null ? 'override' : 'default da plataforma'}).
-          {platformDefault != null ? '' : ' Salvar vazio ou "Voltar a herdar" retorna ao default da plataforma.'}
-        </p>
-        <label style={{ display: 'block', marginBottom: 16 }}>
-          <span style={{ fontSize: 11, color: 'var(--fg3)', display: 'block', marginBottom: 4 }}>
-            Refund & chargeback (%)
-          </span>
-          <input
-            type="text" inputMode="decimal" value={value} autoFocus
-            onChange={(e) => setValue(e.target.value)}
-            onKeyDown={(e) => { if (e.key === 'Enter') submit(value.trim() === '' ? null : value); }}
-            placeholder="ex: 12.5 · vazio = herdar da plataforma"
-            style={feesInputStyle}
-          />
-        </label>
-        {error && <div style={{ color: 'var(--danger)', fontSize: 11, marginBottom: 10 }}>{error}</div>}
-        <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8 }}>
-          <button className="btn btn-ghost" disabled={saving || aff.refundCbPctOverride == null}
-            onClick={() => submit(null)} title="Remove o override — volta ao default da plataforma">
-            Voltar a herdar
-          </button>
-          <span style={{ display: 'flex', gap: 8 }}>
-            <button className="btn btn-ghost" onClick={onCancel} disabled={saving}>Cancelar</button>
-            <button className="btn btn-primary" disabled={saving}
-              onClick={() => submit(value.trim() === '' ? null : value)}>
-              {saving ? 'Salvando…' : 'Salvar'}
-            </button>
-          </span>
-        </div>
-      </div>
-    </div>
-  );
-}
-
 function LeaderboardPage({ filters, onOpenAffiliate, user }) {
   // Quem tem a aba gerencia identidades/contato (não só admin) — 2026-08-25.
   const isAdmin = !!user;
@@ -514,8 +437,10 @@ function LeaderboardPage({ filters, onOpenAffiliate, user }) {
   const [minOrders, setMinOrders] = useState(1);
   const [query, setQuery] = useState('');
   const [state, setLbState] = useState({ status: 'loading', data: null, error: null });
-  // Modal de override do refund&cb% por afiliado (substitui o prompt nativo).
-  const [refundModal, setRefundModal] = useState(null);
+  // Reembolso do NET AOV: observado de cada afiliado (padrão) ou o % das
+  // configurações do Lucro real. O override por afiliado saiu (2026-10-27).
+  const [refundMode, setRefundModeState] = useState(() => window.NSApi.getAffRefundMode());
+  const setRefundMode = (m) => { window.NSApi.setAffRefundMode(m); setRefundModeState(m); };
   const [refreshTick, setRefreshTick] = useState(0);
   // Agrupamento da lista: 'partner' = contas do mesmo parceiro (Identidades)
   // viram uma linha; 'mapped' = pelo affiliate_id do NorthScale Afiliados
@@ -530,7 +455,7 @@ function LeaderboardPage({ filters, onOpenAffiliate, user }) {
   useEffect(() => {
     let cancelled = false;
     setLbState((s) => ({ ...s, status: 'loading' }));
-    window.NSApi.fetchAffiliates(filters, { unify })
+    window.NSApi.fetchAffiliates(filters, { unify, refund: refundMode })
       .then((data) => { if (!cancelled) setLbState({ status: 'ready', data, error: null }); })
       .catch((err) => {
         if (cancelled) return;
@@ -538,7 +463,7 @@ function LeaderboardPage({ filters, onOpenAffiliate, user }) {
         setLbState({ status: 'error', data: null, error: err.message });
       });
     return () => { cancelled = true; };
-  }, [refreshTick, unify, filters.dateRange.start.getTime(), filters.dateRange.end.getTime(),
+  }, [refreshTick, unify, refundMode, filters.dateRange.start.getTime(), filters.dateRange.end.getTime(),
       Array.from(filters.platforms).join(','), Array.from(filters.countries).join(','),
       Array.from(filters.funnels).join(','),
       Array.from(filters.families).join(','), Array.from(filters.affiliates || []).join(',')]);
@@ -548,6 +473,10 @@ function LeaderboardPage({ filters, onOpenAffiliate, user }) {
   const partnerRow = partnerKey ? (all.find((r) => r.key === partnerKey) || null) : null;
   const setPartnerRow = (r) => setPartnerKey(r ? r.key : null);
   const summary = state.data?.summary || { activeNow: 0, activePrev: 0, concentration: 0, newAff: 0, churnedAff: 0 };
+  const lucroRealPct = state.data?.refundSource?.lucroReal || null;
+  const lucroRealTxt = lucroRealPct && lucroRealPct.front != null
+    ? `${lucroRealPct.front}%${lucroRealPct.recovery != null && lucroRealPct.recovery !== lucroRealPct.front ? ` · recuperação ${lucroRealPct.recovery}%` : ''}`
+    : null;
 
   // AOV padrão (fórmula do usuário): RECEITA da linha ÷ FEs APROVADAS —
   // verificável a olho, as duas são colunas da própria tabela. Mesmo
@@ -632,7 +561,7 @@ function LeaderboardPage({ filters, onOpenAffiliate, user }) {
           <button className="btn btn-ghost" onClick={() => downloadCsv(
             `ranking-afiliados_${isoDateOnly(filters.dateRange.start)}_${isoDateOnly(filters.dateRange.end)}.csv`,
             ['#', 'Afiliado', 'Afiliado ID', 'Afiliado (sistema)', 'affiliate_id', 'Plataforma', 'Pedidos aprovados', 'Receita USD', 'FEs aprovadas',
-             'AOV global USD', 'Aprovação %', 'Refund&CB modelo %', 'CPA pago USD', 'Custos op %',
+             'AOV global USD', 'Aprovação %', refundMode === 'lucro_real' ? 'Refund&CB Lucro real %' : 'Refund&CB observado %', 'CPA pago USD', 'Custos op %',
              'NET AOV USD', 'CPA por venda USD', 'Net after CPA USD', 'Status CPA'],
             rows.map((r, i) => [
               i + 1, r.nickname || r.externalId, r.accounts && r.accounts.length > 1 ? r.accounts.map((c) => c.externalId).join(' | ') : r.externalId, r.mapped ? r.mapped.name : '', r.mappedAffiliateId || '', (r.platforms || [r.platformSlug]).join('+'), r.orders, r.revenue, r.feApprovedCount,
@@ -656,13 +585,6 @@ function LeaderboardPage({ filters, onOpenAffiliate, user }) {
       {identityOpen && <AffiliateIdentityDrawer onClose={() => setIdentityOpen(false)} onChanged={() => setRefreshTick((n) => n + 1)}/>}
       {mappingOpen && <AffiliateMappingDrawer isAdmin={user?.role === 'ADMIN'} onClose={() => setMappingOpen(false)} onChanged={() => setRefreshTick((n) => n + 1)}/>}
 
-      {refundModal && (
-        <AffiliateRefundModal
-          aff={refundModal}
-          onCancel={() => setRefundModal(null)}
-          onSaved={() => { setRefundModal(null); setRefreshTick((n) => n + 1); }}
-        />
-      )}
 
       <div className="mini-kpis">
         <div className="mini-kpi">
@@ -732,6 +654,16 @@ function LeaderboardPage({ filters, onOpenAffiliate, user }) {
             busca ativa · {rows.length} {rows.length === 1 ? 'afiliado' : 'afiliados'} (mín. de pedidos ignorado)
           </span>
         )}
+        <span className="f-label" style={{ marginLeft: 10 }}>Reembolso no NET AOV</span>
+        <div className="seg" title="Observado: estornos + chargebacks ÷ pedidos reais de cada afiliado no período (por data da venda — período recente ainda vai receber estornos). Lucro real: o % configurado na aba Lucro real, igual pra todos.">
+          <button className={refundMode === 'observado' ? 'is-active' : ''} onClick={() => setRefundMode('observado')}>observado</button>
+          <button className={refundMode === 'lucro_real' ? 'is-active' : ''}
+            disabled={!lucroRealTxt && refundMode !== 'lucro_real'}
+            title={lucroRealTxt ? `% das configurações do Lucro real: ${lucroRealTxt}` : 'Nenhum % de reembolso configurado na aba Lucro real'}
+            onClick={() => setRefundMode('lucro_real')}>
+            Lucro real{lucroRealTxt ? ` (${lucroRealTxt})` : ''}
+          </button>
+        </div>
       </div>
 
       {state.status === 'error' && (
@@ -752,11 +684,11 @@ function LeaderboardPage({ filters, onOpenAffiliate, user }) {
                     <th className="num">Receita</th>
                     <th className="num" title="AOV = receita das vendas creditadas a ESTE afiliado (FE + os upsells/downsells em que a plataforma manteve o crédito nele) ÷ FEs APROVADAS. É a lente DIRETA: cross-sell da mesma sessão que a plataforma creditou a outro afiliado não entra. Mesmo AOV que alimenta o NET AOV do modelo CPA.">AOV</th>
                     <th title="Aprovadas ÷ pedidos REAIS do período. Na Digistore o estorno é uma linha extra e não entra no denominador — a venda original já está contada.">Aprovação</th>
-                    <th className="num">Reembolso</th>
+                    <th className="num" title={refundMode === 'lucro_real' ? 'Reembolso + chargeback usado no NET AOV: o % configurado na aba Lucro real.' : 'Reembolso + chargeback usado no NET AOV: o OBSERVADO do afiliado no período (estornos + chargebacks ÷ pedidos reais, por data da venda).'}>Reembolso</th>
                     <th className="num" title="Chargebacks ÷ pedidos REAIS do período.">Chargeback</th>
                     <th className="num">CPA pago</th>
                     <th className="num" title="Custos operacionais % (global, modelo CPA) — editável no painel de config acima">Custos op.</th>
-                    <th className="num" title="NET AOV = AOV global × (1 − refund&cb% − taxa da plataforma − custos operacionais % − reserva retida %). Modelo da planilha CPA — % editáveis em Plataformas e no painel de config acima.">NET AOV</th>
+                    <th className="num" title="NET AOV = AOV global × (1 − reembolso&cb% − taxa da plataforma − custos operacionais % − reserva retida %). Reembolso: observado do afiliado ou o % do Lucro real (botão acima); taxa e reserva em Plataformas; custos op. no painel de config.">NET AOV</th>
                     <th className="num" title="CPA por venda FE — último valor observado nas transações">CPA/venda</th>
                     <th className="num" title="NET AFTER CPA = NET AOV − CPA por venda. Quanto sobra por pedido depois de pagar o afiliado.">Net after CPA</th>
                     <th title="≥ limiar saudável → Saudável · ≥ limiar atenção → Atenção · abaixo → Renegociar (régua editável no painel de config)">Status CPA</th>
@@ -807,11 +739,10 @@ function LeaderboardPage({ filters, onOpenAffiliate, user }) {
                             <div className={`ratebar ${apClass === 'val-ok' ? 'ok' : apClass === 'val-warn' ? 'warn' : 'bad'}`} style={{ width: 48 }}><span style={{ width: `${r.approvalRate * 100}%` }}/></div>
                           </div>
                         </td>
-                        <td className="num cell-mono"
-                          title={`Taxa do MODELO CPA usada no NET AOV: ${r.refundCbPctUsed}% (${r.accounts && r.accounts.length > 1 ? 'média ponderada das contas — override é por conta' : r.refundCbPctOverride != null ? 'override deste afiliado' : 'default da plataforma'}).\nObservada no período: ${(r.refundRate * 100).toFixed(1)}% = ${fmtInt(r.refunds)} estornos ÷ ${fmtInt(r.realOrders)} pedidos reais.${r.realOrders !== r.allOrders ? `\n(${fmtInt(r.allOrders - r.realOrders)} linhas de estorno da Digistore fora do denominador.)` : ''}\nCoorte por data da VENDA: período recente ainda vai receber reembolsos.`}>
+                        <td className={`num cell-mono ${refundMode === 'observado' ? rfClass : ''}`}
+                          title={`Usado no NET AOV: ${r.refundCbPctUsed}% (${refundMode === 'lucro_real' ? '% do Lucro real' : `observado${r.accounts && r.accounts.length > 1 ? ' — média das contas ponderada pelas FEs' : ''}`}).\nObservado no período: ${fmtInt(r.refunds)} estornos + ${fmtInt(r.chargebacks)} chargebacks ÷ ${fmtInt(r.realOrders)} pedidos reais.${r.realOrders !== r.allOrders ? `\n(${fmtInt(r.allOrders - r.realOrders)} linhas de estorno da Digistore fora do denominador.)` : ''}\nPor data da VENDA: período recente ainda vai receber reembolsos.`}>
                           {r.refundCbPctUsed}%
-                          {r.refundCbPctOverride != null && <span style={{ fontSize: 8, color: 'var(--glow-cyan)', marginLeft: 3 }}>ovr</span>}
-                          <span className={rfClass} style={{ fontSize: 10, marginLeft: 5, opacity: 0.75 }}>obs {(r.refundRate * 100).toFixed(1)}%</span>
+                          {refundMode === 'lucro_real' && <span style={{ fontSize: 10, marginLeft: 5, color: 'var(--fg5)' }}>obs {((r.refundRate + r.cbRate) * 100).toFixed(1)}%</span>}
                         </td>
                         <td className={`num cell-mono ${cbClass}`}>{(r.cbRate * 100).toFixed(2)}%</td>
                         <td className="num cell-mono">{fmtCurrency(r.cpa, cur, 0)}</td>
@@ -822,14 +753,7 @@ function LeaderboardPage({ filters, onOpenAffiliate, user }) {
                           {r.netAfterCpaUsd != null ? fmtCurrency(r.netAfterCpaUsd, cur, 0) : '—'}
                         </td>
                         <td>
-                          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-                            <CpaStatusChip status={r.cpaStatus}/>
-                            {!(r.accounts && r.accounts.length > 1) && (<button
-                              className="btn btn-ghost" style={{ padding: '1px 6px', fontSize: 10 }}
-                              title={`Refund&CB usado: ${r.refundCbPctUsed}% ${r.refundCbPctOverride != null ? '(override deste afiliado)' : '(default da plataforma)'} — clique pra editar só deste afiliado`}
-                              onClick={(e) => { e.stopPropagation(); setRefundModal(r); }}
-                            >%</button>)}
-                          </span>
+                          <CpaStatusChip status={r.cpaStatus}/>
                         </td>
                       </tr>
                     );
@@ -969,7 +893,7 @@ function AffiliateDrawer({ affiliateId, filters, onClose }) {
                 {k.netAfterCpaTotalUsd != null ? fmtCurrency(k.netAfterCpaTotalUsd, cur, 0) : '—'}
               </div>
               <div className="s" title={k.netAfterCpaUsd != null
-                ? `NET AOV ${fmtCurrency(k.netAovUsd, cur, 2)} = AOV ${fmtCurrency(k.aov, cur, 2)} × (1 − ${k.refundCbPctUsed}% refund&cb${k.refundCbPctOverride != null ? ' (override)' : ''} − taxa da plataforma − ${k.opexPctUsed}% opex).\nNET AFTER CPA ${fmtCurrency(k.netAfterCpaUsd, cur, 2)} = NET AOV − CPA ${fmtCurrency(k.cpaPerFe, cur, 2)}.\nTotal = × ${fmtInt(k.feApprovedCount)} FEs aprovadas.`
+                ? `NET AOV ${fmtCurrency(k.netAovUsd, cur, 2)} = AOV ${fmtCurrency(k.aov, cur, 2)} × (1 − ${k.refundCbPctUsed}% reembolso&cb (${k.refundSource === 'lucro_real' ? '% do Lucro real' : 'observado no período'}) − taxa da plataforma − ${k.opexPctUsed}% opex).\nNET AFTER CPA ${fmtCurrency(k.netAfterCpaUsd, cur, 2)} = NET AOV − CPA ${fmtCurrency(k.cpaPerFe, cur, 2)}.\nTotal = × ${fmtInt(k.feApprovedCount)} FEs aprovadas.`
                 : 'Sem CPA observado no período — afiliado organic ou sem venda de front.'}>
                 {k.netAfterCpaUsd != null
                   ? `${fmtCurrency(k.netAfterCpaUsd, cur, 0)}/venda × ${fmtInt(k.feApprovedCount)} FEs`
