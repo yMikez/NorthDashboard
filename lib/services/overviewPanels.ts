@@ -20,7 +20,8 @@
 // Dia = dia de calendário em BRT, como a daily_metrics.
 
 import { Prisma } from '@prisma/client';
-import { db } from '../db';
+// Leitura de métrica: segue METRICS_SOURCE (public ou painel oficial — lib/db.ts).
+import { dbRead as db } from '../db';
 import { SESSION_KEY_SQL, type MetricsFilters } from './metrics';
 import { getProfitModelInputs } from './profitModel';
 import { getRefundCohorts } from './refundCohorts';

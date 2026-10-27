@@ -65,7 +65,8 @@ ENV PORT=3000
 ENV HOSTNAME=0.0.0.0
 
 # Startup chain: migrate → backfill classification → seed admin (idempotente,
-# requer ADMIN_SEED_EMAIL/PASSWORD em env) → start app.
+# requer ADMIN_SEED_EMAIL/PASSWORD em env) → schema painel (só com
+# METRICS_SOURCE=oficial; sem ele as métricas seguem no public) → start app.
 # Cada passo é idempotente; falhas em backfill/seed loggam mas não derrubam
 # o container — o app sobe mesmo se um deles tropeçar.
-CMD ["sh", "-c", "node node_modules/prisma/build/index.js migrate deploy && (node node_modules/tsx/dist/cli.mjs scripts/backfillClassification.ts || echo '[startup] backfill failed, continuing') && (node node_modules/tsx/dist/cli.mjs scripts/seedAdmin.ts || echo '[startup] seedAdmin failed, continuing') && node server.js"]
+CMD ["sh", "-c", "node node_modules/prisma/build/index.js migrate deploy && (node node_modules/tsx/dist/cli.mjs scripts/backfillClassification.ts || echo '[startup] backfill failed, continuing') && (node node_modules/tsx/dist/cli.mjs scripts/seedAdmin.ts || echo '[startup] seedAdmin failed, continuing') && (node node_modules/tsx/dist/cli.mjs scripts/painelSchema.ts --boot || echo '[startup] painel failed, metrics stay on public') && node server.js"]

@@ -15,7 +15,7 @@
 // `refreshDailyMetricsNow()` directly.
 
 import { Prisma } from '@prisma/client';
-import { db } from '../db';
+import { db, dbRead } from '../db';
 import { logger } from '../logger';
 import { clearResponseCache } from '../cache/responseCache';
 import type { MetricsFilters } from './metrics';
@@ -73,15 +73,24 @@ export async function refreshDailyMetricsNow(): Promise<void> {
   }
 }
 
-async function doRefresh(): Promise<void> {
+async function refreshMv(client: typeof db): Promise<void> {
   // CONCURRENTLY needs the unique index from the migration. Fails silently
   // on first call (before any data) — fall back to non-concurrent refresh
   // which is required for the initial population.
   try {
-    await db.$executeRawUnsafe('REFRESH MATERIALIZED VIEW CONCURRENTLY daily_metrics');
+    await client.$executeRawUnsafe('REFRESH MATERIALIZED VIEW CONCURRENTLY daily_metrics');
   } catch {
-    await db.$executeRawUnsafe('REFRESH MATERIALIZED VIEW daily_metrics');
+    await client.$executeRawUnsafe('REFRESH MATERIALIZED VIEW daily_metrics');
   }
+}
+
+async function doRefresh(): Promise<void> {
+  // A do public segue sempre fresca (é o rollback da flag); com a leitura
+  // oficial ligada, a do painel também — o dado novo dela chega pela carga
+  // do time de dados, não pelo upsertOrder, e é este refresh "quando velho"
+  // que o pega.
+  await refreshMv(db);
+  if (dbRead !== db) await refreshMv(dbRead);
   lastRefreshAt = Date.now();
   // Dado novo na MV invalida as respostas cacheadas dos /api/metrics/* —
   // o staleness do cache fica acoplado à frescura real dos dados.
@@ -177,7 +186,7 @@ export async function queryDailyMetrics(
   // fetchOrders() path. In practice the dashboard uses families now.
 
   const where = Prisma.join(conds, ' AND ');
-  const rows = await db.$queryRaw<RawDailyMetricsRow[]>(Prisma.sql`
+  const rows = await dbRead.$queryRaw<RawDailyMetricsRow[]>(Prisma.sql`
     SELECT day, platform, family, country, product_type,
            total_count, approved_count, refunded_count, chargeback_count,
            gross, gross_original, net, cpa, cogs, fulfillment

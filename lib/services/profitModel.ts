@@ -28,7 +28,8 @@
 // linha-extra, ver memória project-refund-accounting): o refund só é
 // subtraído aqui, na hora de presumir o NET AFTER CPA.
 
-import { db } from '../db';
+// Leitura de métrica: segue METRICS_SOURCE (public ou painel oficial — lib/db.ts).
+import { dbRead as db } from '../db';
 
 // Plataformas onde o refund cria LINHA EXTRA (venda original continua
 // APPROVED) em vez de atualizar in-place. Muda o denominador das taxas:

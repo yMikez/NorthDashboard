@@ -18,7 +18,8 @@
 // só; KPIs e tabelas saem daí em JS (buildNetworkTables, puro).
 
 import { Prisma } from '@prisma/client';
-import { db } from '../db';
+// Leitura de métrica: segue METRICS_SOURCE (public ou painel oficial — lib/db.ts).
+import { dbRead as db } from '../db';
 import { brtDay } from './networksCore';
 
 export interface NetworkFilters {

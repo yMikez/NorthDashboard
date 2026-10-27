@@ -15,7 +15,7 @@
 // recuperação da BuyGoods (só hash do e-mail, sem tela por decisão do dono).
 
 import { Prisma } from '@prisma/client';
-import { db } from '../db';
+import { db, dbRead } from '../db';
 import { logger } from '../logger';
 import { clearResponseCache } from '../cache/responseCache';
 import { normalizePhone } from '../shared/phone';
@@ -30,10 +30,13 @@ export function refreshLeadSummary(): Promise<void> {
   if (refreshInFlight) return refreshInFlight;
   refreshInFlight = (async () => {
     const t0 = Date.now();
-    try {
-      await db.$executeRawUnsafe('REFRESH MATERIALIZED VIEW CONCURRENTLY lead_summary');
-    } catch {
-      await db.$executeRawUnsafe('REFRESH MATERIALIZED VIEW lead_summary');
+    // A do public sempre (rollback da flag); a do painel quando a leitura oficial está ligada.
+    for (const client of dbRead === db ? [db] : [db, dbRead]) {
+      try {
+        await client.$executeRawUnsafe('REFRESH MATERIALIZED VIEW CONCURRENTLY lead_summary');
+      } catch {
+        await client.$executeRawUnsafe('REFRESH MATERIALIZED VIEW lead_summary');
+      }
     }
     clearResponseCache();
     logger.info({ ms: Date.now() - t0 }, 'lead_summary refreshed');
@@ -43,7 +46,7 @@ export function refreshLeadSummary(): Promise<void> {
 
 /** Instante do último refresh (null = MV vazia). Velha → refresh em segundo plano. */
 export async function ensureLeadSummaryFresh(): Promise<Date | null> {
-  const [row] = await db.$queryRaw<Array<{ at: Date | null }>>`SELECT computed_at AS at FROM lead_summary LIMIT 1`;
+  const [row] = await dbRead.$queryRaw<Array<{ at: Date | null }>>`SELECT computed_at AS at FROM lead_summary LIMIT 1`;
   const at = row?.at ? new Date(row.at) : null;
   if (!at || Date.now() - at.getTime() > STALE_MS) {
     refreshLeadSummary().catch((err) => logger.error({ err }, 'lead_summary refresh failed'));
@@ -246,9 +249,9 @@ export async function getLeads(f: LeadFilters) {
   const computedAt = await ensureLeadSummaryFresh();
   const groupBy = f.groupBy ?? 'channel';
   const [rows, [k], groups] = await Promise.all([
-    db.$queryRaw<Array<LeadRow & { total: number }>>(leadListSql(f)),
-    db.$queryRaw<Array<Record<string, number>>>(leadKpisSql(f)),
-    db.$queryRaw<Array<Record<string, unknown>>>(leadBreakdownSql(f, groupBy)),
+    dbRead.$queryRaw<Array<LeadRow & { total: number }>>(leadListSql(f)),
+    dbRead.$queryRaw<Array<Record<string, number>>>(leadKpisSql(f)),
+    dbRead.$queryRaw<Array<Record<string, unknown>>>(leadBreakdownSql(f, groupBy)),
   ]);
   const total = rows[0]?.total ?? (f.page && f.page > 1 ? null : 0);
   const postSale = (k?.callcenterUsd ?? 0) + (k?.salesboundUsd ?? 0);
@@ -514,9 +517,9 @@ export async function getLeadDetail(rawEmail: string) {
   const email = normalizeLeadEmail(rawEmail);
   if (!email) return null;
   const [orders, cc, sb] = await Promise.all([
-    db.$queryRaw<OrderEv[]>(leadOrderEventsSql(email)),
-    db.$queryRaw<CcEv[]>(leadCallCenterEventsSql(email)),
-    db.$queryRaw<SbEv[]>(leadSalesboundEventsSql(email)),
+    dbRead.$queryRaw<OrderEv[]>(leadOrderEventsSql(email)),
+    dbRead.$queryRaw<CcEv[]>(leadCallCenterEventsSql(email)),
+    dbRead.$queryRaw<SbEv[]>(leadSalesboundEventsSql(email)),
   ]);
   return buildLeadDetail(email, orders, cc, sb);
 }

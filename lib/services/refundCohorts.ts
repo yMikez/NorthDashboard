@@ -29,7 +29,8 @@
 // Bucketização de dia em BRT, mesma da daily_metrics.
 
 import { Prisma } from '@prisma/client';
-import { db } from '../db';
+// Leitura de métrica: segue METRICS_SOURCE (public ou painel oficial — lib/db.ts).
+import { dbRead as db } from '../db';
 import { EXTRA_ROW_REFUND_PLATFORMS } from './profitModel';
 import { affiliateSqlCond } from '../shared/affiliateFilter';
 

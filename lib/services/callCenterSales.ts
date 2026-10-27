@@ -20,7 +20,8 @@
 // A tabela "Por parceiro" é calculada SEM o filtro de provider (pra
 // comparar); KPIs, série, tabelas e recentes respeitam o filtro.
 
-import { db } from '../db';
+// Leitura de métrica: segue METRICS_SOURCE (public ou painel oficial — lib/db.ts).
+import { dbRead as db } from '../db';
 import { getProviderCommission, type CallCenterProvider } from './integrationSettings';
 import { getLogicallSyncStatus } from './logicallSync';
 import { isAiAgent } from '../connectors/logicall/ingest';

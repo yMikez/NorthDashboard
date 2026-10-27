@@ -7,7 +7,8 @@
 // da aba Funil); upsell órfão cai na própria família.
 
 import { Prisma } from '@prisma/client';
-import { db } from '../db';
+// Leitura de métrica: segue METRICS_SOURCE (public ou painel oficial — lib/db.ts).
+import { dbRead as db } from '../db';
 import {
   brtDay, reducePerformance, finishMetrics, LINKABLE_PLATFORMS,
   type ChangeRow, type LinkedRow, type RealRow, type VisitAggRow,

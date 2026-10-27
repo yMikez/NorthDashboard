@@ -1,6 +1,7 @@
 import { Prisma } from '@prisma/client';
 import type { ProductType } from '@prisma/client';
-import { db } from '../db';
+// Leitura de métrica: segue METRICS_SOURCE (public ou painel oficial — lib/db.ts).
+import { dbRead as db } from '../db';
 import { mappedIdentityMap } from './affiliateMapping';
 import {
   refreshDailyMetricsIfStale,

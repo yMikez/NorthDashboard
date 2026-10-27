@@ -19,7 +19,7 @@
 //   - Série diária com TODOS os dias e por empresa; período anterior.
 
 import { Prisma } from '@prisma/client';
-import { db } from '../db';
+import { db, dbRead } from '../db';
 import { isStorelessBuyGoodsKey, parseBuyGoodsAffiliateRef } from '../connectors/buygoods/affiliateKey';
 import { SMS_UTM_SOURCE } from '../connectors/sms/config';
 import { EXTRA_ROW_REFUND_PLATFORMS } from './profitModel';
@@ -413,13 +413,13 @@ async function loadRecoveryRows(recAffs: RecAff[], start: Date, end: Date, inclu
 
   const [orders, smsOrders] = await Promise.all([
     recIds.length
-      ? db.order.findMany({
+      ? dbRead.order.findMany({
           where: { affiliateId: { in: recIds }, status: statusIn, orderedAt: { gte: start, lte: end } },
           select: ORDER_SELECT,
         }) as Promise<OrderPick[]>
       : Promise.resolve([] as OrderPick[]),
     includeSms
-      ? db.order.findMany({
+      ? dbRead.order.findMany({
           where: {
             status: statusIn,
             orderedAt: { gte: start, lte: end },
@@ -437,7 +437,7 @@ async function loadRecoveryRows(recAffs: RecAff[], start: Date, end: Date, inclu
   // exclusão da aba Reembolsos). Consulta só sobre as poucas linhas de estorno.
   const refundIds = [...orders, ...smsOrders].filter((o) => o.status !== 'APPROVED').map((o) => o.id);
   const unmatched = new Set(refundIds.length
-    ? (await db.$queryRaw<Array<{ id: string }>>(unmatchedCsvRefundsSql(refundIds))).map((r) => r.id)
+    ? (await dbRead.$queryRaw<Array<{ id: string }>>(unmatchedCsvRefundsSql(refundIds))).map((r) => r.id)
     : []);
 
   // Estorno: a linha só conta se dá pra ligar à venda — Digistore (linha
@@ -495,7 +495,7 @@ async function loadRecoveryRows(recAffs: RecAff[], start: Date, end: Date, inclu
 }
 
 export async function getRecovery(filters: RecoveryFilters): Promise<RecoveryResponse> {
-  const recAffs = await db.recoveryAffiliate.findMany({
+  const recAffs = await dbRead.recoveryAffiliate.findMany({
     where: { enabled: true, ...(filters.affiliateIds?.length ? { affiliateId: { in: filters.affiliateIds } } : {}) },
     select: {
       affiliateId: true,

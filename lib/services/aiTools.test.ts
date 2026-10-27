@@ -35,7 +35,10 @@ vi.mock('./profitSplit', () => ({ getProfitSplit: m.getProfitSplit }));
 vi.mock('./overviewPanels', () => ({ getOverviewPanels: m.getOverviewPanels }));
 vi.mock('./callCenterSales', async (orig) => ({ ...(await orig<typeof import('./callCenterSales')>()), getCallCenterSales: m.getCallCenterSales }));
 vi.mock('./health', () => ({ getHealth: m.getHealth }));
-vi.mock('../db', () => ({ db: { affiliate: { findMany: m.findMany }, $queryRaw: m.queryRaw } }));
+vi.mock('../db', () => {
+  const db = { affiliate: { findMany: m.findMany }, $queryRaw: m.queryRaw };
+  return { db, dbRead: db }; // flag desligada: o cliente de leitura é o próprio db
+});
 vi.mock('../ai/normalizeScope', () => ({ normalizeScope: m.normalizeScope }));
 vi.mock('../ai/coverage', () => ({ dataQualityFor: m.dataQualityFor }));
 

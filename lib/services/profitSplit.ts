@@ -21,7 +21,8 @@
 // do front pelo mesmo critério que entram no back; Tauk já vive fora de
 // Order; SMS_RECOVERY (productType) também é back.
 
-import { db } from '../db';
+// Leitura de métrica: segue METRICS_SOURCE (public ou painel oficial — lib/db.ts).
+import { dbRead as db } from '../db';
 import { getProfitModelInputs, realOrderCount } from './profitModel';
 import { SMS_UTM_SOURCE } from '../connectors/sms/config';
 import { getProviderCommission, getLogicallApiKey } from './integrationSettings';

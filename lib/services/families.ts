@@ -4,7 +4,8 @@
 // user sees the full catalog.
 
 import type { Prisma } from '@prisma/client';
-import { db } from '../db';
+// Leitura de métrica: segue METRICS_SOURCE (public ou painel oficial — lib/db.ts).
+import { dbRead as db } from '../db';
 import type { MetricsFilters } from './metrics';
 import { addAffiliateWhere } from '../shared/affiliateFilter';
 

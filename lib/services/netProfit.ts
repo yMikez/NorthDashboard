@@ -19,7 +19,7 @@
 //   PRODUTOS     vendas de front por família × plataforma × etapa.
 
 import { Prisma } from '@prisma/client';
-import { db } from '../db';
+import { db, dbRead } from '../db';
 import { logger } from '../logger';
 import { SMS_UTM_SOURCE } from '../connectors/sms/config';
 import { getProviderCommission, getLogicallApiKey } from './integrationSettings';
@@ -67,7 +67,7 @@ export async function loadNetProfitInputs(start: Date, end: Date, opts: { lite?:
 async function measureInputs(start: Date, end: Date, lite: boolean): Promise<NetProfitInputs> {
   const range = { gte: start, lte: end };
   const [recAffs, platforms, pm, taukComm, logicallComm, logicallKey] = await Promise.all([
-    db.recoveryAffiliate.findMany({
+    dbRead.recoveryAffiliate.findMany({
       where: { enabled: true },
       select: {
         affiliateId: true, commissionPct: true,
@@ -75,7 +75,7 @@ async function measureInputs(start: Date, end: Date, lite: boolean): Promise<Net
         ratePeriods: { orderBy: { effectiveFrom: 'asc' }, select: { commissionPct: true, effectiveFrom: true, effectiveTo: true } },
       },
     }),
-    db.platform.findMany({ select: { id: true, slug: true, displayName: true, feeRatePct: true, allowancePct: true } }),
+    dbRead.platform.findMany({ select: { id: true, slug: true, displayName: true, feeRatePct: true, allowancePct: true } }),
     getProfitModelInputs(),
     getProviderCommission('tauk'),
     getProviderCommission('logicall'),
@@ -96,32 +96,32 @@ async function measureInputs(start: Date, end: Date, lite: boolean): Promise<Net
 
   const [frontRows, recRows, smsRows, refundFront, cbFront, refundRec, cbRec, refundSms, cbSms,
     ccApproved, ccRefunds, ccPartial, recOrders, recRefund, recCb, affRows, affRefund, affCb, sbMeasured, productRows, productRefunds] = await Promise.all([
-    db.order.groupBy({ by: ['platformId', 'productType'], where: { status: 'APPROVED', orderedAt: range, ...frontScopeWithStage }, _sum: { grossAmountUsd: true, cpaPaidUsd: true, cogsUsd: true, fulfillmentUsd: true }, _count: { _all: true } }),
-    db.order.groupBy({ by: ['platformId', 'productType'], where: { status: 'APPROVED', orderedAt: range, ...recoveryScope }, _sum: { grossAmountUsd: true, cpaPaidUsd: true, cogsUsd: true, fulfillmentUsd: true }, _count: { _all: true } }),
-    db.order.groupBy({ by: ['platformId', 'productType'], where: { status: 'APPROVED', orderedAt: range, ...smsScope }, _sum: { grossAmountUsd: true, cpaPaidUsd: true, cogsUsd: true, fulfillmentUsd: true }, _count: { _all: true } }),
-    db.order.groupBy({ by: ['platformId'], where: { status: 'REFUNDED', refundedAt: range, ...frontScopeWithStage }, _sum: { grossAmountUsd: true } }),
-    db.order.groupBy({ by: ['platformId'], where: { status: 'CHARGEBACK', chargebackAt: range, ...frontScopeWithStage }, _sum: { grossAmountUsd: true } }),
-    db.order.groupBy({ by: ['platformId'], where: { status: 'REFUNDED', refundedAt: range, ...recoveryScope }, _sum: { grossAmountUsd: true } }),
-    db.order.groupBy({ by: ['platformId'], where: { status: 'CHARGEBACK', chargebackAt: range, ...recoveryScope }, _sum: { grossAmountUsd: true } }),
-    db.order.groupBy({ by: ['platformId'], where: { status: 'REFUNDED', refundedAt: range, ...smsScope }, _sum: { grossAmountUsd: true } }),
-    db.order.groupBy({ by: ['platformId'], where: { status: 'CHARGEBACK', chargebackAt: range, ...smsScope }, _sum: { grossAmountUsd: true } }),
-    db.callCenterSale.groupBy({ by: ['provider'], where: { status: 'APPROVED', purchasedAt: range }, _sum: { amountUsd: true }, _count: { _all: true } }),
-    db.$queryRaw<Array<{ provider: string; usd: Prisma.Decimal }>>(Prisma.sql`
+    dbRead.order.groupBy({ by: ['platformId', 'productType'], where: { status: 'APPROVED', orderedAt: range, ...frontScopeWithStage }, _sum: { grossAmountUsd: true, cpaPaidUsd: true, cogsUsd: true, fulfillmentUsd: true }, _count: { _all: true } }),
+    dbRead.order.groupBy({ by: ['platformId', 'productType'], where: { status: 'APPROVED', orderedAt: range, ...recoveryScope }, _sum: { grossAmountUsd: true, cpaPaidUsd: true, cogsUsd: true, fulfillmentUsd: true }, _count: { _all: true } }),
+    dbRead.order.groupBy({ by: ['platformId', 'productType'], where: { status: 'APPROVED', orderedAt: range, ...smsScope }, _sum: { grossAmountUsd: true, cpaPaidUsd: true, cogsUsd: true, fulfillmentUsd: true }, _count: { _all: true } }),
+    dbRead.order.groupBy({ by: ['platformId'], where: { status: 'REFUNDED', refundedAt: range, ...frontScopeWithStage }, _sum: { grossAmountUsd: true } }),
+    dbRead.order.groupBy({ by: ['platformId'], where: { status: 'CHARGEBACK', chargebackAt: range, ...frontScopeWithStage }, _sum: { grossAmountUsd: true } }),
+    dbRead.order.groupBy({ by: ['platformId'], where: { status: 'REFUNDED', refundedAt: range, ...recoveryScope }, _sum: { grossAmountUsd: true } }),
+    dbRead.order.groupBy({ by: ['platformId'], where: { status: 'CHARGEBACK', chargebackAt: range, ...recoveryScope }, _sum: { grossAmountUsd: true } }),
+    dbRead.order.groupBy({ by: ['platformId'], where: { status: 'REFUNDED', refundedAt: range, ...smsScope }, _sum: { grossAmountUsd: true } }),
+    dbRead.order.groupBy({ by: ['platformId'], where: { status: 'CHARGEBACK', chargebackAt: range, ...smsScope }, _sum: { grossAmountUsd: true } }),
+    dbRead.callCenterSale.groupBy({ by: ['provider'], where: { status: 'APPROVED', purchasedAt: range }, _sum: { amountUsd: true }, _count: { _all: true } }),
+    dbRead.$queryRaw<Array<{ provider: string; usd: Prisma.Decimal }>>(Prisma.sql`
       SELECT "provider", COALESCE(SUM(COALESCE("refundedUsd", "amountUsd")), 0) AS usd
       FROM "CallCenterSale"
       WHERE "status" IN ('REFUNDED', 'CHARGEBACK') AND "refundedAt" >= ${start} AND "refundedAt" <= ${end}
       GROUP BY "provider"`),
-    db.callCenterSale.groupBy({ by: ['provider'], where: { status: 'APPROVED', purchasedAt: range, refundedUsd: { not: null } }, _sum: { refundedUsd: true } }),
+    dbRead.callCenterSale.groupBy({ by: ['provider'], where: { status: 'APPROVED', purchasedAt: range, refundedUsd: { not: null } }, _sum: { refundedUsd: true } }),
     recoveryIds.length
-      ? db.order.findMany({ where: { status: 'APPROVED', orderedAt: range, affiliateId: { in: recoveryIds } }, select: { affiliateId: true, grossAmountUsd: true, orderedAt: true, cogsUsd: true, fulfillmentUsd: true, productType: true } })
+      ? dbRead.order.findMany({ where: { status: 'APPROVED', orderedAt: range, affiliateId: { in: recoveryIds } }, select: { affiliateId: true, grossAmountUsd: true, orderedAt: true, cogsUsd: true, fulfillmentUsd: true, productType: true } })
       : Promise.resolve([] as Array<{ affiliateId: string | null; grossAmountUsd: Prisma.Decimal; orderedAt: Date; cogsUsd: Prisma.Decimal | null; fulfillmentUsd: Prisma.Decimal | null; productType: string }>),
-    db.order.groupBy({ by: ['affiliateId'], where: { status: 'REFUNDED', refundedAt: range, ...recoveryScope }, _sum: { grossAmountUsd: true } }),
-    db.order.groupBy({ by: ['affiliateId'], where: { status: 'CHARGEBACK', chargebackAt: range, ...recoveryScope }, _sum: { grossAmountUsd: true } }),
-    lite ? Promise.resolve([] as AffiliateRow[]) : db.order.groupBy({ by: ['affiliateId', 'productType'], where: { status: 'APPROVED', orderedAt: range, affiliateId: { not: null }, ...frontScope }, _sum: { grossAmountUsd: true, cpaPaidUsd: true, cogsUsd: true, fulfillmentUsd: true }, _count: { _all: true } }),
-    lite ? Promise.resolve([] as RefundByAffiliateRow[]) : db.order.groupBy({ by: ['affiliateId'], where: { status: 'REFUNDED', refundedAt: range, affiliateId: { not: null }, ...frontScope }, _sum: { grossAmountUsd: true } }),
-    lite ? Promise.resolve([] as RefundByAffiliateRow[]) : db.order.groupBy({ by: ['affiliateId'], where: { status: 'CHARGEBACK', chargebackAt: range, affiliateId: { not: null }, ...frontScope }, _sum: { grossAmountUsd: true } }),
+    dbRead.order.groupBy({ by: ['affiliateId'], where: { status: 'REFUNDED', refundedAt: range, ...recoveryScope }, _sum: { grossAmountUsd: true } }),
+    dbRead.order.groupBy({ by: ['affiliateId'], where: { status: 'CHARGEBACK', chargebackAt: range, ...recoveryScope }, _sum: { grossAmountUsd: true } }),
+    lite ? Promise.resolve([] as AffiliateRow[]) : dbRead.order.groupBy({ by: ['affiliateId', 'productType'], where: { status: 'APPROVED', orderedAt: range, affiliateId: { not: null }, ...frontScope }, _sum: { grossAmountUsd: true, cpaPaidUsd: true, cogsUsd: true, fulfillmentUsd: true }, _count: { _all: true } }),
+    lite ? Promise.resolve([] as RefundByAffiliateRow[]) : dbRead.order.groupBy({ by: ['affiliateId'], where: { status: 'REFUNDED', refundedAt: range, affiliateId: { not: null }, ...frontScope }, _sum: { grossAmountUsd: true } }),
+    lite ? Promise.resolve([] as RefundByAffiliateRow[]) : dbRead.order.groupBy({ by: ['affiliateId'], where: { status: 'CHARGEBACK', chargebackAt: range, affiliateId: { not: null }, ...frontScope }, _sum: { grossAmountUsd: true } }),
     measureSalesbound(start, end),
-    lite ? Promise.resolve([] as ProductRow[]) : db.$queryRaw<ProductRow[]>(Prisma.sql`
+    lite ? Promise.resolve([] as ProductRow[]) : dbRead.$queryRaw<ProductRow[]>(Prisma.sql`
       SELECT COALESCE(NULLIF(BTRIM(p."family"), ''), '—') AS family, o."platformId" AS "platformId", o."productType"::text AS "productType",
              COALESCE(SUM(o."grossAmountUsd"), 0) AS gross, COALESCE(SUM(o."cpaPaidUsd"), 0) AS cpa, COUNT(*)::int AS orders,
              COALESCE(SUM(o."cogsUsd"), 0) AS cogs, COALESCE(SUM(o."fulfillmentUsd"), 0) AS fulfillment
@@ -129,7 +129,7 @@ async function measureInputs(start: Date, end: Date, lite: boolean): Promise<Net
       WHERE o."status" = 'APPROVED' AND o."orderedAt" >= ${start} AND o."orderedAt" <= ${end}
         AND ${productScopeSql(recoveryIds)}
       GROUP BY 1, 2, 3`),
-    lite ? Promise.resolve([] as ProductRefundRow[]) : db.$queryRaw<ProductRefundRow[]>(Prisma.sql`
+    lite ? Promise.resolve([] as ProductRefundRow[]) : dbRead.$queryRaw<ProductRefundRow[]>(Prisma.sql`
       SELECT COALESCE(NULLIF(BTRIM(p."family"), ''), '—') AS family, o."platformId" AS "platformId", COALESCE(SUM(ABS(o."grossAmountUsd")), 0) AS usd
       FROM "Order" o JOIN "Product" p ON p."id" = o."productId"
       WHERE ((o."status" = 'REFUNDED' AND o."refundedAt" >= ${start} AND o."refundedAt" <= ${end})
@@ -222,7 +222,7 @@ async function measureInputs(start: Date, end: Date, lite: boolean): Promise<Net
   // ── afiliados de front ──
   const affIds = [...new Set(affRows.map((r) => r.affiliateId).filter((x): x is string => !!x))];
   const affMeta = affIds.length
-    ? await db.affiliate.findMany({ where: { id: { in: affIds } }, select: { id: true, externalId: true, nickname: true, mappedAffiliateId: true, platform: { select: { slug: true } } } })
+    ? await dbRead.affiliate.findMany({ where: { id: { in: affIds } }, select: { id: true, externalId: true, nickname: true, mappedAffiliateId: true, platform: { select: { slug: true } } } })
     : [];
   const mappedIds = [...new Set(affMeta.map((a) => a.mappedAffiliateId).filter((x): x is string => !!x))];
   const mappedNames = mappedIds.length ? await mappedIdentityMap(mappedIds) : new Map<string, { name: string; status: string }>();
@@ -429,7 +429,7 @@ export async function computeNeeds(inputs: NetProfitInputs, params: NetProfitPar
     needs.push({ key: 'commission.logicall', severity: 'required', title: 'Comissão da Logicall', detail: 'Nunca foi informada — o cálculo assume 35% (mesmo acordo da Tauk).', format: 'Parâmetros → Comissões → Logicall: % (ex.: 35). Ou aba Call Center → painel Logicall.' });
   }
   // Recuperação: Skill99 precisa estar marcado como afiliado de recuperação.
-  const skill = await db.affiliate.findFirst({
+  const skill = await dbRead.affiliate.findFirst({
     where: { OR: [{ externalId: { equals: 'skill99', mode: 'insensitive' } }, { nickname: { equals: 'skill99', mode: 'insensitive' } }] },
     select: { id: true, externalId: true, platform: { select: { slug: true } }, recovery: { select: { enabled: true, commissionPct: true } } },
   });
@@ -524,7 +524,7 @@ export function affiliateBackendSql(start: Date, end: Date): Prisma.Sql {
 }
 
 async function measureAffiliateBackend(start: Date, end: Date): Promise<AffiliateBackendInput[]> {
-  const rows = await db.$queryRaw<Array<{ affiliateId: string; source: BackendSource | null; gross: number; refunds: number; sales: number; leads: number }>>(affiliateBackendSql(start, end));
+  const rows = await dbRead.$queryRaw<Array<{ affiliateId: string; source: BackendSource | null; gross: number; refunds: number; sales: number; leads: number }>>(affiliateBackendSql(start, end));
   return reduceAffiliateBackend(rows);
 }
 

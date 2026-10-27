@@ -9,7 +9,7 @@
 //   estornos (coorte) reembolsos das vendas do período, qualquer data
 
 import { Prisma } from '@prisma/client';
-import { db } from '../db';
+import { db, dbRead } from '../db';
 import { logger } from '../logger';
 import { parseSalesboundTransactionsCsv, type SalesboundCsvParse } from '../connectors/salesbound/transactionsCsv';
 import { parseSalesboundWebhookSale } from '../connectors/salesbound/webhook';
@@ -300,13 +300,13 @@ export interface SalesboundCcRow {
 
 export async function salesboundCallCenterRows(start: Date, end: Date): Promise<SalesboundCcRow[]> {
   const [sales, reversals] = await Promise.all([
-    db.salesboundTransaction.findMany({
+    dbRead.salesboundTransaction.findMany({
       where: { result: 'SUCCESS', type: 'SALE', txnAt: { gte: start, lte: end } },
       select: { id: true, orderId: true, amountUsd: true, txnAt: true, email: true, agentName: true, family: true, items: true, sourcePlatform: true },
       orderBy: { txnAt: 'asc' },
     }),
     // Estorno/void das vendas DO PERÍODO, mesmo que tenham acontecido depois.
-    db.salesboundTransaction.findMany({
+    dbRead.salesboundTransaction.findMany({
       where: { result: 'SUCCESS', type: { in: ['REFUND', 'VOID'] }, saleAt: { gte: start, lte: end } },
       select: { orderId: true, type: true, amountUsd: true },
     }),
@@ -355,7 +355,7 @@ export async function salesboundCallCenterRows(start: Date, end: Date): Promise<
 export interface SalesboundDayStat { day: string; source: string; type: string; n: number; usd: number }
 
 export async function salesboundBreakdown(start: Date, end: Date): Promise<SalesboundDayStat[]> {
-  const rows = await db.$queryRaw<Array<{ day: string; source: string; type: string; n: bigint; usd: Prisma.Decimal }>>(Prisma.sql`
+  const rows = await dbRead.$queryRaw<Array<{ day: string; source: string; type: string; n: bigint; usd: Prisma.Decimal }>>(Prisma.sql`
     -- txnAt é timestamp SEM fuso guardando UTC: precisa marcar como UTC ANTES
     -- de converter, senão o AT TIME ZONE faz o caminho inverso (dia errado).
     SELECT to_char(("txnAt" AT TIME ZONE 'UTC') AT TIME ZONE 'America/Sao_Paulo', 'YYYY-MM-DD') AS day,
@@ -369,7 +369,7 @@ export async function salesboundBreakdown(start: Date, end: Date): Promise<Sales
 
 /** Auditoria linha a linha (pra cruzar pedido × fonte quando algo não bate). */
 export async function salesboundRows(start: Date, end: Date, take = 300) {
-  const rows = await db.salesboundTransaction.findMany({
+  const rows = await dbRead.salesboundTransaction.findMany({
     where: { txnAt: { gte: start, lte: end } },
     select: { transactionId: true, clientTxnId: true, source: true, orderId: true, type: true, result: true, amountUsd: true, txnAt: true, email: true, family: true },
     orderBy: { txnAt: 'asc' }, take,
@@ -379,7 +379,7 @@ export async function salesboundRows(start: Date, end: Date, take = 300) {
 
 /** Cobertura do razão (null = vazio → canal cai no manual). */
 export async function salesboundCoverage(): Promise<SalesboundCoverage | null> {
-  const [row] = await db.$queryRaw<Array<{ first: Date | null; last: Date | null; imported: Date | null; csv_last: Date | null; webhook_last: Date | null; webhook_n: bigint }>>(Prisma.sql`
+  const [row] = await dbRead.$queryRaw<Array<{ first: Date | null; last: Date | null; imported: Date | null; csv_last: Date | null; webhook_last: Date | null; webhook_n: bigint }>>(Prisma.sql`
     SELECT MIN("txnAt") AS first, MAX("txnAt") AS last, MAX("importedAt") AS imported,
            MAX("txnAt") FILTER (WHERE "source" = 'csv') AS csv_last,
            MAX("txnAt") FILTER (WHERE "source" = 'webhook') AS webhook_last,
@@ -397,7 +397,7 @@ export async function salesboundCoverage(): Promise<SalesboundCoverage | null> {
 export async function measureSalesbound(start: Date, end: Date): Promise<SalesboundMeasured | null> {
   const coverage = await salesboundCoverage();
   if (!coverage) return null;
-  const [row] = await db.$queryRaw<Array<{ sales_usd: Prisma.Decimal; sales_n: bigint; voids_usd: Prisma.Decimal; voids_n: bigint; refunds_usd: Prisma.Decimal; refunds_cohort_usd: Prisma.Decimal }>>(Prisma.sql`
+  const [row] = await dbRead.$queryRaw<Array<{ sales_usd: Prisma.Decimal; sales_n: bigint; voids_usd: Prisma.Decimal; voids_n: bigint; refunds_usd: Prisma.Decimal; refunds_cohort_usd: Prisma.Decimal }>>(Prisma.sql`
     SELECT
       COALESCE(SUM("amountUsd") FILTER (WHERE "type" = 'SALE' AND "txnAt" >= ${start} AND "txnAt" <= ${end}), 0) AS sales_usd,
       COUNT(*) FILTER (WHERE "type" = 'SALE' AND "amountUsd" > 0 AND "txnAt" >= ${start} AND "txnAt" <= ${end}) AS sales_n,

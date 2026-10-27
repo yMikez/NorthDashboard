@@ -18,7 +18,8 @@
 //     cabeça e errava o dia na borda).
 
 import { Prisma } from '@prisma/client';
-import { db } from '../db';
+// Leitura de métrica: segue METRICS_SOURCE (public ou painel oficial — lib/db.ts).
+import { dbRead as db } from '../db';
 import { SESSION_KEY_SQL, type MetricsFilters, type OverviewKPIs, type OverviewResponse, type ProductsResponse, type OrdersResponse } from '../services/metrics';
 import type { OverviewPanels } from '../services/overviewPanels';
 import { realOrderCount } from '../services/profitModel';

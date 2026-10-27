@@ -10,7 +10,8 @@
 // unificada); visão "platform" mostra cada conta separada.
 
 import { Prisma } from '@prisma/client';
-import { db } from '../db';
+// Leitura de métrica: segue METRICS_SOURCE (public ou painel oficial — lib/db.ts).
+import { dbRead as db } from '../db';
 import { getProfitModelInputs, ZERO_PLATFORM_PCTS, type ProfitModelInputs } from './profitModel';
 import { effectiveInternal, suggestLinks, type IdentityAffiliate } from './affiliateIdentityCore';
 import {

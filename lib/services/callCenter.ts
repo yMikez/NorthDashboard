@@ -15,7 +15,8 @@
 // normalizar, NUNCA substring ("Lumicept" não pode engolir "Lumicept
 // Gummies"). Watch com family NULL = todas as famílias da plataforma.
 
-import { db } from '../db';
+// Leitura de métrica: segue METRICS_SOURCE (public ou painel oficial — lib/db.ts).
+import { dbRead as db } from '../db';
 
 export const TAUK_THRESHOLD_PER_DAY = 30;
 export const SALESBOUND_THRESHOLD_PER_DAY = 100;
