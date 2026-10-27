@@ -11,7 +11,7 @@ import {
 } from './dailyMetrics';
 import {
   getProfitModelInputs, getObservedRefundCbPct, netAovUsd, cpaStatus,
-  realOrderCount, EXTRA_ROW_REFUND_PLATFORMS, ZERO_PLATFORM_PCTS,
+  realOrderCount, EXTRA_ROW_REFUND_PLATFORMS, ZERO_PLATFORM_PCTS, type ProfitModelInputs,
 } from './profitModel';
 import { DEFAULT_SUPPLIER } from './cogs';
 import { defaultParams as defaultNetProfitParams, normalizeParams } from './netProfitCore';
@@ -47,9 +47,10 @@ export interface MetricsFilters {
 }
 
 // ── Reembolso do NET AOV na aba Afiliados (decisão do usuário, 2026-10-27) ──
-// 'observado' (padrão): o do próprio afiliado no período — estornos +
-// chargebacks ÷ pedidos reais, por data da VENDA (período recente sai mais
-// baixo: estorno chega até 60–90 dias depois). 'lucro_real': o % das
+// 'observado' (padrão): o do próprio afiliado no período — valor estornado
+// (reembolso + chargeback) ÷ valor cobrado das vendas pagas, por data da
+// VENDA (período recente sai mais baixo: estorno chega até 60–90 dias
+// depois). 'lucro_real': o % das
 // configurações da aba Lucro real (front; conta de recuperação usa o % de
 // recuperação ou, sem ele, o do front — como lá). O % da plataforma e o
 // override por afiliado não entram mais nesta aba.
@@ -69,12 +70,68 @@ export async function loadAffiliateRefundCtx(source: AffiliateRefundSource = 'ob
 
 export function affiliateRefundPct(
   ctx: AffiliateRefundCtx,
-  a: { realOrders: number; refunds: number; chargebacks: number; isRecovery: boolean },
+  a: { grossChargedUsd: number; refundedUsd: number; isRecovery: boolean },
 ): number {
   if (ctx.source === 'lucro_real') {
     return (a.isRecovery ? ctx.lucroReal.recovery ?? ctx.lucroReal.front : ctx.lucroReal.front) ?? 0;
   }
-  return a.realOrders > 0 ? Math.round(((a.refunds + a.chargebacks) / a.realOrders) * 10_000) / 100 : 0;
+  return a.grossChargedUsd > 0 ? Math.round((a.refundedUsd / a.grossChargedUsd) * 10_000) / 100 : 0;
+}
+
+// ── Economia do afiliado na aba Afiliados (regra do extrato, 2026-10-27) ──
+// Mesma régua do export/extrato da JVZoo (doc do Douglas): venda = toda
+// transação PAGA (aprovada + reembolsada + chargeback; na Digistore só a
+// original — o estorno é linha extra), receita = valor COBRADO dessas
+// vendas (o reembolso é dedução à parte, no NET AOV), FE = front pago,
+// CPA = todos os FEs pagos (a JVZoo não devolve CPA no reembolso).
+//   AOV            = cobrado ÷ FEs pagos
+//   NET AOV        = AOV × (1 − reembolso% − taxa% − custos op.% − reserva%)
+//   Net after CPA  = NET AOV − CPA/venda;  total = × FEs pagos
+// Aprovação/reembolso/chargeback = ÷ vendas pagas (NOT PAID fora).
+// Única pra lista (SQL e legacy) e drawer — sem ela os três divergiam.
+export interface AffiliateEconomicsInput {
+  platformSlug: string;
+  isRecovery: boolean;
+  orders: number;          // aprovadas
+  refunds: number;
+  chargebacks: number;
+  paidOrders: number;
+  fePaidCount: number;
+  grossChargedUsd: number;
+  refundedUsd: number;
+  cpa: number;             // CPA somado das vendas do período
+  latestCpa: number | null; // CPA/venda negociado (último observado)
+}
+
+/** Venda paga? (a linha de estorno da Digistore não é venda) */
+export function isPaidSale(platformSlug: string, status: string): boolean {
+  if (status === 'APPROVED') return true;
+  return (status === 'REFUNDED' || status === 'CHARGEBACK') && !EXTRA_ROW_REFUND_PLATFORMS.has(platformSlug);
+}
+
+export function affiliateEconomics(x: AffiliateEconomicsInput, pm: ProfitModelInputs, ctx: AffiliateRefundCtx) {
+  const rate = (n: number) => (x.paidOrders > 0 ? round4(n / x.paidOrders) : 0);
+  const aov = x.fePaidCount > 0 ? x.grossChargedUsd / x.fePaidCount : 0;
+  const ppBase = pm.byPlatform.get(x.platformSlug) ?? ZERO_PLATFORM_PCTS;
+  const refundCbPct = affiliateRefundPct(ctx, { grossChargedUsd: x.grossChargedUsd, refundedUsd: x.refundedUsd, isRecovery: x.isRecovery });
+  const nAov = netAovUsd(aov, { feePct: ppBase.feePct, refundCbPct, allowancePct: ppBase.allowancePct, opexPct: pm.opexPct });
+  const cpaVal = x.latestCpa != null ? round2(x.latestCpa) : 0;
+  const nAfter = cpaVal > 0 ? round2(nAov - cpaVal) : null;
+  return {
+    approvalRate: rate(x.orders),
+    refundRate: rate(x.refunds),
+    cbRate: rate(x.chargebacks),
+    aovUsd: round2(aov),
+    netAovUsd: nAov,
+    netAfterCpaUsd: nAfter,
+    // Total do período — o número que o drawer do afiliado mostra.
+    netAfterCpaTotalUsd: nAfter != null ? round2(nAfter * x.fePaidCount) : null,
+    cpaStatus: nAfter != null ? cpaStatus(nAfter, pm.thresholds) : null,
+    refundCbPctUsed: refundCbPct,
+    refundCbPctOverride: null,
+    opexPctUsed: pm.opexPct,
+    cpaPerFeApproved: x.fePaidCount > 0 ? round2(x.cpa / x.fePaidCount) : 0,
+  };
 }
 
 export interface OverviewKPIs {
@@ -440,6 +497,13 @@ export interface AffiliatesResponse {
     cbRate: number;
     cpa: number;
     feApprovedCount: number;       // FE+APPROVED no período (qualquer cpa)
+    // Regra do extrato (affiliateEconomics): vendas pagas, FEs pagos, valor
+    // cobrado das vendas pagas e valor estornado (reembolso + chargeback).
+    paidOrders: number;
+    fePaidCount: number;
+    grossChargedUsd: number;
+    refundedUsd: number;
+    aovUsd: number;
     feCpaPaidCount: number;        // FE+APPROVED+cpa>0 (sales que pagaram CPA)
     cpaPerFe: number;              // CPA negociado (último valor observado)
     // Afiliado de RECUPERAÇÃO (RecoveryAffiliate ativo): é pago por comissão
@@ -3044,8 +3108,10 @@ export async function getAffiliateDetail(
     db.order.findMany({
       where: periodWhere,
       select: {
+        id: true,
         status: true,
         grossAmountUsd: true,
+        originalGrossUsd: true,
         netAmountUsd: true,
         cpaPaidUsd: true,
         country: true,
@@ -3097,9 +3163,19 @@ export async function getAffiliateDetail(
   // CPA negociado = ÚLTIMO valor observado em FE+APPROVED+cpa>0 (mesma
   // definição do ranking; periodOrders já vem ordenado por orderedAt asc).
   let latestCpa = 0;
+  // Regra do extrato (affiliateEconomics): vendas pagas, FEs pagos, valor
+  // cobrado e valor estornado.
+  let paidOrders = 0, fePaidCount = 0, grossChargedUsd = 0;
+  const refundIds: string[] = [];
   for (const o of periodOrders) {
     net += toNumber(o.netAmountUsd);
     cpa += toNumber(o.cpaPaidUsd);
+    if (isPaidSale(aff.platform.slug, o.status)) {
+      paidOrders++;
+      grossChargedUsd += Math.abs(toNumber(o.originalGrossUsd ?? o.grossAmountUsd));
+      if (o.productType === 'FRONTEND') fePaidCount++;
+    }
+    if (o.status === 'REFUNDED' || o.status === 'CHARGEBACK') refundIds.push(o.id);
     if (o.status === 'APPROVED') {
       orders++;
       revenue += toNumber(o.grossAmountUsd);
@@ -3115,7 +3191,8 @@ export async function getAffiliateDetail(
   // Denominador das taxas = pedidos REAIS (linhas sintéticas de estorno da
   // Digistore fora). Mesma régua do ranking — ver realOrderCount.
   const realOrders = realOrderCount(aff.platform.slug, allOrders, refunds, chargebacks);
-  const denom = realOrders || 1;
+  // Valor estornado do extrato (REFUNDED_VALUE) — o mesmo da linha do ranking.
+  const refundedUsd = (await refundedValueByAffiliate(refundIds)).get(aff.id) ?? 0;
 
   // Session-AOV: pull all orders sharing parent_external_ids of this
   // affiliate's FE orders, sum APPROVED gross, divide by FE-session count.
@@ -3172,29 +3249,14 @@ export async function getAffiliateDetail(
     }
   }
 
-  // AOV direto (mesmo numerador/denominador do ranking) alimenta o modelo.
-  const aovDirect = feApprovedCount > 0 ? revenue / feApprovedCount : 0;
-  const modelKpis = (() => {
-    const ppBase = pm.byPlatform.get(aff.platform.slug) ?? ZERO_PLATFORM_PCTS;
-    const refundCbPct = affiliateRefundPct(refundCtx, { realOrders, refunds, chargebacks, isRecovery: Boolean(recoveryRow?.enabled) });
-    const pp = { feePct: ppBase.feePct, refundCbPct, allowancePct: ppBase.allowancePct };
-    const nAov = netAovUsd(aovDirect, { ...pp, opexPct: pm.opexPct });
-    const nAfter = latestCpa > 0 ? round2(nAov - latestCpa) : null;
-    return {
-      netAovUsd: nAov,
-      cpaPerFe: latestCpa,
-      netAfterCpaUsd: nAfter,
-      // Total do período: quanto o afiliado deixou depois de pago. Null
-      // quando não há CPA observado (afiliado organic) — melhor "—" do que
-      // um total que finge ser lucro sem custo de aquisição.
-      netAfterCpaTotalUsd: nAfter != null ? round2(nAfter * feApprovedCount) : null,
-      cpaStatus: nAfter != null ? cpaStatus(nAfter, pm.thresholds) : null,
-      refundCbPctUsed: pp.refundCbPct,
-      refundCbPctOverride: null,
-      refundSource: refundCtx.source,
-      opexPctUsed: pm.opexPct,
-    };
-  })();
+  // Mesma conta da linha do ranking (affiliateEconomics) — é a mesma tela,
+  // dois níveis de zoom. Total null quando não há CPA observado (organic).
+  const { aovUsd, ...economics } = affiliateEconomics({
+    platformSlug: aff.platform.slug, isRecovery: Boolean(recoveryRow?.enabled),
+    orders, refunds, chargebacks, paidOrders, fePaidCount, grossChargedUsd, refundedUsd,
+    cpa, latestCpa: latestCpa > 0 ? latestCpa : null,
+  }, pm, refundCtx);
+  const modelKpis = { ...economics, cpaPerFe: latestCpa, refundSource: refundCtx.source };
 
   const kpis = {
     revenue: round2(revenue),
@@ -3203,9 +3265,10 @@ export async function getAffiliateDetail(
     realOrders,
     refunds,
     chargebacks,
-    approvalRate: round4(orders / denom),
-    refundRate: round4(refunds / denom),
-    cbRate: round4(chargebacks / denom),
+    paidOrders,
+    fePaidCount,
+    grossChargedUsd: round2(grossChargedUsd),
+    refundedUsd: round2(refundedUsd),
     cpa: round2(cpa),
     // netMargin (net − CPA) SAIU do drawer em 2026-08-12: `net` somava todos
     // os status, então a linha de estorno da Digistore entrava negativa
@@ -3216,19 +3279,15 @@ export async function getAffiliateDetail(
     netMargin: round2(net - cpa),
     // Modelo da planilha CPA, MESMAS contas do ranking (têm que bater
     // número a número — é a mesma tela, dois níveis de zoom):
-    //   NET AOV        = AOV × (1 − refund&cb% − taxa da plataforma − opex%)
-    //   NET AFTER CPA  = NET AOV − CPA por venda        (por pedido)
-    //   total          = NET AFTER CPA × FEs aprovadas  (o que sobrou no período)
+    //   NET AOV        = AOV × (1 − reembolso% − taxa da plataforma − opex% − reserva%)
+    //   NET AFTER CPA  = NET AOV − CPA por venda   (por pedido)
+    //   total          = NET AFTER CPA × FEs pagos (o que sobrou no período)
     ...modelKpis,
-    // AOV direto = receita PRÓPRIA do afiliado / FEs aprovadas dele.
-    // Lente direta (orders onde affiliateId = afiliado), NÃO conta
-    // cross-sells da sessão creditadas a outros via last-click.
-    // Fallback pra AOV por pedido quando não há FE no período.
-    aov: round2(
-      feApprovedCount > 0
-        ? revenue / feApprovedCount
-        : orders ? revenue / orders : 0,
-    ),
+    // AOV direto = valor COBRADO das vendas pagas do afiliado ÷ FEs pagos
+    // dele (regra do extrato — affiliateEconomics). Lente direta (orders
+    // onde affiliateId = afiliado), NÃO conta cross-sells da sessão
+    // creditadas a outros. Sem FE no período: AOV por pedido pago.
+    aov: aovUsd > 0 ? aovUsd : round2(paidOrders ? grossChargedUsd / paidOrders : 0),
     feApprovedCount,
     attributedSessions,
     attributedRevenue: round2(attributedRevenue),
@@ -3411,8 +3470,10 @@ export async function getAffiliatesLegacy(
     db.order.findMany({
       where: whereInCoverage,
       select: {
+        id: true,
         status: true,
         grossAmountUsd: true,
+        originalGrossUsd: true,
         netAmountUsd: true,
         cpaPaidUsd: true,
         cogsUsd: true,
@@ -3421,6 +3482,7 @@ export async function getAffiliatesLegacy(
         orderedAt: true,
         productType: true,
         affiliate: { select: { externalId: true, nickname: true, platformId: true } },
+        affiliateId: true,
         platform: { select: { slug: true } },
       },
     }),
@@ -3562,6 +3624,9 @@ export async function getAffiliatesLegacy(
     // (cpa=0) e refunds (cpa zerado pelo IPN) puxam pra baixo.
     feApprovedCount: number;       // total FE+APPROVED (qualquer cpa)
     feCpaPaidCount: number;        // só FE+APPROVED com cpa > 0
+    paidOrders: number;            // regra do extrato (affiliateEconomics)
+    fePaidCount: number;
+    grossCharged: number;
     // Último CPA observado (FE+APPROVED+cpa>0 mais recente) + timestamp.
     // Fonte de verdade = lista de transações: quando chega venda com valor
     // novo (CPA renegociado), a lista de afiliados atualiza NA HORA — o
@@ -3585,6 +3650,9 @@ export async function getAffiliatesLegacy(
 
   const inPeriod = new Map<string, Agg>();
   const prevSeen = new Set<string>();
+  // Linhas de estorno do período: o valor estornado sai do extrato
+  // (refundedValueByAffiliate), não do laço.
+  const refundIds: string[] = [];
 
   for (const o of orders) {
     if (!o.affiliate) continue;
@@ -3609,6 +3677,9 @@ export async function getAffiliatesLegacy(
           cpa: 0,
           feApprovedCount: 0,
           feCpaPaidCount: 0,
+          paidOrders: 0,
+          fePaidCount: 0,
+          grossCharged: 0,
           latestCpa: 0,
           latestCpaAt: 0,
           net: 0,
@@ -3630,6 +3701,12 @@ export async function getAffiliatesLegacy(
         a.cogs += toNumber(o.cogsUsd ?? 0);
         a.fulfillment += toNumber(o.fulfillmentUsd ?? 0);
       }
+      if (isPaidSale(o.platform.slug, o.status)) {
+        a.paidOrders++;
+        a.grossCharged += Math.abs(toNumber(o.originalGrossUsd ?? o.grossAmountUsd));
+        if (o.productType === 'FRONTEND') a.fePaidCount++;
+      }
+      if (o.status === 'REFUNDED' || o.status === 'CHARGEBACK') refundIds.push(o.id);
       if (o.status === 'APPROVED') {
         a.revenue += toNumber(o.grossAmountUsd);
         a.orders++;
@@ -3667,7 +3744,7 @@ export async function getAffiliatesLegacy(
     }
   }
 
-  const [pm, refundCtx] = await Promise.all([getProfitModelInputs(), loadAffiliateRefundCtx(filters.affiliateRefundSource)]);
+  const [pm, refundCtx, refundedByAff] = await Promise.all([getProfitModelInputs(), loadAffiliateRefundCtx(filters.affiliateRefundSource), refundedValueByAffiliate(refundIds)]);
   const mappedById = await mappedIdentityMap();
 
   // "Ativo" = teve pedido REAL no período. Um afiliado cujo único registro do
@@ -3706,7 +3783,6 @@ export async function getAffiliatesLegacy(
     const chargebacks = a?.chargebacks ?? 0;
     // Ver comentário gêmeo em getAffiliatesSql: denominador = pedidos REAIS.
     const realOrders = realOrderCount(aff.platform.slug, allOrders, refunds, chargebacks);
-    const denom = realOrders || 1;
     return {
       externalId: aff.externalId,
       platformSlug: aff.platform.slug,
@@ -3721,9 +3797,6 @@ export async function getAffiliatesLegacy(
       realOrders,
       refunds,
       chargebacks,
-      approvalRate: realOrders ? round4(orders / denom) : 0,
-      refundRate: realOrders ? round4(refunds / denom) : 0,
-      cbRate: realOrders ? round4(chargebacks / denom) : 0,
       cpa: round2(a?.cpa ?? 0),
       // CPA negociado = ÚLTIMO cpaPaidUsd observado em FE+APPROVED+cpa>0
       // (fonte: lista de transações). Imune a refund (status filter) e a
@@ -3733,33 +3806,18 @@ export async function getAffiliatesLegacy(
       feCpaPaidCount: a?.feCpaPaidCount ?? 0,
       cpaPerFe: a ? round2(a.latestCpa) : 0,
       isRecovery: Boolean(aff.recovery?.enabled),
-      // Modelo planilha CPA: AOV atribuído (sessão FE+UPs+DWs ÷ FEs) ×
-      // fatores da plataforma/global → NET AOV → NET AFTER CPA → status.
-      ...(() => {
-        const feCount = a?.feApprovedCount ?? 0;
-        // AOV padrão do usuário: receita do funil atribuído ÷ FEs APROVADAS.
-        const aovGlobal = feCount > 0 ? (a?.revenue ?? 0) / feCount : 0; // RECEITA da linha ÷ FEs (verificável a olho)
-        const ppBase = pm.byPlatform.get(aff.platform.slug) ?? ZERO_PLATFORM_PCTS;
-        const refundCbPct = affiliateRefundPct(refundCtx, { realOrders, refunds, chargebacks, isRecovery: Boolean(aff.recovery?.enabled) });
-        const pp = { feePct: ppBase.feePct, refundCbPct, allowancePct: ppBase.allowancePct };
-        const nAov = netAovUsd(aovGlobal, { ...pp, opexPct: pm.opexPct });
-        const cpaVal = a ? round2(a.latestCpa) : 0;
-        const nAfter = cpaVal > 0 ? round2(nAov - cpaVal) : null;
-        return {
-          netAovUsd: nAov,
-          netAfterCpaUsd: nAfter,
-          netAfterCpaTotalUsd: nAfter != null ? round2(nAfter * feCount) : null,
-          cpaStatus: nAfter != null ? cpaStatus(nAfter, pm.thresholds) : null,
-          refundCbPctUsed: pp.refundCbPct,
-          refundCbPctOverride: null,
-          opexPctUsed: pm.opexPct,
-        };
-      })(),
-      // Mantido pra retrocompat: ainda mean/count, deflaciona com
-      // sales cpa=0 mas algumas views podem querer essa lente.
-      cpaPerFeApproved: (a?.feApprovedCount ?? 0) > 0
-        ? round2((a!.cpa) / (a!.feApprovedCount))
-        : 0,
+      paidOrders: a?.paidOrders ?? 0,
+      fePaidCount: a?.fePaidCount ?? 0,
+      grossChargedUsd: round2(a?.grossCharged ?? 0),
+      refundedUsd: round2(refundedByAff.get(aff.id) ?? 0),
+      // Regra do extrato + modelo planilha CPA (affiliateEconomics).
+      ...affiliateEconomics({
+        platformSlug: aff.platform.slug, isRecovery: Boolean(aff.recovery?.enabled),
+        orders, refunds, chargebacks,
+        paidOrders: a?.paidOrders ?? 0, fePaidCount: a?.fePaidCount ?? 0,
+        grossChargedUsd: a?.grossCharged ?? 0, refundedUsd: refundedByAff.get(aff.id) ?? 0,
+        cpa: a?.cpa ?? 0, latestCpa: a && a.latestCpa > 0 ? a.latestCpa : null,
+      }, pm, refundCtx),
       netMargin: round2((a?.net ?? 0) - (a?.cpa ?? 0)),
       cogs: round2(a?.cogs ?? 0),
       fulfillment: round2(a?.fulfillment ?? 0),
@@ -3828,6 +3886,28 @@ export async function getAffiliatesLegacy(
 // Espelha realOrderCount() do profitModel, em SQL.
 const NOT_SYNTHETIC_ROW = Prisma.sql`
   NOT (pl."slug" = ANY(${[...EXTRA_ROW_REFUND_PLATFORMS]}) AND o."status" IN ('REFUNDED', 'CHARGEBACK'))`;
+// Valor ESTORNADO de uma linha de reembolso/chargeback: o do extrato quando
+// o dado oficial traz (JVZoo: rawMetadata.reembolso, negativo — 1.232 dos
+// 3.252 estornos do ERICSON em set/26 foram PARCIAIS, e a venda inteira
+// superestimava em ~US$ 28 mil), senão o valor da própria linha.
+const REFUNDED_VALUE = Prisma.sql`
+  COALESCE(CASE WHEN o."rawMetadata"->>'reembolso' ~ '^-?[0-9]+(\.[0-9]+)?$'
+                THEN ABS((o."rawMetadata"->>'reembolso')::numeric) END,
+           ABS(o."grossAmountUsd"))`;
+
+/** Valor estornado (REFUNDED_VALUE) somado por afiliado, das linhas dadas. */
+async function refundedValueByAffiliate(ids: string[]): Promise<Map<string, number>> {
+  if (ids.length === 0) return new Map();
+  const rows = await db.$queryRaw<Array<{ affiliate_id: string | null; usd: Prisma.Decimal }>>(Prisma.sql`
+    SELECT o."affiliateId" AS affiliate_id, COALESCE(SUM(${REFUNDED_VALUE}), 0) AS usd
+    FROM "Order" o WHERE o.id = ANY(${ids}) GROUP BY 1`);
+  return new Map(rows.filter((r) => r.affiliate_id).map((r) => [r.affiliate_id as string, toNumber(r.usd)]));
+}
+
+// Venda PAGA (isPaidSale em SQL): aprovada, ou reembolsada/chargeback que
+// não seja a linha extra de estorno da Digistore. NOT PAID/PENDING fora.
+const PAID_SALE = Prisma.sql`
+  (o."status" = 'APPROVED' OR (o."status" IN ('REFUNDED', 'CHARGEBACK') AND NOT (pl."slug" = ANY(${[...EXTRA_ROW_REFUND_PLATFORMS]}))))`;
 
 export async function getAffiliatesSql(
   filters: MetricsFilters,
@@ -3912,6 +3992,10 @@ export async function getAffiliatesSql(
         revenue: Prisma.Decimal;
         fe_approved_count: bigint;
         fe_cpa_paid_count: bigint;
+        paid_orders: bigint;
+        fe_paid_count: bigint;
+        gross_charged: Prisma.Decimal;
+        refunded_usd: Prisma.Decimal;
         seen_prev: boolean;
       }>>(Prisma.sql`
         SELECT
@@ -3930,6 +4014,12 @@ export async function getAffiliatesSql(
           COALESCE(SUM(o."grossAmountUsd") FILTER (WHERE ${inPeriod} AND o."status" = 'APPROVED'), 0) AS revenue,
           COUNT(*) FILTER (WHERE ${inPeriod} AND o."status" = 'APPROVED' AND o."productType" = 'FRONTEND')::bigint AS fe_approved_count,
           COUNT(*) FILTER (WHERE ${inPeriod} AND o."status" = 'APPROVED' AND o."productType" = 'FRONTEND' AND o."cpaPaidUsd" > 0)::bigint AS fe_cpa_paid_count,
+          -- Regra do extrato (affiliateEconomics): venda paga = aprovada +
+          -- reembolsada + chargeback, menos a linha de estorno da Digistore.
+          COUNT(*) FILTER (WHERE ${inPeriod} AND ${PAID_SALE})::bigint AS paid_orders,
+          COUNT(*) FILTER (WHERE ${inPeriod} AND ${PAID_SALE} AND o."productType" = 'FRONTEND')::bigint AS fe_paid_count,
+          COALESCE(SUM(ABS(COALESCE(o."originalGrossUsd", o."grossAmountUsd"))) FILTER (WHERE ${inPeriod} AND ${PAID_SALE}), 0) AS gross_charged,
+          COALESCE(SUM(${REFUNDED_VALUE}) FILTER (WHERE ${inPeriod} AND o."status" IN ('REFUNDED', 'CHARGEBACK')), 0) AS refunded_usd,
           BOOL_OR(o."orderedAt" >= ${prevStart} AND o."orderedAt" <= ${prevEnd}) AS seen_prev
         FROM "Order" o
         JOIN "Platform" pl ON o."platformId" = pl.id
@@ -4121,7 +4211,10 @@ export async function getAffiliatesSql(
     // reembolso do afiliado e afundava a de aprovação (a venda estornada
     // aparecia nos dois lados da divisão).
     const realOrders = realOrderCount(aff.platform.slug, allOrders, refunds, chargebacks);
-    const denom = realOrders || 1;
+    const paidOrders = a ? Number(a.paid_orders) : 0;
+    const fePaidCount = a ? Number(a.fe_paid_count) : 0;
+    const grossChargedUsd = a ? toNumber(a.gross_charged) : 0;
+    const refundedUsd = a ? toNumber(a.refunded_usd) : 0;
     const cpa = a ? toNumber(a.cpa) : 0;
     const net = a ? toNumber(a.net) : 0;
     const cogs = a ? toNumber(a.cogs) : 0;
@@ -4147,36 +4240,21 @@ export async function getAffiliatesSql(
       realOrders,
       refunds,
       chargebacks,
-      approvalRate: realOrders ? round4(orders / denom) : 0,
-      refundRate: realOrders ? round4(refunds / denom) : 0,
-      cbRate: realOrders ? round4(chargebacks / denom) : 0,
       cpa: round2(cpa),
       feApprovedCount,
       feCpaPaidCount: a ? Number(a.fe_cpa_paid_count) : 0,
       cpaPerFe: latestCpa != null ? round2(latestCpa) : 0,
       isRecovery: Boolean(aff.recovery?.enabled),
-      // Modelo planilha CPA — mesmas contas da legacy (paridade).
-      ...(() => {
-        // AOV padrão do usuário: receita do funil atribuído ÷ FEs APROVADAS.
-        const aovGlobal = feApprovedCount > 0 ? (a ? toNumber(a.revenue) : 0) / feApprovedCount : 0; // RECEITA da linha ÷ FEs
-        const ppBase = pm.byPlatform.get(aff.platform.slug) ?? ZERO_PLATFORM_PCTS;
-        const refundCbPct = affiliateRefundPct(refundCtx, { realOrders, refunds, chargebacks, isRecovery: Boolean(aff.recovery?.enabled) });
-        const pp = { feePct: ppBase.feePct, refundCbPct, allowancePct: ppBase.allowancePct };
-        const nAov = netAovUsd(aovGlobal, { ...pp, opexPct: pm.opexPct });
-        const cpaVal = latestCpa != null ? round2(latestCpa) : 0;
-        const nAfter = cpaVal > 0 ? round2(nAov - cpaVal) : null;
-        return {
-          netAovUsd: nAov,
-          netAfterCpaUsd: nAfter,
-          // Total do período — é o número que o drawer do afiliado mostra.
-          netAfterCpaTotalUsd: nAfter != null ? round2(nAfter * feApprovedCount) : null,
-          cpaStatus: nAfter != null ? cpaStatus(nAfter, pm.thresholds) : null,
-          refundCbPctUsed: pp.refundCbPct,
-          refundCbPctOverride: null,
-          opexPctUsed: pm.opexPct,
-        };
-      })(),
-      cpaPerFeApproved: feApprovedCount > 0 ? round2(cpa / feApprovedCount) : 0,
+      paidOrders,
+      fePaidCount,
+      grossChargedUsd: round2(grossChargedUsd),
+      refundedUsd: round2(refundedUsd),
+      // Regra do extrato + modelo planilha CPA (affiliateEconomics).
+      ...affiliateEconomics({
+        platformSlug: aff.platform.slug, isRecovery: Boolean(aff.recovery?.enabled),
+        orders, refunds, chargebacks, paidOrders, fePaidCount, grossChargedUsd, refundedUsd,
+        cpa, latestCpa: latestCpa ?? null,
+      }, pm, refundCtx),
       netMargin: round2(net - cpa),
       cogs: round2(cogs),
       fulfillment: round2(fulfillment),

@@ -4,9 +4,10 @@
 // parceiro ganha `accounts` (uma por plataforma) pro drawer por plataforma.
 //
 // Regras de fusão (mesmas do mergeMetrics da Análise): somas pra
-// contagens/valores, taxas re-derivadas dos totais, NET AOV ponderado por
-// FEs, CPA/venda ponderado SÓ pelas contas com CPA conhecido, Net after
-// CPA total = soma, por FE = total ÷ FEs com CPA.
+// contagens/valores, taxas re-derivadas dos totais (÷ vendas pagas), NET
+// AOV ponderado por FEs pagos, CPA/venda ponderado SÓ pelas contas com CPA
+// conhecido, Net after CPA total = soma, por FE = total ÷ FEs pagos com
+// CPA, reembolso usado ponderado pelo valor cobrado.
 
 import { db } from '../db';
 import { cpaStatus, getProfitModelInputs, type ProfitThresholds } from './profitModel';
@@ -39,25 +40,28 @@ const sum = <T>(list: T[], f: (x: T) => number | null | undefined) => list.reduc
 /** Funde N linhas de conta numa linha de parceiro (função pura, testada). */
 export function mergeAffiliateRows(accounts: AffiliateRow[], partnerName: string, thresholds: ProfitThresholds): AffiliateRow {
   if (accounts.length === 1) return { ...accounts[0], nickname: partnerName || accounts[0].nickname };
-  const primary = [...accounts].sort((a, b) => b.revenue - a.revenue)[0];
-  const fe = sum(accounts, (a) => a.feApprovedCount);
+  const primary = [...accounts].sort((a, b) => b.grossChargedUsd - a.grossChargedUsd)[0];
+  const feApproved = sum(accounts, (a) => a.feApprovedCount);
+  // Peso dos FEs = FEs PAGOS (regra do extrato — affiliateEconomics).
+  const fe = sum(accounts, (a) => a.fePaidCount);
   const realOrders = sum(accounts, (a) => a.realOrders);
-  const denom = realOrders || 1;
+  const paidOrders = sum(accounts, (a) => a.paidOrders);
+  const grossCharged = sum(accounts, (a) => a.grossChargedUsd);
+  const rate = (n: number) => (paidOrders > 0 ? r4(n / paidOrders) : 0);
   const orders = sum(accounts, (a) => a.orders);
   const refunds = sum(accounts, (a) => a.refunds);
   const chargebacks = sum(accounts, (a) => a.chargebacks);
   const revenue = sum(accounts, (a) => a.revenue);
   const cpa = sum(accounts, (a) => a.cpa);
   const withCpa = accounts.filter((a) => a.netAfterCpaTotalUsd != null && (a.cpaPerFe || 0) > 0);
-  const feWithCpa = sum(withCpa, (a) => a.feApprovedCount);
+  const feWithCpa = sum(withCpa, (a) => a.fePaidCount);
   const nAfterTotal = withCpa.length ? r2(sum(withCpa, (a) => a.netAfterCpaTotalUsd)) : null;
   const nAfter = nAfterTotal != null && feWithCpa > 0 ? r2(nAfterTotal / feWithCpa) : null;
-  const wavgFe = (f: (a: AffiliateRow) => number) => (fe > 0 ? r2(sum(accounts, (a) => f(a) * a.feApprovedCount) / fe) : 0);
   // NET AOV e CPA/venda sobre a MESMA base (contas com CPA, quando há) —
   // assim NET AOV − CPA/venda = Net after CPA também na linha do parceiro.
   const cpaBase = feWithCpa > 0 ? withCpa : accounts;
   const cpaBaseFe = feWithCpa > 0 ? feWithCpa : fe;
-  const wavgCpaBase = (f: (a: AffiliateRow) => number) => (cpaBaseFe > 0 ? r2(sum(cpaBase, (a) => f(a) * a.feApprovedCount) / cpaBaseFe) : 0);
+  const wavgCpaBase = (f: (a: AffiliateRow) => number) => (cpaBaseFe > 0 ? r2(sum(cpaBase, (a) => f(a) * a.fePaidCount) / cpaBaseFe) : 0);
   const attRevenue = sum(accounts, (a) => a.attributedRevenue);
   const attProfit = sum(accounts, (a) => a.attributedProfit);
   const sparkLen = Math.max(...accounts.map((a) => a.sparkline?.length ?? 0), 0);
@@ -77,11 +81,16 @@ export function mergeAffiliateRows(accounts: AffiliateRow[], partnerName: string
     realOrders,
     refunds,
     chargebacks,
-    approvalRate: realOrders ? r4(orders / denom) : 0,
-    refundRate: realOrders ? r4(refunds / denom) : 0,
-    cbRate: realOrders ? r4(chargebacks / denom) : 0,
+    paidOrders,
+    fePaidCount: fe,
+    grossChargedUsd: r2(grossCharged),
+    refundedUsd: r2(sum(accounts, (a) => a.refundedUsd)),
+    aovUsd: fe > 0 ? r2(grossCharged / fe) : 0,
+    approvalRate: rate(orders),
+    refundRate: rate(refunds),
+    cbRate: rate(chargebacks),
     cpa: r2(cpa),
-    feApprovedCount: fe,
+    feApprovedCount: feApproved,
     feCpaPaidCount: sum(accounts, (a) => a.feCpaPaidCount),
     cpaPerFe: feWithCpa > 0 ? wavgCpaBase((a) => a.cpaPerFe) : 0,
     // Parceiro conta como recuperação se QUALQUER conta dele for — é pago
@@ -92,7 +101,7 @@ export function mergeAffiliateRows(accounts: AffiliateRow[], partnerName: string
     netAfterCpaUsd: nAfter,
     netAfterCpaTotalUsd: nAfterTotal,
     cpaStatus: nAfter != null ? cpaStatus(nAfter, thresholds) : null,
-    refundCbPctUsed: fe > 0 ? Math.round(sum(accounts, (a) => a.refundCbPctUsed * a.feApprovedCount) / fe * 10) / 10 : primary.refundCbPctUsed,
+    refundCbPctUsed: grossCharged > 0 ? r2(sum(accounts, (a) => a.refundCbPctUsed * a.grossChargedUsd) / grossCharged) : primary.refundCbPctUsed,
     refundCbPctOverride: null,
     opexPctUsed: primary.opexPctUsed,
     netMargin: r2(sum(accounts, (a) => a.netMargin)),

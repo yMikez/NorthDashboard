@@ -478,12 +478,12 @@ function LeaderboardPage({ filters, onOpenAffiliate, user }) {
     ? `${lucroRealPct.front}%${lucroRealPct.recovery != null && lucroRealPct.recovery !== lucroRealPct.front ? ` · recuperação ${lucroRealPct.recovery}%` : ''}`
     : null;
 
-  // AOV padrão (fórmula do usuário): RECEITA da linha ÷ FEs APROVADAS —
-  // verificável a olho, as duas são colunas da própria tabela. Mesmo
-  // cálculo do NET AOV do modelo CPA no backend.
+  // AOV (regra do extrato, 2026-10-27): valor COBRADO das vendas pagas ÷
+  // FEs pagos — as duas são colunas da própria tabela. Mesmo AOV que
+  // alimenta o NET AOV no backend (affiliateEconomics).
   function aovOf(a) {
-    if (!a || !(a.feApprovedCount > 0)) return 0;
-    return a.revenue / a.feApprovedCount;
+    if (!a || !(a.fePaidCount > 0)) return 0;
+    return a.aovUsd || a.grossChargedUsd / a.fePaidCount;
   }
 
   // Média simples da coluna CPA/venda (cpaPerFe = CPA negociado, último
@@ -510,10 +510,10 @@ function LeaderboardPage({ filters, onOpenAffiliate, user }) {
        || (a.accounts || []).some((c) => (c.nickname || '').toLowerCase().includes(q) || c.externalId.toLowerCase().includes(q))
        || (a.contact?.email || '').toLowerCase().includes(q)
        || (a.mapped?.name || '').toLowerCase().includes(q))
-    : a.realOrders >= minOrders
+    : a.paidOrders >= minOrders
   )).sort((a, b) => {
     switch (sortBy) {
-      case 'orders': return b.orders - a.orders;
+      case 'orders': return b.paidOrders - a.paidOrders;
       case 'aov': return aovOf(b) - aovOf(a);
       case 'netMargin': return b.netMargin - a.netMargin;
       case 'profit': return (b.estimatedProfit ?? 0) - (a.estimatedProfit ?? 0);
@@ -521,7 +521,7 @@ function LeaderboardPage({ filters, onOpenAffiliate, user }) {
       case 'approvalRate': return b.approvalRate - a.approvalRate;
       case 'refundRate': return a.refundRate - b.refundRate;
       case 'chargebackRate': return a.cbRate - b.cbRate;
-      default: return b.revenue - a.revenue;
+      default: return b.grossChargedUsd - a.grossChargedUsd;
     }
   });
 
@@ -560,11 +560,11 @@ function LeaderboardPage({ filters, onOpenAffiliate, user }) {
           </button>
           <button className="btn btn-ghost" onClick={() => downloadCsv(
             `ranking-afiliados_${isoDateOnly(filters.dateRange.start)}_${isoDateOnly(filters.dateRange.end)}.csv`,
-            ['#', 'Afiliado', 'Afiliado ID', 'Afiliado (sistema)', 'affiliate_id', 'Plataforma', 'Pedidos aprovados', 'Receita USD', 'FEs aprovadas',
-             'AOV global USD', 'Aprovação %', refundMode === 'lucro_real' ? 'Refund&CB Lucro real %' : 'Refund&CB observado %', 'CPA pago USD', 'Custos op %',
+            ['#', 'Afiliado', 'Afiliado ID', 'Afiliado (sistema)', 'affiliate_id', 'Plataforma', 'Vendas pagas', 'Vendas aprovadas', 'Receita cobrada USD', 'Estornado USD', 'FEs pagos',
+             'AOV USD', 'Aprovação %', refundMode === 'lucro_real' ? 'Refund&CB Lucro real %' : 'Refund&CB observado %', 'CPA pago USD', 'Custos op %',
              'NET AOV USD', 'CPA por venda USD', 'Net after CPA USD', 'Status CPA'],
             rows.map((r, i) => [
-              i + 1, r.nickname || r.externalId, r.accounts && r.accounts.length > 1 ? r.accounts.map((c) => c.externalId).join(' | ') : r.externalId, r.mapped ? r.mapped.name : '', r.mappedAffiliateId || '', (r.platforms || [r.platformSlug]).join('+'), r.orders, r.revenue, r.feApprovedCount,
+              i + 1, r.nickname || r.externalId, r.accounts && r.accounts.length > 1 ? r.accounts.map((c) => c.externalId).join(' | ') : r.externalId, r.mapped ? r.mapped.name : '', r.mappedAffiliateId || '', (r.platforms || [r.platformSlug]).join('+'), r.paidOrders, r.orders, r.grossChargedUsd, r.refundedUsd, r.fePaidCount,
               aovOf(r), r.approvalRate * 100, r.refundCbPctUsed, r.cpa, r.opexPctUsed,
               r.netAovUsd, r.cpaPerFe, r.netAfterCpaUsd, r.cpaStatus,
             ]),
@@ -680,13 +680,13 @@ function LeaderboardPage({ filters, onOpenAffiliate, user }) {
                     <th style={{ width: 36 }}>#</th>
                     <th>Afiliado</th>
                     <th>Plataforma</th>
-                    <th className="num">Pedidos</th>
-                    <th className="num">Receita</th>
-                    <th className="num" title="AOV = receita das vendas creditadas a ESTE afiliado (FE + os upsells/downsells em que a plataforma manteve o crédito nele) ÷ FEs APROVADAS. É a lente DIRETA: cross-sell da mesma sessão que a plataforma creditou a outro afiliado não entra. Mesmo AOV que alimenta o NET AOV do modelo CPA.">AOV</th>
-                    <th title="Aprovadas ÷ pedidos REAIS do período. Na Digistore o estorno é uma linha extra e não entra no denominador — a venda original já está contada.">Aprovação</th>
+                    <th className="num" title="Vendas PAGAS no período: aprovadas + reembolsadas + chargeback (NOT PAID fora; na Digistore a linha de estorno não é venda). Embaixo, só as aprovadas.">Pedidos</th>
+                    <th className="num" title="Valor COBRADO das vendas pagas, inclusive as reembolsadas depois — o reembolso é dedução à parte (coluna Reembolso), como no extrato.">Receita</th>
+                    <th className="num" title="AOV = valor cobrado das vendas creditadas a ESTE afiliado (FE + os upsells/downsells em que a plataforma manteve o crédito nele) ÷ FEs PAGOS. Lente direta: cross-sell creditado a outro afiliado não entra. Mesmo AOV que alimenta o NET AOV.">AOV</th>
+                    <th title="Aprovadas ÷ vendas pagas do período (NOT PAID fora).">Aprovação</th>
                     <th className="num" title={refundMode === 'lucro_real' ? 'Reembolso + chargeback usado no NET AOV: o % configurado na aba Lucro real.' : 'Reembolso + chargeback usado no NET AOV: o OBSERVADO do afiliado no período (estornos + chargebacks ÷ pedidos reais, por data da venda).'}>Reembolso</th>
-                    <th className="num" title="Chargebacks ÷ pedidos REAIS do período.">Chargeback</th>
-                    <th className="num">CPA pago</th>
+                    <th className="num" title="Chargebacks ÷ vendas pagas do período.">Chargeback</th>
+                    <th className="num" title="CPA de todos os FEs pagos do período — a JVZoo não devolve o CPA quando o FE é reembolsado.">CPA pago</th>
                     <th className="num" title="Custos operacionais % (global, modelo CPA) — editável no painel de config acima">Custos op.</th>
                     <th className="num" title="NET AOV = AOV global × (1 − reembolso&cb% − taxa da plataforma − custos operacionais % − reserva retida %). Reembolso: observado do afiliado ou o % do Lucro real (botão acima); taxa e reserva em Plataformas; custos op. no painel de config.">NET AOV</th>
                     <th className="num" title="CPA por venda FE — último valor observado nas transações">CPA/venda</th>
@@ -703,7 +703,8 @@ function LeaderboardPage({ filters, onOpenAffiliate, user }) {
                   )}
                   {pageRows.map((r, i) => {
                     const apClass = r.approvalRate > 0.7 ? 'val-ok' : r.approvalRate > 0.5 ? 'val-warn' : 'val-bad';
-                    const rfClass = r.refundRate < 0.06 ? 'val-ok' : r.refundRate < 0.12 ? 'val-warn' : 'val-bad';
+                    const refundObs = r.grossChargedUsd > 0 ? r.refundedUsd / r.grossChargedUsd : 0;
+                    const rfClass = refundObs < 0.06 ? 'val-ok' : refundObs < 0.12 ? 'val-warn' : 'val-bad';
                     const cbClass = r.cbRate < 0.005 ? 'val-ok' : r.cbRate < 0.01 ? 'val-warn' : 'val-bad';
                     const { cls: platClass, short: platShort } = platBadge(r.platformSlug);
                     const displayName = r.nickname || r.externalId;
@@ -723,13 +724,16 @@ function LeaderboardPage({ filters, onOpenAffiliate, user }) {
                         <td style={{ whiteSpace: 'nowrap' }}>
                           {(r.accounts && r.accounts.length > 1 ? r.accounts : [r]).map((c) => { const pb = platBadge(c.platformSlug); return <span key={`${c.platformSlug}:${c.externalId}`} className={`plat ${pb.cls}`} style={{ marginRight: 3 }} title={c.nickname || c.externalId}>{pb.short}</span>; })}
                         </td>
-                        <td className="num cell-mono">{fmtInt(r.orders)}</td>
-                        <td className="num cell-mono" style={{ color: 'var(--fg1)' }}>{fmtCurrency(r.revenue, cur, 0)}</td>
+                        <td className="num cell-mono">
+                          {fmtInt(r.paidOrders)}
+                          <span style={{ display: 'block', fontSize: 10, color: 'var(--fg5)', fontWeight: 400, marginTop: 1 }}>{fmtInt(r.orders)} aprov.</span>
+                        </td>
+                        <td className="num cell-mono" style={{ color: 'var(--fg1)' }}>{fmtCurrency(r.grossChargedUsd, cur, 0)}</td>
                         <td className="num cell-mono" style={{ color: 'var(--money)' }}>
                           {aovOf(r) > 0 ? fmtCurrency(aovOf(r), cur, 0) : '—'}
                           {aovOf(r) > 0 && (
                             <span style={{ display: 'block', fontSize: 10, color: 'var(--fg5)', fontWeight: 400, marginTop: 1 }}>
-                              {fmtInt(r.feApprovedCount)} FEs
+                              {fmtInt(r.fePaidCount)} FEs
                             </span>
                           )}
                         </td>
@@ -740,9 +744,9 @@ function LeaderboardPage({ filters, onOpenAffiliate, user }) {
                           </div>
                         </td>
                         <td className={`num cell-mono ${refundMode === 'observado' ? rfClass : ''}`}
-                          title={`Usado no NET AOV: ${r.refundCbPctUsed}% (${refundMode === 'lucro_real' ? '% do Lucro real' : `observado${r.accounts && r.accounts.length > 1 ? ' — média das contas ponderada pelas FEs' : ''}`}).\nObservado no período: ${fmtInt(r.refunds)} estornos + ${fmtInt(r.chargebacks)} chargebacks ÷ ${fmtInt(r.realOrders)} pedidos reais.${r.realOrders !== r.allOrders ? `\n(${fmtInt(r.allOrders - r.realOrders)} linhas de estorno da Digistore fora do denominador.)` : ''}\nPor data da VENDA: período recente ainda vai receber reembolsos.`}>
+                          title={`Usado no NET AOV: ${r.refundCbPctUsed}% (${refundMode === 'lucro_real' ? '% do Lucro real' : 'observado'}).\nObservado no período: ${fmtCurrency(r.refundedUsd, cur, 0)} estornados (${fmtInt(r.refunds)} reembolsos + ${fmtInt(r.chargebacks)} chargebacks) ÷ ${fmtCurrency(r.grossChargedUsd, cur, 0)} cobrados.\nPor data da VENDA: período recente ainda vai receber reembolsos.`}>
                           {r.refundCbPctUsed}%
-                          {refundMode === 'lucro_real' && <span style={{ fontSize: 10, marginLeft: 5, color: 'var(--fg5)' }}>obs {((r.refundRate + r.cbRate) * 100).toFixed(1)}%</span>}
+                          {refundMode === 'lucro_real' && <span style={{ fontSize: 10, marginLeft: 5, color: 'var(--fg5)' }}>obs {r.grossChargedUsd > 0 ? ((r.refundedUsd / r.grossChargedUsd) * 100).toFixed(1) : '0.0'}%</span>}
                         </td>
                         <td className={`num cell-mono ${cbClass}`}>{(r.cbRate * 100).toFixed(2)}%</td>
                         <td className="num cell-mono">{fmtCurrency(r.cpa, cur, 0)}</td>
@@ -851,23 +855,25 @@ function AffiliateDrawer({ affiliateId, filters, onClose }) {
           <div className="mini-kpis">
             <div className="mini-kpi">
               <div className="l">Receita · período</div>
-              <div className="v">{fmtCurrency(k.revenue, cur, 0)}</div>
-              <div className="s">{fmtInt(k.orders)} pedidos aprovados</div>
+              <div className="v">{fmtCurrency(k.grossChargedUsd ?? k.revenue, cur, 0)}</div>
+              <div className="s" title="Valor cobrado de todas as vendas pagas (aprovadas, reembolsadas e chargeback) — o reembolso é dedução à parte, como no extrato.">
+                {fmtInt(k.paidOrders ?? k.orders)} vendas pagas · {fmtInt(k.orders)} aprovadas
+              </div>
             </div>
             <div className="mini-kpi">
               <div className="l">Approval rate</div>
-              <div className="v">{k.realOrders ? (k.approvalRate * 100).toFixed(1) + '%' : '—'}</div>
-              <div className="s">{fmtInt(k.realOrders)} pedidos reais</div>
+              <div className="v">{k.paidOrders ? (k.approvalRate * 100).toFixed(1) + '%' : '—'}</div>
+              <div className="s">aprovadas ÷ {fmtInt(k.paidOrders)} vendas pagas</div>
             </div>
             <div className="mini-kpi">
               <div className="l">Refund rate</div>
-              <div className="v">{k.realOrders ? (k.refundRate * 100).toFixed(1) + '%' : '—'}</div>
-              <div className="s">{fmtInt(k.refunds)} de {fmtInt(k.realOrders)} · meta &lt;6%</div>
+              <div className="v">{k.paidOrders ? (k.refundRate * 100).toFixed(1) + '%' : '—'}</div>
+              <div className="s">{fmtInt(k.refunds)} de {fmtInt(k.paidOrders)} · {fmtCurrency(k.refundedUsd || 0, cur, 0)} estornados</div>
             </div>
             <div className="mini-kpi">
               <div className="l">Chargeback</div>
               <div className="v" style={{ color: k.cbRate > 0.01 ? 'var(--danger)' : 'inherit' }}>
-                {k.realOrders ? (k.cbRate * 100).toFixed(2) + '%' : '—'}
+                {k.paidOrders ? (k.cbRate * 100).toFixed(2) + '%' : '—'}
               </div>
               <div className="s">limite MCC 1.0%</div>
             </div>
@@ -877,7 +883,7 @@ function AffiliateDrawer({ affiliateId, filters, onClose }) {
             <div className="mini-kpi">
               <div className="l">CPA pago · período</div>
               <div className="v">{fmtCurrency(k.cpa, cur, 0)}</div>
-              <div className="s">total transferido ao afiliado</div>
+              <div className="s" title="CPA de todos os FEs pagos — a JVZoo não devolve o CPA quando o FE é reembolsado.">total transferido ao afiliado</div>
             </div>
             {/* Substitui o antigo "Net margin" (net − CPA), que somava os
                 estornos no net mas não descontava o CPA da venda estornada, e
@@ -893,10 +899,10 @@ function AffiliateDrawer({ affiliateId, filters, onClose }) {
                 {k.netAfterCpaTotalUsd != null ? fmtCurrency(k.netAfterCpaTotalUsd, cur, 0) : '—'}
               </div>
               <div className="s" title={k.netAfterCpaUsd != null
-                ? `NET AOV ${fmtCurrency(k.netAovUsd, cur, 2)} = AOV ${fmtCurrency(k.aov, cur, 2)} × (1 − ${k.refundCbPctUsed}% reembolso&cb (${k.refundSource === 'lucro_real' ? '% do Lucro real' : 'observado no período'}) − taxa da plataforma − ${k.opexPctUsed}% opex).\nNET AFTER CPA ${fmtCurrency(k.netAfterCpaUsd, cur, 2)} = NET AOV − CPA ${fmtCurrency(k.cpaPerFe, cur, 2)}.\nTotal = × ${fmtInt(k.feApprovedCount)} FEs aprovadas.`
+                ? `NET AOV ${fmtCurrency(k.netAovUsd, cur, 2)} = AOV ${fmtCurrency(k.aov, cur, 2)} × (1 − ${k.refundCbPctUsed}% reembolso&cb (${k.refundSource === 'lucro_real' ? '% do Lucro real' : 'observado no período'}) − taxa da plataforma − ${k.opexPctUsed}% opex − reserva).\nNET AFTER CPA ${fmtCurrency(k.netAfterCpaUsd, cur, 2)} = NET AOV − CPA ${fmtCurrency(k.cpaPerFe, cur, 2)}.\nTotal = × ${fmtInt(k.fePaidCount ?? k.feApprovedCount)} FEs pagos.`
                 : 'Sem CPA observado no período — afiliado organic ou sem venda de front.'}>
                 {k.netAfterCpaUsd != null
-                  ? `${fmtCurrency(k.netAfterCpaUsd, cur, 0)}/venda × ${fmtInt(k.feApprovedCount)} FEs`
+                  ? `${fmtCurrency(k.netAfterCpaUsd, cur, 0)}/venda × ${fmtInt(k.fePaidCount ?? k.feApprovedCount)} FEs`
                   : 'sem CPA observado no período'}
               </div>
             </div>
@@ -904,8 +910,8 @@ function AffiliateDrawer({ affiliateId, filters, onClose }) {
               <div className="l">AOV</div>
               <div className="v">{fmtCurrency(k.aov, cur, 0)}</div>
               <div className="s">
-                {k.feApprovedCount > 0
-                  ? `receita / ${fmtInt(k.feApprovedCount)} FE aprovados`
+                {(k.fePaidCount ?? k.feApprovedCount) > 0
+                  ? `cobrado ÷ ${fmtInt(k.fePaidCount ?? k.feApprovedCount)} FEs pagos`
                   : 'sem FE no período'}
               </div>
             </div>

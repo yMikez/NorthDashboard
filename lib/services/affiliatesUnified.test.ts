@@ -5,6 +5,7 @@ const th = { healthyMinUsd: 10, attentionMinUsd: 0 };
 const row = (over: Partial<AffiliateRow>): AffiliateRow => ({
   externalId: 'x', platformSlug: 'jvzoo', nickname: 'x', revenue: 0, orders: 0, allOrders: 0, realOrders: 0, refunds: 0, chargebacks: 0,
   approvalRate: 0, refundRate: 0, cbRate: 0, cpa: 0, feApprovedCount: 0, feCpaPaidCount: 0, cpaPerFe: 0, cpaPerFeApproved: 0,
+  paidOrders: 0, fePaidCount: 0, grossChargedUsd: 0, refundedUsd: 0, aovUsd: 0,
   netAovUsd: 0, netAfterCpaUsd: null, netAfterCpaTotalUsd: null, cpaStatus: null, refundCbPctUsed: 15, refundCbPctOverride: null, opexPctUsed: 10,
   netMargin: 0, cogs: 0, fulfillment: 0, estimatedProfit: 0, attributedSessions: 0, attributedOrders: 0, attributedRevenue: 0, attributedNet: 0,
   attributedCpa: 0, attributedCogs: 0, attributedFulfillment: 0, attributedProfit: 0, attributedMarginPct: 0, topCountry: null,
@@ -14,8 +15,8 @@ const row = (over: Partial<AffiliateRow>): AffiliateRow => ({
 
 describe('mergeAffiliateRows', () => {
   it('soma, re-deriva taxas, pondera NET AOV por FE e CPA só pelas contas com CPA; sparkline soma', () => {
-    const a = row({ externalId: 'a', platformSlug: 'jvzoo', revenue: 4000, orders: 10, allOrders: 10, realOrders: 10, feApprovedCount: 10, cpaPerFe: 250, netAovUsd: 280, netAfterCpaUsd: 30, netAfterCpaTotalUsd: 300, cpa: 2500, sparkline: [1, 2, 3], lastOrderAt: '2026-08-20T00:00:00.000Z', refundCbPctUsed: 15 });
-    const b = row({ externalId: 'b', platformSlug: 'digistore24', revenue: 2000, orders: 8, allOrders: 10, realOrders: 8, refunds: 2, feApprovedCount: 5, cpaPerFe: 0, netAovUsd: 300, sparkline: [1, 1, 1], lastOrderAt: '2026-08-24T00:00:00.000Z', refundCbPctUsed: 21 });
+    const a = row({ externalId: 'a', platformSlug: 'jvzoo', revenue: 4000, orders: 10, allOrders: 10, realOrders: 10, paidOrders: 10, fePaidCount: 10, grossChargedUsd: 4000, feApprovedCount: 10, cpaPerFe: 250, netAovUsd: 280, netAfterCpaUsd: 30, netAfterCpaTotalUsd: 300, cpa: 2500, sparkline: [1, 2, 3], lastOrderAt: '2026-08-20T00:00:00.000Z', refundCbPctUsed: 15 });
+    const b = row({ externalId: 'b', platformSlug: 'digistore24', revenue: 2000, orders: 8, allOrders: 10, realOrders: 8, refunds: 2, paidOrders: 8, fePaidCount: 5, grossChargedUsd: 2000, refundedUsd: 420, feApprovedCount: 5, cpaPerFe: 0, netAovUsd: 300, sparkline: [1, 1, 1], lastOrderAt: '2026-08-24T00:00:00.000Z', refundCbPctUsed: 21 });
     const m = mergeAffiliateRows([a, b], 'Parceiro X', th);
     expect(m.nickname).toBe('Parceiro X');
     expect(m.revenue).toBe(6000);
@@ -30,7 +31,8 @@ describe('mergeAffiliateRows', () => {
     expect(m.netAovUsd).toBe(280);                // mesma base do CPA (só contas com CPA) → NET AOV − CPA = Net after CPA
     expect(m.netAovUsd - m.cpaPerFe).toBe(m.netAfterCpaUsd);
     expect(m.attributedMarginPct).toBe(0);
-    expect(m.refundCbPctUsed).toBe(17);           // (15×10 + 21×5)/15 = 17
+    expect(m.refundCbPctUsed).toBe(17);           // (15×4000 + 21×2000)/6000 = 17 (ponderado pelo cobrado)
+    expect(m).toMatchObject({ paidOrders: 18, fePaidCount: 15, grossChargedUsd: 6000, refundedUsd: 420, aovUsd: 400 });
     expect(m.sparkline).toEqual([2, 3, 4]);
     expect(m.lastOrderAt).toBe('2026-08-24T00:00:00.000Z');
     expect(m.platformSlug).toBe('jvzoo');         // conta primária = maior receita

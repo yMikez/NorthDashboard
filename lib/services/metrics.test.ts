@@ -4,8 +4,13 @@
 // we can test them with synthetic inputs without spinning up Postgres.
 
 import { describe, expect, it } from 'vitest';
+import type { ProfitModelInputs } from './profitModel';
+
+const round2 = (n: number) => Math.round(n * 100) / 100;
 import {
+  affiliateEconomics,
   affiliateRefundPct,
+  isPaidSale,
   dailyFromRows,
   byCountryFromRows,
   byProductTypeFromRows,
@@ -286,16 +291,51 @@ describe('classifyOrderInGroup', () => {
 
 describe('affiliateRefundPct — reembolso do NET AOV na aba Afiliados', () => {
   const lucroReal = { front: 20, recovery: null };
-  it('observado: estornos + chargebacks ÷ pedidos reais do afiliado', () => {
+  it('observado: valor estornado ÷ valor cobrado das vendas pagas do afiliado', () => {
     const ctx = { source: 'observado' as const, lucroReal };
-    expect(affiliateRefundPct(ctx, { realOrders: 200, refunds: 30, chargebacks: 4, isRecovery: false })).toBe(17);
-    expect(affiliateRefundPct(ctx, { realOrders: 0, refunds: 0, chargebacks: 0, isRecovery: false })).toBe(0);
+    expect(affiliateRefundPct(ctx, { grossChargedUsd: 1000, refundedUsd: 170, isRecovery: false })).toBe(17);
+    expect(affiliateRefundPct(ctx, { grossChargedUsd: 0, refundedUsd: 0, isRecovery: false })).toBe(0);
   });
   it('Lucro real: o % configurado; recuperação sem % próprio usa o do front', () => {
     const ctx = { source: 'lucro_real' as const, lucroReal };
-    expect(affiliateRefundPct(ctx, { realOrders: 200, refunds: 30, chargebacks: 4, isRecovery: false })).toBe(20);
-    expect(affiliateRefundPct(ctx, { realOrders: 10, refunds: 0, chargebacks: 0, isRecovery: true })).toBe(20);
-    expect(affiliateRefundPct({ source: 'lucro_real', lucroReal: { front: 20, recovery: 8 } }, { realOrders: 10, refunds: 0, chargebacks: 0, isRecovery: true })).toBe(8);
-    expect(affiliateRefundPct({ source: 'lucro_real', lucroReal: { front: null, recovery: null } }, { realOrders: 10, refunds: 5, chargebacks: 0, isRecovery: false })).toBe(0);
+    expect(affiliateRefundPct(ctx, { grossChargedUsd: 1000, refundedUsd: 170, isRecovery: false })).toBe(20);
+    expect(affiliateRefundPct(ctx, { grossChargedUsd: 10, refundedUsd: 0, isRecovery: true })).toBe(20);
+    expect(affiliateRefundPct({ source: 'lucro_real', lucroReal: { front: 20, recovery: 8 } }, { grossChargedUsd: 10, refundedUsd: 0, isRecovery: true })).toBe(8);
+    expect(affiliateRefundPct({ source: 'lucro_real', lucroReal: { front: null, recovery: null } }, { grossChargedUsd: 10, refundedUsd: 5, isRecovery: false })).toBe(0);
+  });
+});
+
+describe('affiliateEconomics — regra do extrato na aba Afiliados', () => {
+  const pm: ProfitModelInputs = {
+    opexPct: 10,
+    thresholds: { healthyMinUsd: 10, attentionMinUsd: 0 },
+    byPlatform: new Map([['jvzoo', { feePct: 10, refundCbPct: 15, allowancePct: 0 }]]),
+  };
+  const ctx = { source: 'observado' as const, lucroReal: { front: 20, recovery: null } };
+  // ERICSON MENDEZ (JVZoo 2322247), set/26 no dia de Nova York — números do
+  // dados_oficiais conferidos em 27/10: 13.261 pagas, 10.009 aprovadas,
+  // 2.820 reembolsos + 432 chargebacks, US$ 3.632.798,49 cobrados.
+  const ericson = {
+    platformSlug: 'jvzoo', isRecovery: false, orders: 10_009, refunds: 2_820, chargebacks: 432,
+    paidOrders: 13_261, fePaidCount: 9_166, grossChargedUsd: 3_632_798.49, refundedUsd: 875_392.15,
+    cpa: 2_238_610, latestCpa: 245,
+  };
+  it('taxas ÷ vendas pagas; AOV = cobrado ÷ FEs pagos; reembolso observado em valor', () => {
+    const e = affiliateEconomics(ericson, pm, ctx);
+    expect(e.approvalRate).toBe(0.7548);                 // 10.009 ÷ 13.261
+    expect(e.cbRate).toBe(0.0326);
+    expect(e.aovUsd).toBe(396.33);                        // 3.632.798,49 ÷ 9.166
+    expect(e.refundCbPctUsed).toBe(24.1);                 // 875.392,15 ÷ 3.632.798,49
+    // NET AOV = 396,33 × (1 − 24,1% − 10% − 10%) = 221,55; − CPA 245.
+    expect(e.netAovUsd).toBe(221.55);
+    expect(e.netAfterCpaUsd).toBe(-23.45);
+    expect(e.netAfterCpaTotalUsd).toBe(round2(-23.45 * 9_166));
+    expect(e.cpaPerFeApproved).toBe(244.23);              // CPA de todos os FEs pagos
+  });
+  it('Digistore: a linha de estorno não é venda paga', () => {
+    expect(isPaidSale('digistore24', 'REFUNDED')).toBe(false);
+    expect(isPaidSale('jvzoo', 'REFUNDED')).toBe(true);
+    expect(isPaidSale('jvzoo', 'CHARGEBACK')).toBe(true);
+    expect(isPaidSale('jvzoo', 'CANCELED')).toBe(false);
   });
 });
