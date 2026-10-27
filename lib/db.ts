@@ -36,7 +36,9 @@ let warnedNotReady = false;
 export function metricsSource(): MetricsSource {
   if (process.env.METRICS_SOURCE !== 'oficial') return 'public';
   if (existsSync(PAINEL_READY_FILE)) return 'oficial';
-  if (!warnedNotReady) {
+  // Só avisa no servidor: os scripts do boot (backfill, seedAdmin) rodam antes
+  // do painel ficar pronto e não leem métrica.
+  if (!warnedNotReady && process.env.NEXT_RUNTIME) {
     warnedNotReady = true;
     console.error(`[db] METRICS_SOURCE=oficial mas o painel não ficou pronto no boot (${PAINEL_READY_FILE}) — lendo do public.`);
   }
