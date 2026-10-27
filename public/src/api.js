@@ -586,6 +586,18 @@ function fetchSurveys(filters, variant, { tests = false } = {}) {
     tests: tests ? '1' : null,
   });
 }
+// Convite de teste (admin): devolve { link, ... }. Fica fora dos números da aba.
+async function createSurveyTestInvite(variant, test) {
+  const res = await fetch('/api/admin/surveys/invites', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+    body: JSON.stringify({ variant, test }),
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.error || `${res.status}`);
+  _respCache.clear();
+  return data;
+}
 async function patchSurveyCs(id, status, note) {
   const res = await fetch('/api/metrics/surveys', {
     method: 'PATCH',
@@ -803,6 +815,7 @@ window.NSApi = _wrapMutations({
   fetchLeads,
   fetchSurveys,
   patchSurveyCs,
+  createSurveyTestInvite,
   fetchOverviewPanels,
   getAffRefundMode,
   setAffRefundMode,

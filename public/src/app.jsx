@@ -310,7 +310,7 @@ function App({ user }) {
           {hashState.route === 'recovery'       && <RecoveryPage filters={filters}/>}
           {hashState.route === 'tauk'           && <CallCenterPage filters={filters} user={user}/>}
           {hashState.route === 'leads'          && <LeadsPage filters={filters}/>}
-          {hashState.route === 'surveys'        && <SurveysPage filters={filters}/>}
+          {hashState.route === 'surveys'        && <SurveysPage filters={filters} user={user}/>}
           {hashState.route === 'products'       && <ProductsPage filters={filters}/>}
           {hashState.route === 'transactions'   && <TransactionsPage filters={filters}/>}
           {hashState.route === 'platforms'      && <IntegrationsPage filters={filters}/>}

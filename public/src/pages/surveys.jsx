@@ -112,7 +112,47 @@ function SvCsQueue({ rows, onChanged }) {
   );
 }
 
-function SurveysPage({ filters }) {
+/** Admin: gera um link de teste pra percorrer a pesquisa de verdade (grava, fora dos números). */
+function SvTestInvite({ variant, onCreated }) {
+  const [form, setForm] = useStateSv({ email: '', firstName: 'John', bottles: '3' });
+  const [busy, setBusy] = useStateSv(false);
+  const [out, setOut] = useStateSv(null);
+  const [err, setErr] = useStateSv(null);
+  const submit = async (e) => {
+    e.preventDefault();
+    setBusy(true); setErr(null); setOut(null);
+    try {
+      const r = await window.NSApi.createSurveyTestInvite(variant, { email: form.email, firstName: form.firstName, bottles: Number(form.bottles) });
+      setOut(r); onCreated();
+    } catch (e2) { setErr(String(e2.message || e2)); }
+    finally { setBusy(false); }
+  };
+  // Enquanto o DNS do domínio público não existe, o mesmo link abre pelo dash.
+  const viaDash = out ? `/api/survey/page?slug=${encodeURIComponent(variant)}&t=${encodeURIComponent(out.link.split('/').pop())}` : null;
+  return (
+    <div className="panel" style={{ marginBottom: 12 }}>
+      <div className="panel-title">Testar a pesquisa</div>
+      <div className="panel-sub" style={{ fontSize: 11, marginBottom: 10 }}>Gera um link de verdade (grava respostas e entra na fila do CS se for o caso), marcado como teste: só aparece com "Incluir testes" ligado.</div>
+      <form onSubmit={submit} style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+        <input type="email" required placeholder="e-mail" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} style={{ minWidth: 220 }} aria-label="E-mail do teste"/>
+        <input placeholder="primeiro nome" value={form.firstName} onChange={(e) => setForm({ ...form, firstName: e.target.value })} style={{ width: 140 }} aria-label="Primeiro nome"/>
+        <select value={form.bottles} onChange={(e) => setForm({ ...form, bottles: e.target.value })} aria-label="Frascos comprados">
+          <option value="2">2 frascos</option><option value="3">3 frascos</option>
+        </select>
+        <button className="btn" type="submit" disabled={busy}>{busy ? 'Gerando…' : 'Gerar link de teste'}</button>
+      </form>
+      {err && <div style={{ color: 'var(--danger)', fontSize: 12, marginTop: 8 }}>Não gerou: {err}</div>}
+      {out && (
+        <div style={{ fontSize: 12.5, marginTop: 10, display: 'grid', gap: 4 }}>
+          <div>Link do cliente: <a href={out.link} target="_blank" rel="noopener" className="mono">{out.link}</a></div>
+          <div style={{ color: 'var(--fg4)' }}>Se o domínio ainda não abrir: <a href={viaDash} target="_blank" rel="noopener">abrir o mesmo link pelo dash</a></div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function SurveysPage({ filters, user }) {
   const [variant, setVariant] = useStateSv(null);
   const [tests, setTests] = useStateSv(false);
   const [tick, setTick] = useStateSv(0);
@@ -209,6 +249,8 @@ function SurveysPage({ filters }) {
       </div>
 
       <SvCsQueue rows={d.csQueue} onChanged={() => setTick((n) => n + 1)}/>
+
+      {user?.role === 'ADMIN' && <SvTestInvite variant={d.variant} onCreated={() => { setTests(true); setTick((n) => n + 1); }}/>}
 
       <div className="panel" style={{ padding: 0, overflow: 'hidden' }}>
         <div style={{ padding: '12px 14px' }}>
