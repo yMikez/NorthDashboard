@@ -317,7 +317,7 @@ export function extractBottles(text: string): BottlesInfo {
     return { bottles: parens.reduce((s, n) => s + n, 0), bonusBottles: null, counts: parens };
   }
   // (iv) "N [até 2 palavras] Bottles" ("12 Additional Bottles")
-  const worded = text.match(/(\d+)\s*(?:[A-Za-z]+\s+){0,2}bottles?\b/i);
+  const worded = text.match(/(\d+)\s*(?:[A-Za-z]+\s+){0,2}(?:bottles?|potes?)\b/i);
   if (worded) {
     const n = parseInt(worded[1], 10);
     return { bottles: n, bonusBottles: null, counts: [n] };
@@ -473,6 +473,27 @@ function classifyCartpanda(sku: string, name?: string | null): BaseClassificatio
   return { family, type, funnelStep, variant: null, bottles, bonusBottles };
 }
 
+// Vupim: o nome é "<loja/funil> - <oferta>" (connectors/vupim). A família é
+// a do produto ENTREGUE: a da oferta quando ela cita um produto ("NeuroRecall
+// - Digest Flow - 6 Potes" = DigestFlow vendido no funil do NeuroRecall, como
+// "DigestFlow 6 Bottles (Upgrade)" na BuyGoods), senão a da loja ("NeuroRecall
+// - 6 Potes"). Antes o scan juntava as duas num combo "NeuroRecall +
+// DigestFlow" que virava família própria no Funil. Papel: do connector.
+export function classifyVupim(sku: string, name?: string | null): BaseClassification {
+  const raw = (name || sku || '').trim();
+  const [loja, ...resto] = raw.split(/\s+[-–]\s+/);
+  const oferta = resto.join(' - ');
+  const pick = (fams: string[]) => {
+    if (fams.length === 0) return null;
+    const set = new Set(fams);
+    if (set.size === 2 && set.has('FlexGuard') && set.has('ImmuneGuard')) return 'FlexImmuneGuard';
+    return fams.length === 1 ? fams[0] : fams.join(' + ');
+  };
+  const family = pick(oferta ? scanFamilies(oferta) : []) ?? pick(scanFamilies(loja));
+  const binfo = extractBottles(raw);
+  return { family, type: 'FRONTEND', funnelStep: null, variant: null, bottles: binfo.bottles, bonusBottles: binfo.bonusBottles };
+}
+
 // Plataformas cujo PAPEL no funil (productType/funnelStep) vem do CONNECTOR,
 // nunca do nome do produto: Cartpanda (up_sell_id).
 // Vupim: o papel vem do `origin` do webhook (direct/upsell) — ver connectors/vupim.
@@ -501,6 +522,9 @@ function classifyProductBase(
   // Cartpanda tem caminho próprio: família do nome, papel do connector.
   if (platform === 'cartpanda') {
     return classifyCartpanda(sku, name);
+  }
+  if (platform === 'vupim') {
+    return classifyVupim(sku, name);
   }
 
   // 1) ClickBank pattern on SKU (most informative — has family in the prefix).

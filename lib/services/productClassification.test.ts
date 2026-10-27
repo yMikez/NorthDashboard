@@ -1007,3 +1007,17 @@ describe('SENTINELAS — JVZoo nomes novos (2026-08-31)', () => {
   });
 });
 
+
+describe('Vupim: "<loja> - <oferta>" — família do produto entregue', () => {
+  const fam = (name: string) => classifyProduct('sku', name, 'vupim');
+  it('oferta que cita outro produto leva a família DELE, não um combo com a loja', () => {
+    expect(fam('NeuroRecall - Digest Flow - 6 Potes')).toMatchObject({ family: 'DigestFlow', bottles: 6 });
+    expect(fam('NeuroRecall - Night Calm - 3 Potes')).toMatchObject({ family: 'NightCalm', bottles: 3 });
+    expect(fam('GlycoEden - Gelazen 9 Bottles')).toMatchObject({ family: 'Gelazen', bottles: 9 });
+  });
+  it('oferta só com a quantidade (ou o próprio produto) fica na família da loja', () => {
+    expect(fam('NeuroRecall - 6 Potes')).toMatchObject({ family: 'NeuroRecall', bottles: 6 });
+    expect(fam('GlycoEden - Glyco Eden 12 Bottles')).toMatchObject({ family: 'GlycoEden', bottles: 12 });
+    expect(fam('GlycoEden - 2 Bottles')).toMatchObject({ family: 'GlycoEden', bottles: 2 });
+  });
+});

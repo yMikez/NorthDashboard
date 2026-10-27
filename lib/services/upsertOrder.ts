@@ -78,7 +78,8 @@ function parseCombo(json: PrismaTypes.JsonValue | null): ComboComponentInput[] |
   return out.length >= 2 ? out : null;
 }
 
-export async function upsertOrder(normalized: NormalizedOrder): Promise<UpsertOrderResult> {
+export async function upsertOrder(incoming: NormalizedOrder): Promise<UpsertOrderResult> {
+  let normalized = incoming;
   const platform = await db.platform.upsert({
     where: { slug: normalized.platformSlug },
     create: {
@@ -88,6 +89,25 @@ export async function upsertOrder(normalized: NormalizedOrder): Promise<UpsertOr
     update: {},
     select: { id: true },
   });
+
+  // Vupim: do 3º passo do funil em diante o checkout abre OUTRA sessão
+  // (checkoutSessionId novo), mas o pedido aponta pro passo anterior em
+  // parentTransactionId. Upsell/downsell herda a sessão do pai — que já veio
+  // resolvida até o front quando chegou —, senão o Digest Flow do passo 3
+  // ficava órfão e virava "família" própria no Funil. Pai que ainda não
+  // chegou: fica a sessão do payload (o backfill da migração religa).
+  if (normalized.platformSlug === 'vupim' && (normalized.productType === 'UPSELL' || normalized.productType === 'DOWNSELL')) {
+    const parentTx = typeof normalized.rawMetadata?.parentTransactionId === 'string' ? normalized.rawMetadata.parentTransactionId : null;
+    if (parentTx && parentTx !== normalized.externalId) {
+      const parent = await db.order.findUnique({
+        where: { platformId_externalId: { platformId: platform.id, externalId: parentTx } },
+        select: { parentExternalId: true, funnelSessionId: true },
+      });
+      if (parent?.parentExternalId) {
+        normalized = { ...normalized, parentExternalId: parent.parentExternalId, funnelSessionId: parent.funnelSessionId ?? parent.parentExternalId };
+      }
+    }
+  }
 
   // Classificador = SUGESTOR (v2, 2026-08-31). A autoridade é o catálogo
   // (Product.verified). Quando a família não resolve pelas canônicas
