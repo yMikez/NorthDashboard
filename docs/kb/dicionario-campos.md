@@ -40,7 +40,7 @@ effectiveDate: 2026-09-30
 
 ## get_affiliates e get_affiliate_detail (Afiliados)
 
-- revenue, net, cpa, cogs, fulfillment (US$) do afiliado no período, por data da venda. revenue = só APROVADO (o faturamento do Funil e da Visão Geral); grossChargedUsd = valor COBRADO das vendas pagas (a "Receita" da aba Afiliados). grossChargedUsd − revenue = vendas que foram estornadas depois.
+- revenue, net, cpa, cogs, fulfillment (US$) do afiliado no período, por data da venda. revenue = só APROVADO — a "Receita" da aba Afiliados, igual ao faturamento do Funil e da Visão Geral; grossChargedUsd = valor COBRADO das vendas pagas (linha "cobr." embaixo da Receita; base do AOV e do NET AOV). grossChargedUsd − revenue = vendas que foram estornadas depois.
 - feApprovedCount: FEs aprovadas; realOrders: pedidos reais (Digistore sem as linhas extras) — denominador das taxas por afiliado.
 - cpaPerFe: CPA negociado = ÚLTIMO CPA pago numa FE com CPA > 0 no período. cpaPerFeApproved: média ponderada (deflacionada por FEs sem CPA).
 - netAovUsd, netAfterCpaUsd (por FE), netAfterCpaTotalUsd, cpaStatus (saudavel | atencao | renegociar): modelo CPA. null = sem CPA detectado.
