@@ -121,6 +121,23 @@ function rangeForPreset(preset, now = new Date()) {
 function isoDateOnly(d) {
   return d.toISOString().slice(0, 10);
 }
+// Período personalizado no MESMO dia dos atalhos (Brasília): "1 a 30/09" =
+// [01/09 03:00 UTC, 01/10 02:59:59.999 UTC]. Antes era meia-noite UTC — o
+// personalizado cobria um dia diferente dos atalhos (achado 2026-10-27).
+function brtDayRange(fromYmd, toYmd) {
+  const ymd = (s) => String(s || '').split('-').map(Number);
+  const [y1, m1, d1] = ymd(fromYmd);
+  const [y2, m2, d2] = ymd(toYmd);
+  return {
+    start: new Date(Date.UTC(y1, m1 - 1, d1, 3, 0, 0, 0)),
+    end: new Date(Date.UTC(y2, m2 - 1, d2, 26, 59, 59, 999)),
+  };
+}
+// Dia de Brasília (YYYY-MM-DD) de um instante — o inverso do brtDayRange
+// (o fim do período, 02:59 UTC do dia seguinte, volta pro dia certo).
+function brtDateOnly(d) {
+  return new Date(d.getTime() - 3 * 3600 * 1000).toISOString().slice(0, 10);
+}
 function previousRange(range) {
   const ms = range.end.getTime() - range.start.getTime();
   const end = new Date(range.start.getTime() - 1);
@@ -641,7 +658,7 @@ function RefundCoverageNotice({ platforms }) {
 
 Object.assign(window, {
   fmtCurrency, fmtK, fmtInt, fmtPct, fmtDateShort, fmtDateLong, fmtDateTime,
-  initials, avatarColor, rangeForPreset, previousRange, isoDateOnly, dayIndexFromDate,
+  initials, avatarColor, rangeForPreset, previousRange, isoDateOnly, brtDayRange, brtDateOnly, dayIndexFromDate,
   applyFilters, aggregateKPIs, bucketByDay,
   downloadCsv,
   Icon, Sparkline, FXLayers,

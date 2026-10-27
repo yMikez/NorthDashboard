@@ -100,7 +100,12 @@ export const ORDER_FILL_FROM_PUBLIC = [
   'cogsUsd', 'fulfillmentUsd', 'bottlesShipped', 'mappedAffiliateId',
 ];
 /** Classificação do catálogo: o painel vence. */
-export const ORDER_PUBLIC_WINS = ['productType', 'classificationPending'];
+export const ORDER_PUBLIC_WINS = ['classificationPending'];
+// Papel no funil (productType): o do OFICIAL (etapa do extrato). A 2ª compra
+// do mesmo front pelo mesmo cliente no mesmo dia virava upsell/downsell na
+// nossa sessão (e-mail + dia) — com CPA de front pago (288 FEs em 60 dias,
+// achado 2026-10-27). Quando os dois lados discordam do papel, a etapa
+// numérica também é a do oficial, pra não sobrar FE com "etapa 2".
 /** Sessão do funil: o painel vence enquanto PainelOptions.sessao = 'painel'. */
 export const ORDER_SESSION = ['funnelSessionId', 'parentExternalId'];
 
@@ -112,6 +117,8 @@ function orderExpr(col: Column, ofi: Set<string>, opts: PainelOptions, t: Typing
   let e: string;
   if (col.name === 'billingType') e = `CASE WHEN ${d}::text = 'UNKNOWN' THEN COALESCE(${p}, ${d}) ELSE ${d} END`;
   else if (col.name === 'originalGrossUsd') e = `COALESCE(${d}, d."grossAmountUsd")`;
+  else if (col.name === 'productType') e = `COALESCE(${d}, ${p})`;
+  else if (col.name === 'funnelStep') e = `CASE WHEN p."productType" IS NULL OR p."productType" = d."productType" THEN COALESCE(${d}, ${p}) ELSE ${d} END`;
   else if (ORDER_FILL_FROM_PUBLIC.includes(col.name)) e = `COALESCE(${d}, ${p})`;
   else if (ORDER_PUBLIC_WINS.includes(col.name)) e = `COALESCE(${p}, ${d})`;
   else if (opts.sessao === 'painel' && ORDER_SESSION.includes(col.name)) e = `COALESCE(${p}, ${d})`;

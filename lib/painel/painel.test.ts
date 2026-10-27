@@ -63,6 +63,10 @@ describe('schema painel (PGlite)', () => {
     // J3 só no oficial, J9 só no public e DEPOIS da última oficial (tempo real),
     // C1 de outra plataforma (100% public).
     await order('public', 'J1', { status: 'REFUNDED', cogsUsd: 12, funnelSessionId: 'sess-painel', billingType: 'SINGLE_PAYMENT' });
+    // J4: 2ª compra do front no mesmo dia — a nossa sessão chamou de upsell
+    // (etapa 2); o extrato diz FE. Vale o oficial, e a etapa vem junto.
+    await order('public', 'J4', { productType: 'UPSELL', funnelStep: 2, orderedAt: new Date('2026-10-03T15:00:00Z') });
+    await order('dados_oficiais', 'J4', { productType: 'FRONTEND', funnelStep: null, orderedAt: new Date('2026-10-03T15:00:00Z') });
     await order('dados_oficiais', 'J1', { status: 'CHARGEBACK', cogsUsd: null, funnelSessionId: 'sess-oficial', billingType: 'UNKNOWN' });
     await order('public', 'J2', { orderedAt: new Date('2026-10-02T15:00:00Z') });
     await order('dados_oficiais', 'J3', { orderedAt: new Date('2026-10-05T15:00:00Z'), productId: 'dq_pr2' });
@@ -104,7 +108,9 @@ describe('schema painel (PGlite)', () => {
   });
 
   it('Order: oficial no lugar do public, sem duplicar, + outras plataformas + tempo real', async () => {
-    expect(await keys(`SELECT "externalId" AS k FROM painel."Order"`)).toEqual(['C1', 'J1', 'J3', 'J9']);
+    expect(await keys(`SELECT "externalId" AS k FROM painel."Order"`)).toEqual(['C1', 'J1', 'J3', 'J4', 'J9']);
+    const j4 = (await pg.query<Record<string, unknown>>(`SELECT "productType", "funnelStep" FROM painel."Order" WHERE "externalId" = 'J4'`)).rows[0];
+    expect(j4).toEqual({ productType: 'FRONTEND', funnelStep: null });
     const dup = await pg.query<{ n: number }>(`SELECT count(*)::int AS n FROM (SELECT 1 FROM painel."Order" GROUP BY "platformId", "externalId" HAVING count(*) > 1) x`);
     expect(dup.rows[0].n).toBe(0);
     const j1 = (await pg.query<Record<string, unknown>>(`SELECT status, "cogsUsd"::float AS cogs, "funnelSessionId", "billingType" FROM painel."Order" WHERE "externalId" = 'J1'`)).rows[0];
@@ -155,15 +161,15 @@ describe('schema painel (PGlite)', () => {
     await pg.exec('REFRESH MATERIALIZED VIEW CONCURRENTLY painel.daily_metrics');
     const r = await pg.query<{ approved: number; cb: number }>(`
       SELECT sum(approved_count)::int AS approved, sum(chargeback_count)::int AS cb FROM painel.daily_metrics`);
-    // J3, J9 e C1 aprovados; J1 chargeback.
-    expect(r.rows[0]).toEqual({ approved: 3, cb: 1 });
+    // J3, J4, J9 e C1 aprovados; J1 chargeback.
+    expect(r.rows[0]).toEqual({ approved: 4, cb: 1 });
     expect((await pg.query(`SELECT 1 FROM painel.lead_summary LIMIT 1`)).fields.length).toBeGreaterThan(0);
   });
 
   it('sem tempo real: só o oficial (e a troca de opção refaz o schema)', async () => {
     const r = await syncPainel(runner(pg), { opts: { sessao: 'painel', tempoReal: false } });
     expect(r.changed).toBe(true);
-    expect(await keys(`SELECT "externalId" AS k FROM painel."Order"`)).toEqual(['C1', 'J1', 'J3']);
+    expect(await keys(`SELECT "externalId" AS k FROM painel."Order"`)).toEqual(['C1', 'J1', 'J3', 'J4']);
     expect(await keys(`SELECT "transactionId" AS k FROM painel."SalesboundTransaction"`)).toEqual(['S1', 'S5']);
   });
 });

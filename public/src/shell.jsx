@@ -428,15 +428,15 @@ const AFFILIATE_NOT_APPLICABLE = {
 function DateRangeChip({ range, onChange }) {
   const [open, setOpen] = useStateS(false);
   const [draft, setDraft] = useStateS({
-    from: isoDateOnly(range.start),
-    to: isoDateOnly(range.end),
+    from: brtDateOnly(range.start),
+    to: brtDateOnly(range.end),
   });
   const ref = useRefS(null);
 
   // Re-seed draft whenever the external range changes (preset clicks etc.)
   // so the popover never shows a stale leftover selection.
   useEffectS(() => {
-    setDraft({ from: isoDateOnly(range.start), to: isoDateOnly(range.end) });
+    setDraft({ from: brtDateOnly(range.start), to: brtDateOnly(range.end) });
   }, [range.start.getTime(), range.end.getTime()]);
 
   useEffectS(() => {
@@ -446,8 +446,7 @@ function DateRangeChip({ range, onChange }) {
   }, []);
 
   function apply() {
-    const start = new Date(draft.from + 'T00:00:00.000Z');
-    const end = new Date(draft.to + 'T23:59:59.999Z');
+    const { start, end } = brtDayRange(draft.from, draft.to);
     if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) return;
     if (start > end) return;
     onChange(start, end);
@@ -496,7 +495,7 @@ function DateRangeChip({ range, onChange }) {
               value={draft.to}
               onChange={(e) => setDraft(d => ({ ...d, to: e.target.value }))}
               min={draft.from}
-              max={isoDateOnly(new Date())}
+              max={brtDateOnly(new Date())}
               style={dateInputStyle}
             />
           </label>

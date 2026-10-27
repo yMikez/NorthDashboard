@@ -121,8 +121,7 @@ function App({ user }) {
     if (initialPreset === 'custom') {
       const fromRaw = params.get('from');
       const toRaw = params.get('to');
-      const start = fromRaw ? new Date(fromRaw + 'T00:00:00.000Z') : null;
-      const end = toRaw ? new Date(toRaw + 'T23:59:59.999Z') : null;
+      const { start, end } = fromRaw && toRaw ? brtDayRange(fromRaw, toRaw) : { start: null, end: null };
       if (start && end && !Number.isNaN(start.getTime()) && !Number.isNaN(end.getTime()) && start <= end) {
         return { start, end, preset: 'custom' };
       }
@@ -191,8 +190,8 @@ function App({ user }) {
     const p = new URLSearchParams();
     if (filters.preset !== '30d') p.set('range', filters.preset);
     if (filters.preset === 'custom') {
-      p.set('from', isoDateOnly(filters.dateRange.start));
-      p.set('to', isoDateOnly(filters.dateRange.end));
+      p.set('from', brtDateOnly(filters.dateRange.start));
+      p.set('to', brtDateOnly(filters.dateRange.end));
     }
     if (filters.compare) p.set('cmp', '1');
     if (filters.platforms.size) p.set('plat', encodeSet(filters.platforms));
