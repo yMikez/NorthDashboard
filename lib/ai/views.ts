@@ -31,10 +31,12 @@ const round4 = (n: number) => Math.round(n * 10_000) / 10_000;
 
 // ── Overview ────────────────────────────────────────────────────────────
 
-export type AiOverviewKpis = Omit<OverviewKPIs, 'netProfit'>;
+// O overview não traz mais `netProfit` (net − CPA contava o CPA 2×; saiu em
+// 2026-10-27). A cópia segue tirando a chave se ela voltar de algum cache.
+export type AiOverviewKpis = OverviewKPIs;
 
 export function stripNetProfit(k: OverviewKPIs): AiOverviewKpis {
-  const { netProfit: _doubleCpa, ...rest } = k;
+  const { netProfit: _doubleCpa, ...rest } = k as OverviewKPIs & { netProfit?: number };
   return rest;
 }
 

@@ -136,6 +136,21 @@ export interface NetProfitInputs {
   // já renderam (só carregado por evaluateNetProfitRealized). Ausente = a
   // visão de projeção de sempre.
   affiliateBackend?: AffiliateBackendInput[];
+  // Acerto oficial do back-end (painel de dados — lib/services/oficial.ts),
+  // só com a leitura oficial ligada: o canal usa o líquido publicado em vez
+  // de bruto × % configurada. Sinais como publicados (descontos negativos).
+  oficialBackend?: Partial<Record<BackendSource, OficialBackendInput>>;
+}
+
+export interface OficialBackendInput {
+  vendas: number;
+  pedidos: number;
+  reembolsos: number;
+  parcela: number;
+  outros: number;
+  liquido: number;
+  /** Fulfillment ainda não informado pelo parceiro (Tauk). */
+  fulfillmentAConfirmar: boolean;
 }
 
 // Backend atribuído a um afiliado: vendas de call center / SalesBound do
@@ -255,7 +270,7 @@ export function normalizeParams(raw: unknown): NetProfitParams {
 // ---------------------------------------------------------------------
 // RESULTADO
 // ---------------------------------------------------------------------
-export type LineSource = 'observed' | 'manual' | 'config' | 'default' | 'none';
+export type LineSource = 'observed' | 'manual' | 'config' | 'default' | 'none' | 'oficial';
 // cost  = custo variável da NorthScale (entra nos custos, §4)
 // share = não é receita da NorthScale (parcela do parceiro, estorno do
 //         parceiro) — sai do bruto ANTES da receita econômica (§10.2)
@@ -611,9 +626,25 @@ export function computeNetProfit(inputs: NetProfitInputs, params: NetProfitParam
     return lines;
   };
 
+  // Acerto oficial: as deduções publicadas viram linhas 'share' (não são
+  // receita da NorthScale) — a receita do canal fica = líquido publicado.
+  const oficialBreakdown = (key: string, label: string, o: OficialBackendInput, costPct: number | null): Breakdown => {
+    const lines: Line[] = [
+      line('refund', 'Estornos informados pelo parceiro', Math.abs(o.reembolsos), o.vendas, 'oficial', 'share', 'acerto oficial'),
+      line('commission', 'Parcela do parceiro', Math.abs(o.parcela), o.vendas, 'oficial', 'share', 'acerto oficial'),
+    ];
+    if (o.outros) lines.push(line('fees', 'Taxa e chargeback do acerto', Math.abs(o.outros), o.vendas, 'oficial', 'share', 'acerto oficial'));
+    const base = o.vendas + o.reembolsos;
+    if (costPct != null && costPct > 0) lines.push(line('product', 'Produto + fulfillment', base * (costPct / 100), o.vendas, 'manual', 'cost', `${costPct}% (por canal)`));
+    if (o.fulfillmentAConfirmar) warnings.push(`${label}: fulfillment do acerto ainda a confirmar — o líquido oficial é antes dele.`);
+    return finishBreakdown(key, label, o.vendas, o.pedidos, lines);
+  };
+
   // Call centers
   const ccBreakdown: Breakdown[] = [];
   for (const c of inputs.callcenters) {
+    const ofi = inputs.oficialBackend?.[c.provider];
+    if (ofi) { ccBreakdown.push(oficialBreakdown(c.provider, `${c.label} (acerto oficial)`, ofi, params.productCostPct.callcenter)); continue; }
     if (!c.configured && c.gross === 0) continue;
     const pct = params.commissionPct[c.provider] ?? c.commissionPct;
     const src: LineSource = params.commissionPct[c.provider] != null ? 'manual' : 'config';
@@ -625,10 +656,12 @@ export function computeNetProfit(inputs: NetProfitInputs, params: NetProfitParam
 
   // SalesBound: razão importado (export do CRM) ou manual
   const sbBreakdown: Breakdown[] = [];
-  const sbMeasured = inputs.salesbound.measured;
+  const sbOficial = inputs.oficialBackend?.salesbound;
+  const sbMeasured = sbOficial ? null : inputs.salesbound.measured;
+  if (sbOficial) sbBreakdown.push(oficialBreakdown('salesbound', 'SalesBound (acerto oficial)', sbOficial, params.productCostPct.salesbound));
   const sbGross = sbMeasured ? sbMeasured.gross : params.salesbound.grossUsd;
   const sbSales = sbMeasured ? sbMeasured.sales : (params.salesbound.sales ?? 0);
-  if (sbGross > 0 || (sbMeasured && sbSales > 0)) {
+  if (!sbOficial && (sbGross > 0 || (sbMeasured && sbSales > 0))) {
     const sbPct = params.commissionPct.salesbound;
     const refunds = sbMeasured ? sbMeasured.refunds : (params.salesbound.refundsUsd ?? 0);
     const note = sbPct != null ? `${sbPct}% · NS fica com ${r2(100 - sbPct)}%` : 'parcela não informada';

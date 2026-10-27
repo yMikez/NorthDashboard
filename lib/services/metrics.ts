@@ -1,7 +1,8 @@
 import { Prisma } from '@prisma/client';
 import type { ProductType } from '@prisma/client';
 // Leitura de métrica: segue METRICS_SOURCE (public ou painel oficial — lib/db.ts).
-import { dbRead as db } from '../db';
+import { dbRead as db, metricsSource } from '../db';
+import { oficialLastSyncBySlug } from './oficial';
 import { mappedIdentityMap } from './affiliateMapping';
 import {
   refreshDailyMetricsIfStale,
@@ -49,7 +50,6 @@ export interface OverviewKPIs {
                           // Bate com o "Gross Sale Amount" do CB Reporting.
   net: number;
   cpa: number;
-  netProfit: number;
   approvalRate: number;
   refundRate: number;
   cbRate: number;
@@ -761,7 +761,6 @@ function kpisFromRows(
     grossOriginal: round2(grossOriginal),
     net: round2(net),
     cpa: round2(cpa),
-    netProfit: round2(net - cpa),
     approvalRate: round4(approvedCount / denom),
     refundRate: round4(refundedCount / denom),
     cbRate: round4(chargebackCount / denom),
@@ -2262,6 +2261,8 @@ export async function getPlatforms(
     where.productType = { in: filters.productTypes };
   }
 
+  // Plataforma que vem do oficial: "sincronizado" = última carga ok do time de dados.
+  const oficialSync = metricsSource() === 'oficial' ? await oficialLastSyncBySlug() : new Map<string, Date>();
   const [platforms, orders, affiliatesTotalByPlatform] = await Promise.all([
     db.platform.findMany({
       where: filters.platformSlugs?.length
@@ -2426,7 +2427,7 @@ export async function getPlatforms(
           slug: p.slug,
           displayName: p.displayName,
           isActive: p.isActive,
-          lastSyncAt: p.lastSyncAt,
+          lastSyncAt: oficialSync.get(p.slug)?.toISOString() ?? p.lastSyncAt,
           totalRevenue: round2(p.revenue),
           totalOrders: p.orders,
           allOrders: p.allOrders,
@@ -4577,7 +4578,6 @@ function computeKPIs(orders: OrderWithJoins[]): OverviewKPIs {
     grossOriginal: round2(grossOriginal),
     net: round2(net),
     cpa: round2(cpa),
-    netProfit: round2(net - cpa),
     approvalRate: round4(approvedCount / denominator),
     refundRate: round4(refundedCount / denominator),
     cbRate: round4(chargebackCount / denominator),

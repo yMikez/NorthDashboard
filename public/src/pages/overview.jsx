@@ -305,6 +305,77 @@ function StagePanels({ panels, cur }) {
   );
 }
 
+// ---------- Resultado oficial por plataforma (dados oficiais) ----------
+// Os cartões do painel de dados (time de dados), lidos do que eles publicam:
+// mesmo número, sem recálculo aqui. Cada plataforma no dia da sua fonte; só
+// aparece com a leitura oficial ligada e sem recorte que o oficial não tem.
+const OFICIAL_PARCELA_LABEL = { jvzoo: 'CPA (afiliado + taxa)', logicall: 'Parcela Logicall', tauk: 'Parcela Tauk', salesbound: 'Parcela SalesBound' };
+const OFICIAL_FUSO_LABEL = { 'America/New_York': 'dia de Nova York', 'America/Vancouver': 'dia do Pacífico', 'America/Chicago': 'dia de Chicago', UTC: 'dia UTC' };
+
+function OficialCard({ p, total }) {
+  const row = (label, value, opts = {}) => (
+    <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, fontSize: 12, padding: '3px 0', borderTop: '1px solid var(--border-soft)' }}>
+      <span style={{ color: 'var(--fg4)' }}>{label}</span>
+      <span className="cell-mono" style={{ color: opts.tone || 'var(--fg2)', fontWeight: opts.strong ? 600 : 400 }}>{value}</span>
+    </div>
+  );
+  const usd = (v) => (v == null ? '—' : fmtCurrency(v, 'USD', 2));
+  return (
+    <div className="panel" style={{ margin: 0, padding: '12px 14px', borderColor: total ? 'color-mix(in srgb, var(--accent) 35%, var(--border))' : undefined }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 8 }}>
+        <span style={{ fontWeight: 700, color: 'var(--fg1)' }}>{total ? 'Total das fontes oficiais' : p.plataforma}</span>
+        {!total && <span style={{ fontSize: 10, color: 'var(--fg5)' }} title={p.fuso}>{OFICIAL_FUSO_LABEL[p.fuso] || p.fuso}</span>}
+      </div>
+      <div className="panel-eyebrow" style={{ marginTop: 6 }}>Líquido</div>
+      <div style={{ fontSize: 22, fontWeight: 700, color: p.liquido < 0 ? 'var(--danger)' : 'var(--money)', lineHeight: 1.15 }}>{usd(p.liquido)}</div>
+      <div style={{ fontSize: 10.5, color: 'var(--fg5)', marginBottom: 6 }}>
+        {total ? 'Logicall antes da reserva' : p.periodos.length ? `acerto ${p.periodos.join(', ')}` : ''}
+      </div>
+      {row('Vendas', usd(p.vendas), { tone: 'var(--money)' })}
+      {row('Pedidos', fmtInt(p.pedidos))}
+      {row('Reembolsos', usd(p.reembolsos))}
+      {!total && row(OFICIAL_PARCELA_LABEL[p.chave] || 'Parcela', usd(p.parcela))}
+      {total && row('CPA e parcelas', usd(p.parcela))}
+      {row('Outros descontos', usd(p.outros))}
+      {row('Líquido ÷ vendas', p.liquidoSobreVendas == null ? '—' : `${(p.liquidoSobreVendas * 100).toFixed(1)}%`, { strong: true })}
+      {p.reserva != null && row('Reserva (10%)', usd(p.reserva))}
+      {p.saldoAReceber != null && row('Saldo a receber', usd(p.saldoAReceber), { tone: 'var(--money)', strong: true })}
+      {p.fulfillmentAConfirmar && row('Fulfillment', 'a confirmar', { tone: 'var(--warning)' })}
+    </div>
+  );
+}
+
+function OficialStrip({ oficial, filters }) {
+  if (!oficial || !oficial.ativo) return null;
+  const recorte = ['funnels', 'families', 'countries', 'stages', 'affiliates'].some((k) => filters[k] && filters[k].size > 0);
+  const pub = oficial.publicacao;
+  const pubTxt = pub ? `publicado ${fmtDateTime(pub.publicadoEm)}` : 'sem publicação';
+  return (
+    <div className="panel">
+      <div className="panel-head">
+        <div className="panel-title">
+          <span className="panel-eyebrow">Resultado oficial por plataforma</span>
+          <div className="panel-sub">
+            Painel de dados (time de dados) · {pubTxt} · cada plataforma somada no dia da sua fonte ({oficial.diaInicio.slice(8, 10)}/{oficial.diaInicio.slice(5, 7)} a {oficial.diaFim.slice(8, 10)}/{oficial.diaFim.slice(5, 7)})
+          </div>
+        </div>
+      </div>
+      {recorte ? (
+        <div style={{ fontSize: 12, color: 'var(--fg4)', padding: '4px 2px 6px' }}>
+          O resultado oficial não tem recorte por produto, família, país, etapa ou afiliado — tire esses filtros pra ver os cartões. Os números acima seguem a fórmula operacional.
+        </div>
+      ) : oficial.plataformas.length === 0 ? (
+        <div style={{ fontSize: 12, color: 'var(--fg5)', padding: '4px 2px 6px' }}>Nenhuma fonte oficial no recorte.</div>
+      ) : (
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(210px, 1fr))', gap: 10 }}>
+          {oficial.plataformas.map((p) => <OficialCard key={p.chave} p={p}/>)}
+          {oficial.plataformas.length > 1 && <OficialCard total p={{ ...oficial.total, periodos: [] }}/>}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function OverviewPage({ filters }) {
   const [state, setState] = useStateOv({ status: 'loading', data: null, error: null });
   const [panels, setPanels] = useStateOv({ status: 'loading', data: null });
@@ -344,6 +415,16 @@ function OverviewPage({ filters }) {
         console.error('fetchOverviewPanels failed', err);
         setPanels({ status: 'error', data: null });
       });
+    return () => { cancelled = true; };
+  }, [filterKey]);
+
+  // Resultado oficial por plataforma (só com a leitura oficial ligada).
+  const [oficial, setOficial] = useStateOv(null);
+  useEffectOv(() => {
+    let cancelled = false;
+    window.NSApi.fetchOficial(filters)
+      .then((d) => { if (!cancelled) setOficial(d); })
+      .catch(() => { if (!cancelled) setOficial(null); });
     return () => { cancelled = true; };
   }, [filterKey]);
 
@@ -488,6 +569,8 @@ function OverviewPage({ filters }) {
           }}
           onClick={() => window.NSNavigate('transactions', { status: 'chargeback' })}/>
       </div>
+
+      <OficialStrip oficial={oficial} filters={filters}/>
 
       <StagePanels panels={pd} cur={cur}/>
 

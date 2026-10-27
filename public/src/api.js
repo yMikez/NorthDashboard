@@ -87,6 +87,16 @@ function fetchAffiliateRefunds(keys) {
 }
 // Painéis da Visão geral fora da daily_metrics: estágio de captação,
 // reembolso dos últimos 60 dias e séries de reembolso/Net after CPA/AOV.
+// Resultado oficial por plataforma (painel de dados): o servidor filtra pelo
+// dia-rótulo; com filtro de plataforma, só as oficiais escolhidas.
+function fetchOficial(filters) {
+  return fetchJSON('/api/metrics/oficial', {
+    start_date: toISODate(filters.dateRange.start),
+    end_date: toISODate(filters.dateRange.end),
+    platforms: setToCSV(filters.platforms),
+  });
+}
+
 function fetchOverviewPanels(filters) {
   return fetchJSON('/api/metrics/overview-panels', {
     start_date: toISODate(filters.dateRange.start),
@@ -758,6 +768,7 @@ function _wrapMutations(api) {
 window.NSApi = _wrapMutations({
   fetchLeads,
   fetchOverviewPanels,
+  fetchOficial,
   fetchAffiliateRefunds,
   fetchNetworks,
   adminNetworksSyncStatus,

@@ -4722,6 +4722,44 @@ function HealthPage() {
         </div>
       </div>
 
+      {/* Leitura oficial ligada: as métricas de JVZoo, Logicall, Tauk e
+          SalesBound vêm da carga do time de dados, não do IPN. */}
+      {d.oficial && (
+        <div className="panel" style={{ marginBottom: 14 }}>
+          <div className="panel-head">
+            <div className="panel-title">
+              <span className="panel-eyebrow">Dado oficial · cargas do time de dados</span>
+              <div className="panel-sub">
+                JVZoo, Logicall, Tauk e SalesBound nas telas vêm destas cargas (de hora em hora){d.oficial.publicacao ? ` · última publicação ${fmtDateTime(d.oficial.publicacao.publicadoEm)}` : ''}
+              </div>
+            </div>
+          </div>
+          <div className="tbl-wrap">
+            <table className="tbl">
+              <thead><tr><th>Tabela</th><th>Última carga ok</th><th className="num">Linhas</th><th className="num">Falhas 24h</th><th>Status</th></tr></thead>
+              <tbody>
+                {d.oficial.cargas.map((c) => {
+                  const ageH = c.ultimaOkEm ? (Date.now() - new Date(c.ultimaOkEm).getTime()) / 3600_000 : null;
+                  const stale = ageH == null || ageH > 3;
+                  const ok = !stale && c.ultimoStatus === 'ok';
+                  return (
+                    <tr key={c.tabela}>
+                      <td className="cell-mono">{c.tabela}</td>
+                      <td>{c.ultimaOkEm ? fmtDateTime(c.ultimaOkEm) : '—'}</td>
+                      <td className="num cell-mono">{c.linhas != null ? fmtInt(c.linhas) : '—'}</td>
+                      <td className="num cell-mono" style={{ color: c.falhas24h > 0 ? 'var(--warning)' : undefined }}>{fmtInt(c.falhas24h)}</td>
+                      <td style={{ color: ok ? 'var(--success)' : 'var(--warning)', fontSize: 12 }} title={c.ultimoErro || undefined}>
+                        {ok ? 'OK' : stale ? 'Atrasada' : `Falhou${c.ultimoErro ? ': ' + c.ultimoErro : ''}`}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
       {/* Per-platform ingestion */}
       <div className="panel" style={{ marginBottom: 14 }}>
         <div className="panel-head">
@@ -5994,6 +6032,12 @@ function CallCenterPage({ filters, user }) {
   const m = data.m;
   // KPIs do recorte: totais quando "Todos", senão o parceiro selecionado.
   const k = m ? (provider === 'all' ? m.totals : (m.providers.find((p) => p.provider === provider) || m.totals)) : null;
+  // Acerto oficial (painel de dados), quando a leitura oficial está ligada:
+  // vendas, parcela e líquido dos cards saem dele; pendentes e estornos
+  // seguem da operação (o acerto não tem esse detalhe).
+  const ofi = m?.oficial?.ativo ? m.oficial : null;
+  const ofiSel = ofi ? (provider === 'all' ? (ofi.plataformas.length ? ofi.total : null) : ofi.plataformas.find((p) => p.chave === provider)) : null;
+  const ofiCards = ofi ? ofi.plataformas.filter((p) => provider === 'all' || p.chave === provider) : [];
   const sync = m?.logicallSync;
   // Reset da paginação: parceiro + período. "Vendas recentes" tem teto de 80 no
   // servidor — com o tamanho fixo, o reset por tamanho do usePaged nunca dispara.
@@ -6036,17 +6080,43 @@ function CallCenterPage({ filters, user }) {
       {m && k && (
         <div style={{ opacity: data.status === 'loading' ? 0.45 : 1, transition: 'opacity .15s' }}>
           <div className="grid-2" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', marginBottom: 12 }}>
-            <CopyKpi label="Vendas recuperadas" value={fmtInt(k.sales)} sub={k.refundedCount > 0 ? `${fmtInt(k.approved)} sem estorno` : undefined}/>
-            <CopyKpi label="Receita" value={fmtCurrency(k.grossUsd, 'USD', 2)}/>
-            <CopyKpi label="Ticket médio" value={fmtCurrency(k.aovUsd, 'USD', 2)}/>
-            <CopyKpi
-              label={`Comissão (${Math.round((k.commissionPct || 0) * 100)}%)${k.commissionAssumed ? ' · assumida' : ''}`}
-              value={fmtCurrency(k.commissionUsd || 0, 'USD', 2)} tone="danger"
-              sub={k.commissionAssumed ? 'parceiro sem % configurada — usando o padrão' : undefined}/>
-            <CopyKpi label="Líquido (pós-comissão)" value={fmtCurrency(k.netUsd || 0, 'USD', 2)} tone="ok"/>
+            {ofiSel ? (<>
+              <CopyKpi label="Vendas recuperadas" value={fmtInt(ofiSel.pedidos)} sub="acerto oficial"/>
+              <CopyKpi label="Receita" value={fmtCurrency(ofiSel.vendas, 'USD', 2)} sub="acerto oficial"/>
+              <CopyKpi label="Ticket médio" value={ofiSel.pedidos ? fmtCurrency(ofiSel.vendas / ofiSel.pedidos, 'USD', 2) : '—'}/>
+              <CopyKpi label="Parcela do parceiro (acerto)" value={fmtCurrency(Math.abs(ofiSel.parcela), 'USD', 2)} tone="danger"
+                sub={ofiSel.outros ? `+ ${fmtCurrency(Math.abs(ofiSel.outros), 'USD', 2)} de taxa e chargeback` : undefined}/>
+              <CopyKpi label="Líquido NorthScale (acerto)" value={fmtCurrency(ofiSel.liquido, 'USD', 2)} tone="ok"
+                sub={ofiSel.saldoAReceber != null ? `saldo a receber ${fmtCurrency(ofiSel.saldoAReceber, 'USD', 2)} (reserva 10%)` : ofiSel.fulfillmentAConfirmar ? 'antes do fulfillment (a confirmar)' : undefined}/>
+            </>) : (<>
+              <CopyKpi label="Vendas recuperadas" value={fmtInt(k.sales)} sub={k.refundedCount > 0 ? `${fmtInt(k.approved)} sem estorno` : undefined}/>
+              <CopyKpi label="Receita" value={fmtCurrency(k.grossUsd, 'USD', 2)}/>
+              <CopyKpi label="Ticket médio" value={fmtCurrency(k.aovUsd, 'USD', 2)}/>
+              <CopyKpi
+                label={`Comissão (${Math.round((k.commissionPct || 0) * 100)}%)${k.commissionAssumed ? ' · assumida' : ''}`}
+                value={fmtCurrency(k.commissionUsd || 0, 'USD', 2)} tone="danger"
+                sub={k.commissionAssumed ? 'parceiro sem % configurada — usando o padrão' : undefined}/>
+              <CopyKpi label="Líquido (pós-comissão)" value={fmtCurrency(k.netUsd || 0, 'USD', 2)} tone="ok"/>
+            </>)}
             <CopyKpi label="Pendentes (HOLD/PENDING)" value={fmtInt(k.pendingCount)} tone={k.pendingCount > 0 ? 'danger' : undefined}/>
             <CopyKpi label="Estornos" value={fmtInt(k.refundedCount)} sub={k.refundedCount > 0 ? fmtCurrency(k.refundedUsd, 'USD', 0) : 'a Tauk não reporta'}/>
           </div>
+
+          {ofiCards.length > 0 && (
+            <div className="panel" style={{ marginBottom: 12 }}>
+              <div className="panel-head">
+                <div className="panel-title">
+                  <span className="panel-eyebrow">Acerto oficial por parceiro</span>
+                  <div className="panel-sub">
+                    Painel de dados (time de dados){ofi.publicacao ? ` · publicado ${fmtDateTime(ofi.publicacao.publicadoEm)}` : ''} · cada parceiro no dia da sua fonte · a tabela abaixo é a operação (fórmula do dashboard)
+                  </div>
+                </div>
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(210px, 1fr))', gap: 10 }}>
+                {ofiCards.map((p) => <OficialCard key={p.chave} p={p}/>)}
+              </div>
+            </div>
+          )}
 
           {/* Por parceiro — sempre os dois, mesmo com filtro, pra comparar. */}
           <div className="panel" style={{ padding: 0, marginBottom: 12 }}>

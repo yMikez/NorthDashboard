@@ -19,11 +19,12 @@
 //   PRODUTOS     vendas de front por família × plataforma × etapa.
 
 import { Prisma } from '@prisma/client';
-import { db, dbRead } from '../db';
+import { db, dbRead, metricsSource } from '../db';
+import { getOficialResultado } from './oficial';
 import { logger } from '../logger';
 import { SMS_UTM_SOURCE } from '../connectors/sms/config';
 import { getProviderCommission, getLogicallApiKey } from './integrationSettings';
-import { getProfitModelInputs } from './profitModel';
+import { EXTRA_ROW_REFUND_PLATFORMS, getProfitModelInputs } from './profitModel';
 import { ratePeriodAt, recoveryCommission, type RatePeriod } from './recovery';
 import { mappedIdentityMap } from './affiliateMapping';
 import { measureSalesbound } from './salesboundLedger';
@@ -93,18 +94,26 @@ async function measureInputs(start: Date, end: Date, lite: boolean): Promise<Net
   // Produto SMS_RECOVERY (etapa de recuperação do próprio funil) fica no
   // front como etapa — o toggle de dedupe cuida só das FONTES de back.
   const frontScopeWithStage = { AND: [notSms, notRecovery] };
+  // Estorno IN-PLACE (JVZoo, ClickBank, BuyGoods, Cartpanda, Vupim): a linha
+  // estornada É a venda e já saiu do bruto APPROVED. Se a venda é do próprio
+  // período, descontar o estorno de novo contava duas vezes (~US$ 800 mil só
+  // na JVZoo em out/26); fica só o estorno de venda de período anterior.
+  // Digistore (linha extra): a venda segue APPROVED no bruto, então todo
+  // estorno do período desconta.
+  const extraRowSlugs = [...EXTRA_ROW_REFUND_PLATFORMS];
+  const refundEvent = { OR: [{ platform: { slug: { in: extraRowSlugs } } }, { orderedAt: { lt: start } }] };
 
   const [frontRows, recRows, smsRows, refundFront, cbFront, refundRec, cbRec, refundSms, cbSms,
     ccApproved, ccRefunds, ccPartial, recOrders, recRefund, recCb, affRows, affRefund, affCb, sbMeasured, productRows, productRefunds] = await Promise.all([
     dbRead.order.groupBy({ by: ['platformId', 'productType'], where: { status: 'APPROVED', orderedAt: range, ...frontScopeWithStage }, _sum: { grossAmountUsd: true, cpaPaidUsd: true, cogsUsd: true, fulfillmentUsd: true }, _count: { _all: true } }),
     dbRead.order.groupBy({ by: ['platformId', 'productType'], where: { status: 'APPROVED', orderedAt: range, ...recoveryScope }, _sum: { grossAmountUsd: true, cpaPaidUsd: true, cogsUsd: true, fulfillmentUsd: true }, _count: { _all: true } }),
     dbRead.order.groupBy({ by: ['platformId', 'productType'], where: { status: 'APPROVED', orderedAt: range, ...smsScope }, _sum: { grossAmountUsd: true, cpaPaidUsd: true, cogsUsd: true, fulfillmentUsd: true }, _count: { _all: true } }),
-    dbRead.order.groupBy({ by: ['platformId'], where: { status: 'REFUNDED', refundedAt: range, ...frontScopeWithStage }, _sum: { grossAmountUsd: true } }),
-    dbRead.order.groupBy({ by: ['platformId'], where: { status: 'CHARGEBACK', chargebackAt: range, ...frontScopeWithStage }, _sum: { grossAmountUsd: true } }),
-    dbRead.order.groupBy({ by: ['platformId'], where: { status: 'REFUNDED', refundedAt: range, ...recoveryScope }, _sum: { grossAmountUsd: true } }),
-    dbRead.order.groupBy({ by: ['platformId'], where: { status: 'CHARGEBACK', chargebackAt: range, ...recoveryScope }, _sum: { grossAmountUsd: true } }),
-    dbRead.order.groupBy({ by: ['platformId'], where: { status: 'REFUNDED', refundedAt: range, ...smsScope }, _sum: { grossAmountUsd: true } }),
-    dbRead.order.groupBy({ by: ['platformId'], where: { status: 'CHARGEBACK', chargebackAt: range, ...smsScope }, _sum: { grossAmountUsd: true } }),
+    dbRead.order.groupBy({ by: ['platformId'], where: { status: 'REFUNDED', refundedAt: range, AND: [frontScopeWithStage, refundEvent] }, _sum: { grossAmountUsd: true } }),
+    dbRead.order.groupBy({ by: ['platformId'], where: { status: 'CHARGEBACK', chargebackAt: range, AND: [frontScopeWithStage, refundEvent] }, _sum: { grossAmountUsd: true } }),
+    dbRead.order.groupBy({ by: ['platformId'], where: { status: 'REFUNDED', refundedAt: range, AND: [recoveryScope, refundEvent] }, _sum: { grossAmountUsd: true } }),
+    dbRead.order.groupBy({ by: ['platformId'], where: { status: 'CHARGEBACK', chargebackAt: range, AND: [recoveryScope, refundEvent] }, _sum: { grossAmountUsd: true } }),
+    dbRead.order.groupBy({ by: ['platformId'], where: { status: 'REFUNDED', refundedAt: range, AND: [smsScope, refundEvent] }, _sum: { grossAmountUsd: true } }),
+    dbRead.order.groupBy({ by: ['platformId'], where: { status: 'CHARGEBACK', chargebackAt: range, AND: [smsScope, refundEvent] }, _sum: { grossAmountUsd: true } }),
     dbRead.callCenterSale.groupBy({ by: ['provider'], where: { status: 'APPROVED', purchasedAt: range }, _sum: { amountUsd: true }, _count: { _all: true } }),
     dbRead.$queryRaw<Array<{ provider: string; usd: Prisma.Decimal }>>(Prisma.sql`
       SELECT "provider", COALESCE(SUM(COALESCE("refundedUsd", "amountUsd")), 0) AS usd
@@ -115,11 +124,11 @@ async function measureInputs(start: Date, end: Date, lite: boolean): Promise<Net
     recoveryIds.length
       ? dbRead.order.findMany({ where: { status: 'APPROVED', orderedAt: range, affiliateId: { in: recoveryIds } }, select: { affiliateId: true, grossAmountUsd: true, orderedAt: true, cogsUsd: true, fulfillmentUsd: true, productType: true } })
       : Promise.resolve([] as Array<{ affiliateId: string | null; grossAmountUsd: Prisma.Decimal; orderedAt: Date; cogsUsd: Prisma.Decimal | null; fulfillmentUsd: Prisma.Decimal | null; productType: string }>),
-    dbRead.order.groupBy({ by: ['affiliateId'], where: { status: 'REFUNDED', refundedAt: range, ...recoveryScope }, _sum: { grossAmountUsd: true } }),
-    dbRead.order.groupBy({ by: ['affiliateId'], where: { status: 'CHARGEBACK', chargebackAt: range, ...recoveryScope }, _sum: { grossAmountUsd: true } }),
+    dbRead.order.groupBy({ by: ['affiliateId'], where: { status: 'REFUNDED', refundedAt: range, AND: [recoveryScope, refundEvent] }, _sum: { grossAmountUsd: true } }),
+    dbRead.order.groupBy({ by: ['affiliateId'], where: { status: 'CHARGEBACK', chargebackAt: range, AND: [recoveryScope, refundEvent] }, _sum: { grossAmountUsd: true } }),
     lite ? Promise.resolve([] as AffiliateRow[]) : dbRead.order.groupBy({ by: ['affiliateId', 'productType'], where: { status: 'APPROVED', orderedAt: range, affiliateId: { not: null }, ...frontScope }, _sum: { grossAmountUsd: true, cpaPaidUsd: true, cogsUsd: true, fulfillmentUsd: true }, _count: { _all: true } }),
-    lite ? Promise.resolve([] as RefundByAffiliateRow[]) : dbRead.order.groupBy({ by: ['affiliateId'], where: { status: 'REFUNDED', refundedAt: range, affiliateId: { not: null }, ...frontScope }, _sum: { grossAmountUsd: true } }),
-    lite ? Promise.resolve([] as RefundByAffiliateRow[]) : dbRead.order.groupBy({ by: ['affiliateId'], where: { status: 'CHARGEBACK', chargebackAt: range, affiliateId: { not: null }, ...frontScope }, _sum: { grossAmountUsd: true } }),
+    lite ? Promise.resolve([] as RefundByAffiliateRow[]) : dbRead.order.groupBy({ by: ['affiliateId'], where: { status: 'REFUNDED', refundedAt: range, affiliateId: { not: null }, AND: [frontScope, refundEvent] }, _sum: { grossAmountUsd: true } }),
+    lite ? Promise.resolve([] as RefundByAffiliateRow[]) : dbRead.order.groupBy({ by: ['affiliateId'], where: { status: 'CHARGEBACK', chargebackAt: range, affiliateId: { not: null }, AND: [frontScope, refundEvent] }, _sum: { grossAmountUsd: true } }),
     measureSalesbound(start, end),
     lite ? Promise.resolve([] as ProductRow[]) : dbRead.$queryRaw<ProductRow[]>(Prisma.sql`
       SELECT COALESCE(NULLIF(BTRIM(p."family"), ''), '—') AS family, o."platformId" AS "platformId", o."productType"::text AS "productType",
@@ -134,6 +143,7 @@ async function measureInputs(start: Date, end: Date, lite: boolean): Promise<Net
       FROM "Order" o JOIN "Product" p ON p."id" = o."productId"
       WHERE ((o."status" = 'REFUNDED' AND o."refundedAt" >= ${start} AND o."refundedAt" <= ${end})
           OR (o."status" = 'CHARGEBACK' AND o."chargebackAt" >= ${start} AND o."chargebackAt" <= ${end}))
+        AND (o."orderedAt" < ${start} OR o."platformId" IN (SELECT pl."id" FROM "Platform" pl WHERE pl."slug" = ANY(${extraRowSlugs})))
         AND ${productScopeSql(recoveryIds)}
       GROUP BY 1, 2`),
   ]);
@@ -261,6 +271,21 @@ async function measureInputs(start: Date, end: Date, lite: boolean): Promise<Net
   for (const r of productRefunds) { const part = prodPart(r.family, r.platformId); if (part) part.refundsObserved = r2(part.refundsObserved + num(r.usd)); }
   const products: ProductInput[] = [...prodMap.entries()].map(([family, parts]) => ({ family, byPlatform: [...parts.values()] }));
 
+  // Leitura oficial ligada: o back-end usa o acerto publicado (líquido do
+  // painel de dados) — cada parceiro no dia da sua fonte, pelo dia-rótulo.
+  let oficialBackend: NetProfitInputs['oficialBackend'];
+  if (metricsSource() === 'oficial') {
+    const ofi = await getOficialResultado(start, end, { chaves: ['logicall', 'tauk', 'salesbound'] });
+    oficialBackend = {};
+    for (const p of ofi.plataformas) {
+      if (p.chave === 'jvzoo') continue;
+      oficialBackend[p.chave] = {
+        vendas: p.vendas, pedidos: p.pedidos, reembolsos: p.reembolsos, parcela: p.parcela,
+        outros: p.outros, liquido: p.liquido, fulfillmentAConfirmar: p.fulfillmentAConfirmar,
+      };
+    }
+  }
+
   return {
     period: { start: start.toISOString(), end: end.toISOString() },
     platforms: [...byPlat.values()].sort((a, b) => a.displayName.localeCompare(b.displayName)),
@@ -270,6 +295,7 @@ async function measureInputs(start: Date, end: Date, lite: boolean): Promise<Net
     affiliates,
     products,
     salesbound: { measured: sbMeasured },
+    ...(oficialBackend ? { oficialBackend } : {}),
   };
 }
 

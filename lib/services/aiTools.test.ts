@@ -66,7 +66,7 @@ const schemaOf = (name: string) => TOOLS.find((t) => t.name === name)!.input_sch
 const NOW = new Date('2026-09-30T17:05:00.000Z');
 
 const KPIS = {
-  gross: 1000, grossOriginal: 1100, net: 700, cpa: 200, netProfit: 500, approvalRate: 0.9, refundRate: 0.05, cbRate: 0.01,
+  gross: 1000, grossOriginal: 1100, net: 700, cpa: 200, approvalRate: 0.9, refundRate: 0.05, cbRate: 0.01,
   aov: 100, approvedCount: 9, totalCount: 10, orderGroups: 10, epo: 70, cogs: 50, fulfillment: 40, estimatedProfit: 610, estimatedMarginPct: 61,
 };
 
@@ -74,7 +74,7 @@ function overviewFixture(withPrevious = false): OverviewResponse {
   return {
     range: { start: '2026-09-01T03:00:00.000Z', end: '2026-10-01T02:59:59.999Z' },
     kpis: { ...KPIS },
-    ...(withPrevious ? { previous: { ...KPIS, gross: 800, netProfit: 400, refundRate: 0.04 } } : {}),
+    ...(withPrevious ? { previous: { ...KPIS, gross: 800, refundRate: 0.04 } } : {}),
     daily: [],
     byCountry: [],
     byProductType: [],

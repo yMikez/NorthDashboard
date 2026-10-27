@@ -21,7 +21,8 @@
 // comparar); KPIs, série, tabelas e recentes respeitam o filtro.
 
 // Leitura de métrica: segue METRICS_SOURCE (public ou painel oficial — lib/db.ts).
-import { dbRead as db } from '../db';
+import { dbRead as db, metricsSource } from '../db';
+import { getOficialResultado, type OficialResultado } from './oficial';
 import { getProviderCommission, type CallCenterProvider } from './integrationSettings';
 import { getLogicallSyncStatus } from './logicallSync';
 import { isAiAgent } from '../connectors/logicall/ingest';
@@ -85,6 +86,13 @@ export interface CallCenterResponse {
   // De onde veio o cliente que a SalesBound converteu (só ela informa).
   bySourcePlatform: Array<{ platform: string; sales: number; grossUsd: number }>;
   salesbound: { coverage: SalesboundCoverage | null; voidedCount: number };
+  /**
+   * Acerto oficial dos três parceiros (painel de dados — lib/services/oficial.ts),
+   * só com a leitura oficial ligada: Logicall com reserva e saldo a receber,
+   * Tauk com a taxa de 6% e o fulfillment a confirmar, SalesBound pela regra
+   * publicada (60/40 desde 01/08). Cada um no dia da sua fonte.
+   */
+  oficial: OficialResultado | null;
 }
 
 // Linha mínima que a agregação precisa — a mesma shape do select abaixo,
@@ -270,7 +278,7 @@ export function aggregateCallCenter(
 
 export async function getCallCenterSales(filters: CallCenterFilters): Promise<CallCenterResponse> {
   const provider = filters.provider && filters.provider !== 'all' ? filters.provider : 'all';
-  const [rows, tauk, logicall, salesbound, logicallSync, sbRows, sbCoverage] = await Promise.all([
+  const [rows, tauk, logicall, salesbound, logicallSync, sbRows, sbCoverage, oficial] = await Promise.all([
     db.callCenterSale.findMany({
       where: { purchasedAt: { gte: filters.startDate, lte: filters.endDate } },
       orderBy: { purchasedAt: 'desc' },
@@ -287,6 +295,9 @@ export async function getCallCenterSales(filters: CallCenterFilters): Promise<Ca
     // SalesBound vem do razão próprio (webhook do CRM + export CSV).
     salesboundCallCenterRows(filters.startDate, filters.endDate),
     salesboundCoverage(),
+    metricsSource() === 'oficial'
+      ? getOficialResultado(filters.startDate, filters.endDate, { chaves: ['logicall', 'tauk', 'salesbound'] })
+      : Promise.resolve(null),
   ]);
 
   const all: CallCenterRow[] = [
@@ -327,5 +338,6 @@ export async function getCallCenterSales(filters: CallCenterFilters): Promise<Ca
       placeholder: Boolean(r.placeholder),
     })),
     logicallSync,
+    oficial,
   };
 }

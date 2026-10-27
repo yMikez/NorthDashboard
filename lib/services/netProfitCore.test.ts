@@ -238,6 +238,38 @@ describe('BACKEND: call centers — parcela líquida da NorthScale', () => {
   });
 });
 
+describe('BACKEND pelo acerto oficial (leitura oficial ligada)', () => {
+  const inp = inputs({
+    callcenters: [cc({ provider: 'logicall', label: 'Logicall', gross: 999, sales: 9, commissionPct: 35 }), cc({ provider: 'tauk', label: 'Tauk', gross: 500, sales: 2 })],
+    salesbound: { measured: { gross: 777, sales: 3, refunds: 0, refundsCohort: 0, voids: 0, coverage: null as never } },
+    oficialBackend: {
+      // Logicall de set/26 no painel de dados: líquido antes da reserva.
+      logicall: { vendas: 343708.47, pedidos: 1148, reembolsos: -30908.31, parcela: -88816.72, outros: -29230.69, liquido: 194752.75, fulfillmentAConfirmar: false },
+      salesbound: { vendas: 1000, pedidos: 4, reembolsos: -100, parcela: -540, outros: 0, liquido: 360, fulfillmentAConfirmar: false },
+    },
+  });
+  const r = computeNetProfit(inp, defaultParams());
+
+  it('a receita do canal é o líquido publicado; parcela, estorno e taxa saem como "share" oficial', () => {
+    const lc = r.channels.find((c) => c.key === 'callcenter')!.breakdown.find((b) => b.key === 'logicall')!;
+    expect(lc.gross).toBe(343708.47);
+    expect(lc.revenue).toBe(194752.75);
+    expect(lineOf(lc.lines, 'commission')).toMatchObject({ usd: 88816.72, kind: 'share', source: 'oficial' });
+    expect(lineOf(lc.lines, 'fees')).toMatchObject({ usd: 29230.69, kind: 'share', source: 'oficial' });
+  });
+
+  it('parceiro sem acerto no período segue a fórmula de sempre', () => {
+    const tauk = r.channels.find((c) => c.key === 'callcenter')!.breakdown.find((b) => b.key === 'tauk')!;
+    expect(tauk.revenue).toBe(350); // 500 × 70%
+  });
+
+  it('SalesBound pelo acerto, no lugar do export do CRM', () => {
+    const sb = r.channels.find((c) => c.key === 'salesbound')!;
+    expect(sb.breakdown.map((b) => b.label)).toEqual(['SalesBound (acerto oficial)']);
+    expect(sb.revenue).toBe(360);
+  });
+});
+
 describe('SALESBOUND: export do CRM (medido) ou manual', () => {
   it('sem dado → indisponível; manual → parcela líquida e aviso sem parcela', () => {
     const r0 = computeNetProfit(inputs(), defaultParams());

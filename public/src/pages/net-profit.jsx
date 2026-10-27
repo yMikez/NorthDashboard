@@ -32,6 +32,7 @@ const NP_SOURCE = {
   config:   { label: 'config',    color: 'var(--fg4)',     hint: 'Cadastro (Plataformas / Integrações)' },
   default:  { label: 'padrão',    color: 'var(--fg5)',     hint: 'Valor padrão do sistema' },
   none:     { label: 'faltando',  color: 'var(--warning)', hint: 'Sem dado nem parâmetro — está em 0' },
+  oficial:  { label: 'oficial',   color: 'var(--chart-2)', hint: 'Acerto publicado pelo time de dados (painel de dados)' },
 };
 // Rótulos do histórico de premissas (caminho do parâmetro → texto).
 const NP_PARAM_LABELS = {

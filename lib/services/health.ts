@@ -6,7 +6,8 @@
 
 import { Prisma } from '@prisma/client';
 // Leitura de métrica: segue METRICS_SOURCE (public ou painel oficial — lib/db.ts).
-import { dbRead as db } from '../db';
+import { dbRead as db, metricsSource } from '../db';
+import { getOficialCargas, type OficialCarga, type OficialResultado } from './oficial';
 
 export interface HealthResponse {
   ingestion: {
@@ -40,6 +41,8 @@ export interface HealthResponse {
   metricsView: {
     rowCount: number;
   };
+  /** Leitura oficial ligada: cargas do time de dados (dados_oficiais._cargas). */
+  oficial: { cargas: OficialCarga[]; publicacao: OficialResultado['publicacao'] } | null;
   generatedAt: string;
 }
 
@@ -139,6 +142,7 @@ export async function getHealth(): Promise<HealthResponse> {
   const mvRows = await db.$queryRaw<{ count: bigint }[]>(
     Prisma.sql`SELECT COUNT(*)::bigint AS count FROM daily_metrics`,
   );
+  const oficial = metricsSource() === 'oficial' ? await getOficialCargas() : null;
 
   return {
     ingestion: { perPlatform, totalReceived24h, totalFailures24h },
@@ -166,6 +170,7 @@ export async function getHealth(): Promise<HealthResponse> {
     metricsView: {
       rowCount: Number(mvRows[0]?.count ?? 0n),
     },
+    oficial,
     generatedAt: now.toISOString(),
   };
 }

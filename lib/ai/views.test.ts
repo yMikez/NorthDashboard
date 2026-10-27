@@ -23,7 +23,7 @@ import {
 } from './views';
 
 const KPIS: OverviewKPIs = {
-  gross: 154_318.2, grossOriginal: 171_002.5, net: 98_000.1, cpa: 40_000, netProfit: 58_000.1,
+  gross: 154_318.2, grossOriginal: 171_002.5, net: 98_000.1, cpa: 40_000,
   approvalRate: 0.8812, refundRate: 0.0613, cbRate: 0.0123, aov: 142.37, approvedCount: 1083, totalCount: 1229,
   orderGroups: 1000, epo: 98, cogs: 9000, fulfillment: 7000, estimatedProfit: 82_000.1, estimatedMarginPct: 53.14,
 };
