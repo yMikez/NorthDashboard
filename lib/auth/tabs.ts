@@ -18,6 +18,7 @@ export type TabId =
   | 'recovery'
   | 'tauk'
   | 'leads'
+  | 'surveys'
   | 'products'
   | 'transactions'
   | 'platforms'
@@ -51,6 +52,9 @@ export const AVAILABLE_TABS: TabSpec[] = [
   // Leads: a pessoa (e-mail) cruzando funil, call center e SalesBound — mostra
   // e-mail e nome de cliente, então só quem o admin liberar.
   { id: 'leads',          label: 'Leads',               group: 'Clientes' },
+  // Pesquisas: quiz pós-compra (fim do tratamento) — respostas e a fila do CS
+  // com nome, e-mail e telefone, então também só quem o admin liberar.
+  { id: 'surveys',        label: 'Pesquisas',           group: 'Clientes' },
   { id: 'products',       label: 'Produtos',            group: 'Catálogo' },
   { id: 'transactions',   label: 'Transações',          group: 'Catálogo' },
   { id: 'platforms',      label: 'Plataformas',         group: 'Sistema' },

@@ -2048,3 +2048,92 @@ model NetworkCheckoutDaily {
   @@id([day, networkId, memberKey, productKey])
   @@map("network_checkout_daily")
 }
+
+// ---------- Pesquisas / quiz pós-compra (2026-10-27) ----------
+//
+// Página pública em checkin.<domínio>/<slug>/<token>. A estrutura, o texto
+// padrão e a regra da tela final ficam em lib/surveys/<template>.ts; o que
+// muda por produto (nome, opções, links de checkout, cupom, frases) fica na
+// variante. A venda que vem do quiz volta pelo ingest normal com o rastreio
+// qz_<SurveyResponse.id> (Order.trackingId).
+
+model SurveyVariant {
+  id        String   @id @default(cuid())
+  // Caminho público: /neuromind-pro
+  slug      String   @unique
+  // Modelo em lib/surveys ('fim-tratamento').
+  template  String
+  name      String
+  // Product.family de quem recebe (lista de elegíveis).
+  family    String?
+  active    Boolean  @default(true)
+  // Sobe a cada edição do texto — a resposta guarda a versão que viu.
+  version   Int      @default(1)
+  // SurveyVariantConfig (lib/surveys/fimTratamento.ts).
+  config    Json
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  invites   SurveyInvite[]
+  responses SurveyResponse[]
+}
+
+model SurveyInvite {
+  id             String        @id @default(cuid())
+  // Vai no link (aleatório, ~144 bits) — sem e-mail nem nome na URL.
+  token          String        @unique
+  variantId      String
+  variant        SurveyVariant @relation(fields: [variantId], references: [id])
+  // Contato tirado da aba Leads (lead_summary) no momento do convite.
+  email          String
+  firstName      String?
+  phone          String?
+  // Frascos comprados e quando o estoque acaba (30 dias por frasco).
+  bottles        Int
+  stockUntil     DateTime
+  originPlatform String?
+  // email | sms | manual — quem dispara (n8n) marca.
+  channel        String?
+  // Convite de teste (gerado à mão pelo admin): fora dos números da aba.
+  isTest         Boolean       @default(false)
+  sentAt         DateTime?
+  openedAt       DateTime?
+  createdAt      DateTime      @default(now())
+
+  response SurveyResponse?
+
+  @@unique([variantId, email, stockUntil])
+  @@index([variantId, createdAt])
+}
+
+model SurveyResponse {
+  id                String        @id @default(cuid())
+  inviteId          String        @unique
+  invite            SurveyInvite  @relation(fields: [inviteId], references: [id])
+  variantId         String
+  variant           SurveyVariant @relation(fields: [variantId], references: [id])
+  variantVersion    Int
+  // SurveyAnswers — gravado a cada clique (dá pra ver onde a pessoa parou).
+  answers           Json          @default("{}")
+  // cs | recorrencia | cupom | obrigado — decidido no servidor ao concluir.
+  outcome           String?
+  // Marcou "ver mais progresso primeiro": acompanhamento em 30 dias.
+  followUp          Boolean       @default(false)
+  startedAt         DateTime      @default(now())
+  updatedAt         DateTime      @updatedAt
+  completedAt       DateTime?
+  // Clicou no botão do checkout (desfecho clicado).
+  checkoutAt        DateTime?
+  checkoutOutcome   String?
+  // Fila do CS: nota 1–2 ou parou por médico/mal-estar. Prazo 24h.
+  csReason          String?
+  csStatus          String?
+  csDueAt           DateTime?
+  csNote            String?
+  csUpdatedAt       DateTime?
+  // Ticket aberto no SendTrace (quando a integração estiver ligada).
+  sendtraceTicketId String?
+
+  @@index([variantId, startedAt])
+  @@index([csStatus])
+}

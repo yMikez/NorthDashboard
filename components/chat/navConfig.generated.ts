@@ -79,6 +79,11 @@ export const NAV_GROUPS: NavGroup[] = [
         "id": "leads",
         "label": "Leads",
         "icon": "user"
+      },
+      {
+        "id": "surveys",
+        "label": "Pesquisas",
+        "icon": "message-square"
       }
     ]
   },

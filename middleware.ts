@@ -57,6 +57,7 @@ const SPA_ROUTES = new Set([
   '/recovery',
   '/tauk',
   '/leads',
+  '/surveys',
   '/net-profit',
   // Abas removidas em 2026-10-03: link salvo abre a Visão geral (a SPA cai
   // no overview pra rota desconhecida) em vez de 404.
@@ -68,8 +69,26 @@ const SPA_ROUTES = new Set([
   // com TS + Tailwind + shadcn. Não rewriter — deixa o Next.js servir.
 ]);
 
+// Domínio público das pesquisas (checkin.<domínio>/<variante>/<token>): ali
+// só existe a página do quiz — qualquer outro caminho cai na tela de link
+// inválido. As APIs desse domínio são filtradas no Caddy (só /api/survey/*).
+const SURVEY_HOSTS = new Set(
+  (process.env.SURVEY_HOSTS ?? 'checkin.healthnwellnes.com').split(',').map((h) => h.trim().toLowerCase()).filter(Boolean),
+);
+const SURVEY_PATH_RE = /^\/([a-z0-9-]{1,60})\/([A-Za-z0-9_-]{16,64})\/?$/;
+
+function surveyHost(req: NextRequest): NextResponse {
+  const m = SURVEY_PATH_RE.exec(req.nextUrl.pathname);
+  const url = req.nextUrl.clone();
+  url.pathname = '/api/survey/page';
+  url.search = m ? `?slug=${m[1]}&t=${m[2]}` : '?slug=';
+  return NextResponse.rewrite(url);
+}
+
 export function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;
+  const host = (req.headers.get('host') ?? '').split(':')[0].toLowerCase();
+  if (SURVEY_HOSTS.has(host)) return surveyHost(req);
   if (PUBLIC_PREFIXES.some((p) => pathname.startsWith(p))) {
     return NextResponse.next();
   }

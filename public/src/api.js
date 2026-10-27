@@ -576,6 +576,27 @@ function fetchLeads(filters, { segment = 'all', sort = 'ltv', group = 'channel',
     segment, sort, group, page: String(page), q: q || null,
   });
 }
+// Aba Pesquisas (quiz pós-compra). Período = data do convite; os outros
+// filtros globais não se aplicam (a variante já é o produto).
+function fetchSurveys(filters, variant, { tests = false } = {}) {
+  return fetchJSON('/api/metrics/surveys', {
+    start_date: toISODate(filters.dateRange.start),
+    end_date: toISODate(filters.dateRange.end),
+    variant: variant || null,
+    tests: tests ? '1' : null,
+  });
+}
+async function patchSurveyCs(id, status, note) {
+  const res = await fetch('/api/metrics/surveys', {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+    body: JSON.stringify(note === undefined ? { id, status } : { id, status, note }),
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.error || `${res.status}`);
+  _respCache.clear();
+  return data;
+}
 // Aba Networks (redes de afiliados do NorthAffiliates). `opts` = filtros
 // próprios da aba (rede, integrante, produto, tráfego, testes, página).
 function fetchNetworks(filters, opts = {}) {
@@ -780,6 +801,8 @@ function _wrapMutations(api) {
 
 window.NSApi = _wrapMutations({
   fetchLeads,
+  fetchSurveys,
+  patchSurveyCs,
   fetchOverviewPanels,
   getAffRefundMode,
   setAffRefundMode,
