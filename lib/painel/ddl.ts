@@ -293,9 +293,16 @@ export function buildPainelDdl(s: PainelSnapshot, schema: string, opts: PainelOp
   return out;
 }
 
-/** Troca o schema montado pelo `painel` em uso, numa tacada só (dentro da mesma transação). */
+/**
+ * Troca o schema montado pelo `painel` em uso, numa tacada só (dentro da
+ * mesma transação). O DROP do schema velho espera as consultas que ainda o
+ * leem: com o lock_timeout, uma consulta presa faz a troca desistir em 60 s
+ * (o boot segue no public) em vez de segurar o servidor fora do ar — foi o
+ * que aconteceu em 2026-10-27 com uma consulta da aba VSLs de 1 hora.
+ */
 export function swapSql(built: string, hash: string): string[] {
   return [
+    `SET LOCAL lock_timeout = '60s'`,
     `DROP SCHEMA IF EXISTS painel_velho CASCADE`,
     `DO $$ BEGIN IF EXISTS (SELECT 1 FROM pg_namespace WHERE nspname = 'painel') THEN EXECUTE 'ALTER SCHEMA painel RENAME TO painel_velho'; END IF; END $$`,
     `ALTER SCHEMA ${q(built)} RENAME TO painel`,

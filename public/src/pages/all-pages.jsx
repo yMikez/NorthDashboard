@@ -4652,6 +4652,12 @@ function HealthPage() {
         </div>
       </div>
 
+      {d.oficialFalhou && (
+        <div className="panel" style={{ marginBottom: 14, borderColor: 'color-mix(in srgb, var(--danger) 45%, var(--border))', color: 'var(--danger)', fontSize: 13 }}>
+          <Icon name="alert-triangle" size={14}/> A leitura pelos dados oficiais está ligada, mas o schema <code>painel</code> não ficou pronto no último boot do servidor — as telas estão lendo do banco de sempre (public). Ver o log do boot e rodar <code>scripts/painelSchema.ts --apply</code>, depois reiniciar o app.
+        </div>
+      )}
+
       {/* Leitura oficial ligada: as métricas de JVZoo, Logicall, Tauk e
           SalesBound vêm da carga do time de dados, não do IPN. */}
       {d.oficial && (

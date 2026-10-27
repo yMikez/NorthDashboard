@@ -7,8 +7,11 @@
 // da aba Funil); upsell órfão cai na própria família.
 
 import { Prisma } from '@prisma/client';
-// Leitura de métrica: segue METRICS_SOURCE (public ou painel oficial — lib/db.ts).
-import { dbRead as db } from '../db';
+// Fica no public de propósito (2026-10-27): sobre as views do painel oficial
+// a consulta de desempenho por página (subconsultas correlacionadas por
+// visita) passou de 1 HORA e travou a troca do schema no deploy. Ela mede
+// páginas e cliques do funil — o dado oficial não muda nada aqui.
+import { db } from '../db';
 import {
   brtDay, reducePerformance, finishMetrics, LINKABLE_PLATFORMS,
   type ChangeRow, type LinkedRow, type RealRow, type VisitAggRow,

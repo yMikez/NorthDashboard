@@ -6,7 +6,7 @@
 
 import { Prisma } from '@prisma/client';
 // Leitura de métrica: segue METRICS_SOURCE (public ou painel oficial — lib/db.ts).
-import { dbRead as db, metricsSource } from '../db';
+import { dbRead as db, metricsSource, metricsSourceFellBack } from '../db';
 import { getOficialCargas, type OficialCarga, type OficialResultado } from './oficial';
 
 export interface HealthResponse {
@@ -43,6 +43,8 @@ export interface HealthResponse {
   };
   /** Leitura oficial ligada: cargas do time de dados (dados_oficiais._cargas). */
   oficial: { cargas: OficialCarga[]; publicacao: OficialResultado['publicacao'] } | null;
+  /** METRICS_SOURCE=oficial, mas o schema painel falhou no boot: as telas estão lendo do public. */
+  oficialFalhou: boolean;
   generatedAt: string;
 }
 
@@ -171,6 +173,7 @@ export async function getHealth(): Promise<HealthResponse> {
       rowCount: Number(mvRows[0]?.count ?? 0n),
     },
     oficial,
+    oficialFalhou: metricsSourceFellBack(),
     generatedAt: now.toISOString(),
   };
 }

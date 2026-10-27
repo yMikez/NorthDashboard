@@ -33,6 +33,11 @@ export const PAINEL_READY_FILE = process.env.PAINEL_READY_FILE ?? '/tmp/painel-p
 
 let warnedNotReady = false;
 
+/** Pedido no .env (oficial) mas o painel não ficou pronto no boot → lendo do public. */
+export function metricsSourceFellBack(): boolean {
+  return process.env.METRICS_SOURCE === 'oficial' && !existsSync(PAINEL_READY_FILE);
+}
+
 export function metricsSource(): MetricsSource {
   if (process.env.METRICS_SOURCE !== 'oficial') return 'public';
   if (existsSync(PAINEL_READY_FILE)) return 'oficial';
