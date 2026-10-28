@@ -180,14 +180,32 @@ export async function surveyCheckoutRedirect(token: string, kind: string, size?:
 }
 
 // ---------- convites (lista de quem está com o estoque acabando) ----------
+//
+// A lista mora AQUI (SurveyInvite): o dash decide quem entra (regra de estoque
+// da aba Leads), não repete a mesma pessoa pro mesmo estoque e guarda o link
+// pessoal. O n8n só puxa (POST cria os novos, GET relê os pendentes) e quem
+// dispara marca o envio (markSurveyInvitesSent).
+
+export type InviteStatus = 'pendente' | 'enviado' | 'abriu' | 'respondeu' | 'concluiu';
 
 export interface SurveyInviteOut {
+  id: string;
+  variant: string;
+  product: string;
+  /** parcial = comprou 2–3 frascos; completo = 6+. */
+  segment: 'parcial' | 'completo';
   email: string;
   firstName: string | null;
   phone: string | null;
   bottles: number;
   stockUntil: string;
+  /** Dias até o produto acabar (negativo = já acabou). */
+  daysLeft: number;
   link: string;
+  status: InviteStatus;
+  channel: string | null;
+  sentAt: string | null;
+  createdAt: string;
 }
 
 export interface CreateInvitesResult {
@@ -197,12 +215,49 @@ export interface CreateInvitesResult {
   invites: SurveyInviteOut[];
 }
 
+type InviteRow = SurveyInvite & { variant: SurveyVariant; response?: SurveyResponse | null };
+
+function inviteStatus(i: InviteRow): InviteStatus {
+  if (i.response?.completedAt) return 'concluiu';
+  if (i.response) return 'respondeu';
+  if (i.openedAt) return 'abriu';
+  return i.sentAt ? 'enviado' : 'pendente';
+}
+
+export function inviteOut(i: InviteRow, now = Date.now()): SurveyInviteOut {
+  const cfg = cfgOf(i.variant);
+  return {
+    id: i.id,
+    variant: i.variant.slug,
+    product: cfg.productName,
+    segment: segmentOf(cfg, i.bottles),
+    email: i.email,
+    firstName: i.firstName,
+    phone: i.phone,
+    bottles: i.bottles,
+    stockUntil: i.stockUntil.toISOString(),
+    daysLeft: Math.ceil((i.stockUntil.getTime() - now) / 86400000),
+    link: surveyLink(i.variant.slug, i.token),
+    status: inviteStatus(i),
+    channel: i.channel,
+    sentAt: i.sentAt ? i.sentAt.toISOString() : null,
+    createdAt: i.createdAt.toISOString(),
+  };
+}
+
+/** Pesquisas que geram convite: a pedida, ou todas as ativas com produto. */
+export async function activeSurveySlugs(slug?: string | null): Promise<string[]> {
+  if (slug && slug !== 'all') return [slug];
+  const rows = await db.surveyVariant.findMany({ where: { active: true, family: { not: null } }, select: { slug: true }, orderBy: { createdAt: 'asc' } });
+  return rows.map((r) => r.slug);
+}
+
 /**
  * Quem recebe: o último produto da pessoa é o da variante, comprou 2 ou 3
  * frascos (config.eligibleBottles) ou o plano inteiro e mais (≥
  * config.fullPlanFrom), sem estorno, e o estoque acaba nos próximos
  * `withinDays` dias. Quem já tem convite pra esse mesmo estoque não
- * ganha outro. `channel` marca como enviado agora (o n8n dispara em seguida).
+ * ganha outro. `channel` marca como enviado agora.
  */
 export async function createSurveyInvites(opts: {
   slug: string;
@@ -260,17 +315,51 @@ export async function createSurveyInvites(opts: {
   await db.surveyInvite.createMany({ data, skipDuplicates: true });
   const created = await db.surveyInvite.findMany({
     where: { token: { in: data.map((d) => d.token) } },
+    include: { variant: true },
     orderBy: { stockUntil: 'asc' },
   });
   return {
     variant: variant.slug,
     eligible: rows.length,
     created: created.length,
-    invites: created.map((i) => ({
-      email: i.email, firstName: i.firstName, phone: i.phone, bottles: i.bottles,
-      stockUntil: i.stockUntil.toISOString(), link: surveyLink(variant.slug, i.token),
-    })),
+    invites: created.map((i) => inviteOut(i)),
   };
+}
+
+/**
+ * Lista atual (sem criar nada): convites das pesquisas ativas cujo estoque
+ * acaba em até `withinDays` dias — inclusive quem já ficou sem produto, que
+ * ainda é público da recompra. `onlyUnsent` = só os que ninguém disparou.
+ */
+export async function listSurveyInvites(opts: {
+  slug?: string | null; withinDays?: number; onlyUnsent?: boolean; limit?: number;
+}): Promise<SurveyInviteOut[]> {
+  const days = Math.min(Math.max(Math.trunc(opts.withinDays ?? 7), 1), 60);
+  const limit = Math.min(Math.max(Math.trunc(opts.limit ?? 2000), 1), 10000);
+  const rows = await db.surveyInvite.findMany({
+    where: {
+      isTest: false,
+      variant: { active: true, ...(opts.slug && opts.slug !== 'all' ? { slug: opts.slug } : {}) },
+      stockUntil: { lt: new Date(Date.now() + days * 86400000) },
+      ...(opts.onlyUnsent ? { sentAt: null } : {}),
+    },
+    include: { variant: true, response: true },
+    orderBy: { stockUntil: 'asc' },
+    take: limit,
+  });
+  const now = Date.now();
+  return rows.map((i) => inviteOut(i, now));
+}
+
+/** Quem dispara marca o envio (e-mail, SMS…). Só conta o primeiro envio. */
+export async function markSurveyInvitesSent(ids: string[], channel: string): Promise<number> {
+  const clean = [...new Set(ids.filter((x) => typeof x === 'string' && x.length <= 40))].slice(0, 5000);
+  if (!clean.length) return 0;
+  const res = await db.surveyInvite.updateMany({
+    where: { id: { in: clean }, sentAt: null },
+    data: { sentAt: new Date(), channel: channel.slice(0, 20) || null },
+  });
+  return res.count;
 }
 
 /** Convite de teste pra um e-mail qualquer (admin). Fica fora dos números da aba. */
@@ -279,18 +368,16 @@ export async function createSurveyTestInvite(opts: {
 }): Promise<SurveyInviteOut | null> {
   const variant = await db.surveyVariant.findUnique({ where: { slug: opts.slug } });
   if (!variant) return null;
-  const bottles = [2, 3].includes(Number(opts.bottles)) ? Number(opts.bottles) : 3;
+  const bottles = [2, 3, 6].includes(Number(opts.bottles)) ? Number(opts.bottles) : 3;
   const inv = await db.surveyInvite.create({
     data: {
       token: newToken(), variantId: variant.id, email: opts.email.trim().toLowerCase(),
       firstName: opts.firstName?.trim() || null, bottles,
       stockUntil: new Date(Date.now() + 7 * 86400000), channel: 'manual', isTest: true,
     },
+    include: { variant: true },
   });
-  return {
-    email: inv.email, firstName: inv.firstName, phone: null, bottles: inv.bottles,
-    stockUntil: inv.stockUntil.toISOString(), link: surveyLink(variant.slug, inv.token),
-  };
+  return inviteOut(inv);
 }
 
 // ---------- cadastro das variantes (aba Pesquisas, admin) ----------

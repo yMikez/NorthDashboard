@@ -410,7 +410,7 @@ function SvTestInvite({ variant, onCreated }) {
         <input type="email" required placeholder="e-mail" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} style={{ minWidth: 220 }} aria-label="E-mail do teste"/>
         <input placeholder="primeiro nome" value={form.firstName} onChange={(e) => setForm({ ...form, firstName: e.target.value })} style={{ width: 140 }} aria-label="Primeiro nome"/>
         <select value={form.bottles} onChange={(e) => setForm({ ...form, bottles: e.target.value })} aria-label="Frascos comprados">
-          <option value="2">2 frascos</option><option value="3">3 frascos</option>
+          <option value="2">2 frascos</option><option value="3">3 frascos</option><option value="6">6 frascos (plano completo)</option>
         </select>
         <button className="btn" type="submit" disabled={busy}>{busy ? 'Gerando…' : 'Gerar link de teste'}</button>
       </form>
