@@ -15,6 +15,20 @@ export function normalizePhone(raw: unknown): string | null {
   return digits.length >= 7 && digits.length <= 15 ? digits : null;
 }
 
+/**
+ * Número pra disparo de SMS (E.164) de cliente dos EUA. 11 dígitos com "1" =
+ * já tem o DDI; 10 dígitos no formato norte-americano (área e prefixo não
+ * começam com 0/1) ganham o +1 e voltam marcados como `inferred` — quem
+ * dispara confere. Fora disso, null (não dá pra adivinhar o país).
+ */
+export function smsPhoneUS(raw: unknown): { e164: string; inferred: boolean } | null {
+  const d = normalizePhone(raw);
+  if (!d) return null;
+  if (d.length === 11 && d.startsWith('1') && /^1[2-9]\d{2}[2-9]\d{6}$/.test(d)) return { e164: `+${d}`, inferred: false };
+  if (d.length === 10 && /^[2-9]\d{2}[2-9]\d{6}$/.test(d)) return { e164: `+1${d}`, inferred: true };
+  return null;
+}
+
 /** Primeiro candidato que vira telefone válido. */
 export function firstPhone(...candidates: unknown[]): string | null {
   for (const c of candidates) {

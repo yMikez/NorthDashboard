@@ -84,6 +84,11 @@ export const NAV_GROUPS: NavGroup[] = [
         "id": "surveys",
         "label": "Pesquisas",
         "icon": "message-square"
+      },
+      {
+        "id": "recurrences",
+        "label": "Recorrências",
+        "icon": "refresh"
       }
     ]
   },
@@ -161,6 +166,7 @@ export const NS_ICON_SVG = {
   "ns-recuperacao": "<path d=\"M4 12a8 8 0 1 0 2.3-5.6M4 3.5V7h3.5\"/><path d=\"M12 8.5V12l2.5 1.5\"/>",
   "target": "<path d=\"M12 22a10 10 0 1 0 0-20 10 10 0 0 0 0 20Z\"/><path d=\"M12 18a6 6 0 1 0 0-12 6 6 0 0 0 0 12Z\"/><path d=\"M12 14a2 2 0 1 0 0-4 2 2 0 0 0 0 4Z\"/>",
   "user": "<path d=\"M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2\"/><path d=\"M12 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8\"/>",
+  "refresh": "<path d=\"M23 4v6h-6\"/><path d=\"M1 20v-6h6\"/><path d=\"M3.5 9a9 9 0 0 1 15-3.4L23 10\"/><path d=\"M20.5 15a9 9 0 0 1-15 3.4L1 14\"/>",
   "package": "<path d=\"M12 3.5 20 8v8l-8 4.5L4 16V8z\"/><path d=\"M4.5 8.2 12 12.5l7.5-4.3M12 12.5v8\"/>",
   "receipt": "<path d=\"M4 8h13M14 4.5 17.5 8 14 11.5\"/><path d=\"M20 16H7M10 12.5 6.5 16l3.5 3.5\"/>",
   "ns-networks": "<circle cx=\"5.5\" cy=\"12\" r=\"2.5\"/><circle cx=\"18.5\" cy=\"5.5\" r=\"2.5\"/><circle cx=\"18.5\" cy=\"18.5\" r=\"2.5\"/><path d=\"M7.8 10.8l8.4-4.2M7.8 13.2l8.4 4.2\"/>",
@@ -206,7 +212,6 @@ export const NS_ICON_SVG = {
   "globe": "<path d=\"M12 22a10 10 0 1 0 0-20 10 10 0 0 0 0 20Z\"/><path d=\"M2 12h20\"/><path d=\"M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10Z\"/>",
   "users": "<circle cx=\"9\" cy=\"8.5\" r=\"3.5\"/><path d=\"M3.5 19.5c0-3 2.5-5 5.5-5s5.5 2 5.5 5\"/><circle cx=\"17\" cy=\"9.5\" r=\"2.6\"/><path d=\"M16.5 14.6c2.4.2 4 1.9 4 4.4\"/>",
   "filter": "<path d=\"M4.5 6.5h15M7.5 12h9M10.5 17.5h3\"/>",
-  "refresh": "<path d=\"M23 4v6h-6\"/><path d=\"M1 20v-6h6\"/><path d=\"M3.5 9a9 9 0 0 1 15-3.4L23 10\"/><path d=\"M20.5 15a9 9 0 0 1-15 3.4L1 14\"/>",
   "download": "<path d=\"M12 15V4M8 7.5 12 3.5l4 4\"/><path d=\"M4.5 14v4A2.5 2.5 0 0 0 7 20.5h10a2.5 2.5 0 0 0 2.5-2.5v-4\"/>",
   "sun": "<circle cx=\"12\" cy=\"12\" r=\"4.5\"/><path d=\"M12 2.5V5M12 19v2.5M2.5 12H5M19 12h2.5M4.9 4.9 6.7 6.7M17.3 17.3l1.8 1.8M19.1 4.9l-1.8 1.8M6.7 17.3l-1.8 1.8\"/>",
   "moon": "<path d=\"M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79Z\"/>",

@@ -59,6 +59,7 @@ const SPA_ROUTES = new Set([
   '/tauk',
   '/leads',
   '/surveys',
+  '/recurrences',
   '/net-profit',
   // Abas removidas em 2026-10-03: link salvo abre a Visão geral (a SPA cai
   // no overview pra rota desconhecida) em vez de 404.

@@ -632,6 +632,21 @@ async function svAdminSend(url, method, body) {
   _respCache.clear();
   return data;
 }
+// Aba Recorrências: lista de recompra (janela em dias, não usa o período) e assinaturas (período).
+function fetchRepurchase(variant, withinDays, { tests = false } = {}) {
+  return fetchJSON('/api/metrics/recurrences/repurchase', {
+    variant: variant || 'all', withinDays: String(withinDays || 14), tests: tests ? '1' : null,
+  });
+}
+function postRepurchase(body) {
+  return svAdminSend('/api/metrics/recurrences/repurchase', 'POST', body);
+}
+function fetchSubscriptions(filters) {
+  return fetchJSON('/api/metrics/recurrences/subscriptions', {
+    start_date: toISODate(filters.dateRange.start),
+    end_date: toISODate(filters.dateRange.end),
+  });
+}
 // Catálogo da rede no NorthAffiliates (admin). 409 = chave não configurada.
 async function fetchNetworkCatalog() {
   const res = await fetch('/api/admin/northaffiliates/catalog', { headers: { Accept: 'application/json' } });
@@ -875,6 +890,9 @@ window.NSApi = _wrapMutations({
   fetchSurveyExperiments,
   createSurveyExperiment,
   patchSurveyExperiment,
+  fetchRepurchase,
+  postRepurchase,
+  fetchSubscriptions,
   fetchNetworkCatalog,
   fetchOverviewPanels,
   getAffRefundMode,

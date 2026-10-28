@@ -2167,3 +2167,76 @@ model SurveyExperiment {
 
   @@index([variantId, startedAt])
 }
+
+// Assinaturas (aba Recorrências). Projeção dos eventos da plataforma: cada
+// cobrança, renovação, falha de pagamento e cancelamento entra em
+// SubscriptionEvent (idempotente pelo eventId) e o estado aqui é recalculado
+// a partir de todos os eventos da assinatura (aguenta entrega fora de ordem).
+// Fora de Order de propósito: a cobrança em si continua sendo um pedido.
+model Subscription {
+  id                 String    @id @default(cuid())
+  // vupim (outras plataformas entram com o mesmo formato).
+  platform           String
+  // Id da assinatura na plataforma (Vupim: data.subscriptionId).
+  externalId         String
+  // active | past_due | canceled
+  status             String
+  email              String?
+  name               String?
+  // Só dígitos (lib/shared/phone).
+  phone              String?
+  productName        String?
+  offerName          String?
+  offerId            String?
+  // Frascos por cobrança (do nome da oferta); o ciclo em meses é o mesmo número.
+  bottles            Int?
+  // Valor da última cobrança e soma do que já foi pago.
+  amountUsd          Decimal?  @db.Decimal(12, 2)
+  totalPaidUsd       Decimal   @default(0) @db.Decimal(12, 2)
+  chargeCount        Int       @default(0)
+  startedAt          DateTime?
+  lastChargeAt       DateTime?
+  // Fim do período pago (renovação) — a próxima cobrança.
+  periodEnd          DateTime?
+  failedAttempts     Int       @default(0)
+  lastFailedAt       DateTime?
+  nextRetryAt        DateTime?
+  lastFailureReason  String?
+  canceledAt         DateTime?
+  cancelReason       String?
+  firstTransactionId String?
+  lastTransactionId  String?
+  // src do checkout (qz_<SurveyResponse.id> = veio da pesquisa).
+  src                String?
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+
+  events SubscriptionEvent[]
+
+  @@unique([platform, externalId])
+  @@index([status])
+  @@index([email])
+}
+
+model SubscriptionEvent {
+  id             String       @id @default(cuid())
+  subscriptionId String
+  subscription   Subscription @relation(fields: [subscriptionId], references: [id], onDelete: Cascade)
+  // Id do evento na plataforma (Vupim: eventId; o envelope.id no webhook antigo).
+  eventId        String       @unique
+  // charge (1ª cobrança) | renewed | failed | canceled | refunded | chargeback
+  kind           String
+  // Quando aconteceu (data.*At; o timestamp da entrega como fallback).
+  at             DateTime
+  amountUsd      Decimal?     @db.Decimal(12, 2)
+  chargeNumber   Int?
+  attempt        Int?
+  nextRetryAt    DateTime?
+  periodEnd      DateTime?
+  reason         String?
+  transactionId  String?
+  createdAt      DateTime     @default(now())
+
+  @@index([subscriptionId, at])
+  @@index([kind, at])
+}

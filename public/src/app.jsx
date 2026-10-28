@@ -15,6 +15,7 @@ const ROUTES = {
   'tauk':           { title: 'Call Center', em: 'Tauk + Logicall', crumbs: ['Captação', 'Call Center'] },
   'leads':          { title: 'Leads',       em: 'e LTV',       crumbs: ['Clientes', 'Leads'] },
   'surveys':        { title: 'Pesquisas',   em: 'pós-compra',  crumbs: ['Clientes', 'Pesquisas'] },
+  'recurrences':    { title: 'Recorrências', em: 'recompra e assinaturas', crumbs: ['Clientes', 'Recorrências'] },
   'products':       { title: 'Produtos',     em: '',            crumbs: ['Catálogo', 'Produtos'] },
   'transactions':   { title: 'Transações',  em: 'do ledger',   crumbs: ['Catálogo', 'Transações'] },
   'platforms':      { title: 'Plataformas', em: 'conectadas',  crumbs: ['Sistema', 'Plataformas'] },
@@ -311,6 +312,7 @@ function App({ user }) {
           {hashState.route === 'tauk'           && <CallCenterPage filters={filters} user={user}/>}
           {hashState.route === 'leads'          && <LeadsPage filters={filters}/>}
           {hashState.route === 'surveys'        && <SurveysPage filters={filters} user={user}/>}
+          {hashState.route === 'recurrences'    && <RecurrencesPage filters={filters} user={user}/>}
           {hashState.route === 'products'       && <ProductsPage filters={filters}/>}
           {hashState.route === 'transactions'   && <TransactionsPage filters={filters}/>}
           {hashState.route === 'platforms'      && <IntegrationsPage filters={filters}/>}

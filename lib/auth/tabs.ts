@@ -19,6 +19,7 @@ export type TabId =
   | 'tauk'
   | 'leads'
   | 'surveys'
+  | 'recurrences'
   | 'products'
   | 'transactions'
   | 'platforms'
@@ -55,6 +56,9 @@ export const AVAILABLE_TABS: TabSpec[] = [
   // Pesquisas: quiz pós-compra (fim do tratamento) — respostas e a fila do CS
   // com nome, e-mail e telefone, então também só quem o admin liberar.
   { id: 'surveys',        label: 'Pesquisas',           group: 'Clientes' },
+  // Recorrências: lista de recompra (quem dispara opera: nome, telefone, link)
+  // e assinaturas da Vupim — dado de cliente, só quem o admin liberar.
+  { id: 'recurrences',    label: 'Recorrências',        group: 'Clientes' },
   { id: 'products',       label: 'Produtos',            group: 'Catálogo' },
   { id: 'transactions',   label: 'Transações',          group: 'Catálogo' },
   { id: 'platforms',      label: 'Plataformas',         group: 'Sistema' },

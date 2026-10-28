@@ -18,6 +18,8 @@
 // livemode=false (Send test, venda-teste do checkout) nunca vira pedido.
 // Eventos que não viram pedido (sale.created, declined, shipped,
 // subscription.* fora renewed, checkout.*) ficam só no IngestLog e respondem 200.
+// Toda entrega com subscriptionId (cobrança, renovação, falha de pagamento,
+// cancelamento) também entra no histórico da assinatura (aba Recorrências).
 
 import { NextResponse } from 'next/server';
 import { db } from '@/lib/db';
@@ -26,6 +28,7 @@ import { parseVupimOrder, vupimEventKey, vupimShouldApply, VupimCurrencyError, V
 import { verifyVupimSignature, vupimSecrets } from '@/lib/connectors/vupim/signature';
 import type { VupimEnvelope } from '@/lib/connectors/vupim/types';
 import { upsertOrder } from '@/lib/services/upsertOrder';
+import { trackVupimSubscription } from '@/lib/services/subscriptions';
 import { logger, maskEmail } from '@/lib/logger';
 
 export const runtime = 'nodejs';
@@ -80,6 +83,10 @@ export async function POST(req: Request) {
   });
   const done = (extra: { error?: string } = {}) =>
     db.ingestLog.update({ where: { id: log.id }, data: { processedOk: !extra.error, processedAt: new Date(), error: extra.error ?? null } });
+
+  // Assinatura: entra antes do pedido porque falha de pagamento e
+  // cancelamento não viram pedido. Erro aqui não derruba a venda.
+  await trackVupimSubscription(env, event).catch((err) => logger.error({ err, logId: log.id }, 'vupim assinatura falhou'));
 
   const status = VUPIM_ORDER_EVENTS[event];
   // Teste (Send test, venda-teste do checkout): só registra, não conta.

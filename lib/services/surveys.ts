@@ -19,6 +19,7 @@ import {
   CONTROL_ARM, armConfig, armsOf, configDiff, pickArm, proportionTest, sanitizeArms,
   type ExperimentArm, type ProportionTest,
 } from '../surveys/experiments';
+import { smsPhoneUS } from '../shared/phone';
 import { renderSurveyInvalid, renderSurveyPage } from '../surveys/render';
 import { sanitizeVariantConfig } from '../surveys/variantConfig';
 
@@ -299,6 +300,38 @@ export async function activeSurveySlugs(slug?: string | null): Promise<string[]>
   return rows.map((r) => r.slug);
 }
 
+type EligibleLead = {
+  email: string; name: string | null; phone: string | null; bottles: number; stock_until: Date; origin_platform: string | null;
+};
+
+/** Regra de quem entra (ver createSurveyInvites): estoque da variante acabando em até `days` dias. */
+async function eligibleLeads(variant: SurveyVariant, days: number, limit: number): Promise<EligibleLead[]> {
+  const cfg = cfgOf(variant);
+  const bottles = cfg.eligibleBottles?.length ? cfg.eligibleBottles : [2, 3];
+  // Sem fullPlanFrom o público completo fica de fora (nenhum lead tem 1e9 frascos).
+  const fullFrom = cfg.fullPlanFrom ?? 1_000_000_000;
+  return dbRead.$queryRaw<EligibleLead[]>(Prisma.sql`
+    SELECT ls.email, ls.name, ls.phone, ls.bottles, ls.stock_until, ls.origin_platform
+    FROM lead_summary ls
+    WHERE ls.stock_family = ${variant.family}
+      AND (ls.bottles = ANY(${bottles}::int[]) OR ls.bottles >= ${fullFrom}::int)
+      AND COALESCE(ls.refunded_usd, 0) = 0
+      AND ls.email IS NOT NULL
+      AND ls.stock_until >= now() AND ls.stock_until < now() + make_interval(days => ${days}::int)
+    ORDER BY ls.stock_until
+    LIMIT ${limit}`);
+}
+
+/** Quem já tem convite pra aquele mesmo estoque (e-mail|fim do estoque). */
+async function invitedKeys(variantId: string, rows: EligibleLead[]): Promise<Set<string>> {
+  if (!rows.length) return new Set();
+  const invited = await db.surveyInvite.findMany({
+    where: { variantId, email: { in: rows.map((r) => r.email) } },
+    select: { email: true, stockUntil: true },
+  });
+  return new Set(invited.map((i) => `${i.email}|${i.stockUntil.getTime()}`));
+}
+
 /**
  * Quem recebe: o último produto da pessoa é o da variante, comprou 2 ou 3
  * frascos (config.eligibleBottles) ou o plano inteiro e mais (≥
@@ -315,32 +348,10 @@ export async function createSurveyInvites(opts: {
 }): Promise<CreateInvitesResult | null> {
   const variant = await db.surveyVariant.findUnique({ where: { slug: opts.slug } });
   if (!variant || !variant.active || !variant.family) return null;
-  const cfg = cfgOf(variant);
   const days = Math.min(Math.max(Math.trunc(opts.withinDays ?? 7), 1), 60);
   const limit = Math.min(Math.max(Math.trunc(opts.limit ?? 500), 1), 5000);
-  const bottles = cfg.eligibleBottles?.length ? cfg.eligibleBottles : [2, 3];
-  // Sem fullPlanFrom o público completo fica de fora (nenhum lead tem 1e9 frascos).
-  const fullFrom = cfg.fullPlanFrom ?? 1_000_000_000;
-
-  const rows = await dbRead.$queryRaw<Array<{
-    email: string; name: string | null; phone: string | null; bottles: number; stock_until: Date; origin_platform: string | null;
-  }>>(Prisma.sql`
-    SELECT ls.email, ls.name, ls.phone, ls.bottles, ls.stock_until, ls.origin_platform
-    FROM lead_summary ls
-    WHERE ls.stock_family = ${variant.family}
-      AND (ls.bottles = ANY(${bottles}::int[]) OR ls.bottles >= ${fullFrom}::int)
-      AND COALESCE(ls.refunded_usd, 0) = 0
-      AND ls.email IS NOT NULL
-      AND ls.stock_until >= now() AND ls.stock_until < now() + make_interval(days => ${days}::int)
-    ORDER BY ls.stock_until
-    LIMIT ${limit}`);
-
-  const existing = new Set(
-    (await db.surveyInvite.findMany({
-      where: { variantId: variant.id, email: { in: rows.map((r) => r.email) } },
-      select: { email: true, stockUntil: true },
-    })).map((i) => `${i.email}|${i.stockUntil.getTime()}`),
-  );
+  const rows = await eligibleLeads(variant, days, limit);
+  const existing = await invitedKeys(variant.id, rows);
   const fresh = rows.filter((r) => !existing.has(`${r.email}|${r.stock_until.getTime()}`));
   if (opts.dryRun) {
     return { variant: variant.slug, eligible: rows.length, created: 0, invites: [] };
@@ -407,6 +418,106 @@ export async function markSurveyInvitesSent(ids: string[], channel: string): Pro
     data: { sentAt: new Date(), channel: channel.slice(0, 20) || null },
   });
   return res.count;
+}
+
+// ---------- aba Recorrências → Lista de recompra ----------
+
+export type RepurchaseStatus = InviteStatus | 'comprou';
+
+export interface RepurchaseRow {
+  id: string; variant: string; product: string; segment: 'parcial' | 'completo';
+  firstName: string | null; email: string; phone: string | null;
+  /** Número pronto pro SMS (+1…); inferred = o DDI foi deduzido (10 dígitos). */
+  smsPhone: string | null; smsPhoneInferred: boolean;
+  bottles: number; stockUntil: string; daysLeft: number; link: string;
+  status: RepurchaseStatus; channel: string | null; sentAt: string | null; openedAt: string | null;
+  outcome: string | null; purchasedUsd: number; isTest: boolean; createdAt: string;
+}
+
+export interface RepurchaseList {
+  rows: RepurchaseRow[];
+  kpis: { total: number; unsent: number; sent: number; opened: number; completed: number; purchased: number; revenueUsd: number };
+  /** Quem ainda vai entrar (sem convite), por quantos dias faltam pro estoque acabar. */
+  forecast: { variant: string; name: string; buckets: { id: string; label: string; count: number }[] }[];
+  variants: { slug: string; name: string; active: boolean }[];
+}
+
+const FORECAST_BUCKETS = [
+  { id: '0-7', label: 'até 7 dias', max: 7 },
+  { id: '8-14', label: '8 a 14 dias', max: 14 },
+  { id: '15-21', label: '15 a 21 dias', max: 21 },
+  { id: '22-30', label: '22 a 30 dias', max: 30 },
+] as const;
+
+/**
+ * Convites cujo estoque acaba em até `withinDays` dias (e quem já ficou sem
+ * produto nos últimos 45), com status até a compra, + a previsão de quem
+ * entra nos próximos 30 dias. Lista pra quem dispara: telefone em E.164 e o
+ * link pessoal de cada um.
+ */
+export async function getRepurchaseList(opts: {
+  slug?: string | null; withinDays?: number; includeTests?: boolean;
+}): Promise<RepurchaseList> {
+  const days = Math.min(Math.max(Math.trunc(opts.withinDays ?? 14), 1), 60);
+  const now = Date.now();
+  const variants = await db.surveyVariant.findMany({ orderBy: { createdAt: 'asc' } });
+  const bySlug = opts.slug && opts.slug !== 'all' ? opts.slug : null;
+  const invites = await db.surveyInvite.findMany({
+    where: {
+      ...(opts.includeTests ? {} : { isTest: false }),
+      ...(bySlug ? { variant: { slug: bySlug } } : {}),
+      stockUntil: { lt: new Date(now + days * DAY_MS), gte: new Date(now - 45 * DAY_MS) },
+    },
+    include: { variant: true, response: true },
+    orderBy: { stockUntil: 'asc' },
+    take: 5000,
+  });
+  const sales = await surveySales(invites.flatMap((i) => (i.response ? [i.response.id] : [])));
+  const rows: RepurchaseRow[] = invites.map((i) => {
+    const base = inviteOut(i, now);
+    const sale = i.response ? sales.get(i.response.id) : undefined;
+    const sms = smsPhoneUS(i.phone);
+    return {
+      id: base.id, variant: base.variant, product: base.product, segment: base.segment,
+      firstName: base.firstName, email: base.email, phone: base.phone,
+      smsPhone: sms?.e164 ?? null, smsPhoneInferred: sms?.inferred ?? false,
+      bottles: base.bottles, stockUntil: base.stockUntil, daysLeft: base.daysLeft, link: base.link,
+      status: sale ? 'comprou' : base.status, channel: base.channel, sentAt: base.sentAt,
+      openedAt: i.openedAt ? i.openedAt.toISOString() : null,
+      outcome: i.response?.completedAt ? (i.response.outcome === 'cupom' ? `cupom${i.response.couponPct}` : i.response.outcome) : null,
+      purchasedUsd: sale ? Math.round(sale.revenue * 100) / 100 : 0,
+      isTest: i.isTest, createdAt: base.createdAt,
+    };
+  });
+
+  const forecast: RepurchaseList['forecast'] = [];
+  for (const v of variants.filter((x) => x.active && x.family && (!bySlug || x.slug === bySlug))) {
+    const leads = await eligibleLeads(v, 30, 5000);
+    const invited = await invitedKeys(v.id, leads);
+    const counts = FORECAST_BUCKETS.map((b) => ({ id: b.id, label: b.label, count: 0 }));
+    for (const l of leads) {
+      if (invited.has(`${l.email}|${l.stock_until.getTime()}`)) continue;
+      const left = (l.stock_until.getTime() - now) / DAY_MS;
+      const k = FORECAST_BUCKETS.findIndex((b) => left <= b.max);
+      if (k >= 0) counts[k].count++;
+    }
+    forecast.push({ variant: v.slug, name: v.name, buckets: counts });
+  }
+
+  return {
+    rows,
+    kpis: {
+      total: rows.length,
+      unsent: rows.filter((r) => !r.sentAt).length,
+      sent: rows.filter((r) => r.sentAt).length,
+      opened: rows.filter((r) => r.openedAt).length,
+      completed: rows.filter((r) => r.status === 'concluiu' || r.status === 'comprou').length,
+      purchased: rows.filter((r) => r.status === 'comprou').length,
+      revenueUsd: Math.round(rows.reduce((s, r) => s + r.purchasedUsd, 0) * 100) / 100,
+    },
+    forecast,
+    variants: variants.map((v) => ({ slug: v.slug, name: v.name, active: v.active })),
+  };
 }
 
 /**

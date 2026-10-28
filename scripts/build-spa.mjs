@@ -36,6 +36,7 @@ const options = {
     'public/src/pages/vsl.jsx',
     'public/src/pages/leads.jsx',
     'public/src/pages/surveys.jsx',
+    'public/src/pages/recurrences.jsx',
     'public/src/app.jsx',
   ],
   outdir: 'public/dist',
@@ -119,6 +120,7 @@ function checkGlobals() {
     'public/src/pages/vsl.jsx',
     'public/src/pages/leads.jsx',
     'public/src/pages/surveys.jsx',
+    'public/src/pages/recurrences.jsx',
     'public/src/pages/net-profit.jsx',
   ]) {
     for (const m of read(f).matchAll(/NSApi\.(\w+)/g)) {
