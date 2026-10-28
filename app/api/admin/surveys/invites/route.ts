@@ -9,7 +9,8 @@
 //     "withinDays": 7, "limit": 500, "channel": "email" | "sms" | null, "dryRun": false }
 //   channel marca como enviado agora; dryRun só conta.
 //   Convite de teste (fora dos números da aba):
-//   { "variant": "neurorecall", "test": { "email": "...", "firstName": "John", "bottles": 3 } }
+//   { "variant": "neurorecall", "test": { "email": "...", "firstName": "John", "bottles": 3, "arm": "B"? } }
+//   (arm força a versão do teste A/B no ar; sem ele, sorteia na abertura)
 //
 // GET /api/admin/surveys/invites?variant=all&withinDays=7&unsent=1
 //   Relê a lista atual sem criar nada (estoque acaba em até N dias, inclusive
@@ -43,6 +44,7 @@ export async function POST(req: Request) {
       }
       const inv = await createSurveyTestInvite({
         slug: variant, email: t.email, firstName: typeof t.firstName === 'string' ? t.firstName : null, bottles: Number(t.bottles),
+        arm: typeof t.arm === 'string' ? t.arm : null,
       });
       return inv ? NextResponse.json(inv) : NextResponse.json({ error: 'variant not found' }, { status: 404 });
     }

@@ -604,6 +604,34 @@ async function saveSurveyVariant(slug, patch) {
   _respCache.clear();
   return data;
 }
+// Pesquisa nova copiada de outra (admin): { slug, name, family, productName, from }. Nasce desligada.
+async function createSurveyVariant(body) {
+  return svAdminSend('/api/admin/surveys/variants', 'POST', body);
+}
+// Teste A/B das pesquisas (admin).
+async function fetchSurveyExperiments(slug) {
+  const res = await fetch(`/api/admin/surveys/experiments?variant=${encodeURIComponent(slug)}`, { headers: { Accept: 'application/json' } });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.error || `${res.status}`);
+  return data;
+}
+function createSurveyExperiment(body) {
+  return svAdminSend('/api/admin/surveys/experiments', 'POST', body);
+}
+function patchSurveyExperiment(body) {
+  return svAdminSend('/api/admin/surveys/experiments', 'PATCH', body);
+}
+async function svAdminSend(url, method, body) {
+  const res = await fetch(url, {
+    method,
+    headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+    body: JSON.stringify(body),
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.error || `${res.status}`);
+  _respCache.clear();
+  return data;
+}
 // Catálogo da rede no NorthAffiliates (admin). 409 = chave não configurada.
 async function fetchNetworkCatalog() {
   const res = await fetch('/api/admin/northaffiliates/catalog', { headers: { Accept: 'application/json' } });
@@ -843,6 +871,10 @@ window.NSApi = _wrapMutations({
   createSurveyTestInvite,
   fetchSurveyVariantsAdmin,
   saveSurveyVariant,
+  createSurveyVariant,
+  fetchSurveyExperiments,
+  createSurveyExperiment,
+  patchSurveyExperiment,
   fetchNetworkCatalog,
   fetchOverviewPanels,
   getAffRefundMode,

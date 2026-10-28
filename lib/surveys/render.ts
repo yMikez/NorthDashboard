@@ -27,6 +27,8 @@ export interface RenderSurveyInput {
   outcome: Outcome | null;
   couponPct: number | null;
   followUp: boolean;
+  /** Pré-visualização de uma versão do teste A/B (a tela final é calculada com ela). */
+  previewArm?: { exp: string; arm: string } | null;
 }
 
 const ESC: Record<string, string> = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' };
@@ -148,7 +150,7 @@ $('#q5 [data-next]').onclick=function(){save('q5',picked('q5'));var c=$('#coment
 function finish(){
   if(busy)return;busy=true;$$('[data-next]').forEach(function(b){b.disabled=true});
   var p=D.preview
-    ?fetch(D.api,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({preview:true,slug:D.slug,bottles:D.bottles,answers:A})}).then(function(r){return r.json()}).catch(function(){return null})
+    ?fetch(D.api,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({preview:true,slug:D.slug,bottles:D.bottles,exp:D.exp,arm:D.arm,answers:A})}).then(function(r){return r.json()}).catch(function(){return null})
     :post({finish:true,answers:A});
   p.then(function(r){
     busy=false;var o=(r&&r.outcome)||'obrigado';
@@ -275,6 +277,8 @@ export function renderSurveyPage(input: RenderSurveyInput): string {
     slug: input.slug,
     bottles: ctx.bottles,
     preview: input.preview,
+    exp: input.previewArm?.exp ?? null,
+    arm: input.previewArm?.arm ?? null,
     api: '/api/survey/answer',
     goUrl: { assinatura: goUrl('assinatura'), kit: goUrl('kit') },
     order,

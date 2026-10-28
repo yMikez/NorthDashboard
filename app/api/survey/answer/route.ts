@@ -2,7 +2,7 @@
 //
 //   { t, q, v }                grava uma resposta
 //   { t, finish, answers }     conclui e devolve a tela final { outcome, followUp }
-//   { preview, slug, answers } pré-visualização: só calcula a tela final
+//   { preview, slug, answers, bottles?, exp?, arm? }  pré-visualização: só calcula a tela final
 
 import { NextResponse } from 'next/server';
 import { finishSurvey, previewOutcome, saveSurveyAnswer } from '@/lib/services/surveys';
@@ -20,7 +20,7 @@ export async function POST(req: Request) {
   }
   try {
     if (body.preview === true) {
-      const d = await previewOutcome(String(body.slug ?? ''), body.answers, body.bottles);
+      const d = await previewOutcome(String(body.slug ?? ''), body.answers, body.bottles, { exp: body.exp, arm: body.arm });
       return d ? NextResponse.json(d) : NextResponse.json({ error: 'not found' }, { status: 404 });
     }
     const token = String(body.t ?? '');

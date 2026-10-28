@@ -2074,16 +2074,17 @@ model SurveyVariant {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  invites   SurveyInvite[]
-  responses SurveyResponse[]
+  invites     SurveyInvite[]
+  responses   SurveyResponse[]
+  experiments SurveyExperiment[]
 }
 
 model SurveyInvite {
-  id             String        @id @default(cuid())
+  id             String            @id @default(cuid())
   // Vai no link (aleatório, ~144 bits) — sem e-mail nem nome na URL.
-  token          String        @unique
+  token          String            @unique
   variantId      String
-  variant        SurveyVariant @relation(fields: [variantId], references: [id])
+  variant        SurveyVariant     @relation(fields: [variantId], references: [id])
   // Contato tirado da aba Leads (lead_summary) no momento do convite.
   email          String
   firstName      String?
@@ -2095,15 +2096,20 @@ model SurveyInvite {
   // email | sms | manual — quem dispara (n8n) marca.
   channel        String?
   // Convite de teste (gerado à mão pelo admin): fora dos números da aba.
-  isTest         Boolean       @default(false)
+  isTest         Boolean           @default(false)
   sentAt         DateTime?
   openedAt       DateTime?
-  createdAt      DateTime      @default(now())
+  createdAt      DateTime          @default(now())
+  // Teste A/B: versão sorteada na 1ª abertura (fica fixa pra pessoa).
+  experimentId   String?
+  experiment     SurveyExperiment? @relation(fields: [experimentId], references: [id])
+  arm            String?
 
   response SurveyResponse?
 
   @@unique([variantId, email, stockUntil])
   @@index([variantId, createdAt])
+  @@index([experimentId])
 }
 
 model SurveyResponse {
@@ -2138,4 +2144,26 @@ model SurveyResponse {
 
   @@index([variantId, startedAt])
   @@index([csStatus])
+}
+
+// Teste A/B de uma pesquisa (lib/surveys/experiments.ts). Um por vez no ar por
+// pesquisa. A = a pesquisa como está; B, C, D = cópias editadas da config.
+model SurveyExperiment {
+  id        String        @id @default(cuid())
+  variantId String
+  variant   SurveyVariant @relation(fields: [variantId], references: [id])
+  name      String
+  // running | stopped
+  status    String        @default("running")
+  // ExperimentArm[]: { key, name, weight, config? }.
+  arms      Json
+  // Versão escolhida ao encerrar (B, C, D publicada = virou a config da pesquisa).
+  winner    String?
+  createdBy String?
+  startedAt DateTime      @default(now())
+  endedAt   DateTime?
+
+  invites SurveyInvite[]
+
+  @@index([variantId, startedAt])
 }

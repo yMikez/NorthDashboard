@@ -6,12 +6,19 @@
 // `dbRead` — a mesma conta de estoque da aba Leads (30 dias por frasco).
 
 import { randomBytes } from 'node:crypto';
-import { Prisma, type SurveyInvite, type SurveyResponse, type SurveyVariant } from '@prisma/client';
+import {
+  Prisma, type SurveyExperiment, type SurveyInvite, type SurveyResponse, type SurveyVariant,
+} from '@prisma/client';
 import { db, dbRead } from '../db';
 import {
-  SURVEY_TRACKING_PREFIX, availableOffers, checkoutUrl, cleanAnswer, decideOutcome, firstNameOf, kitSizeFor, q4Options,
-  segmentOf, type CheckoutKind, type OutcomeDecision, type SurveyAnswers, type SurveyVariantConfig,
+  DEFAULT_COPY, FIM_TRATAMENTO, SURVEY_TRACKING_PREFIX, availableOffers, checkoutUrl, cleanAnswer, decideOutcome,
+  firstNameOf, kitSizeFor, q4Options, segmentOf,
+  type CheckoutKind, type OutcomeDecision, type SurveyAnswers, type SurveyVariantConfig,
 } from '../surveys/fimTratamento';
+import {
+  CONTROL_ARM, armConfig, armsOf, configDiff, pickArm, proportionTest, sanitizeArms,
+  type ExperimentArm, type ProportionTest,
+} from '../surveys/experiments';
 import { renderSurveyInvalid, renderSurveyPage } from '../surveys/render';
 import { sanitizeVariantConfig } from '../surveys/variantConfig';
 
@@ -31,12 +38,30 @@ function offerContext(cfg: SurveyVariantConfig, bottles: number) {
   return { kit, av: availableOffers(cfg, kit) };
 }
 
-type InviteFull = SurveyInvite & { variant: SurveyVariant; response: SurveyResponse | null };
+type InviteFull = SurveyInvite & {
+  variant: SurveyVariant; response: SurveyResponse | null; experiment: SurveyExperiment | null;
+};
 
 async function loadInvite(token: string): Promise<InviteFull | null> {
   if (!TOKEN_RE.test(token)) return null;
-  const inv = await db.surveyInvite.findUnique({ where: { token }, include: { variant: true, response: true } });
+  const inv = await db.surveyInvite.findUnique({ where: { token }, include: { variant: true, response: true, experiment: true } });
   return inv && inv.variant.active ? inv : null;
+}
+
+const runningExperiment = (variantId: string) =>
+  db.surveyExperiment.findFirst({ where: { variantId, status: 'running' }, orderBy: { startedAt: 'desc' } });
+
+/**
+ * O que a pessoa vê: a versão do teste A/B em que caiu enquanto o teste roda;
+ * depois de encerrado, só quem já tinha começado segue nela (a oferta que viu
+ * continua a mesma) — o resto volta pra pesquisa como está.
+ */
+function inviteConfig(inv: InviteFull): SurveyVariantConfig {
+  const base = cfgOf(inv.variant);
+  const exp = inv.experiment;
+  if (!exp || !inv.arm) return base;
+  if (exp.status !== 'running' && !inv.response) return base;
+  return armConfig(base, armsOf(exp.arms).find((a) => a.key === inv.arm));
 }
 
 // ---------- página pública ----------
@@ -47,11 +72,21 @@ export async function surveyPageHtml(slug: string, token: string): Promise<{ sta
     const variant = await db.surveyVariant.findUnique({ where: { slug } }).catch(() => null);
     return { status: 404, html: renderSurveyInvalid(variant ? cfgOf(variant) : null) };
   }
-  if (!inv.openedAt) {
-    await db.surveyInvite.update({ where: { id: inv.id }, data: { openedAt: new Date() } });
+  const data: Prisma.SurveyInviteUpdateInput = {};
+  if (!inv.openedAt) data.openedAt = new Date();
+  // Sorteio do teste A/B: só quem nunca caiu em teste e ainda não começou a responder.
+  if (!inv.response && !inv.experimentId) {
+    const exp = await runningExperiment(inv.variantId);
+    if (exp) {
+      const arm = pickArm(armsOf(exp.arms), `${exp.id}:${inv.id}`);
+      data.experiment = { connect: { id: exp.id } };
+      data.arm = arm;
+      Object.assign(inv, { experiment: exp, experimentId: exp.id, arm });
+    }
   }
+  if (Object.keys(data).length) await db.surveyInvite.update({ where: { id: inv.id }, data });
   const html = renderSurveyPage({
-    cfg: cfgOf(inv.variant),
+    cfg: inviteConfig(inv),
     ctx: { firstName: inv.firstName, bottles: inv.bottles },
     slug, token, preview: false,
     answers: answersOf(inv.response),
@@ -69,21 +104,33 @@ function previewBottles(cfg: SurveyVariantConfig, raw: unknown): number {
   return cfg.eligibleBottles?.[cfg.eligibleBottles.length - 1] ?? 3;
 }
 
+/** Versão de um teste A/B pra pré-visualizar (exp + arm); sem isso, a pesquisa como está. */
+export interface PreviewArm { exp?: unknown; arm?: unknown }
+
+async function previewConfig(variant: SurveyVariant, p?: PreviewArm): Promise<{ cfg: SurveyVariantConfig; exp: string | null; arm: string | null }> {
+  const base = cfgOf(variant);
+  if (typeof p?.exp !== 'string' || typeof p.arm !== 'string' || !p.exp || !p.arm) return { cfg: base, exp: null, arm: null };
+  const exp = await db.surveyExperiment.findFirst({ where: { id: p.exp, variantId: variant.id } });
+  const arm = exp ? armsOf(exp.arms).find((a) => a.key === p.arm) : undefined;
+  return arm && exp ? { cfg: armConfig(base, arm), exp: exp.id, arm: arm.key } : { cfg: base, exp: null, arm: null };
+}
+
 /** Pré-visualização pro dash: dados de exemplo, nada é gravado. ?bottles=6 mostra o público completo. */
-export async function surveyPreviewHtml(slug: string, bottles?: unknown): Promise<string | null> {
+export async function surveyPreviewHtml(slug: string, bottles?: unknown, p?: PreviewArm): Promise<string | null> {
   const variant = await db.surveyVariant.findUnique({ where: { slug } });
   if (!variant) return null;
-  const cfg = cfgOf(variant);
+  const { cfg, exp, arm } = await previewConfig(variant, p);
   return renderSurveyPage({
     cfg, ctx: { firstName: 'John', bottles: previewBottles(cfg, bottles) },
     slug, token: '', preview: true, answers: {}, outcome: null, couponPct: null, followUp: false,
+    previewArm: exp && arm ? { exp, arm } : null,
   });
 }
 
-export async function previewOutcome(slug: string, raw: unknown, bottles?: unknown): Promise<OutcomeDecision | null> {
+export async function previewOutcome(slug: string, raw: unknown, bottles?: unknown, p?: PreviewArm): Promise<OutcomeDecision | null> {
   const variant = await db.surveyVariant.findUnique({ where: { slug } });
   if (!variant) return null;
-  const cfg = cfgOf(variant);
+  const { cfg } = await previewConfig(variant, p);
   return decideOutcome(cleanAll(cfg, raw), offerContext(cfg, previewBottles(cfg, bottles)).av);
 }
 
@@ -105,7 +152,7 @@ export type SaveResult = { ok: true } | { ok: false; status: 400 | 404 };
 export async function saveSurveyAnswer(token: string, key: string, value: unknown): Promise<SaveResult> {
   const inv = await loadInvite(token);
   if (!inv) return { ok: false, status: 404 };
-  const clean = cleanAnswer(cfgOf(inv.variant), key, value);
+  const clean = cleanAnswer(inviteConfig(inv), key, value);
   if (!clean) return { ok: false, status: 400 };
   // Concluída: só o "Not now" ainda conta (a resposta que decidiu fica como foi).
   if (inv.response?.completedAt && clean.key !== 'dispensou') return { ok: true };
@@ -130,7 +177,7 @@ export async function finishSurvey(token: string, raw: unknown): Promise<Outcome
       followUp: inv.response.followUp,
     };
   }
-  const cfg = cfgOf(inv.variant);
+  const cfg = inviteConfig(inv);
   const answers = { ...answersOf(inv.response), ...cleanAll(cfg, raw) };
   const d = decideOutcome(answers, offerContext(cfg, inv.bottles).av);
   const now = new Date();
@@ -163,7 +210,7 @@ export async function surveyCheckoutRedirect(token: string, kind: string, size?:
   if (!(CHECKOUT_KINDS as readonly string[]).includes(kind)) return null;
   const inv = await loadInvite(token);
   if (!inv?.response) return null;
-  const cfg = cfgOf(inv.variant);
+  const cfg = inviteConfig(inv);
   // "See all plans": o cliente escolheu outro kit; só vale tamanho que existe na variante.
   const chosen = kind === 'kit' && size && cfg.offers?.kits?.[size]?.url ? Number(size) : null;
   const kit = chosen ?? offerContext(cfg, inv.bottles).kit;
@@ -362,22 +409,28 @@ export async function markSurveyInvitesSent(ids: string[], channel: string): Pro
   return res.count;
 }
 
-/** Convite de teste pra um e-mail qualquer (admin). Fica fora dos números da aba. */
+/**
+ * Convite de teste pra um e-mail qualquer (admin). Fica fora dos números da
+ * aba. `arm` força a versão do teste A/B no ar (sem isso, sorteia ao abrir).
+ */
 export async function createSurveyTestInvite(opts: {
-  slug: string; email: string; firstName?: string | null; bottles?: number;
-}): Promise<SurveyInviteOut | null> {
+  slug: string; email: string; firstName?: string | null; bottles?: number; arm?: string | null;
+}): Promise<(SurveyInviteOut & { arm: string | null }) | null> {
   const variant = await db.surveyVariant.findUnique({ where: { slug: opts.slug } });
   if (!variant) return null;
   const bottles = [2, 3, 6].includes(Number(opts.bottles)) ? Number(opts.bottles) : 3;
+  const exp = opts.arm ? await runningExperiment(variant.id) : null;
+  const arm = exp && armsOf(exp.arms).some((a) => a.key === opts.arm) ? opts.arm! : null;
   const inv = await db.surveyInvite.create({
     data: {
       token: newToken(), variantId: variant.id, email: opts.email.trim().toLowerCase(),
       firstName: opts.firstName?.trim() || null, bottles,
       stockUntil: new Date(Date.now() + 7 * 86400000), channel: 'manual', isTest: true,
+      ...(exp && arm ? { experimentId: exp.id, arm } : {}),
     },
     include: { variant: true },
   });
-  return inviteOut(inv);
+  return { ...inviteOut(inv), arm: inv.arm };
 }
 
 // ---------- cadastro das variantes (aba Pesquisas, admin) ----------
@@ -387,12 +440,41 @@ export interface SurveyVariantAdmin {
   config: SurveyVariantConfig; updatedAt: string;
 }
 
+type AdminResult<T> = ({ ok: true } & T) | { ok: false; status: 400 | 404 | 409; error: string };
+
+const variantAdminOut = (v: SurveyVariant): SurveyVariantAdmin => ({
+  slug: v.slug, name: v.name, family: v.family, active: v.active, version: v.version,
+  config: cfgOf(v), updatedAt: v.updatedAt.toISOString(),
+});
+
 export async function listSurveyVariantsAdmin(): Promise<SurveyVariantAdmin[]> {
   const rows = await db.surveyVariant.findMany({ orderBy: { createdAt: 'asc' } });
-  return rows.map((v) => ({
-    slug: v.slug, name: v.name, family: v.family, active: v.active, version: v.version,
-    config: cfgOf(v), updatedAt: v.updatedAt.toISOString(),
-  }));
+  return rows.map(variantAdminOut);
+}
+
+/** Texto padrão da página (as chaves que dá pra reescrever por pesquisa ou versão). */
+export const surveyCopyDefaults = (): Record<string, string> => DEFAULT_COPY;
+
+/**
+ * Duas pesquisas no ar pro mesmo produto = a mesma pessoa em duas listas, com
+ * dois links. Pra comparar textos/ofertas no mesmo produto existe o teste A/B.
+ */
+async function activeFamilyConflict(family: string | null, exceptId?: string): Promise<string | null> {
+  if (!family) return null;
+  const other = await db.surveyVariant.findFirst({
+    where: { family, active: true, ...(exceptId ? { NOT: { id: exceptId } } : {}) },
+    select: { name: true },
+  });
+  return other ? `Já tem uma pesquisa no ar pra ${family} ("${other.name}"). Desligue a outra ou use um teste A/B.` : null;
+}
+
+async function familyExists(family: string): Promise<boolean> {
+  return (await db.product.count({ where: { family } })) > 0;
+}
+
+function nameOf(raw: unknown): string | null {
+  const name = typeof raw === 'string' ? raw.trim() : '';
+  return name && name.length <= 120 ? name : null;
 }
 
 /**
@@ -401,16 +483,28 @@ export async function listSurveyVariantsAdmin(): Promise<SurveyVariantAdmin[]> {
  */
 export async function updateSurveyVariant(
   slug: string,
-  patch: { active?: unknown; name?: unknown; config?: unknown },
-): Promise<{ ok: true; variant: SurveyVariantAdmin } | { ok: false; status: 400 | 404; error: string }> {
+  patch: { active?: unknown; name?: unknown; family?: unknown; config?: unknown },
+): Promise<AdminResult<{ variant: SurveyVariantAdmin }>> {
   const current = await db.surveyVariant.findUnique({ where: { slug } });
   if (!current) return { ok: false, status: 404, error: 'pesquisa não encontrada' };
   const data: Prisma.SurveyVariantUpdateInput = {};
   if (patch.active !== undefined) data.active = patch.active === true;
   if (patch.name !== undefined) {
-    const name = typeof patch.name === 'string' ? patch.name.trim() : '';
-    if (!name || name.length > 120) return { ok: false, status: 400, error: 'Nome da pesquisa: obrigatório (até 120)' };
+    const name = nameOf(patch.name);
+    if (!name) return { ok: false, status: 400, error: 'Nome da pesquisa: obrigatório (até 120)' };
     data.name = name;
+  }
+  let family = current.family;
+  if (patch.family !== undefined && patch.family !== current.family) {
+    if (typeof patch.family !== 'string' || !(await familyExists(patch.family))) {
+      return { ok: false, status: 400, error: 'Produto: escolha um produto do catálogo' };
+    }
+    family = data.family = patch.family;
+  }
+  const active = patch.active !== undefined ? patch.active === true : current.active;
+  if (active && (!current.active || family !== current.family)) {
+    const conflict = await activeFamilyConflict(family, current.id);
+    if (conflict) return { ok: false, status: 409, error: conflict };
   }
   if (patch.config !== undefined) {
     const res = sanitizeVariantConfig(patch.config);
@@ -421,34 +515,234 @@ export async function updateSurveyVariant(
     }
   }
   const v = await db.surveyVariant.update({ where: { slug }, data });
+  return { ok: true, variant: variantAdminOut(v) };
+}
+
+const SLUG_RE = /^[a-z0-9](?:[a-z0-9-]{0,58}[a-z0-9])?$/;
+const RESERVED_SLUGS = new Set(['api', 'survey-assets', '_next', 'login', 'admin', 'static', 'assets']);
+
+/**
+ * Pesquisa nova a partir de outra (as perguntas são as mesmas; muda produto,
+ * ofertas, foto e textos). Nasce DESLIGADA. Produto diferente do da origem:
+ * links de checkout, códigos de cupom e foto não vêm junto — são de outro
+ * produto e mandariam o cliente pro checkout errado.
+ */
+export async function createSurveyVariant(input: {
+  slug?: unknown; name?: unknown; family?: unknown; productName?: unknown; from?: unknown;
+}): Promise<AdminResult<{ variant: SurveyVariantAdmin }>> {
+  const slug = typeof input.slug === 'string' ? input.slug.trim().toLowerCase() : '';
+  if (!SLUG_RE.test(slug) || RESERVED_SLUGS.has(slug)) {
+    return { ok: false, status: 400, error: 'Endereço: só letras minúsculas, números e hífen (ex.: neurorecall-2)' };
+  }
+  if (await db.surveyVariant.findUnique({ where: { slug }, select: { id: true } })) {
+    return { ok: false, status: 409, error: `Já existe uma pesquisa em /${slug}` };
+  }
+  const name = nameOf(input.name);
+  if (!name) return { ok: false, status: 400, error: 'Nome da pesquisa: obrigatório (até 120)' };
+  const family = typeof input.family === 'string' ? input.family : '';
+  if (!family || !(await familyExists(family))) return { ok: false, status: 400, error: 'Produto: escolha um produto do catálogo' };
+
+  const fromSlug = typeof input.from === 'string' && input.from ? input.from : null;
+  const source = fromSlug
+    ? await db.surveyVariant.findUnique({ where: { slug: fromSlug } })
+    : await db.surveyVariant.findFirst({ orderBy: { createdAt: 'asc' } });
+  if (fromSlug && !source) return { ok: false, status: 404, error: 'pesquisa de origem não encontrada' };
+  const cfg: SurveyVariantConfig = structuredClone(source ? cfgOf(source) : { productName: family });
+  cfg.productName = typeof input.productName === 'string' && input.productName.trim() ? input.productName.trim() : family;
+  if (!source || source.family !== family) {
+    cfg.image = null;
+    if (cfg.offers?.assinatura) cfg.offers.assinatura.url = null;
+    for (const k of Object.values(cfg.offers?.kits ?? {})) k.url = null;
+    cfg.coupons = (cfg.coupons ?? []).map((c) => ({ pct: c.pct, code: null }));
+  }
+  const res = sanitizeVariantConfig(cfg);
+  if (!res.ok) return { ok: false, status: 400, error: res.error };
+  const v = await db.surveyVariant.create({
+    data: {
+      slug, template: FIM_TRATAMENTO, name, family, active: false,
+      config: res.config as unknown as Prisma.InputJsonObject,
+    },
+  });
+  return { ok: true, variant: variantAdminOut(v) };
+}
+
+// ---------- teste A/B (aba Pesquisas, admin) ----------
+
+export interface SurveyExperimentAdmin {
+  id: string; name: string; status: string; winner: string | null; createdBy: string | null;
+  startedAt: string; endedAt: string | null;
+  /** Versões com a config efetiva e o que muda em relação à A. */
+  arms: (ExperimentArm & { changes: string[] })[];
+}
+
+function experimentOut(e: SurveyExperiment, live: SurveyVariantConfig): SurveyExperimentAdmin {
+  const base = diffBase(e, live);
   return {
-    ok: true,
-    variant: { slug: v.slug, name: v.name, family: v.family, active: v.active, version: v.version, config: cfgOf(v), updatedAt: v.updatedAt.toISOString() },
+    id: e.id, name: e.name, status: e.status, winner: e.winner, createdBy: e.createdBy,
+    startedAt: e.startedAt.toISOString(), endedAt: e.endedAt ? e.endedAt.toISOString() : null,
+    arms: armsOf(e.arms).map(({ snapshot: _s, ...a }) => ({ ...a, changes: a.config ? configDiff(base, armConfig(base, a)) : [] })),
   };
+}
+
+export async function listSurveyExperiments(slug: string): Promise<SurveyExperimentAdmin[] | null> {
+  const variant = await db.surveyVariant.findUnique({
+    where: { slug }, include: { experiments: { orderBy: { startedAt: 'desc' }, take: 20 } },
+  });
+  if (!variant) return null;
+  return variant.experiments.map((e) => experimentOut(e, cfgOf(variant)));
+}
+
+function checkArms(raw: unknown, base: SurveyVariantConfig): { ok: true; arms: ExperimentArm[] } | { ok: false; error: string } {
+  const res = sanitizeArms(raw);
+  if (!res.ok) return res;
+  const same = res.arms.find((a) => a.config && !configDiff(base, armConfig(base, a)).length);
+  if (same) return { ok: false, error: `A versão ${same.key} está igual à atual — mude o que quer testar` };
+  return res;
+}
+
+/** Começa um teste. Um por vez no ar por pesquisa. */
+export async function createSurveyExperiment(
+  slug: string, input: { name?: unknown; arms?: unknown }, by: string | null,
+): Promise<AdminResult<{ experiment: SurveyExperimentAdmin }>> {
+  const variant = await db.surveyVariant.findUnique({ where: { slug } });
+  if (!variant) return { ok: false, status: 404, error: 'pesquisa não encontrada' };
+  if (await runningExperiment(variant.id)) {
+    return { ok: false, status: 409, error: 'Já tem um teste no ar nesta pesquisa — encerre antes de começar outro' };
+  }
+  const name = typeof input.name === 'string' ? input.name.trim().slice(0, 80) : '';
+  if (!name) return { ok: false, status: 400, error: 'Nome do teste: obrigatório' };
+  const base = cfgOf(variant);
+  const res = checkArms(input.arms, base);
+  if (!res.ok) return { ok: false, status: 400, error: res.error };
+  const e = await db.surveyExperiment.create({
+    data: { variantId: variant.id, name, arms: res.arms as unknown as Prisma.InputJsonArray, createdBy: by },
+  });
+  return { ok: true, experiment: experimentOut(e, base) };
+}
+
+/**
+ * Edita um teste no ar (nome, pesos, versões — mesma quantidade de versões;
+ * quem já foi sorteado continua na sua) ou encerra. Encerrar com `winner`
+ * B/C/D publica a config daquela versão na pesquisa (versão + 1); A = fica
+ * como está.
+ */
+export async function updateSurveyExperiment(
+  id: string,
+  patch: { name?: unknown; arms?: unknown; action?: unknown; winner?: unknown },
+): Promise<AdminResult<{ experiment: SurveyExperimentAdmin }>> {
+  const e = await db.surveyExperiment.findUnique({ where: { id }, include: { variant: true } });
+  if (!e) return { ok: false, status: 404, error: 'teste não encontrado' };
+  if (e.status !== 'running') return { ok: false, status: 409, error: 'Este teste já foi encerrado' };
+  const base = cfgOf(e.variant);
+
+  if (patch.action === 'stop') {
+    const winner = typeof patch.winner === 'string' && patch.winner ? patch.winner : null;
+    const arm = winner ? armsOf(e.arms).find((a) => a.key === winner) : null;
+    if (winner && !arm) return { ok: false, status: 400, error: `Versão ${winner} não existe neste teste` };
+    const ops: Prisma.PrismaPromise<unknown>[] = [];
+    if (arm?.config) {
+      const res = sanitizeVariantConfig(armConfig(base, arm));
+      if (!res.ok) return { ok: false, status: 400, error: res.error };
+      ops.push(db.surveyVariant.update({
+        where: { id: e.variantId },
+        data: { config: res.config as unknown as Prisma.InputJsonObject, version: { increment: 1 } },
+      }));
+    }
+    // A guarda a pesquisa como estava: o histórico segue mostrando o que cada versão mudou.
+    const arms = armsOf(e.arms).map((a, i) => (i === 0 ? { ...a, snapshot: base } : a));
+    ops.push(db.surveyExperiment.update({
+      where: { id },
+      data: { status: 'stopped', endedAt: new Date(), winner, arms: arms as unknown as Prisma.InputJsonArray },
+    }));
+    await db.$transaction(ops);
+    const fresh = await db.surveyExperiment.findUniqueOrThrow({ where: { id }, include: { variant: true } });
+    return { ok: true, experiment: experimentOut(fresh, cfgOf(fresh.variant)) };
+  }
+
+  const data: Prisma.SurveyExperimentUpdateInput = {};
+  if (patch.name !== undefined) {
+    const name = typeof patch.name === 'string' ? patch.name.trim().slice(0, 80) : '';
+    if (!name) return { ok: false, status: 400, error: 'Nome do teste: obrigatório' };
+    data.name = name;
+  }
+  if (patch.arms !== undefined) {
+    const res = checkArms(patch.arms, base);
+    if (!res.ok) return { ok: false, status: 400, error: res.error };
+    if (res.arms.length !== armsOf(e.arms).length) {
+      return { ok: false, status: 400, error: 'Com o teste no ar não dá pra mudar a quantidade de versões — encerre e comece outro' };
+    }
+    data.arms = res.arms as unknown as Prisma.InputJsonArray;
+  }
+  const u = await db.surveyExperiment.update({ where: { id }, data });
+  return { ok: true, experiment: experimentOut(u, base) };
 }
 
 // ---------- aba Pesquisas ----------
 
 const LABELS = {
   q1: { testar: 'Queria testar antes', dinheiro: 'Plano todo era caro de uma vez', outra_pessoa: 'É pra outra pessoa', nao_sabia: 'Não sabia que eram 6 meses' },
+  q2: { 1: '1★', 2: '2★', 3: '3★', 4: '4★', 5: '5★' } as Record<string, string>,
   q3: { todo_dia: 'Todo dia', maioria: 'Na maioria dos dias', esquece: 'Esquece mais do que gostaria', parou: 'Parou de tomar' },
   q3b: { medico: 'Médico desaconselhou', mal_estar: 'Não caiu bem', sem_diferenca: 'Não notou diferença', orcamento: 'Não coube no orçamento', outro: 'Outro motivo' },
   q5: { mensal: '1 frasco por mês', desconto: 'Desconto nos que faltam', progresso: 'Ver mais progresso antes', nao_continuar: 'Não vai continuar' },
   outcome: {
     cs: 'CS liga (sem oferta)', recorrencia: 'Assinatura mensal', oferta: 'Kit no preço de recompra',
     cupom10: 'Kit + cupom 10%', cupom15: 'Kit + cupom 15%', cupom20: 'Kit + cupom 20%', obrigado: 'Só agradecimento',
-  },
+  } as Record<string, string>,
   // nota_baixa = regra antiga (nota 1–2), antes da venda pra nota 2 (2026-10-28).
   csReason: { nota_minima: 'Nota 1', nota_baixa: 'Nota 1–2', parou_medico: 'Parou: médico', parou_mal_estar: 'Parou: mal-estar' },
+  segment: { parcial: 'Comprou 2–3 frascos', completo: 'Comprou 6+ frascos' } as Record<string, string>,
+  timing: { '8+': '8+ dias antes de acabar', '4-7': '4 a 7 dias antes', '1-3': '1 a 3 dias antes', acabou: 'Já tinha acabado' } as Record<string, string>,
+  channel: {
+    email: 'E-mail', sms: 'SMS', whatsapp: 'WhatsApp', manual: 'Manual (teste)', outro: 'Outro canal', nao_enviado: 'Sem envio marcado',
+  } as Record<string, string>,
 } as const;
+
+const TIMING_ORDER = ['8+', '4-7', '1-3', 'acabou'] as const;
+
+function offerLabel(k: string): string {
+  if (k === 'assinatura') return 'Assinatura (1 frasco/mês)';
+  if (k === 'cupom') return 'Kit com cupom';
+  const m = /^kit:(\d+)$/.exec(k);
+  return m ? `Kit de ${m[1]} frascos` : k === 'kit' ? 'Kit' : k;
+}
 
 export interface SurveyCount { id: string; label: string; count: number }
 
+/**
+ * Uma linha de "→ venda". `base` = quem entrou no grupo (abriu, concluiu ou
+ * clicou — cada tabela diz qual); as taxas são sobre ela.
+ */
+export interface SurveySalesRow {
+  id: string; label: string;
+  /** Convites do grupo (tabelas de público, canal e pesquisas). */
+  invited?: number;
+  base: number; completed: number; clicked: number; purchases: number; revenueUsd: number;
+}
+
+export interface SurveyDailyRow { date: string; opened: number; completed: number; clicked: number; purchases: number; revenueUsd: number }
+
+export interface SurveyExperimentArmReport {
+  key: string; name: string; weight: number; changes: string[];
+  /** Sorteados = abriram o link durante o teste. */
+  opened: number; started: number; completed: number; clicked: number; purchases: number; revenueUsd: number;
+  satisfactionAvg: number | null;
+  /** Contra a versão A: clique no checkout e compra, sobre quem abriu. null na própria A. */
+  vsControl: { click: ProportionTest | null; purchase: ProportionTest | null } | null;
+}
+
+export interface SurveyExperimentReport {
+  id: string; name: string; status: string; winner: string | null; startedAt: string; endedAt: string | null;
+  arms: SurveyExperimentArmReport[];
+}
+
 export interface SurveyDashboard {
   variants: {
-    slug: string; name: string; active: boolean; previewUrl: string;
+    slug: string; name: string; active: boolean; family: string | null; previewUrl: string;
     /** Links cadastrados: assinatura, quantos kits e quantos cupons. */
     checkoutReady: { assinatura: boolean; kits: number; cupons: number };
+    /** Teste A/B no ar (pra pré-visualizar cada versão). */
+    experiment: { id: string; name: string; arms: { key: string; name: string }[] } | null;
   }[];
   variant: string | null;
   kpis: {
@@ -459,6 +753,24 @@ export interface SurveyDashboard {
   outcomes: SurveyCount[];
   satisfaction: SurveyCount[];
   q1: SurveyCount[]; q3: SurveyCount[]; q3b: SurveyCount[]; q4: SurveyCount[]; q5: SurveyCount[];
+  /** Tela final → clique → compra (base = concluíram com aquela tela). */
+  outcomeSales: SurveySalesRow[];
+  /** Botão clicado → compra (base = clicaram naquele botão; vale o último clique). */
+  offerSales: SurveySalesRow[];
+  /** Público: 2–3 × 6+ frascos (base = abriram). */
+  segments: SurveySalesRow[];
+  /** Quantos dias faltavam pro estoque acabar quando abriu (base = abriram). */
+  timing: SurveySalesRow[];
+  /** Canal do envio (base = abriram). */
+  channels: SurveySalesRow[];
+  /** Cada resposta → compra (base = concluíram com aquela resposta). */
+  answerSales: { id: string; title: string; rows: SurveySalesRow[] }[];
+  /** Por dia (BRT) do evento: abriu, concluiu, clicou, comprou. */
+  daily: SurveyDailyRow[];
+  /** Todas as pesquisas no mesmo período (base = abriram). */
+  compare: (SurveySalesRow & { active: boolean })[];
+  /** Testes A/B da pesquisa: o no ar e os últimos encerrados (período próprio de cada teste). */
+  experiments: SurveyExperimentReport[];
   csQueue: SurveyCsRow[];
   recent: SurveyRecentRow[];
 }
@@ -473,10 +785,160 @@ export interface SurveyRecentRow {
   id: string; firstName: string | null; email: string; bottles: number; satisfaction: number | null;
   outcome: string | null; couponPct: number | null; comment: string | null; completedAt: string | null;
   checkout: boolean; purchased: boolean;
+  /** Versão do teste A/B em que caiu. */
+  arm: string | null;
 }
 
 function counts(ids: readonly string[], labels: Record<string, string>, values: (string | undefined)[]): SurveyCount[] {
   return ids.map((id) => ({ id, label: labels[id] ?? id, count: values.filter((v) => v === id).length }));
+}
+
+type InvRow = SurveyInvite & { response: SurveyResponse | null };
+type SalesIndex = Map<string, { revenue: number; firstAt: Date; orders: { at: Date; usd: number }[] }>;
+
+const round2 = (n: number) => Math.round(n * 100) / 100;
+const avg = (xs: number[]) => (xs.length ? round2(xs.reduce((s, n) => s + n, 0) / xs.length) : null);
+const DAY_MS = 86400000;
+/** Dia em BRT (UTC−3, sem horário de verão desde 2019) — o dia do dash. */
+const brtDay = (d: Date) => new Date(d.getTime() - 3 * 3600000).toISOString().slice(0, 10);
+
+/** Venda que veio do quiz: o checkout leva src=qz_<resposta> e o ingest grava em trackingId. */
+async function surveySales(responseIds: string[]): Promise<SalesIndex> {
+  const out: SalesIndex = new Map();
+  const ids = [...new Set(responseIds)];
+  for (let k = 0; k < ids.length; k += 5000) {
+    const orders = await dbRead.order.findMany({
+      where: { trackingId: { in: ids.slice(k, k + 5000).map((id) => `${SURVEY_TRACKING_PREFIX}${id}`) }, status: 'APPROVED' },
+      select: { trackingId: true, grossAmountUsd: true, orderedAt: true },
+    });
+    for (const o of orders) {
+      const id = o.trackingId!.slice(SURVEY_TRACKING_PREFIX.length);
+      const usd = Number(o.grossAmountUsd);
+      const cur = out.get(id);
+      if (!cur) out.set(id, { revenue: usd, firstAt: o.orderedAt, orders: [{ at: o.orderedAt, usd }] });
+      else {
+        cur.revenue += usd;
+        cur.orders.push({ at: o.orderedAt, usd });
+        if (o.orderedAt < cur.firstAt) cur.firstAt = o.orderedAt;
+      }
+    }
+  }
+  return out;
+}
+
+function salesRow(id: string, label: string, rows: InvRow[], sales: SalesIndex, invited?: number): SurveySalesRow {
+  let completed = 0;
+  let clicked = 0;
+  let purchases = 0;
+  let revenue = 0;
+  for (const i of rows) {
+    const r = i.response;
+    if (!r) continue;
+    if (r.completedAt) completed++;
+    if (r.checkoutAt) clicked++;
+    const s = sales.get(r.id);
+    if (s) {
+      purchases++;
+      revenue += s.revenue;
+    }
+  }
+  return { id, label, ...(invited != null ? { invited } : {}), base: rows.length, completed, clicked, purchases, revenueUsd: round2(revenue) };
+}
+
+/**
+ * Agrupa e conta até a venda. `invited` = a base vira quem ABRIU e o total do
+ * grupo vai em `invited`. Resposta de múltipla escolha conta em cada opção.
+ */
+function breakdown(
+  rows: InvRow[], keyOf: (i: InvRow) => string | string[] | null | undefined, label: (k: string) => string,
+  sales: SalesIndex, opts: { order?: readonly string[]; invited?: boolean } = {},
+): SurveySalesRow[] {
+  const groups = new Map<string, InvRow[]>();
+  for (const i of rows) {
+    const k = keyOf(i);
+    for (const key of Array.isArray(k) ? k : k == null ? [] : [k]) {
+      const g = groups.get(key);
+      if (g) g.push(i);
+      else groups.set(key, [i]);
+    }
+  }
+  const order = opts.order;
+  const keys = order
+    ? [...order.filter((k) => groups.has(k)), ...[...groups.keys()].filter((k) => !order.includes(k))]
+    : [...groups.keys()].sort((a, b) => groups.get(b)!.length - groups.get(a)!.length);
+  return keys.map((k) => {
+    const g = groups.get(k)!;
+    return opts.invited ? salesRow(k, label(k), g.filter((i) => i.openedAt), sales, g.length) : salesRow(k, label(k), g, sales);
+  });
+}
+
+function timingBucket(i: InvRow): string | null {
+  if (!i.openedAt) return null;
+  const days = (i.stockUntil.getTime() - i.openedAt.getTime()) / DAY_MS;
+  return days >= 8 ? '8+' : days >= 4 ? '4-7' : days > 0 ? '1-3' : 'acabou';
+}
+
+/** Série por dia (BRT) do evento — até 120 dias, os mais recentes. */
+function dailySeries(rows: InvRow[], sales: SalesIndex, start: Date, end: Date): SurveyDailyRow[] {
+  const last = brtDay(new Date(Math.min(end.getTime(), Date.now())));
+  const lastMs = Date.parse(`${last}T00:00:00Z`);
+  const firstMs = Math.max(Date.parse(`${brtDay(start)}T00:00:00Z`), lastMs - 119 * DAY_MS);
+  const days = new Map<string, SurveyDailyRow>();
+  for (let t = firstMs; t <= lastMs; t += DAY_MS) {
+    const date = new Date(t).toISOString().slice(0, 10);
+    days.set(date, { date, opened: 0, completed: 0, clicked: 0, purchases: 0, revenueUsd: 0 });
+  }
+  const bump = (at: Date | null | undefined, f: (r: SurveyDailyRow) => void) => {
+    const r = at ? days.get(brtDay(at)) : undefined;
+    if (r) f(r);
+  };
+  for (const i of rows) {
+    bump(i.openedAt, (r) => { r.opened++; });
+    const resp = i.response;
+    if (!resp) continue;
+    bump(resp.completedAt, (r) => { r.completed++; });
+    bump(resp.checkoutAt, (r) => { r.clicked++; });
+    const s = sales.get(resp.id);
+    if (!s) continue;
+    bump(s.firstAt, (r) => { r.purchases++; });
+    for (const o of s.orders) bump(o.at, (r) => { r.revenueUsd += o.usd; });
+  }
+  return [...days.values()].map((r) => ({ ...r, revenueUsd: round2(r.revenueUsd) }));
+}
+
+/** Base do "o que muda": a pesquisa ao vivo enquanto o teste roda; a foto do encerramento depois. */
+function diffBase(e: SurveyExperiment, live: SurveyVariantConfig): SurveyVariantConfig {
+  return e.status === 'running' ? live : armsOf(e.arms)[0]?.snapshot ?? live;
+}
+
+function experimentReport(e: SurveyExperiment, live: SurveyVariantConfig, rows: InvRow[], sales: SalesIndex): SurveyExperimentReport {
+  const base = diffBase(e, live);
+  const arms: SurveyExperimentArmReport[] = armsOf(e.arms).map((a) => {
+    const g = rows.filter((i) => i.experimentId === e.id && i.arm === a.key);
+    const s = salesRow(a.key, a.name, g, sales);
+    return {
+      key: a.key, name: a.name, weight: a.weight,
+      changes: a.config ? configDiff(base, armConfig(base, a)) : [],
+      opened: g.length, started: g.filter((i) => i.response).length,
+      completed: s.completed, clicked: s.clicked, purchases: s.purchases, revenueUsd: s.revenueUsd,
+      satisfactionAvg: avg(g.map((i) => answersOf(i.response).q2).filter((n): n is number => typeof n === 'number')),
+      vsControl: null,
+    };
+  });
+  const ctl = arms.find((a) => a.key === CONTROL_ARM);
+  if (ctl) {
+    for (const a of arms) {
+      if (a === ctl) continue;
+      a.vsControl = {
+        click: proportionTest(ctl.clicked, ctl.opened, a.clicked, a.opened),
+        purchase: proportionTest(ctl.purchases, ctl.opened, a.purchases, a.opened),
+      };
+    }
+  }
+  return {
+    id: e.id, name: e.name, status: e.status, winner: e.winner,
+    startedAt: e.startedAt.toISOString(), endedAt: e.endedAt ? e.endedAt.toISOString() : null, arms,
+  };
 }
 
 export async function getSurveyDashboard(opts: {
@@ -484,53 +946,68 @@ export async function getSurveyDashboard(opts: {
 }): Promise<SurveyDashboard> {
   const testFilter = opts.includeTests ? {} : { isTest: false };
   const variants = await db.surveyVariant.findMany({ orderBy: { createdAt: 'asc' } });
+  const running = await db.surveyExperiment.findMany({ where: { status: 'running' } });
   const variant = variants.find((v) => v.slug === opts.slug) ?? variants.find((v) => v.active) ?? variants[0] ?? null;
   const variantsOut = variants.map((v) => {
     const c = cfgOf(v);
+    const exp = running.find((e) => e.variantId === v.id);
     return {
-      slug: v.slug, name: v.name, active: v.active,
+      slug: v.slug, name: v.name, active: v.active, family: v.family,
       previewUrl: `/api/survey/page?slug=${encodeURIComponent(v.slug)}&preview=1`,
       checkoutReady: {
         assinatura: Boolean(c.offers?.assinatura?.url),
         kits: Object.values(c.offers?.kits ?? {}).filter((k) => k?.url).length,
         cupons: (c.coupons ?? []).filter((x) => x.code).length,
       },
+      experiment: exp ? { id: exp.id, name: exp.name, arms: armsOf(exp.arms).map((a) => ({ key: a.key, name: a.name })) } : null,
     };
   });
   const empty: SurveyDashboard = {
     variants: variantsOut, variant: variant?.slug ?? null,
     kpis: { invites: 0, sent: 0, opened: 0, started: 0, completed: 0, checkoutClicks: 0, purchases: 0, revenueUsd: 0, satisfactionAvg: null },
-    steps: [], outcomes: [], satisfaction: [], q1: [], q3: [], q3b: [], q4: [], q5: [], csQueue: [], recent: [],
+    steps: [], outcomes: [], satisfaction: [], q1: [], q3: [], q3b: [], q4: [], q5: [],
+    outcomeSales: [], offerSales: [], segments: [], timing: [], channels: [], answerSales: [], daily: [], compare: [], experiments: [],
+    csQueue: [], recent: [],
   };
   if (!variant) return empty;
   const cfg = cfgOf(variant);
 
-  const invites = await db.surveyInvite.findMany({
-    where: { variantId: variant.id, createdAt: { gte: opts.start, lte: opts.end }, ...testFilter },
+  // Todas as pesquisas do período (a comparação usa todas; o resto, só a escolhida).
+  const all = await db.surveyInvite.findMany({
+    where: { createdAt: { gte: opts.start, lte: opts.end }, ...testFilter },
     include: { response: true },
   });
+  const invites = all.filter((i) => i.variantId === variant.id);
+  const experiments = await db.surveyExperiment.findMany({
+    where: { variantId: variant.id }, orderBy: { startedAt: 'desc' }, take: 6,
+  });
+  const expInvites = experiments.length
+    ? await db.surveyInvite.findMany({
+        where: { experimentId: { in: experiments.map((e) => e.id) }, ...testFilter },
+        include: { response: true },
+      })
+    : [];
+  const sales = await surveySales([...all, ...expInvites].flatMap((i) => (i.response ? [i.response.id] : [])));
+
   const responses = invites.map((i) => i.response).filter((r): r is SurveyResponse => r != null);
   const ans = responses.map(answersOf);
   const completed = responses.filter((r) => r.completedAt);
-
-  // Venda que veio do quiz: o checkout leva src=qz_<resposta> e o ingest grava em trackingId.
-  const purchases = responses.length
-    ? await dbRead.order.findMany({
-        where: { trackingId: { in: responses.map((r) => `${SURVEY_TRACKING_PREFIX}${r.id}`) }, status: 'APPROVED' },
-        select: { trackingId: true, grossAmountUsd: true },
-      })
-    : [];
-  const boughtIds = new Set(purchases.map((p) => p.trackingId!.slice(SURVEY_TRACKING_PREFIX.length)));
+  const opened = invites.filter((i) => i.openedAt);
+  const done = invites.filter((i) => i.response?.completedAt);
+  const clicked = invites.filter((i) => i.response?.checkoutAt);
   const sat = ans.map((a) => a.q2).filter((n): n is number => typeof n === 'number');
+  const kpiSales = salesRow('all', 'all', invites, sales);
 
   const stepCount = (pred: (a: SurveyAnswers) => boolean) => ans.filter(pred).length;
-  const q4Labels = Object.fromEntries(q4Options(cfg).map((o) => [o.id, o.label]));
+  const q4Labels: Record<string, string> = { ...Object.fromEntries(q4Options(cfg).map((o) => [o.id, o.label])), nada: 'Nada ainda', cedo: 'Cedo demais' };
   const flat = (k: 'q4' | 'q5') => ans.flatMap((a) => (a[k] ?? []) as string[]);
+  const doneAns = (i: InvRow) => answersOf(i.response);
+  const lbl = (labels: Record<string, string>) => (k: string) => labels[k] ?? k;
 
   const csResponses = await db.surveyResponse.findMany({
     where: {
       variantId: variant.id, outcome: 'cs', invite: testFilter,
-      OR: [{ csStatus: { not: 'resolvido' } }, { csUpdatedAt: { gte: new Date(Date.now() - 7 * 86400000) } }],
+      OR: [{ csStatus: { not: 'resolvido' } }, { csUpdatedAt: { gte: new Date(Date.now() - 7 * DAY_MS) } }],
     },
     include: { invite: true },
     orderBy: { completedAt: 'asc' },
@@ -544,16 +1021,16 @@ export async function getSurveyDashboard(opts: {
     kpis: {
       invites: invites.length,
       sent: invites.filter((i) => i.sentAt).length,
-      opened: invites.filter((i) => i.openedAt).length,
+      opened: opened.length,
       started: responses.length,
       completed: completed.length,
-      checkoutClicks: responses.filter((r) => r.checkoutAt).length,
-      purchases: boughtIds.size,
-      revenueUsd: Math.round(purchases.reduce((s, p) => s + Number(p.grossAmountUsd), 0) * 100) / 100,
-      satisfactionAvg: sat.length ? Math.round((sat.reduce((s, n) => s + n, 0) / sat.length) * 100) / 100 : null,
+      checkoutClicks: kpiSales.clicked,
+      purchases: kpiSales.purchases,
+      revenueUsd: kpiSales.revenueUsd,
+      satisfactionAvg: avg(sat),
     },
     steps: [
-      { id: 'abriu', label: 'Abriu o link', count: invites.filter((i) => i.openedAt).length },
+      { id: 'abriu', label: 'Abriu o link', count: opened.length },
       { id: 'q1', label: '1 · Motivo', count: stepCount((a) => a.q1 != null) },
       { id: 'q2', label: '2 · Satisfação', count: stepCount((a) => a.q2 != null) },
       { id: 'q3', label: '3 · Constância', count: stepCount((a) => a.q3 != null) },
@@ -567,8 +1044,31 @@ export async function getSurveyDashboard(opts: {
     q1: counts(Object.keys(LABELS.q1), LABELS.q1, ans.map((a) => a.q1)),
     q3: counts(Object.keys(LABELS.q3), LABELS.q3, ans.map((a) => a.q3)),
     q3b: counts(Object.keys(LABELS.q3b), LABELS.q3b, ans.map((a) => a.q3b)),
-    q4: counts(Object.keys(q4Labels), { ...q4Labels, nada: 'Nada ainda', cedo: 'Cedo demais' }, flat('q4')),
+    q4: counts(Object.keys(q4Labels), q4Labels, flat('q4')),
     q5: counts(Object.keys(LABELS.q5), LABELS.q5, flat('q5')),
+
+    outcomeSales: breakdown(done, (i) => (i.response!.outcome === 'cupom' ? `cupom${i.response!.couponPct}` : i.response!.outcome),
+      lbl(LABELS.outcome), sales, { order: Object.keys(LABELS.outcome) }),
+    offerSales: breakdown(clicked, (i) => i.response!.checkoutOutcome ?? 'kit', offerLabel, sales,
+      { order: ['assinatura', ...Object.keys(cfg.offers?.kits ?? {}).map((n) => `kit:${n}`), 'cupom'] }),
+    segments: breakdown(invites, (i) => segmentOf(cfg, i.bottles), lbl(LABELS.segment), sales, { order: ['parcial', 'completo'], invited: true }),
+    timing: breakdown(opened, timingBucket, lbl(LABELS.timing), sales, { order: TIMING_ORDER }),
+    channels: breakdown(invites, (i) => i.channel || (i.sentAt ? 'outro' : 'nao_enviado'), lbl(LABELS.channel), sales, { invited: true }),
+    answerSales: [
+      { id: 'q2', title: 'Satisfação (pergunta 2)', rows: breakdown(done, (i) => (doneAns(i).q2 != null ? String(doneAns(i).q2) : null), lbl(LABELS.q2), sales, { order: ['1', '2', '3', '4', '5'] }) },
+      { id: 'q1', title: 'Por que não levou os 6 (pergunta 1)', rows: breakdown(done, (i) => doneAns(i).q1, lbl(LABELS.q1), sales, { order: Object.keys(LABELS.q1) }) },
+      { id: 'q3', title: 'Constância (pergunta 3)', rows: breakdown(done, (i) => doneAns(i).q3, lbl(LABELS.q3), sales, { order: Object.keys(LABELS.q3) }) },
+      { id: 'q3b', title: 'Por que parou (3b)', rows: breakdown(done, (i) => doneAns(i).q3b, lbl(LABELS.q3b), sales, { order: Object.keys(LABELS.q3b) }) },
+      { id: 'q4', title: 'O que notaram (pergunta 4)', rows: breakdown(done, (i) => doneAns(i).q4 ?? null, lbl(q4Labels), sales, { order: Object.keys(q4Labels) }) },
+      { id: 'q5', title: 'O que ajudaria (pergunta 5)', rows: breakdown(done, (i) => doneAns(i).q5 ?? null, lbl(LABELS.q5), sales, { order: Object.keys(LABELS.q5) }) },
+    ].filter((q) => q.rows.length),
+    daily: dailySeries(invites, sales, opts.start, opts.end),
+    compare: variants.map((v) => {
+      const g = all.filter((i) => i.variantId === v.id);
+      return { ...salesRow(v.slug, v.name, g.filter((i) => i.openedAt), sales, g.length), active: v.active };
+    }),
+    experiments: experiments.map((e) => experimentReport(e, cfg, expInvites, sales)),
+
     csQueue: csResponses.map((r) => {
       const a = answersOf(r);
       return {
@@ -589,7 +1089,7 @@ export async function getSurveyDashboard(opts: {
         return {
           id: r.id, firstName: i.firstName, email: i.email, bottles: i.bottles, satisfaction: a.q2 ?? null,
           outcome: r.outcome, couponPct: r.couponPct, comment: a.comentario || null, completedAt: iso(r.completedAt),
-          checkout: r.checkoutAt != null, purchased: boughtIds.has(r.id),
+          checkout: r.checkoutAt != null, purchased: sales.has(r.id), arm: i.experimentId ? i.arm : null,
         };
       }),
   };
