@@ -12,7 +12,8 @@ const SV_CS_STATUS = [
   { id: 'ligado', label: 'Ligado' },
   { id: 'resolvido', label: 'Resolvido' },
 ];
-const SV_OUTCOME_LABEL = { cs: 'CS liga', recorrencia: 'Recorrência', cupom: 'Cupom', obrigado: 'Só agradecimento' };
+const SV_OUTCOME_LABEL = { cs: 'CS liga', recorrencia: 'Assinatura', oferta: 'Kit', cupom: 'Kit + cupom', obrigado: 'Só agradecimento' };
+const svOutcome = (r) => (r.outcome === 'cupom' && r.couponPct ? `Kit + cupom ${r.couponPct}%` : SV_OUTCOME_LABEL[r.outcome] || r.outcome);
 
 function svPhone(d) {
   if (!d) return '—';
@@ -68,7 +69,7 @@ function SvCsQueue({ rows, onChanged }) {
     <div className="panel" style={{ marginBottom: 12, padding: 0, overflow: 'hidden' }}>
       <div style={{ padding: '12px 14px' }}>
         <div className="panel-title">Fila do CS</div>
-        <div className="panel-sub" style={{ fontSize: 11 }}>Nota 1–2 ou parou por médico/mal-estar. A página promete contato em até 24h. Mostra os abertos e os resolvidos nos últimos 7 dias, de qualquer período.</div>
+        <div className="panel-sub" style={{ fontSize: 11 }}>Nota 1 ou parou por médico/mal-estar (sem oferta). A página promete contato em até 24h. Mostra os abertos e os resolvidos nos últimos 7 dias, de qualquer período.</div>
         {err && <div style={{ color: 'var(--danger)', fontSize: 12, marginTop: 6 }}>Não salvou: {err}</div>}
       </div>
       {!rows.length ? (
@@ -199,14 +200,22 @@ function SurveysPage({ filters, user }) {
         <label style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 12, color: 'var(--fg4)', cursor: 'pointer' }}>
           <input type="checkbox" checked={tests} onChange={(e) => setTests(e.target.checked)}/> Incluir testes
         </label>
-        <a className="btn btn-ghost" href={current.previewUrl} target="_blank" rel="noopener">
-          <Icon name="external-link" size={12}/> Ver a página
+        <a className="btn btn-ghost" href={`${current.previewUrl}&bottles=3`} target="_blank" rel="noopener" title="Quem comprou 2 ou 3 frascos: copy de completar o plano de 6 meses">
+          <Icon name="external-link" size={12}/> Ver página · 2–3 frascos
+        </a>
+        <a className="btn btn-ghost" href={`${current.previewUrl}&bottles=6`} target="_blank" rel="noopener" title="Quem comprou 6 ou mais: copy de uso sem constância (doses perdidas)">
+          <Icon name="external-link" size={12}/> 6+ frascos
         </a>
       </div>
 
-      {!current.checkoutReady.recorrencia && (
-        <ReadState kind="parcial" title="Links de checkout ainda não cadastrados">
-          Sem o link da recorrência{current.checkoutReady.cupom ? '' : ' e do cupom'}, a pesquisa termina no agradecimento e o atalho "Reorder now" não aparece.
+      {(!current.checkoutReady.assinatura || !current.checkoutReady.kits) && (
+        <ReadState kind="parcial" title="Ofertas da Vupim ainda não cadastradas">
+          {!current.checkoutReady.assinatura && !current.checkoutReady.kits
+            ? 'Sem os links da assinatura e dos kits, a pesquisa termina no agradecimento e o atalho "Reorder now" não aparece.'
+            : !current.checkoutReady.assinatura
+              ? 'Falta o link da assinatura mensal: quem pedir "1 frasco por mês" recebe o kit.'
+              : 'Faltam os links dos kits: todo mundo recebe a assinatura mensal, sem cupom.'}
+          {current.checkoutReady.kits > 0 && !current.checkoutReady.cupons && ' Sem códigos de cupom, quem tem objeção de preço recebe o kit no preço de recompra.'}
         </ReadState>
       )}
 
@@ -224,13 +233,13 @@ function SurveysPage({ filters, user }) {
         <SvPanel title="Onde as pessoas param" sub="Quantos chegaram em cada pergunta. % sobre quem abriu o link.">
           <SvBars items={d.steps} total={k.opened}/>
         </SvPanel>
-        <SvPanel title="Tela final" sub="Decidida pelas respostas: CS → recorrência → cupom → agradecimento.">
+        <SvPanel title="Tela final" sub="Decidida pelas respostas: CS (nota 1, médico, mal-estar) → assinatura → kit com cupom (10/15/20% pela objeção) → kit no preço de recompra.">
           <SvBars items={d.outcomes} total={k.completed}/>
         </SvPanel>
-        <SvPanel title="Satisfação" sub="Pergunta 2. Nota 1–2 vai direto pro CS.">
+        <SvPanel title="Satisfação" sub="Pergunta 2. Nota 1 vai pro CS sem oferta; nota 2 recebe o cupom de 20%.">
           <SvBars items={d.satisfaction} total={d.satisfaction.reduce((s, i) => s + i.count, 0)}/>
         </SvPanel>
-        <SvPanel title="Por que não levou os 6" sub="Pergunta 1 — o motivo da compra menor.">
+        <SvPanel title="Por que não levou os 6" sub="Pergunta 1 — o motivo da compra menor (só quem comprou 2 ou 3).">
           <SvBars items={d.q1} total={answered}/>
         </SvPanel>
         <SvPanel title="Constância" sub="Pergunta 3, e por que parou (3b) para quem parou.">
@@ -273,7 +282,7 @@ function SurveysPage({ filters, user }) {
                         <td><div style={{ fontWeight: 600 }}>{r.firstName || '—'}</div><div style={{ color: 'var(--fg4)', fontSize: 11.5 }}>{r.email}</div></td>
                         <td className="num mono">{r.bottles}</td>
                         <td className="num mono">{r.satisfaction != null ? `${r.satisfaction}★` : '—'}</td>
-                        <td>{r.outcome ? SV_OUTCOME_LABEL[r.outcome] || r.outcome : <span style={{ color: 'var(--fg5)' }}>não terminou</span>}</td>
+                        <td>{r.outcome ? svOutcome(r) : <span style={{ color: 'var(--fg5)' }}>não terminou</span>}</td>
                         <td style={{ maxWidth: 280, whiteSpace: 'normal', color: r.comment ? 'var(--fg2)' : 'var(--fg5)' }}>{r.comment || '—'}</td>
                         <td>{r.purchased ? <span style={{ color: 'var(--money)', fontWeight: 600 }}>comprou</span> : r.checkout ? 'clicou' : '—'}</td>
                         <td style={{ whiteSpace: 'nowrap', color: 'var(--fg3)' }}>{r.completedAt ? fmtDateTime(r.completedAt) : '—'}</td>

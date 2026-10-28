@@ -20,7 +20,7 @@ export async function POST(req: Request) {
   }
   try {
     if (body.preview === true) {
-      const d = await previewOutcome(String(body.slug ?? ''), body.answers);
+      const d = await previewOutcome(String(body.slug ?? ''), body.answers, body.bottles);
       return d ? NextResponse.json(d) : NextResponse.json({ error: 'not found' }, { status: 404 });
     }
     const token = String(body.t ?? '');

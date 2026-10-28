@@ -1,6 +1,7 @@
 // GET /api/survey/page?slug=&t=   (público — o middleware reescreve
 // checkin.<domínio>/<slug>/<token> pra cá)
-// GET /api/survey/page?slug=&preview=1   (pré-visualização, sessão do dash)
+// GET /api/survey/page?slug=&preview=1[&bottles=6]   (pré-visualização, sessão do dash;
+//     bottles escolhe o público: 2–3 = plano incompleto, 6+ = plano completo)
 //
 // Devolve o HTML pronto da pesquisa (lib/surveys/render.ts).
 
@@ -28,7 +29,7 @@ export async function GET(req: Request) {
     if (url.searchParams.get('preview') === '1') {
       const auth = await requireAuth();
       if (!auth.ok) return auth.response;
-      const html = await surveyPreviewHtml(slug);
+      const html = await surveyPreviewHtml(slug, url.searchParams.get('bottles'));
       return new NextResponse(html ?? renderSurveyInvalid(null), { status: html ? 200 : 404, headers: HEADERS });
     }
     const { status, html } = await surveyPageHtml(slug, url.searchParams.get('t') ?? '');

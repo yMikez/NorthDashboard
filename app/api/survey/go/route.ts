@@ -1,8 +1,9 @@
-// GET /api/survey/go?t=&o=recorrencia|cupom   (público)
+// GET /api/survey/go?t=&o=assinatura|kit|cupom   (público)
 //
 // Botão do checkout na tela final: registra o clique e redireciona pro link
 // da variante com o rastreio src=qz_<resposta>, que volta no postback da
-// venda (Order.trackingId).
+// venda (Order.trackingId). O kit e a faixa do cupom vêm do convite e da
+// resposta — a página não escolhe preço.
 
 import { NextResponse } from 'next/server';
 import { surveyCheckoutRedirect } from '@/lib/services/surveys';

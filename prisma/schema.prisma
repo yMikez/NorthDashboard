@@ -2115,8 +2115,10 @@ model SurveyResponse {
   variantVersion    Int
   // SurveyAnswers — gravado a cada clique (dá pra ver onde a pessoa parou).
   answers           Json          @default("{}")
-  // cs | recorrencia | cupom | obrigado — decidido no servidor ao concluir.
+  // cs | recorrencia | oferta | cupom | obrigado — decidido no servidor ao concluir.
   outcome           String?
+  // Faixa do cupom (10/15/20) quando outcome = 'cupom'.
+  couponPct         Int?
   // Marcou "ver mais progresso primeiro": acompanhamento em 30 dias.
   followUp          Boolean       @default(false)
   startedAt         DateTime      @default(now())

@@ -9,8 +9,8 @@ import { randomBytes } from 'node:crypto';
 import { Prisma, type SurveyInvite, type SurveyResponse, type SurveyVariant } from '@prisma/client';
 import { db, dbRead } from '../db';
 import {
-  SURVEY_TRACKING_PREFIX, availableOutcomes, checkoutUrl, cleanAnswer, decideOutcome, firstNameOf, q4Options,
-  type OutcomeDecision, type SurveyAnswers, type SurveyVariantConfig,
+  SURVEY_TRACKING_PREFIX, availableOffers, checkoutUrl, cleanAnswer, decideOutcome, firstNameOf, kitSizeFor, q4Options,
+  segmentOf, type CheckoutKind, type OutcomeDecision, type SurveyAnswers, type SurveyVariantConfig,
 } from '../surveys/fimTratamento';
 import { renderSurveyInvalid, renderSurveyPage } from '../surveys/render';
 
@@ -24,6 +24,11 @@ export const surveyLink = (slug: string, token: string) => `${SURVEY_PUBLIC_URL}
 const newToken = () => randomBytes(18).toString('base64url');
 const cfgOf = (v: SurveyVariant) => v.config as unknown as SurveyVariantConfig;
 const answersOf = (r: SurveyResponse | null | undefined) => (r?.answers ?? {}) as SurveyAnswers;
+/** Kit oferecido e ofertas disponíveis pra quem comprou `bottles` frascos. */
+function offerContext(cfg: SurveyVariantConfig, bottles: number) {
+  const kit = kitSizeFor(cfg, segmentOf(cfg, bottles), bottles);
+  return { kit, av: availableOffers(cfg, kit) };
+}
 
 type InviteFull = SurveyInvite & { variant: SurveyVariant; response: SurveyResponse | null };
 
@@ -50,27 +55,35 @@ export async function surveyPageHtml(slug: string, token: string): Promise<{ sta
     slug, token, preview: false,
     answers: answersOf(inv.response),
     outcome: (inv.response?.completedAt ? inv.response.outcome : null) as OutcomeDecision['outcome'] | null,
+    couponPct: inv.response?.couponPct ?? null,
     followUp: inv.response?.followUp ?? false,
   });
   return { status: 200, html };
 }
 
-/** Pré-visualização pro dash: dados de exemplo, nada é gravado. */
-export async function surveyPreviewHtml(slug: string): Promise<string | null> {
+/** Frascos válidos na pré-visualização (2, 3, 6…); o padrão é o último do plano incompleto. */
+function previewBottles(cfg: SurveyVariantConfig, raw: unknown): number {
+  const n = Number(raw);
+  if (Number.isInteger(n) && n >= 1 && n <= 24) return n;
+  return cfg.eligibleBottles?.[cfg.eligibleBottles.length - 1] ?? 3;
+}
+
+/** Pré-visualização pro dash: dados de exemplo, nada é gravado. ?bottles=6 mostra o público completo. */
+export async function surveyPreviewHtml(slug: string, bottles?: unknown): Promise<string | null> {
   const variant = await db.surveyVariant.findUnique({ where: { slug } });
   if (!variant) return null;
   const cfg = cfgOf(variant);
   return renderSurveyPage({
-    cfg, ctx: { firstName: 'John', bottles: cfg.eligibleBottles?.[cfg.eligibleBottles.length - 1] ?? 3 },
-    slug, token: '', preview: true, answers: {}, outcome: null, followUp: false,
+    cfg, ctx: { firstName: 'John', bottles: previewBottles(cfg, bottles) },
+    slug, token: '', preview: true, answers: {}, outcome: null, couponPct: null, followUp: false,
   });
 }
 
-export async function previewOutcome(slug: string, raw: unknown): Promise<OutcomeDecision | null> {
+export async function previewOutcome(slug: string, raw: unknown, bottles?: unknown): Promise<OutcomeDecision | null> {
   const variant = await db.surveyVariant.findUnique({ where: { slug } });
   if (!variant) return null;
   const cfg = cfgOf(variant);
-  return decideOutcome(cleanAll(cfg, raw), availableOutcomes(cfg));
+  return decideOutcome(cleanAll(cfg, raw), offerContext(cfg, previewBottles(cfg, bottles)).av);
 }
 
 function cleanAll(cfg: SurveyVariantConfig, raw: unknown): SurveyAnswers {
@@ -112,16 +125,18 @@ export async function finishSurvey(token: string, raw: unknown): Promise<Outcome
     return {
       outcome: inv.response.outcome as OutcomeDecision['outcome'],
       csReason: (inv.response.csReason ?? null) as OutcomeDecision['csReason'],
+      couponPct: inv.response.couponPct,
       followUp: inv.response.followUp,
     };
   }
   const cfg = cfgOf(inv.variant);
   const answers = { ...answersOf(inv.response), ...cleanAll(cfg, raw) };
-  const d = decideOutcome(answers, availableOutcomes(cfg));
+  const d = decideOutcome(answers, offerContext(cfg, inv.bottles).av);
   const now = new Date();
   const data = {
     answers: answers as Prisma.InputJsonObject,
     outcome: d.outcome,
+    couponPct: d.couponPct,
     followUp: d.followUp,
     completedAt: now,
     csReason: d.csReason,
@@ -136,16 +151,27 @@ export async function finishSurvey(token: string, raw: unknown): Promise<Outcome
   return d;
 }
 
-/** Clique no botão do checkout: registra e devolve o link com o rastreio. */
-export async function surveyCheckoutRedirect(token: string, outcome: string): Promise<string | null> {
-  if (outcome !== 'recorrencia' && outcome !== 'cupom') return null;
+const CHECKOUT_KINDS: readonly CheckoutKind[] = ['assinatura', 'kit', 'cupom'];
+
+/**
+ * Clique no botão do checkout: registra e devolve o link com o rastreio. O
+ * preço do cupom fica reservado por couponValidDays depois da pesquisa (é o
+ * que a página promete); depois disso o botão leva ao kit no preço de recompra.
+ */
+export async function surveyCheckoutRedirect(token: string, kind: string): Promise<string | null> {
+  if (!(CHECKOUT_KINDS as readonly string[]).includes(kind)) return null;
   const inv = await loadInvite(token);
   if (!inv?.response) return null;
-  const url = checkoutUrl(cfgOf(inv.variant), outcome, inv.response.id);
+  const cfg = cfgOf(inv.variant);
+  const { kit } = offerContext(cfg, inv.bottles);
+  let k = kind as CheckoutKind;
+  const done = inv.response.completedAt;
+  if (k === 'cupom' && done && Date.now() - done.getTime() > (cfg.couponValidDays ?? 7) * 86400000) k = 'kit';
+  const url = checkoutUrl(cfg, k, inv.response.id, { kit, couponPct: inv.response.couponPct });
   if (!url) return null;
   await db.surveyResponse.update({
     where: { id: inv.response.id },
-    data: { checkoutAt: new Date(), checkoutOutcome: outcome },
+    data: { checkoutAt: new Date(), checkoutOutcome: k },
   });
   return url;
 }
@@ -170,8 +196,9 @@ export interface CreateInvitesResult {
 
 /**
  * Quem recebe: o último produto da pessoa é o da variante, comprou 2 ou 3
- * frascos (config.eligibleBottles), sem estorno, e o estoque acaba nos
- * próximos `withinDays` dias. Quem já tem convite pra esse mesmo estoque não
+ * frascos (config.eligibleBottles) ou o plano inteiro e mais (≥
+ * config.fullPlanFrom), sem estorno, e o estoque acaba nos próximos
+ * `withinDays` dias. Quem já tem convite pra esse mesmo estoque não
  * ganha outro. `channel` marca como enviado agora (o n8n dispara em seguida).
  */
 export async function createSurveyInvites(opts: {
@@ -187,6 +214,8 @@ export async function createSurveyInvites(opts: {
   const days = Math.min(Math.max(Math.trunc(opts.withinDays ?? 7), 1), 60);
   const limit = Math.min(Math.max(Math.trunc(opts.limit ?? 500), 1), 5000);
   const bottles = cfg.eligibleBottles?.length ? cfg.eligibleBottles : [2, 3];
+  // Sem fullPlanFrom o público completo fica de fora (nenhum lead tem 1e9 frascos).
+  const fullFrom = cfg.fullPlanFrom ?? 1_000_000_000;
 
   const rows = await dbRead.$queryRaw<Array<{
     email: string; name: string | null; phone: string | null; bottles: number; stock_until: Date; origin_platform: string | null;
@@ -194,7 +223,7 @@ export async function createSurveyInvites(opts: {
     SELECT ls.email, ls.name, ls.phone, ls.bottles, ls.stock_until, ls.origin_platform
     FROM lead_summary ls
     WHERE ls.stock_family = ${variant.family}
-      AND ls.bottles = ANY(${bottles}::int[])
+      AND (ls.bottles = ANY(${bottles}::int[]) OR ls.bottles >= ${fullFrom}::int)
       AND COALESCE(ls.refunded_usd, 0) = 0
       AND ls.email IS NOT NULL
       AND ls.stock_until >= now() AND ls.stock_until < now() + make_interval(days => ${days}::int)
@@ -268,14 +297,22 @@ const LABELS = {
   q3: { todo_dia: 'Todo dia', maioria: 'Na maioria dos dias', esquece: 'Esquece mais do que gostaria', parou: 'Parou de tomar' },
   q3b: { medico: 'Médico desaconselhou', mal_estar: 'Não caiu bem', sem_diferenca: 'Não notou diferença', orcamento: 'Não coube no orçamento', outro: 'Outro motivo' },
   q5: { mensal: '1 frasco por mês', desconto: 'Desconto nos que faltam', progresso: 'Ver mais progresso antes', nao_continuar: 'Não vai continuar' },
-  outcome: { cs: 'CS liga', recorrencia: 'Recorrência', cupom: 'Cupom', obrigado: 'Só agradecimento' },
-  csReason: { nota_baixa: 'Nota 1–2', parou_medico: 'Parou: médico', parou_mal_estar: 'Parou: mal-estar' },
+  outcome: {
+    cs: 'CS liga (sem oferta)', recorrencia: 'Assinatura mensal', oferta: 'Kit no preço de recompra',
+    cupom10: 'Kit + cupom 10%', cupom15: 'Kit + cupom 15%', cupom20: 'Kit + cupom 20%', obrigado: 'Só agradecimento',
+  },
+  // nota_baixa = regra antiga (nota 1–2), antes da venda pra nota 2 (2026-10-28).
+  csReason: { nota_minima: 'Nota 1', nota_baixa: 'Nota 1–2', parou_medico: 'Parou: médico', parou_mal_estar: 'Parou: mal-estar' },
 } as const;
 
 export interface SurveyCount { id: string; label: string; count: number }
 
 export interface SurveyDashboard {
-  variants: { slug: string; name: string; active: boolean; previewUrl: string; checkoutReady: { recorrencia: boolean; cupom: boolean } }[];
+  variants: {
+    slug: string; name: string; active: boolean; previewUrl: string;
+    /** Links cadastrados: assinatura, quantos kits e quantos cupons. */
+    checkoutReady: { assinatura: boolean; kits: number; cupons: number };
+  }[];
   variant: string | null;
   kpis: {
     invites: number; sent: number; opened: number; started: number; completed: number;
@@ -297,7 +334,8 @@ export interface SurveyCsRow {
 
 export interface SurveyRecentRow {
   id: string; firstName: string | null; email: string; bottles: number; satisfaction: number | null;
-  outcome: string | null; comment: string | null; completedAt: string | null; checkout: boolean; purchased: boolean;
+  outcome: string | null; couponPct: number | null; comment: string | null; completedAt: string | null;
+  checkout: boolean; purchased: boolean;
 }
 
 function counts(ids: readonly string[], labels: Record<string, string>, values: (string | undefined)[]): SurveyCount[] {
@@ -309,12 +347,19 @@ export async function getSurveyDashboard(opts: {
 }): Promise<SurveyDashboard> {
   const testFilter = opts.includeTests ? {} : { isTest: false };
   const variants = await db.surveyVariant.findMany({ orderBy: { createdAt: 'asc' } });
-  const variant = variants.find((v) => v.slug === opts.slug) ?? variants[0] ?? null;
-  const variantsOut = variants.map((v) => ({
-    slug: v.slug, name: v.name, active: v.active,
-    previewUrl: `/api/survey/page?slug=${encodeURIComponent(v.slug)}&preview=1`,
-    checkoutReady: availableOutcomes(cfgOf(v)),
-  }));
+  const variant = variants.find((v) => v.slug === opts.slug) ?? variants.find((v) => v.active) ?? variants[0] ?? null;
+  const variantsOut = variants.map((v) => {
+    const c = cfgOf(v);
+    return {
+      slug: v.slug, name: v.name, active: v.active,
+      previewUrl: `/api/survey/page?slug=${encodeURIComponent(v.slug)}&preview=1`,
+      checkoutReady: {
+        assinatura: Boolean(c.offers?.assinatura?.url),
+        kits: Object.values(c.offers?.kits ?? {}).filter((k) => k?.url).length,
+        cupons: (c.coupons ?? []).filter((x) => x.code).length,
+      },
+    };
+  });
   const empty: SurveyDashboard = {
     variants: variantsOut, variant: variant?.slug ?? null,
     kpis: { invites: 0, sent: 0, opened: 0, started: 0, completed: 0, checkoutClicks: 0, purchases: 0, revenueUsd: 0, satisfactionAvg: null },
@@ -379,7 +424,8 @@ export async function getSurveyDashboard(opts: {
       { id: 'q5', label: '5 · Terminar o plano', count: stepCount((a) => a.q5 != null) },
       { id: 'fim', label: 'Concluiu', count: completed.length },
     ],
-    outcomes: counts(Object.keys(LABELS.outcome), LABELS.outcome, completed.map((r) => r.outcome ?? undefined)),
+    outcomes: counts(Object.keys(LABELS.outcome), LABELS.outcome,
+      completed.map((r) => (r.outcome === 'cupom' ? `cupom${r.couponPct}` : r.outcome ?? undefined))),
     satisfaction: [1, 2, 3, 4, 5].map((n) => ({ id: String(n), label: `${n}★`, count: sat.filter((s) => s === n).length })),
     q1: counts(Object.keys(LABELS.q1), LABELS.q1, ans.map((a) => a.q1)),
     q3: counts(Object.keys(LABELS.q3), LABELS.q3, ans.map((a) => a.q3)),
@@ -405,7 +451,7 @@ export async function getSurveyDashboard(opts: {
         const a = answersOf(r);
         return {
           id: r.id, firstName: i.firstName, email: i.email, bottles: i.bottles, satisfaction: a.q2 ?? null,
-          outcome: r.outcome, comment: a.comentario || null, completedAt: iso(r.completedAt),
+          outcome: r.outcome, couponPct: r.couponPct, comment: a.comentario || null, completedAt: iso(r.completedAt),
           checkout: r.checkoutAt != null, purchased: boughtIds.has(r.id),
         };
       }),

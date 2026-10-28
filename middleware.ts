@@ -78,6 +78,8 @@ const SURVEY_HOSTS = new Set(
 const SURVEY_PATH_RE = /^\/([a-z0-9-]{1,60})\/([A-Za-z0-9_-]{16,64})\/?$/;
 
 function surveyHost(req: NextRequest): NextResponse {
+  // Fotos dos produtos (public/survey-assets) — o resto do public/ não existe aqui.
+  if (/^\/survey-assets\/[\w.-]+$/.test(req.nextUrl.pathname)) return NextResponse.next();
   const m = SURVEY_PATH_RE.exec(req.nextUrl.pathname);
   const url = req.nextUrl.clone();
   url.pathname = '/api/survey/page';
