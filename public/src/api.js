@@ -586,6 +586,31 @@ function fetchSurveys(filters, variant, { tests = false } = {}) {
     tests: tests ? '1' : null,
   });
 }
+// Cadastro das pesquisas (admin): ofertas, links, preços, cupons e textos.
+async function fetchSurveyVariantsAdmin() {
+  const res = await fetch('/api/admin/surveys/variants', { headers: { Accept: 'application/json' } });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.error || `${res.status}`);
+  return data;
+}
+async function saveSurveyVariant(slug, patch) {
+  const res = await fetch('/api/admin/surveys/variants', {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+    body: JSON.stringify({ slug, ...patch }),
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.error || `${res.status}`);
+  _respCache.clear();
+  return data;
+}
+// Catálogo da rede no NorthAffiliates (admin). 409 = chave não configurada.
+async function fetchNetworkCatalog() {
+  const res = await fetch('/api/admin/northaffiliates/catalog', { headers: { Accept: 'application/json' } });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw Object.assign(new Error(data.message || data.error || `${res.status}`), { code: data.error });
+  return data;
+}
 // Convite de teste (admin): devolve { link, ... }. Fica fora dos números da aba.
 async function createSurveyTestInvite(variant, test) {
   const res = await fetch('/api/admin/surveys/invites', {
@@ -816,6 +841,9 @@ window.NSApi = _wrapMutations({
   fetchSurveys,
   patchSurveyCs,
   createSurveyTestInvite,
+  fetchSurveyVariantsAdmin,
+  saveSurveyVariant,
+  fetchNetworkCatalog,
   fetchOverviewPanels,
   getAffRefundMode,
   setAffRefundMode,

@@ -13,6 +13,7 @@ import {
   segmentOf, type CheckoutKind, type OutcomeDecision, type SurveyAnswers, type SurveyVariantConfig,
 } from '../surveys/fimTratamento';
 import { renderSurveyInvalid, renderSurveyPage } from '../surveys/render';
+import { sanitizeVariantConfig } from '../surveys/variantConfig';
 
 export const SURVEY_PUBLIC_URL = (process.env.SURVEY_PUBLIC_URL ?? 'https://checkin.healthnwellnes.com').replace(/\/+$/, '');
 const TOKEN_RE = /^[A-Za-z0-9_-]{16,64}$/;
@@ -158,12 +159,14 @@ const CHECKOUT_KINDS: readonly CheckoutKind[] = ['assinatura', 'kit', 'cupom'];
  * preço do cupom fica reservado por couponValidDays depois da pesquisa (é o
  * que a página promete); depois disso o botão leva ao kit no preço de recompra.
  */
-export async function surveyCheckoutRedirect(token: string, kind: string): Promise<string | null> {
+export async function surveyCheckoutRedirect(token: string, kind: string, size?: string | null): Promise<string | null> {
   if (!(CHECKOUT_KINDS as readonly string[]).includes(kind)) return null;
   const inv = await loadInvite(token);
   if (!inv?.response) return null;
   const cfg = cfgOf(inv.variant);
-  const { kit } = offerContext(cfg, inv.bottles);
+  // "See all plans": o cliente escolheu outro kit; só vale tamanho que existe na variante.
+  const chosen = kind === 'kit' && size && cfg.offers?.kits?.[size]?.url ? Number(size) : null;
+  const kit = chosen ?? offerContext(cfg, inv.bottles).kit;
   let k = kind as CheckoutKind;
   const done = inv.response.completedAt;
   if (k === 'cupom' && done && Date.now() - done.getTime() > (cfg.couponValidDays ?? 7) * 86400000) k = 'kit';
@@ -171,7 +174,7 @@ export async function surveyCheckoutRedirect(token: string, kind: string): Promi
   if (!url) return null;
   await db.surveyResponse.update({
     where: { id: inv.response.id },
-    data: { checkoutAt: new Date(), checkoutOutcome: k },
+    data: { checkoutAt: new Date(), checkoutOutcome: k === 'kit' && kit != null ? `kit:${kit}` : k },
   });
   return url;
 }
@@ -287,6 +290,53 @@ export async function createSurveyTestInvite(opts: {
   return {
     email: inv.email, firstName: inv.firstName, phone: null, bottles: inv.bottles,
     stockUntil: inv.stockUntil.toISOString(), link: surveyLink(variant.slug, inv.token),
+  };
+}
+
+// ---------- cadastro das variantes (aba Pesquisas, admin) ----------
+
+export interface SurveyVariantAdmin {
+  slug: string; name: string; family: string | null; active: boolean; version: number;
+  config: SurveyVariantConfig; updatedAt: string;
+}
+
+export async function listSurveyVariantsAdmin(): Promise<SurveyVariantAdmin[]> {
+  const rows = await db.surveyVariant.findMany({ orderBy: { createdAt: 'asc' } });
+  return rows.map((v) => ({
+    slug: v.slug, name: v.name, family: v.family, active: v.active, version: v.version,
+    config: cfgOf(v), updatedAt: v.updatedAt.toISOString(),
+  }));
+}
+
+/**
+ * Salva o que veio do formulário. O texto/oferta muda → versão + 1 (cada
+ * resposta guarda a versão que viu, pra comparar antes × depois).
+ */
+export async function updateSurveyVariant(
+  slug: string,
+  patch: { active?: unknown; name?: unknown; config?: unknown },
+): Promise<{ ok: true; variant: SurveyVariantAdmin } | { ok: false; status: 400 | 404; error: string }> {
+  const current = await db.surveyVariant.findUnique({ where: { slug } });
+  if (!current) return { ok: false, status: 404, error: 'pesquisa não encontrada' };
+  const data: Prisma.SurveyVariantUpdateInput = {};
+  if (patch.active !== undefined) data.active = patch.active === true;
+  if (patch.name !== undefined) {
+    const name = typeof patch.name === 'string' ? patch.name.trim() : '';
+    if (!name || name.length > 120) return { ok: false, status: 400, error: 'Nome da pesquisa: obrigatório (até 120)' };
+    data.name = name;
+  }
+  if (patch.config !== undefined) {
+    const res = sanitizeVariantConfig(patch.config);
+    if (!res.ok) return { ok: false, status: 400, error: res.error };
+    if (JSON.stringify(res.config) !== JSON.stringify(current.config)) {
+      data.config = res.config as unknown as Prisma.InputJsonObject;
+      data.version = { increment: 1 };
+    }
+  }
+  const v = await db.surveyVariant.update({ where: { slug }, data });
+  return {
+    ok: true,
+    variant: { slug: v.slug, name: v.name, family: v.family, active: v.active, version: v.version, config: cfgOf(v), updatedAt: v.updatedAt.toISOString() },
   };
 }
 

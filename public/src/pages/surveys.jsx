@@ -113,6 +113,278 @@ function SvCsQueue({ rows, onChanged }) {
   );
 }
 
+const SV_INPUT = {
+  padding: '7px 10px', fontSize: 12.5, color: 'var(--fg1)', background: 'var(--bg)',
+  border: '1px solid var(--border)', borderRadius: 6, minWidth: 0, width: '100%',
+};
+const SV_LABEL = { display: 'block', fontSize: 11, color: 'var(--fg4)', marginBottom: 3 };
+const SV_H = { fontSize: 12, fontWeight: 600, color: 'var(--fg2)', margin: '18px 0 8px' };
+const svNum = (v) => (v === '' || v == null ? null : Number(v));
+
+function svDraftOf(v) {
+  const c = v.config || {};
+  const sub = (c.offers && c.offers.assinatura) || {};
+  return {
+    name: v.name, active: v.active,
+    productName: c.productName || '', accent: c.accent || '#2f6fde', image: c.image || '',
+    eligible: (c.eligibleBottles || [2, 3]).join(', '), fullPlanFrom: c.fullPlanFrom == null ? '' : String(c.fullPlanFrom),
+    sub: { url: sub.url || '', monthlyPrice: sub.monthlyPrice == null ? '' : String(sub.monthlyPrice), firstPrice: sub.firstPrice != null && sub.firstPrice !== sub.monthlyPrice ? String(sub.firstPrice) : '' },
+    kits: Object.entries((c.offers && c.offers.kits) || {}).map(([n, k]) => ({ n, url: k.url || '', price: String(k.price ?? ''), every: k.everyMonths == null ? '' : String(k.everyMonths) })),
+    fronts: Object.entries(c.frontPrices || {}).map(([n, p]) => ({ n, price: String(p) })),
+    coupons: (c.coupons || []).map((x) => ({ pct: String(x.pct), code: x.code || '', kits: x.kits })),
+    couponValidDays: String(c.couponValidDays ?? 7),
+    // Campos sem formulário (opções da pergunta 4 etc.) passam como estão.
+    rest: { planBottles: c.planBottles, daysPerBottle: c.daysPerBottle, trackingParam: c.trackingParam, couponParam: c.couponParam, q4: c.q4 },
+    copy: c.copy ? JSON.stringify(c.copy, null, 2) : '',
+  };
+}
+
+function svConfigOf(d) {
+  const copy = d.copy.trim() ? JSON.parse(d.copy) : null;
+  return {
+    ...d.rest,
+    productName: d.productName, accent: d.accent, image: d.image || null,
+    eligibleBottles: d.eligible.split(/[,\s]+/).filter(Boolean).map(Number),
+    fullPlanFrom: svNum(d.fullPlanFrom),
+    frontPrices: Object.fromEntries(d.fronts.filter((r) => r.n !== '').map((r) => [r.n, svNum(r.price)])),
+    offers: {
+      assinatura: d.sub.url || d.sub.monthlyPrice !== ''
+        ? { url: d.sub.url || null, monthlyPrice: svNum(d.sub.monthlyPrice), firstPrice: svNum(d.sub.firstPrice) }
+        : null,
+      kits: Object.fromEntries(d.kits.filter((r) => r.n !== '').map((r) => [r.n, { url: r.url || null, price: svNum(r.price), everyMonths: svNum(r.every) }])),
+    },
+    coupons: d.coupons.filter((c) => c.pct !== '').map((c) => ({ pct: svNum(c.pct), code: c.code || null, ...(c.kits ? { kits: c.kits } : {}) })),
+    couponValidDays: svNum(d.couponValidDays),
+    ...(copy ? { copy } : {}),
+  };
+}
+
+/** Admin: links, preços, ciclo de cobrança, cupons e frases da pesquisa. Salvar publica na hora. */
+function SvVariantEditor({ slug, onSaved }) {
+  const [open, setOpen] = useStateSv(false);
+  const [state, setState] = useStateSv({ status: 'idle', error: null, version: null });
+  const [draft, setDraft] = useStateSv(null);
+  const [saving, setSaving] = useStateSv(false);
+  const [msg, setMsg] = useStateSv(null);
+
+  useEffectSv(() => {
+    if (!open) return undefined;
+    let alive = true;
+    setState({ status: 'loading', error: null, version: null });
+    window.NSApi.fetchSurveyVariantsAdmin()
+      .then((d) => {
+        if (!alive) return;
+        const v = d.variants.find((x) => x.slug === slug);
+        if (!v) { setState({ status: 'error', error: 'pesquisa não encontrada', version: null }); return; }
+        setDraft(svDraftOf(v));
+        setState({ status: 'ready', error: null, version: v.version });
+      })
+      .catch((e) => alive && setState({ status: 'error', error: String(e.message || e), version: null }));
+    return () => { alive = false; };
+  }, [slug, open]);
+
+  const set = (patch) => setDraft((d) => ({ ...d, ...patch }));
+  const setRow = (key, i, patch) => setDraft((d) => ({ ...d, [key]: d[key].map((r, j) => (j === i ? { ...r, ...patch } : r)) }));
+  const addRow = (key, row) => setDraft((d) => ({ ...d, [key]: [...d[key], row] }));
+  const delRow = (key, i) => setDraft((d) => ({ ...d, [key]: d[key].filter((_, j) => j !== i) }));
+
+  const save = async () => {
+    let config;
+    try { config = svConfigOf(draft); } catch { setMsg({ err: 'Textos: o JSON está inválido.' }); return; }
+    setSaving(true); setMsg(null);
+    try {
+      const r = await window.NSApi.saveSurveyVariant(slug, { name: draft.name, active: draft.active, config });
+      setState((s) => ({ ...s, version: r.variant.version }));
+      setDraft(svDraftOf(r.variant));
+      setMsg({ ok: `Salvo (versão ${r.variant.version}). A página já usa os valores novos.` });
+      onSaved();
+    } catch (e) { setMsg({ err: String(e.message || e) }); }
+    finally { setSaving(false); }
+  };
+
+  return (
+    <div className="panel" style={{ marginBottom: 12 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+        <div style={{ flex: 1 }}>
+          <div className="panel-title">Ofertas e textos</div>
+          <div className="panel-sub" style={{ fontSize: 11 }}>Links de checkout, preços, ciclo de cobrança, cupons e frases da página. Salvar publica na hora.</div>
+        </div>
+        <button className="btn btn-ghost" onClick={() => setOpen((o) => !o)} aria-expanded={open}>{open ? 'Fechar' : 'Editar'}</button>
+      </div>
+      {open && state.status === 'loading' && <div style={{ marginTop: 12 }}><SkelTableRows rows={4} cols={4}/></div>}
+      {open && state.status === 'error' && <div style={{ marginTop: 12, color: 'var(--danger)', fontSize: 12 }}>Não carregou: {state.error}</div>}
+      {open && state.status === 'ready' && draft && (
+        <div style={{ marginTop: 6 }}>
+          <div style={SV_H}>Página</div>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 10 }}>
+            <label><span style={SV_LABEL}>Nome da pesquisa (só no dash)</span><input style={SV_INPUT} value={draft.name} onChange={(e) => set({ name: e.target.value })}/></label>
+            <label><span style={SV_LABEL}>Nome do produto na página</span><input style={SV_INPUT} value={draft.productName} onChange={(e) => set({ productName: e.target.value })}/></label>
+            <label><span style={SV_LABEL}>Cor de destaque</span>
+              <span style={{ display: 'flex', gap: 6 }}>
+                <input type="color" value={/^#[0-9a-f]{6}$/i.test(draft.accent) ? draft.accent : '#2f6fde'} onChange={(e) => set({ accent: e.target.value })} aria-label="Escolher cor" style={{ width: 36, height: 32, padding: 0, border: 'none', background: 'none' }}/>
+                <input style={SV_INPUT} value={draft.accent} onChange={(e) => set({ accent: e.target.value })}/>
+              </span>
+            </label>
+            <label><span style={SV_LABEL}>Foto dos frascos</span><input style={SV_INPUT} value={draft.image} onChange={(e) => set({ image: e.target.value })} placeholder="/survey-assets/produto.webp"/></label>
+            <label><span style={SV_LABEL}>Recebe quem comprou (frascos)</span><input style={SV_INPUT} value={draft.eligible} onChange={(e) => set({ eligible: e.target.value })} placeholder="2, 3"/></label>
+            <label><span style={SV_LABEL}>E quem comprou a partir de (frascos)</span><input style={SV_INPUT} inputMode="numeric" value={draft.fullPlanFrom} onChange={(e) => set({ fullPlanFrom: e.target.value })} placeholder="6 (vazio = não)"/></label>
+            <label style={{ display: 'flex', alignItems: 'center', gap: 8, alignSelf: 'end', fontSize: 12.5 }}>
+              <input type="checkbox" checked={draft.active} onChange={(e) => set({ active: e.target.checked })}/> Pesquisa no ar
+            </label>
+          </div>
+
+          <div style={SV_H}>Assinatura de 1 frasco por mês</div>
+          <div style={{ display: 'grid', gridTemplateColumns: 'minmax(220px, 3fr) repeat(2, minmax(110px, 1fr))', gap: 10 }}>
+            <label><span style={SV_LABEL}>Link do checkout</span><input style={SV_INPUT} value={draft.sub.url} onChange={(e) => set({ sub: { ...draft.sub, url: e.target.value } })} placeholder="https://vupim.com/c/…"/></label>
+            <label><span style={SV_LABEL}>Preço por mês (US$)</span><input style={SV_INPUT} inputMode="decimal" value={draft.sub.monthlyPrice} onChange={(e) => set({ sub: { ...draft.sub, monthlyPrice: e.target.value } })}/></label>
+            <label><span style={SV_LABEL} title="Deixe vazio se a 1ª cobrança é igual às outras">1ª cobrança, se diferente</span><input style={SV_INPUT} inputMode="decimal" value={draft.sub.firstPrice} onChange={(e) => set({ sub: { ...draft.sub, firstPrice: e.target.value } })} placeholder="igual"/></label>
+          </div>
+
+          <div style={SV_H}>Kits de recompra</div>
+          <div style={{ overflowX: 'auto' }}>
+            <table className="tbl" style={{ fontSize: 12.5, minWidth: 640 }}>
+              <thead><tr><th style={{ width: 80 }}>Frascos</th><th>Link do checkout</th><th style={{ width: 110 }}>Preço (US$)</th><th style={{ width: 130 }} title="De quantos em quantos meses a Vupim entrega e cobra de novo. Vazio = compra única.">Cobra a cada (meses)</th><th style={{ width: 90 }} className="num">Por frasco</th><th style={{ width: 40 }}/></tr></thead>
+              <tbody>
+                {draft.kits.map((r, i) => (
+                  <tr key={i}>
+                    <td><input style={SV_INPUT} inputMode="numeric" value={r.n} onChange={(e) => setRow('kits', i, { n: e.target.value })} aria-label="Frascos do kit"/></td>
+                    <td><input style={SV_INPUT} value={r.url} onChange={(e) => setRow('kits', i, { url: e.target.value })} placeholder="https://vupim.com/c/…" aria-label="Link do kit"/></td>
+                    <td><input style={SV_INPUT} inputMode="decimal" value={r.price} onChange={(e) => setRow('kits', i, { price: e.target.value })} aria-label="Preço do kit"/></td>
+                    <td><input style={SV_INPUT} inputMode="numeric" value={r.every} onChange={(e) => setRow('kits', i, { every: e.target.value })} placeholder="única" aria-label="Ciclo de cobrança em meses"/></td>
+                    <td className="num mono">{Number(r.n) > 0 && Number(r.price) > 0 ? fmtCurrency(Number(r.price) / Number(r.n), 'USD', 2) : '—'}</td>
+                    <td><button className="icon-btn" onClick={() => delRow('kits', i)} aria-label="Remover kit" title="Remover"><Icon name="x" size={12}/></button></td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <button className="btn btn-ghost" style={{ marginTop: 6 }} onClick={() => addRow('kits', { n: '', url: '', price: '', every: '' })}>+ Kit</button>
+
+          <div style={SV_H}>Cupons <span style={{ fontWeight: 400, color: 'var(--fg5)' }}>· 10% hesitante, 15% objeção de preço, 20% quase desistindo</span></div>
+          <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'flex-end' }}>
+            {draft.coupons.map((c, i) => (
+              <div key={i} style={{ display: 'flex', gap: 6, alignItems: 'flex-end' }}>
+                <label style={{ width: 70 }}><span style={SV_LABEL}>%</span><input style={SV_INPUT} inputMode="numeric" value={c.pct} onChange={(e) => setRow('coupons', i, { pct: e.target.value })}/></label>
+                <label style={{ width: 140 }}><span style={SV_LABEL}>Código</span><input style={SV_INPUT} value={c.code} onChange={(e) => setRow('coupons', i, { code: e.target.value.toUpperCase() })} placeholder="sem código = desligado"/></label>
+                <button className="icon-btn" onClick={() => delRow('coupons', i)} aria-label="Remover cupom" title="Remover"><Icon name="x" size={12}/></button>
+              </div>
+            ))}
+            <button className="btn btn-ghost" onClick={() => addRow('coupons', { pct: '', code: '' })}>+ Cupom</button>
+            <label style={{ width: 150 }}><span style={SV_LABEL}>Reservado por (dias)</span><input style={SV_INPUT} inputMode="numeric" value={draft.couponValidDays} onChange={(e) => set({ couponValidDays: e.target.value })}/></label>
+          </div>
+
+          <div style={SV_H}>Preço normal do front <span style={{ fontWeight: 400, color: 'var(--fg5)' }}>· a copy compara o preço por frasco com ele</span></div>
+          <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'flex-end' }}>
+            {draft.fronts.map((r, i) => (
+              <div key={i} style={{ display: 'flex', gap: 6, alignItems: 'flex-end' }}>
+                <label style={{ width: 70 }}><span style={SV_LABEL}>Frascos</span><input style={SV_INPUT} inputMode="numeric" value={r.n} onChange={(e) => setRow('fronts', i, { n: e.target.value })}/></label>
+                <label style={{ width: 100 }}><span style={SV_LABEL}>Preço (US$)</span><input style={SV_INPUT} inputMode="decimal" value={r.price} onChange={(e) => setRow('fronts', i, { price: e.target.value })}/></label>
+                <button className="icon-btn" onClick={() => delRow('fronts', i)} aria-label="Remover preço" title="Remover"><Icon name="x" size={12}/></button>
+              </div>
+            ))}
+            <button className="btn btn-ghost" onClick={() => addRow('fronts', { n: '', price: '' })}>+ Preço</button>
+          </div>
+
+          <div style={SV_H}>Frases reescritas <span style={{ fontWeight: 400, color: 'var(--fg5)' }}>· opcional; chave + "@completo" vale só pra quem comprou 6+</span></div>
+          <textarea style={{ ...SV_INPUT, fontFamily: 'var(--f-mono)', minHeight: 110, resize: 'vertical' }} value={draft.copy} onChange={(e) => set({ copy: e.target.value })}
+            placeholder={'{\n  "end.oferta.title": "Don\'t stop at month {frascos}",\n  "end.oferta.title@completo": "Make up for the days you missed"\n}'} aria-label="Frases reescritas (JSON)"/>
+
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 14, flexWrap: 'wrap' }}>
+            <button className="btn" onClick={save} disabled={saving}>{saving ? 'Salvando…' : 'Salvar e publicar'}</button>
+            <span style={{ fontSize: 11.5, color: 'var(--fg5)' }}>Versão atual: {state.version}. Cada resposta guarda a versão que viu.</span>
+            {msg && msg.ok && <span style={{ fontSize: 12, color: 'var(--success)' }}>{msg.ok}</span>}
+            {msg && msg.err && <span style={{ fontSize: 12, color: 'var(--danger)' }}>Não salvou: {msg.err}</span>}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+const SV_NA_KEY = 'northaffiliates.network.apiKey';
+const svNameKey = (s) => String(s || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+
+/** Admin: chave e catálogo da rede no NorthAffiliates (produtos, mockups dos kits, VSLs). */
+function SvNetworkCatalog({ productName }) {
+  const [open, setOpen] = useStateSv(false);
+  const [keyInfo, setKeyInfo] = useStateSv({ status: 'loading', value: null });
+  const [keyInput, setKeyInput] = useStateSv('');
+  const [cat, setCat] = useStateSv({ status: 'idle', data: null, error: null });
+  const [busy, setBusy] = useStateSv(false);
+
+  const loadKey = () => window.NSApi.adminListIntegrationSettings()
+    .then((d) => {
+      const row = (d.settings || []).find((x) => x.key === SV_NA_KEY);
+      const env = d.envOverrides && d.envOverrides[SV_NA_KEY];
+      setKeyInfo({ status: 'ready', value: env ? 'definida por env' : row ? row.value : null });
+    })
+    .catch(() => setKeyInfo({ status: 'ready', value: null }));
+  useEffectSv(() => { if (open) loadKey(); }, [open]);
+
+  const loadCatalog = () => {
+    setCat({ status: 'loading', data: null, error: null });
+    window.NSApi.fetchNetworkCatalog()
+      .then((data) => setCat({ status: 'ready', data, error: null }))
+      .catch((e) => setCat({ status: 'error', data: null, error: e.code === 'not_configured' ? 'Cole a chave da API primeiro.' : String(e.message || e) }));
+  };
+  const saveKey = async () => {
+    setBusy(true);
+    try { await window.NSApi.adminSaveIntegrationSetting(SV_NA_KEY, keyInput.trim()); setKeyInput(''); await loadKey(); loadCatalog(); }
+    catch (e) { setCat({ status: 'error', data: null, error: String(e.message || e) }); }
+    finally { setBusy(false); }
+  };
+
+  const mine = svNameKey(productName);
+  const products = cat.data ? [...cat.data.products].sort((a, b) => (svNameKey(b.name) === mine) - (svNameKey(a.name) === mine) || a.name.localeCompare(b.name)) : [];
+  return (
+    <div className="panel" style={{ marginBottom: 12 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+        <div style={{ flex: 1 }}>
+          <div className="panel-title">Materiais do NorthAffiliates</div>
+          <div className="panel-sub" style={{ fontSize: 11 }}>Catálogo da rede (chave só de leitura): foto do produto, mockups dos kits, versões da VSL e materiais. Os links das imagens valem 30 minutos.</div>
+        </div>
+        <button className="btn btn-ghost" onClick={() => setOpen((o) => !o)} aria-expanded={open}>{open ? 'Fechar' : 'Abrir'}</button>
+      </div>
+      {open && (
+        <div style={{ marginTop: 12 }}>
+          <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+            <span style={{ fontSize: 12, color: 'var(--fg4)' }}>Chave da API:</span>
+            <span className="mono" style={{ fontSize: 12 }}>{keyInfo.status === 'loading' ? '…' : keyInfo.value || 'não configurada'}</span>
+            <input type="password" style={{ ...SV_INPUT, width: 280 }} value={keyInput} onChange={(e) => setKeyInput(e.target.value)} placeholder="nsk_…" aria-label="Chave da API do NorthAffiliates"/>
+            <button className="btn btn-ghost" onClick={saveKey} disabled={busy || !/^nsk_\S{10,}$/.test(keyInput.trim())}>Salvar chave</button>
+            <button className="btn btn-ghost" onClick={loadCatalog} disabled={cat.status === 'loading'}>{cat.status === 'loading' ? 'Lendo…' : 'Ver catálogo'}</button>
+          </div>
+          {cat.status === 'error' && <div style={{ color: 'var(--danger)', fontSize: 12, marginTop: 8 }}>{cat.error}</div>}
+          {cat.status === 'ready' && (
+            <div style={{ marginTop: 10 }}>
+              <div style={{ fontSize: 11.5, color: 'var(--fg5)', marginBottom: 6 }}>
+                Rede {cat.data.network || '—'} · {fmtInt(products.length)} produtos{!products.some((p) => svNameKey(p.name) === mine) && ` · ${productName} não está no catálogo (a foto vem do Atlas)`}
+              </div>
+              <div style={{ overflowX: 'auto' }}>
+                <table className="tbl" style={{ fontSize: 12.5, minWidth: 680 }}>
+                  <thead><tr><th style={{ width: 52 }}/><th>Produto</th><th>Nicho</th><th>Mockups de kit</th><th className="num">Versões da VSL</th><th>Materiais</th></tr></thead>
+                  <tbody>
+                    {products.map((p) => (
+                      <tr key={p.id}>
+                        <td>{p.image ? <img src={p.image} alt="" width="40" height="40" loading="lazy" style={{ objectFit: 'contain', display: 'block' }}/> : null}</td>
+                        <td style={{ fontWeight: 600 }}>{p.name}{svNameKey(p.name) === mine && <span style={{ marginLeft: 6, fontSize: 11, color: 'var(--accent)' }}>esta pesquisa</span>}{p.status === 'paused' && <span style={{ marginLeft: 6, fontSize: 11, color: 'var(--warning)' }}>pausado</span>}</td>
+                        <td>{p.niche || '—'}</td>
+                        <td>{p.kits.length ? p.kits.map((k) => <a key={k.packSize} href={k.url} target="_blank" rel="noopener" style={{ marginRight: 8 }}>{k.packSize} frascos</a>) : '—'}</td>
+                        <td className="num mono">{fmtInt(p.offers)}</td>
+                        <td style={{ color: 'var(--fg4)' }}>{Object.entries(p.materials).map(([t, n]) => `${t} ${n}`).join(' · ') || '—'}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 /** Admin: gera um link de teste pra percorrer a pesquisa de verdade (grava, fora dos números). */
 function SvTestInvite({ variant, onCreated }) {
   const [form, setForm] = useStateSv({ email: '', firstName: 'John', bottles: '3' });
@@ -259,7 +531,11 @@ function SurveysPage({ filters, user }) {
 
       <SvCsQueue rows={d.csQueue} onChanged={() => setTick((n) => n + 1)}/>
 
-      {user?.role === 'ADMIN' && <SvTestInvite variant={d.variant} onCreated={() => { setTests(true); setTick((n) => n + 1); }}/>}
+      {user?.role === 'ADMIN' && (<>
+        <SvVariantEditor slug={d.variant} onSaved={() => setTick((n) => n + 1)}/>
+        <SvNetworkCatalog productName={current.name.split(' · ')[0]}/>
+        <SvTestInvite variant={d.variant} onCreated={() => { setTests(true); setTick((n) => n + 1); }}/>
+      </>)}
 
       <div className="panel" style={{ padding: 0, overflow: 'hidden' }}>
         <div style={{ padding: '12px 14px' }}>

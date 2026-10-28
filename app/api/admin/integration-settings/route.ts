@@ -38,6 +38,8 @@ export async function GET(req: Request) {
       [SETTING_KEYS.affiliatesIntegrationApiKey]: Boolean(process.env.INTEGRATION_API_KEY),
       [SETTING_KEYS.affiliatesDashboardApiKey]: Boolean(process.env.DASHBOARD_API_KEY),
       [SETTING_KEYS.salesboundPostbackToken]: Boolean(process.env.SALESBOUND_POSTBACK_TOKEN),
+      [SETTING_KEYS.northAffiliatesNetworkApiKey]: Boolean(process.env.NORTHAFFILIATES_NETWORK_API_KEY),
+      [SETTING_KEYS.northAffiliatesNetworkApiUrl]: Boolean(process.env.NORTHAFFILIATES_NETWORK_API_URL),
     },
   });
 }

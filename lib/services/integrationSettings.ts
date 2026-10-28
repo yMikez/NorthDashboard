@@ -51,6 +51,11 @@ export const SETTING_KEYS = {
   retentionApiUrl: 'sendtrace.retention.apiUrl',
   retentionApiKey: 'sendtrace.retention.apiKey',
   retentionAllowInsecure: 'sendtrace.retention.allowInsecure',
+  // API de leitura da rede no NorthAffiliates (catálogo, mockups dos kits,
+  // VSLs): chave nsk_… só de leitura, gerada por rede. Usada pela aba
+  // Pesquisas pra puxar imagem de produto. Base padrão em getNetworkCatalogUrl.
+  northAffiliatesNetworkApiUrl: 'northaffiliates.network.apiUrl',
+  northAffiliatesNetworkApiKey: 'northaffiliates.network.apiKey',
 } as const;
 
 // Chaves INTERNAS (não editáveis pela UI): marcador incremental do mapping.
@@ -253,4 +258,17 @@ export async function getProviderCommission(
   // e não com os 50% que o exemplo do docs/specs/calculo-margem.md usava).
   if (provider === 'salesbound') return { pct: 0.65, assumed: false, source: 'default' };
   return { pct: DEFAULT_COMMISSION_PCT, assumed: provider !== 'tauk', source: 'default' };
+}
+
+const DEFAULT_NETWORK_CATALOG_URL = 'https://api.thenorthscales.com/v1/network';
+export async function getNetworkCatalogUrl(): Promise<string> {
+  const env = process.env.NORTHAFFILIATES_NETWORK_API_URL?.trim();
+  const raw = env || (await getSetting(SETTING_KEYS.northAffiliatesNetworkApiUrl)) || DEFAULT_NETWORK_CATALOG_URL;
+  return raw.replace(/\/+$/, '');
+}
+export async function getNetworkCatalogKey(): Promise<string | null> {
+  const env = process.env.NORTHAFFILIATES_NETWORK_API_KEY?.trim();
+  if (env) return env;
+  const v = await getSetting(SETTING_KEYS.northAffiliatesNetworkApiKey);
+  return v?.trim() || null;
 }

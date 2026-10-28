@@ -1,4 +1,5 @@
-// GET /api/survey/go?t=&o=assinatura|kit|cupom   (público)
+// GET /api/survey/go?t=&o=assinatura|kit|cupom[&n=frascos]   (público; n = plano
+//     escolhido em "See all plans")
 //
 // Botão do checkout na tela final: registra o clique e redireciona pro link
 // da variante com o rastreio src=qz_<resposta>, que volta no postback da
@@ -15,7 +16,9 @@ export const dynamic = 'force-dynamic';
 export async function GET(req: Request) {
   const url = new URL(req.url);
   try {
-    const target = await surveyCheckoutRedirect(url.searchParams.get('t') ?? '', url.searchParams.get('o') ?? '');
+    const target = await surveyCheckoutRedirect(
+      url.searchParams.get('t') ?? '', url.searchParams.get('o') ?? '', url.searchParams.get('n'),
+    );
     if (target) return NextResponse.redirect(target, 302);
   } catch (err) {
     logger.error({ err }, 'survey checkout redirect failed');

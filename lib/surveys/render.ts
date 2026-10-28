@@ -10,7 +10,8 @@
 
 import {
   DEFAULT_COPY, Q1_OPTS, Q3_OPTS, Q3B_OPTS, Q5_OPTS, Q5_MAX,
-  availableOffers, copyText, couponVars, fillText, kitSizeFor, q4Options, questionOrder, segmentOf, surveyVars,
+  availableOffers, copyText, couponVars, cycleText, fillText, kitSizeFor, plansOf, q4Options, questionOrder, segmentOf,
+  surveyVars, usd,
   type CheckoutKind, type Outcome, type SurveyAnswers, type SurveyContext, type SurveyVariantConfig,
 } from './fimTratamento';
 
@@ -72,6 +73,14 @@ h1{font-size:25px;line-height:1.28;margin:0 0 12px;letter-spacing:-.01em;outline
 .btn{display:block;width:100%;min-height:54px;padding:15px 20px;border:0;border-radius:12px;background:var(--accent);color:#fff;font:inherit;font-weight:600;text-align:center;text-decoration:none;cursor:pointer;touch-action:manipulation}
 .btn[disabled]{opacity:.4;cursor:default}
 .alt{display:block;width:100%;margin-top:12px;padding:13px 16px;border:1.5px solid var(--line);border-radius:12px;background:var(--card);color:var(--ink);font-weight:600;text-align:center;text-decoration:none}
+.fine{margin:10px 2px 0;font-size:13px;line-height:1.45;color:var(--muted);text-align:center}
+.plans{margin-top:14px;border:1.5px solid var(--line);border-radius:12px;background:var(--card)}
+.plans summary{padding:13px 16px;font-weight:600;cursor:pointer;list-style:none;text-align:center;color:var(--accent)}
+.plans summary::-webkit-details-marker{display:none}
+.plan{display:flex;align-items:center;gap:10px;padding:12px 16px;border-top:1px solid var(--line);color:var(--ink);text-decoration:none}
+.plan b{font-weight:600}.plan .pp{margin-left:auto;text-align:right;font-size:14px;color:var(--muted);white-space:nowrap}
+.plan .pp strong{display:block;color:var(--ink);font-size:16px}
+.badge{display:inline-block;margin-left:6px;padding:1px 7px;border-radius:999px;background:color-mix(in srgb,var(--accent) 12%,#fff);color:var(--accent);font-size:12px;font-weight:700}
 .link{display:block;width:100%;min-height:48px;margin-top:8px;background:none;border:0;color:var(--muted);font:inherit;text-decoration:underline;cursor:pointer}
 .atalho{display:block;margin-top:18px;padding:12px 0;background:none;border:0;color:var(--accent);font:inherit;font-weight:600;cursor:pointer;text-align:left}
 .stars{display:flex;gap:8px;margin:4px 0 10px}
@@ -174,10 +183,12 @@ export function renderSurveyPage(input: RenderSurveyInput): string {
   const img = imageOf(cfg);
   const hero = (cls = 'hero') => (img ? `<img class="${cls}" src="${img}" width="594" height="640" alt="${esc(cfg.productName)}">` : '');
 
-  const goUrl = (kind: CheckoutKind, pct?: number): string => {
-    if (!input.preview) return `/api/survey/go?t=${encodeURIComponent(input.token)}&o=${kind}`;
+  const goUrl = (kind: CheckoutKind, pct?: number, n?: number): string => {
+    if (!input.preview) {
+      return `/api/survey/go?t=${encodeURIComponent(input.token)}&o=${kind}${n != null ? `&n=${n}` : ''}`;
+    }
     if (kind === 'assinatura') return cfg.offers?.assinatura?.url ?? '#';
-    const kitUrl = kit != null ? cfg.offers?.kits?.[String(kit)]?.url : null;
+    const kitUrl = cfg.offers?.kits?.[String(n ?? kit)]?.url ?? null;
     if (kind === 'cupom') return cfg.coupons?.find((c) => c.pct === pct)?.kits?.[String(kit)] ?? kitUrl ?? '#';
     return kitUrl ?? '#';
   };
@@ -201,10 +212,29 @@ export function renderSurveyPage(input: RenderSurveyInput): string {
     if (cfg.copy?.[constKey] == null && !(constKey in DEFAULT_COPY)) return padrao;
     return padrao + `<p class="lead" data-body="constante" hidden>${mark(esc(fillText(copyText(cfg, key, 'completo_constante'), v)))}</p>`;
   };
+  const kitCycle = kit != null ? cfg.offers?.kits?.[String(kit)]?.everyMonths ?? null : null;
+  /** O que vai ser cobrado, sob o botão principal. */
+  const fine = (kind: CheckoutKind, v: Record<string, string>) =>
+    `<p class="fine">${tv(kind === 'assinatura' ? 'fine.assinatura' : (kitCycle ? 'fine.kit' : 'fine.kit_unica'), v)}</p>`;
+  const plans = plansOf(cfg);
+  const plansList = plans.length > 1
+    ? `<details class="plans"><summary>${t('plans.title')}</summary>${plans.map((p) => {
+      const every = p.everyMonths ?? 0;
+      const label = p.kind === 'assinatura'
+        ? t('plans.assinatura')
+        : tv(every ? 'plans.kit' : 'plans.kit_unica', { ...vars, n: String(p.bottles), every: String(every) });
+      const href = p.kind === 'assinatura' ? goUrl('assinatura') : goUrl('kit', undefined, p.bottles);
+      const per = tv('plans.per', { ...vars, preco: usd(p.perBottle) });
+      const billed = p.kind === 'assinatura' || every ? ` · ${esc(cycleText(p.kind === 'assinatura' ? 1 : every))}` : '';
+      return `<a class="plan" href="${esc(href)}"${target}><span><b>${label}</b>${p.best ? `<span class="badge">${t('plans.best')}</span>` : ''}</span>`
+        + `<span class="pp"><strong>${esc(usd(p.price))}</strong>${per}${billed}</span></a>`;
+    }).join('')}</details>`
+    : '';
   const offer = (id: string, base: string, primary: CheckoutKind, alt: CheckoutKind | null, v = vars, pct?: number, code?: string) =>
     `<section id="${id}">${hero('hero sm')}<h1 tabindex="-1">${tv(`${base}.title`, v)}</h1>${body(`${base}.body`, v, code)}`
-    + `<a class="btn" href="${esc(goUrl(primary, pct))}"${target}>${tv(`${base}.cta`, v)}</a>`
+    + `<a class="btn" href="${esc(goUrl(primary, pct))}"${target}>${tv(`${base}.cta`, v)}</a>${fine(primary, v)}`
     + (alt ? `<a class="alt" href="${esc(goUrl(alt))}"${target}>${tv(`${base}.alt`, v)}</a>` : '')
+    + plansList
     + `<button type="button" class="link" data-dismiss>${t('end.dispensar')}</button></section>`;
 
   const stars = [1, 2, 3, 4, 5].map((n) =>

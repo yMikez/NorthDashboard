@@ -54,6 +54,12 @@ export type CsReason = 'nota_minima' | 'parou_medico' | 'parou_mal_estar';
 /** Botão do checkout: assinatura mensal, kit no preço de recompra, kit com cupom. */
 export type CheckoutKind = 'assinatura' | 'kit' | 'cupom';
 
+export interface SurveyKit {
+  url: string | null;
+  price: number;
+  everyMonths?: number | null;
+}
+
 export interface SurveyVariantConfig {
   productName: string;
   /** Cor de destaque da página (hex). */
@@ -74,8 +80,12 @@ export interface SurveyVariantConfig {
   offers?: {
     /** 1 frasco por mês: 1ª cobrança com desconto, depois o preço normal da assinatura. */
     assinatura?: { url: string | null; firstPrice: number; monthlyPrice: number } | null;
-    /** Kits de recompra (frascos → link e preço). */
-    kits?: Record<string, { url: string | null; price: number }>;
+    /**
+     * Kits de recompra (frascos → link, preço e ciclo). everyMonths = de
+     * quantos em quantos meses a plataforma entrega e cobra de novo (null =
+     * compra única). A página sempre diz a cobrança recorrente.
+     */
+    kits?: Record<string, SurveyKit>;
   };
   /** Cupons por faixa (10/15/20%). kits = link da oferta já com desconto, se existir. */
   coupons?: { pct: number; code: string | null; kits?: Record<string, string | null> }[];
@@ -154,19 +164,19 @@ export const DEFAULT_COPY: Record<string, string> = {
 
   // Recorrência: 1 frasco por mês, 1º mês com desconto.
   'end.recorrencia.title': 'Finish your {plano}-month plan, one bottle at a time',
-  'end.recorrencia.body': "When you ordered, we recommended the full {plano} months, because {produto} is made for steady, daily use. You're at month {frascos}, right where many people stop too early. Get your next bottles one a month: your first month is just {preco_1o}, then {preco_mes} a month. Skip or cancel anytime.",
+  'end.recorrencia.body': "When you ordered, we recommended the full {plano} months, because {produto} is made for steady, daily use. You're at month {frascos}, right where many people stop too early. Get your next bottles one a month, so you never pay for the whole plan at once. {assinatura_frase}",
   'end.recorrencia.cta': 'Continue my plan for {preco_1o}',
-  'end.recorrencia.alt': 'Prefer all {kit} bottles now? {preco_kit}',
+  'end.recorrencia.alt': 'Prefer {kit} bottles at once? {preco_kit}',
   'end.recorrencia.title@completo': 'Never run out, or miss a day, again',
-  'end.recorrencia.body@completo': "Most missed doses aren't a choice: a busy week, a trip, a bottle that ran out before the next one arrived. With 1 bottle a month, the next one is at your door before the last one ends. First month {preco_1o}, then {preco_mes} a month. Skip or cancel anytime.",
-  'end.recorrencia.body@completo_constante': 'You took it every day, which is exactly how {produto} is meant to be used. Keep that streak going without thinking about it: 1 bottle a month, at your door before the last one ends. First month {preco_1o}, then {preco_mes} a month. Skip or cancel anytime.',
+  'end.recorrencia.body@completo': "Most missed doses aren't a choice: a busy week, a trip, a bottle that ran out before the next one arrived. With 1 bottle a month, the next one is at your door before the last one ends. {assinatura_frase}",
+  'end.recorrencia.body@completo_constante': 'You took it every day, which is exactly how {produto} is meant to be used. Keep that streak going without thinking about it: 1 bottle a month, at your door before the last one ends. {assinatura_frase}',
   'end.recorrencia.cta@completo': 'Start for {preco_1o}',
 
   // Oferta: kit no preço de recompra (já promocional).
   'end.oferta.title': "Don't stop at month {frascos}",
   'end.oferta.body': "Your plan was built for {plano} months of daily use. That's why we recommended it when you ordered, and stopping now means starting over later. As a returning customer you already get a promotional reorder price: {kit} bottles for {preco_kit}, just {preco_pote} per bottle instead of the regular {preco_regular_pote}.",
   'end.oferta.cta': 'Complete my plan for {preco_kit}',
-  'end.oferta.alt': 'Or 1 bottle a month, first month {preco_1o}',
+  'end.oferta.alt': 'Or 1 bottle a month, {assinatura_curto}',
   'end.oferta.title@completo': 'Make up for the days you missed',
   'end.oferta.body@completo': "Even with the best intentions, doses get missed, and {produto} is made for steady, daily use. If you skipped days along the way, your {plano} months aren't complete yet. Keep going at your promotional reorder price: {kit} bottles for {preco_kit}, just {preco_pote} per bottle instead of the regular {preco_regular_pote}.",
   'end.oferta.body@completo_constante': "You took it every day, and that's exactly how {produto} is meant to be used. Don't break the streak now. Keep going at your promotional reorder price: {kit} bottles for {preco_kit}, just {preco_pote} per bottle instead of the regular {preco_regular_pote}.",
@@ -176,13 +186,25 @@ export const DEFAULT_COPY: Record<string, string> = {
   'end.cupom.title': 'Your last {kit} bottles, {desconto}% off',
   'end.cupom.body': 'Your reorder price is already lower than the regular price: {preco_pote} per bottle instead of {preco_regular_pote}. With code {cupom} you save another {desconto}%: {kit} bottles for {preco_cupom}, and your {plano}-month plan is complete. This price is reserved for you for {validade} days.',
   'end.cupom.cta': 'Complete my plan for {preco_cupom}',
-  'end.cupom.alt': 'Or 1 bottle a month, first month {preco_1o}',
+  'end.cupom.alt': 'Or 1 bottle a month, {assinatura_curto}',
   'end.cupom.title@completo': 'Keep going, {desconto}% off',
   'end.cupom.body@completo': 'Missed doses add up, and this is the easiest way to make your plan count. Your reorder price is already lower than the regular price, and with code {cupom} you save another {desconto}%: {kit} bottles for {preco_cupom}. Reserved for you for {validade} days.',
   'end.cupom.body@completo_constante': "You've been consistent, so let's keep it that way. Your reorder price is already lower than the regular price, and with code {cupom} you save another {desconto}%: {kit} bottles for {preco_cupom}. Reserved for you for {validade} days.",
   'end.cupom.cta@completo': 'Keep going for {preco_cupom}',
 
   'end.dispensar': 'Not now',
+
+  // Letra miúda sob o botão: a cobrança recorrente sempre dita.
+  'fine.assinatura': '1 bottle delivered and billed every month. Skip or cancel anytime.',
+  'fine.kit': '{kit} bottles delivered and billed {cobranca_kit}, {preco_kit} each time. Skip or cancel anytime.',
+  'fine.kit_unica': 'One-time payment of {preco_kit}. No subscription.',
+  // Todos os planos (abre num "See all plans").
+  'plans.title': 'See all plans',
+  'plans.assinatura': '1 bottle every month',
+  'plans.kit': '{n} bottles every {every} months',
+  'plans.kit_unica': '{n} bottles, one-time',
+  'plans.best': 'Best value',
+  'plans.per': '{preco} per bottle',
 
   'end.obrigado.title': 'Thank you, {nome}.',
   'end.obrigado.body': 'Your answers help us make {produto} better for you.',
@@ -275,8 +297,51 @@ export function surveyVars(cfg: SurveyVariantConfig, ctx: SurveyContext): Survey
     preco_regular_pote: regular != null ? usd(regular) : '',
     preco_1o: sub ? usd(sub.firstPrice) : '',
     preco_mes: sub ? usd(sub.monthlyPrice) : '',
+    // Assinatura com ou sem desconto no 1º mês (a Vupim pode não ter 1ª cobrança diferente).
+    assinatura_frase: !sub ? ''
+      : sub.firstPrice < sub.monthlyPrice
+        ? `Your first month is just ${usd(sub.firstPrice)}, then ${usd(sub.monthlyPrice)} a month. Skip or cancel anytime.`
+        : `It's just ${usd(sub.monthlyPrice)} a month. Skip or cancel anytime.`,
+    assinatura_curto: !sub ? ''
+      : sub.firstPrice < sub.monthlyPrice ? `first month ${usd(sub.firstPrice)}` : `${usd(sub.monthlyPrice)} each`,
+    cobranca_kit: cycleText(kit != null ? cfg.offers?.kits?.[String(kit)]?.everyMonths : null),
     validade: String(cfg.couponValidDays ?? 7),
   };
+}
+
+/** "every 3 months" / "every month"; vazio = compra única. */
+export function cycleText(everyMonths: number | null | undefined): string {
+  if (!everyMonths || everyMonths < 1) return '';
+  return everyMonths === 1 ? 'every month' : `every ${everyMonths} months`;
+}
+
+export interface SurveyPlan {
+  kind: 'assinatura' | 'kit';
+  bottles: number;
+  price: number;
+  perBottle: number;
+  everyMonths: number | null;
+  best: boolean;
+}
+
+/** Todos os planos com link, do menor pro maior; "best" = menor preço por frasco. */
+export function plansOf(cfg: SurveyVariantConfig): SurveyPlan[] {
+  const out: SurveyPlan[] = [];
+  const sub = cfg.offers?.assinatura;
+  if (sub?.url && sub.monthlyPrice > 0) {
+    out.push({ kind: 'assinatura', bottles: 1, price: sub.monthlyPrice, perBottle: sub.monthlyPrice, everyMonths: 1, best: false });
+  }
+  for (const [size, k] of Object.entries(cfg.offers?.kits ?? {})) {
+    const n = Number(size);
+    if (!k?.url || !(k.price > 0) || !Number.isInteger(n) || n < 1) continue;
+    out.push({ kind: 'kit', bottles: n, price: k.price, perBottle: round2(k.price / n), everyMonths: k.everyMonths ?? null, best: false });
+  }
+  out.sort((a, b) => a.bottles - b.bottles);
+  if (out.length > 1) {
+    const min = Math.min(...out.map((p) => p.perBottle));
+    for (const p of out) p.best = p.perBottle === min;
+  }
+  return out;
 }
 
 /** Variáveis de uma faixa de cupom (somadas às de surveyVars). */
@@ -426,6 +491,9 @@ export function decideOutcome(a: SurveyAnswers, av: Availability): OutcomeDecisi
 
   if ((a.atalho === true || (a.q5 ?? []).includes('mensal')) && av.assinatura) return { ...base, outcome: 'recorrencia' };
   const tier = a.atalho === true ? 0 : couponTier(a);
+  // Sem cupom, quem não consegue pagar tudo de uma vez recebe a assinatura (pagar por mês resolve).
+  const payAtOnce = a.q1 === 'dinheiro' || (a.q3 === 'parou' && a.q3b === 'orcamento');
+  if (payAtOnce && !av.cupons.length && av.assinatura) return { ...base, outcome: 'recorrencia' };
   if (tier > 0 && av.cupons.length) {
     // Faixa exata, ou a maior configurada abaixo dela, ou a menor que existir.
     const pct = av.cupons.includes(tier) ? tier : (av.cupons.filter((p) => p < tier).pop() ?? av.cupons[0]);
