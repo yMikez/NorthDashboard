@@ -18,6 +18,7 @@
 // Middleware NÃO interfere em /api/* — deixa o handler decidir o status.
 
 import { NextResponse, type NextRequest } from 'next/server';
+import { SURVEY_PATH_RE } from './lib/surveys/publicPath';
 
 const SESSION_COOKIE = 'ns_session';
 
@@ -75,7 +76,6 @@ const SPA_ROUTES = new Set([
 const SURVEY_HOSTS = new Set(
   (process.env.SURVEY_HOSTS ?? 'checkin.healthnwellnes.com').split(',').map((h) => h.trim().toLowerCase()).filter(Boolean),
 );
-const SURVEY_PATH_RE = /^\/([a-z0-9-]{1,60})\/([A-Za-z0-9_-]{16,64})\/?$/;
 
 function surveyHost(req: NextRequest): NextResponse {
   // Fotos dos produtos (public/survey-assets) — o resto do public/ não existe aqui.

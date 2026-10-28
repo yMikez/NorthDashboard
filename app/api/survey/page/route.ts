@@ -10,6 +10,7 @@ import { NextResponse } from 'next/server';
 import { requireAuth } from '@/lib/auth/guard';
 import { surveyPageHtml, surveyPreviewHtml } from '@/lib/services/surveys';
 import { renderSurveyInvalid } from '@/lib/surveys/render';
+import { surveyPageParams } from '@/lib/surveys/publicPath';
 import { logger } from '@/lib/logger';
 
 export const runtime = 'nodejs';
@@ -25,7 +26,7 @@ const HEADERS = {
 
 export async function GET(req: Request) {
   const url = new URL(req.url);
-  const slug = url.searchParams.get('slug') ?? '';
+  const { slug, token } = surveyPageParams(url);
   try {
     if (url.searchParams.get('preview') === '1') {
       const auth = await requireAuth();
@@ -35,7 +36,7 @@ export async function GET(req: Request) {
       });
       return new NextResponse(html ?? renderSurveyInvalid(null), { status: html ? 200 : 404, headers: HEADERS });
     }
-    const { status, html } = await surveyPageHtml(slug, url.searchParams.get('t') ?? '');
+    const { status, html } = await surveyPageHtml(slug, token);
     return new NextResponse(html, { status, headers: HEADERS });
   } catch (err) {
     logger.error({ err, slug }, 'survey page failed');
