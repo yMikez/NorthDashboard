@@ -5,6 +5,7 @@
 // desconhecido é descartado; valor inválido derruba o salvamento com a
 // mensagem do campo — melhor não salvar do que publicar um checkout quebrado.
 
+import { isSurveyImagePath } from './assets';
 import { DEFAULT_COPY, type SurveyKit, type SurveyVariantConfig } from './fimTratamento';
 
 export type ConfigResult = { ok: true; config: SurveyVariantConfig } | { ok: false; error: string };
@@ -56,7 +57,8 @@ export function sanitizeVariantConfig(raw: unknown): ConfigResult {
     };
     const accent = str(r.accent, 'Cor', 7, /^#[0-9a-f]{6}$/i);
     if (accent) out.accent = accent;
-    const image = str(r.image, 'Imagem', 200, /^\/(survey-assets\/[\w.-]+|api\/survey\/asset\/[\w-]+)$/);
+    const image = str(r.image, 'Imagem', 200);
+    if (image && !isSurveyImagePath(image)) fail('Foto: escolha uma foto da galeria ou envie uma');
     if (image) out.image = image;
     out.planBottles = r.planBottles == null ? 6 : num(r.planBottles, 'Plano (frascos)', 1, 24, true);
     out.daysPerBottle = r.daysPerBottle == null ? 30 : num(r.daysPerBottle, 'Dias por frasco', 1, 90, true);

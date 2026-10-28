@@ -316,6 +316,161 @@ function svSlugId(label, taken) {
   return id;
 }
 
+// Página inicial: campos próprios (as mesmas chaves de texto da página, fora da lista genérica).
+const SV_INTRO_FIELDS = [
+  { key: 'intro.title', label: 'Título', who: '2–3 frascos', rows: 2 },
+  { key: 'intro.body', label: 'Texto', who: '2–3 frascos', rows: 3 },
+  { key: 'intro.title@completo', label: 'Título', who: '6+ frascos', rows: 2 },
+  { key: 'intro.body@completo', label: 'Texto', who: '6+ frascos', rows: 3 },
+  { key: 'intro.cta', label: 'Botão', who: 'todos', rows: 1 },
+  { key: 'intro.atalho', label: 'Link de atalho (vai direto pro pedido)', who: 'todos', rows: 1 },
+];
+const SV_INTRO_KEYS = new Set(SV_INTRO_FIELDS.map((f) => f.key));
+const svIsIntro = (key) => SV_INTRO_KEYS.has(key) || key.split('@')[0].startsWith('intro.');
+
+function SvIntroFields({ intro, defaults, onChange }) {
+  const area = { ...SV_INPUT, resize: 'vertical', fontFamily: 'inherit' };
+  const field = (f) => (
+    <label key={f.key} style={{ display: 'block' }}>
+      <span style={SV_LABEL}>{f.label}</span>
+      <textarea style={{ ...area, minHeight: f.rows > 1 ? 22 * f.rows + 14 : 34 }} rows={f.rows} value={intro[f.key] || ''}
+        onChange={(e) => onChange({ ...intro, [f.key]: e.target.value })} placeholder={(defaults || {})[f.key] || ''}
+        aria-label={`Página inicial: ${f.label} (${f.who})`}/>
+    </label>
+  );
+  const col = (who) => SV_INTRO_FIELDS.filter((f) => f.who === who);
+  return (
+    <div>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: 14 }}>
+        {['2–3 frascos', '6+ frascos'].map((who) => (
+          <div key={who} style={{ display: 'grid', gap: 8, alignContent: 'start' }}>
+            <div style={{ fontSize: 11.5, fontWeight: 600, color: 'var(--fg3)' }}>
+              {who === '2–3 frascos' ? 'Quem comprou 2–3 frascos (completar o plano)' : 'Quem comprou 6+ frascos (constância)'}
+            </div>
+            {col(who).map(field)}
+          </div>
+        ))}
+      </div>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: 14, marginTop: 10 }}>
+        {col('todos').map(field)}
+      </div>
+      <div style={{ fontSize: 11, color: 'var(--fg5)', marginTop: 6 }}>
+        Vazio = texto padrão (o cinza dentro do campo). Variáveis: {'{nome} {produto} {frascos} {plano} {dias} {total}'} — sem o primeiro nome do cliente, a frase se ajusta sozinha.
+      </div>
+    </div>
+  );
+}
+
+const SV_IMG_MAX = 640;
+
+/** Reduz no navegador (até 640 px no lado maior) e converte pra WebP — PNG se o navegador não gerar WebP. */
+async function svPrepareImage(file) {
+  const bmp = await createImageBitmap(file);
+  const scale = Math.min(1, SV_IMG_MAX / Math.max(bmp.width, bmp.height));
+  const w = Math.max(1, Math.round(bmp.width * scale));
+  const h = Math.max(1, Math.round(bmp.height * scale));
+  const canvas = document.createElement('canvas');
+  canvas.width = w; canvas.height = h;
+  canvas.getContext('2d').drawImage(bmp, 0, 0, w, h);
+  const toBlob = (type, q) => new Promise((resolve) => canvas.toBlob(resolve, type, q));
+  let blob = await toBlob('image/webp', 0.86);
+  if (!blob || blob.type !== 'image/webp') blob = await toBlob('image/png');
+  const dataUrl = await new Promise((resolve, reject) => {
+    const r = new FileReader();
+    r.onload = () => resolve(r.result);
+    r.onerror = () => reject(new Error('não leu o arquivo'));
+    r.readAsDataURL(blob);
+  });
+  return { dataBase64: String(dataUrl).split(',')[1], width: w, height: h, size: blob.size };
+}
+
+/** Foto do produto: a atual, a galeria (enviadas pelo dash + as do código) e o envio do computador. */
+function SvImagePicker({ value, onChange }) {
+  const [open, setOpen] = useStateSv(false);
+  const [images, setImages] = useStateSv(null);
+  const [busy, setBusy] = useStateSv(false);
+  const [err, setErr] = useStateSv(null);
+  const fileRef = React.useRef(null);
+
+  const load = () => window.NSApi.fetchSurveyImages()
+    .then((d) => setImages(d.images))
+    .catch((e) => setErr(String(e.message || e)));
+  useEffectSv(() => { if (open && !images) load(); }, [open]);
+
+  const upload = async (file) => {
+    if (!file) return;
+    if (!/^image\/(png|jpeg|webp)$/.test(file.type)) { setErr('Só PNG, JPEG ou WebP.'); return; }
+    setBusy(true); setErr(null);
+    try {
+      const prepared = await svPrepareImage(file);
+      const r = await window.NSApi.uploadSurveyImage({ name: file.name.replace(/\.[^.]+$/, ''), dataBase64: prepared.dataBase64, width: prepared.width, height: prepared.height });
+      onChange(r.image.url);
+      setOpen(true);
+      await load();
+    } catch (e) { setErr(String(e.message || e)); }
+    finally { setBusy(false); if (fileRef.current) fileRef.current.value = ''; }
+  };
+  const remove = async (img) => {
+    if (!window.confirm(`Apagar a foto "${img.name}"?`)) return;
+    setErr(null);
+    try { await window.NSApi.deleteSurveyImage(img.id); await load(); }
+    catch (e) { setErr(String(e.message || e)); }
+  };
+
+  const thumb = { width: 64, height: 70, objectFit: 'contain', display: 'block', background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: 6 };
+  const current = images && images.find((i) => i.url === value);
+  return (
+    <div>
+      <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
+        {value ? <img src={value} alt="Foto atual do produto" style={thumb}/> : <div style={{ ...thumb, display: 'grid', placeItems: 'center', fontSize: 11, color: 'var(--fg5)' }}>sem foto</div>}
+        <div style={{ display: 'grid', gap: 6 }}>
+          <span style={{ fontSize: 12, color: 'var(--fg3)' }}>{current ? current.name : value ? value.split('/').pop() : 'A página aparece sem foto'}</span>
+          <span style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+            <button type="button" className="btn btn-ghost" onClick={() => setOpen((o) => !o)} aria-expanded={open}>{open ? 'Fechar galeria' : 'Trocar foto'}</button>
+            <button type="button" className="btn btn-ghost" onClick={() => fileRef.current && fileRef.current.click()} disabled={busy}>
+              <Icon name="upload" size={12}/> {busy ? 'Enviando…' : 'Enviar do computador'}
+            </button>
+            {value && <button type="button" className="btn btn-ghost" onClick={() => onChange('')}>Sem foto</button>}
+          </span>
+          <input ref={fileRef} type="file" accept="image/png,image/jpeg,image/webp" style={{ display: 'none' }} onChange={(e) => upload(e.target.files && e.target.files[0])}/>
+        </div>
+      </div>
+      {err && <div style={{ color: 'var(--danger)', fontSize: 12, marginTop: 6 }}>{err}</div>}
+      {open && (
+        <div style={{ marginTop: 10 }}>
+          {!images ? <SkelTableRows rows={2} cols={4}/> : (
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(116px, 1fr))', gap: 10 }}>
+              {images.map((img) => {
+                const on = img.url === value;
+                return (
+                  <div key={img.url} style={{ position: 'relative', border: `1px solid ${on ? 'var(--accent)' : 'var(--border)'}`, borderRadius: 8, padding: 8, background: on ? 'color-mix(in oklab, var(--accent) 8%, transparent)' : 'transparent' }}>
+                    <button type="button" onClick={() => onChange(img.url)} aria-pressed={on} title={`Usar "${img.name}"`}
+                      style={{ display: 'block', width: '100%', background: 'none', border: 0, padding: 0, cursor: 'pointer', textAlign: 'left' }}>
+                      <img src={img.url} alt="" loading="lazy" style={{ width: '100%', height: 96, objectFit: 'contain', display: 'block' }}/>
+                      <div style={{ fontSize: 11.5, marginTop: 6, color: 'var(--fg2)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{img.name}</div>
+                      <div style={{ fontSize: 10.5, color: 'var(--fg5)' }}>
+                        {img.source === 'code' ? 'veio com o sistema' : `${img.width || '?'}×${img.height || '?'} · ${Math.round((img.size || 0) / 1000)} KB`}
+                        {img.usedBy.length ? ` · em uso` : ''}
+                      </div>
+                    </button>
+                    {img.source === 'upload' && !img.usedBy.length && (
+                      <button type="button" className="icon-btn" onClick={() => remove(img)} aria-label={`Apagar ${img.name}`} title="Apagar"
+                        style={{ position: 'absolute', top: 4, right: 4 }}><Icon name="x" size={11}/></button>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          )}
+          <div style={{ fontSize: 11, color: 'var(--fg5)', marginTop: 6 }}>
+            Clique pra usar. A foto enviada é reduzida no navegador (até {SV_IMG_MAX} px) pra página abrir rápido no celular; fundo transparente (PNG) funciona melhor. Escolher aqui só vale depois de "Salvar".
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 /** Config (JSON da pesquisa) → rascunho do formulário. */
 function svCfgDraft(c) {
   c = c || {};
@@ -331,7 +486,8 @@ function svCfgDraft(c) {
     q4: (c.q4 || []).map((o) => ({ id: o.id, label: o.label })),
     // Campos sem formulário passam como estão.
     rest: { planBottles: c.planBottles, daysPerBottle: c.daysPerBottle, trackingParam: c.trackingParam, couponParam: c.couponParam },
-    copy: Object.entries(c.copy || {}).map(([k, text]) => ({ base: k.split('@')[0], seg: k.split('@')[1] || '', text })),
+    intro: Object.fromEntries(Object.entries(c.copy || {}).filter(([k]) => svIsIntro(k))),
+    copy: Object.entries(c.copy || {}).filter(([k]) => !svIsIntro(k)).map(([k, text]) => ({ base: k.split('@')[0], seg: k.split('@')[1] || '', text })),
   };
 }
 
@@ -353,13 +509,16 @@ function svCfgOf(d) {
     coupons: d.coupons.filter((c) => c.pct !== '').map((c) => ({ pct: svNum(c.pct), code: c.code || null, ...(c.kits ? { kits: c.kits } : {}) })),
     couponValidDays: svNum(d.couponValidDays),
     q4: d.q4.filter((o) => o.label.trim()).map((o) => ({ id: o.id || svSlugId(o.label, taken), label: o.label.trim() })),
-    copy: Object.fromEntries(d.copy.filter((r) => r.base && r.text.trim()).map((r) => [r.seg ? `${r.base}@${r.seg}` : r.base, r.text.trim()])),
+    copy: {
+      ...Object.fromEntries(d.copy.filter((r) => r.base && r.text.trim()).map((r) => [r.seg ? `${r.base}@${r.seg}` : r.base, r.text.trim()])),
+      ...Object.fromEntries(Object.entries(d.intro || {}).filter(([, t]) => t && t.trim()).map(([k, t]) => [k, t.trim()])),
+    },
   };
 }
 
 /** Frases reescritas: escolhe a frase, o público e escreve por cima do padrão. */
 function SvCopyRows({ rows, defaults, onChange }) {
-  const keys = Object.keys(defaults || {}).filter((k) => !k.includes('@'));
+  const keys = Object.keys(defaults || {}).filter((k) => !k.includes('@') && !svIsIntro(k));
   const groups = [];
   for (const k of keys) {
     const g = k.split('.')[0];
@@ -419,12 +578,17 @@ function SvConfigFields({ draft, onChange, defaults, armMode }) {
             <input style={SV_INPUT} value={draft.accent} onChange={(e) => set({ accent: e.target.value })}/>
           </span>
         </label>
-        <label><span style={SV_LABEL}>Foto dos frascos</span><input style={SV_INPUT} value={draft.image} onChange={(e) => set({ image: e.target.value })} placeholder="/survey-assets/produto.webp"/></label>
         {!armMode && (<>
           <label><span style={SV_LABEL}>Recebe quem comprou (frascos)</span><input style={SV_INPUT} value={draft.eligible} onChange={(e) => set({ eligible: e.target.value })} placeholder="2, 3"/></label>
           <label><span style={SV_LABEL}>E quem comprou a partir de (frascos)</span><input style={SV_INPUT} inputMode="numeric" value={draft.fullPlanFrom} onChange={(e) => set({ fullPlanFrom: e.target.value })} placeholder="6 (vazio = não)"/></label>
         </>)}
       </div>
+
+      <div style={SV_H}>Foto do produto <span style={{ fontWeight: 400, color: 'var(--fg5)' }}>· aparece no topo da página inicial e da oferta</span></div>
+      <SvImagePicker value={draft.image} onChange={(image) => set({ image })}/>
+
+      <div style={SV_H}>Página inicial <span style={{ fontWeight: 400, color: 'var(--fg5)' }}>· a primeira tela que o cliente vê ao abrir o link</span></div>
+      <SvIntroFields intro={draft.intro || {}} defaults={defaults} onChange={(intro) => set({ intro })}/>
 
       <div style={SV_H}>Assinatura de 1 frasco por mês</div>
       <div style={{ display: 'grid', gridTemplateColumns: 'minmax(220px, 3fr) repeat(2, minmax(110px, 1fr))', gap: 10 }}>

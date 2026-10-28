@@ -608,6 +608,22 @@ async function saveSurveyVariant(slug, patch) {
 async function createSurveyVariant(body) {
   return svAdminSend('/api/admin/surveys/variants', 'POST', body);
 }
+// Fotos das pesquisas (admin): galeria (enviadas + as do código), envio e exclusão.
+async function fetchSurveyImages() {
+  const res = await fetch('/api/admin/surveys/assets', { headers: { Accept: 'application/json' } });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.error || `${res.status}`);
+  return data;
+}
+function uploadSurveyImage(body) {
+  return svAdminSend('/api/admin/surveys/assets', 'POST', body);
+}
+async function deleteSurveyImage(id) {
+  const res = await fetch(`/api/admin/surveys/assets?id=${encodeURIComponent(id)}`, { method: 'DELETE', headers: { Accept: 'application/json' } });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.error || `${res.status}`);
+  return data;
+}
 // Teste A/B das pesquisas (admin).
 async function fetchSurveyExperiments(slug) {
   const res = await fetch(`/api/admin/surveys/experiments?variant=${encodeURIComponent(slug)}`, { headers: { Accept: 'application/json' } });
@@ -890,6 +906,9 @@ window.NSApi = _wrapMutations({
   fetchSurveyExperiments,
   createSurveyExperiment,
   patchSurveyExperiment,
+  fetchSurveyImages,
+  uploadSurveyImage,
+  deleteSurveyImage,
   fetchRepurchase,
   postRepurchase,
   fetchSubscriptions,

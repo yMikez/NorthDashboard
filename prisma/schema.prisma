@@ -2240,3 +2240,20 @@ model SubscriptionEvent {
   @@index([subscriptionId, at])
   @@index([kind, at])
 }
+
+// Fotos das páginas de pesquisa enviadas pelo dash (aba Pesquisas →
+// Configurar). No banco de propósito: arquivo no disco do container some no
+// próximo deploy. O navegador já reduz (até 640 px, WebP/PNG) antes de subir.
+// Servida em /api/survey/asset/<id> (público, cache longo — o id não muda).
+model SurveyAsset {
+  id        String   @id @default(cuid())
+  name      String
+  // image/webp | image/png | image/jpeg
+  mime      String
+  bytes     Bytes
+  size      Int
+  width     Int?
+  height    Int?
+  createdBy String?
+  createdAt DateTime @default(now())
+}

@@ -8,6 +8,7 @@
 // Todas as telas finais já vêm no HTML (uma por faixa de cupom); a página só
 // mostra a que o servidor escolheu.
 
+import { isSurveyImagePath } from './assets';
 import {
   DEFAULT_COPY, Q1_OPTS, Q3_OPTS, Q3B_OPTS, Q5_OPTS, Q5_MAX,
   availableOffers, copyText, couponVars, cycleText, fillText, kitSizeFor, plansOf, q4Options, questionOrder, segmentOf,
@@ -37,8 +38,7 @@ const esc = (s: string) => s.replace(/[&<>"']/g, (c) => ESC[c]);
 const DEFAULT_ACCENT = '#2f6fde';
 const accentOf = (cfg: SurveyVariantConfig) =>
   cfg.accent && /^#[0-9a-f]{3,8}$/i.test(cfg.accent) ? cfg.accent : DEFAULT_ACCENT;
-const imageOf = (cfg: SurveyVariantConfig) =>
-  cfg.image && /^\/survey-assets\/[\w.-]+$/.test(cfg.image) ? cfg.image : null;
+const imageOf = (cfg: SurveyVariantConfig) => (isSurveyImagePath(cfg.image) ? cfg.image : null);
 
 /** Seção final pelo desfecho (cupom tem uma por faixa). */
 export const endSectionId = (outcome: Outcome, couponPct: number | null) =>
@@ -61,7 +61,7 @@ section{display:none}section.on{display:block;animation:in .22s ease-out}
 @keyframes in{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
 h1{font-size:25px;line-height:1.28;margin:0 0 12px;letter-spacing:-.01em;outline:0}
 .lead{color:var(--muted);margin:0 0 22px}
-.hero{display:block;width:150px;height:auto;aspect-ratio:594/640;margin:0 auto 18px}
+.hero{display:block;width:150px;height:auto;aspect-ratio:594/640;object-fit:contain;margin:0 auto 18px}
 .hero.sm{width:118px;margin-bottom:14px}
 .hint{font-size:15px;color:var(--muted);margin:-4px 0 16px}.hint.warn{color:#b4540a}
 .opt{display:flex;align-items:center;gap:12px;width:100%;min-height:56px;padding:13px 16px;margin:0 0 10px;border:1.5px solid var(--line);border-radius:12px;background:var(--card);font:inherit;color:inherit;text-align:left;cursor:pointer;transition:border-color .15s,background-color .15s;touch-action:manipulation}
