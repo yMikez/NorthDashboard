@@ -15,7 +15,7 @@ const ROUTES = {
   'tauk':           { title: 'Call Center', em: 'Tauk + Logicall', crumbs: ['Captação', 'Call Center'] },
   'leads':          { title: 'Leads',       em: 'e LTV',       crumbs: ['Clientes', 'Leads'] },
   'surveys':        { title: 'Pesquisas',   em: 'pós-compra',  crumbs: ['Clientes', 'Pesquisas'] },
-  'recurrences':    { title: 'Recorrências', em: 'recompra e assinaturas', crumbs: ['Clientes', 'Recorrências'] },
+  'recurrences':    { title: 'Recorrências', em: 'assinaturas de todas as plataformas', crumbs: ['Clientes', 'Recorrências'] },
   'products':       { title: 'Produtos',     em: '',            crumbs: ['Catálogo', 'Produtos'] },
   'transactions':   { title: 'Transações',  em: 'do ledger',   crumbs: ['Catálogo', 'Transações'] },
   'platforms':      { title: 'Plataformas', em: 'conectadas',  crumbs: ['Sistema', 'Plataformas'] },

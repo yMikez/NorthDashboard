@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import type { VupimEnvelope } from '../connectors/vupim/types';
 import { smsPhoneUS } from '../shared/phone';
 import {
-  bottlesFromName, monthlyValue, nextCharge, parseVupimSubscriptionEvent, projectSubscription, type SubEventRow,
+  bottlesFromName, parseVupimSubscriptionEvent, projectSubscription, type SubEventRow,
 } from './core';
 
 const env = (event: string, data: Record<string, unknown>, extra: Partial<VupimEnvelope> = {}): VupimEnvelope =>
@@ -79,16 +79,6 @@ describe('estado da assinatura', () => {
       ev('charge', '2026-10-01', { transactionId: 't1', amountUsd: 138 }),
     ]);
     expect(p).toMatchObject({ status: 'canceled', cancelReason: 'customer', totalPaidUsd: 138 });
-  });
-
-  it('próxima cobrança: fim do período ou estimada pelo ciclo; valor por mês', () => {
-    expect(nextCharge({ status: 'active', periodEnd: new Date('2026-12-01'), lastChargeAt: new Date('2026-11-01'), bottles: 2 }))
-      .toEqual({ at: new Date('2026-12-01'), estimated: false });
-    expect(nextCharge({ status: 'active', periodEnd: null, lastChargeAt: new Date('2026-10-01T00:00:00Z'), bottles: 2 }))
-      .toEqual({ at: new Date('2026-11-30T00:00:00Z'), estimated: true });
-    expect(nextCharge({ status: 'canceled', periodEnd: null, lastChargeAt: new Date(), bottles: 1 })).toBeNull();
-    expect(monthlyValue(138, 2)).toBe(69);
-    expect(monthlyValue(69, null)).toBe(69);
   });
 });
 

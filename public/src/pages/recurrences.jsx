@@ -1,32 +1,31 @@
-/* global React, Icon, fmtCurrency, fmtInt, fmtPct, fmtDateTime, fmtDateShort, SkelTableRows, Paginated, ReadState */
-/* Aba Recorrências — antes e depois da recompra.
-   Lista de recompra: quem está com o estoque acabando, com o link pessoal da
-   pesquisa e o telefone pronto pro SMS; gera os links da janela, marca o
-   envio por canal, exporta o lote e mostra quem ainda vai entrar.
-   Assinaturas: estado das assinaturas da Vupim (eventos do webhook) — ativas,
-   em atraso, próximas cobranças, canceladas, receita mensal recorrente.
-   A Vupim não tem API: cancelar/pausar/trocar plano é no painel dela.
-   API: /api/metrics/recurrences/{repurchase,subscriptions} */
+/* global React, Icon, fmtCurrency, fmtInt, fmtPct, fmtDateShort, fmtDateTime, SkelTableRows, Paginated, ReadState, platBadge, downloadCsv */
+/* Aba Recorrências — todas as assinaturas, de qualquer plataforma (JVZoo,
+   ClickBank, BuyGoods, Digistore, Vupim). Visão geral: quanto entrou de
+   renovação, ticket médio, previsão dos próximos meses, ativas, quem encerrou
+   e quanto tempo levou, retenção por cobrança e por produto. Assinantes: a
+   lista com status, próxima cobrança e exportação.
+   O disparo de SMS/e-mail da pesquisa mudou pra aba Pesquisas → Disparos.
+   API: GET /api/metrics/recurrences (lib/services/recurrences.ts) */
 
 const { useState: useStateRc, useEffect: useEffectRc } = React;
 
 const RC_SECTION_KEY = 'ns.recurrences.section';
-const RC_TEMPLATE_KEY = 'ns.recurrences.smsTemplate';
-const RC_DEFAULT_TEMPLATE = 'NeuroRecall: Hi {nome}, your bottle is almost done. Take our 1-min check-in and get your returning-customer price: {link} Reply STOP to opt out';
-const RC_DAYS = [7, 14, 21, 30];
+const RC_PLATFORM_NAME = { jvzoo: 'JVZoo', clickbank: 'ClickBank', buygoods: 'BuyGoods', digistore24: 'Digistore24', vupim: 'Vupim', cartpanda: 'Cartpanda' };
 const RC_STATUS = [
-  { id: 'todos', label: 'Todos' },
-  { id: 'sem_envio', label: 'Sem envio' },
-  { id: 'enviado', label: 'Enviados' },
-  { id: 'abriu', label: 'Abriram' },
-  { id: 'concluiu', label: 'Concluíram' },
-  { id: 'comprou', label: 'Compraram' },
+  { id: 'todas', label: 'Todas' },
+  { id: 'active', label: 'Ativas' },
+  { id: 'late', label: 'Em atraso' },
+  { id: 'ended', label: 'Encerradas' },
 ];
-const RC_STATUS_LABEL = { pendente: 'Na lista', enviado: 'Enviado', abriu: 'Abriu', respondeu: 'Respondendo', concluiu: 'Concluiu', comprou: 'Comprou' };
-const RC_STATUS_TONE = { pendente: 'neutral', enviado: '', abriu: '', respondeu: 'warn', concluiu: 'ok', comprou: 'ok' };
-const RC_CHANNELS = [{ id: 'sms', label: 'SMS' }, { id: 'email', label: 'E-mail' }, { id: 'whatsapp', label: 'WhatsApp' }];
-const RC_CHANNEL_LABEL = { sms: 'SMS', email: 'E-mail', whatsapp: 'WhatsApp', manual: 'Manual' };
+const RC_STATUS_LABEL = { active: 'Ativa', late: 'Em atraso', ended: 'Encerrada' };
+const RC_STATUS_TONE = { active: 'ok', late: 'warn', ended: 'neutral' };
+const RC_REASON_LABEL = { pediu: 'pediu cancelamento', reembolso: 'reembolso', sem_pagamento: 'parou de pagar' };
+const RC_MONTHS = ['jan', 'fev', 'mar', 'abr', 'mai', 'jun', 'jul', 'ago', 'set', 'out', 'nov', 'dez'];
+
 const rcUsd = (n, d = 0) => fmtCurrency(n, 'USD', d);
+const rcPlatform = (slug) => RC_PLATFORM_NAME[slug] || slug;
+const rcMonthLabel = (m) => `${RC_MONTHS[Number(m.slice(5, 7)) - 1]}/${m.slice(2, 4)}`;
+const rcDays = (n) => (n == null ? '—' : `${fmtInt(Math.round(n))} dia${Math.round(n) === 1 ? '' : 's'}`);
 
 function rcLoad(key, fallback) {
   try { return localStorage.getItem(key) || fallback; } catch { return fallback; }
@@ -35,53 +34,31 @@ function rcSave(key, value) {
   try { localStorage.setItem(key, value); } catch { /* sem storage: só não lembra */ }
 }
 
-/** Caracteres que cabem no SMS comum (GSM-7). Fora disso, cada parte cai de 153 pra 67. */
-const RC_GSM_RE = /^[A-Za-z0-9 \n\r@£$¥èéùìòÇØøÅåΔ_ΦΓΛΩΠΨΣΘΞÆæßÉ!"#¤%&'()*+,\-./:;<=>?¡ÄÖÑÜ§¿äöñüà^{}\\[~\]|€]*$/;
-function rcSegments(text) {
-  const gsm = RC_GSM_RE.test(text);
-  const n = text.length;
-  const parts = gsm ? (n <= 160 ? 1 : Math.ceil(n / 153)) : (n <= 70 ? 1 : Math.ceil(n / 67));
-  return { gsm, n, parts };
-}
-const rcFill = (tpl, r) => tpl.replace(/\{nome\}/g, r.firstName || 'there').replace(/\{link\}/g, r.link).replace(/\{produto\}/g, r.product);
-
-function rcCsv(rows, tpl) {
-  const esc = (v) => {
-    const s = v == null ? '' : String(v);
-    return /[",\n;]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
-  };
-  const head = ['convite_id', 'nome', 'telefone', 'telefone_ddi_deduzido', 'email', 'produto', 'frascos', 'estoque_acaba', 'dias_restantes', 'status', 'link', 'mensagem'];
-  const lines = rows.map((r) => [
-    r.id, r.firstName || '', r.smsPhone || '', r.smsPhoneInferred ? 'sim' : '', r.email, r.product, r.bottles,
-    r.stockUntil.slice(0, 10), r.daysLeft, RC_STATUS_LABEL[r.status] || r.status, r.link, rcFill(tpl, r),
-  ].map(esc).join(','));
-  return '﻿' + [head.join(','), ...lines].join('\n');
+function RcPlat({ slug }) {
+  const pb = platBadge(slug);
+  return <span className={`plat ${pb.cls}`} title={rcPlatform(slug)}>{pb.short}</span>;
 }
 
-function rcDownload(name, text) {
-  const url = URL.createObjectURL(new Blob([text], { type: 'text/csv;charset=utf-8' }));
-  const a = document.createElement('a');
-  a.href = url; a.download = name;
-  document.body.appendChild(a); a.click(); a.remove();
-  setTimeout(() => URL.revokeObjectURL(url), 1000);
-}
-
-async function rcCopy(text) {
-  try { await navigator.clipboard.writeText(text); return true; } catch { return false; }
-}
-
-function rcDaysText(d) {
-  if (d > 1) return `em ${d} dias`;
-  if (d === 1) return 'amanhã';
-  if (d === 0) return 'hoje';
-  return `acabou há ${-d} dia${d === -1 ? '' : 's'}`;
+function RcPanel({ title, sub, children, right, style }) {
+  return (
+    <div className="panel" style={{ marginBottom: 12, minWidth: 0, ...style }}>
+      <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10 }}>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div className="panel-title">{title}</div>
+          {sub ? <div className="panel-sub" style={{ fontSize: 11, marginBottom: 10 }}>{sub}</div> : <div style={{ height: 8 }}/>}
+        </div>
+        {right}
+      </div>
+      {children}
+    </div>
+  );
 }
 
 function RcKpis({ items }) {
   return (
     <div className="mini-kpis" style={{ marginBottom: 12 }}>
       {items.map((x) => (
-        <div className="mini-kpi" key={x.l}>
+        <div className="mini-kpi" key={x.l} title={x.title}>
           <div className="l">{x.l}</div>
           <div className="v" style={x.money ? { color: 'var(--money)' } : x.tone ? { color: x.tone } : undefined}>{x.v}</div>
           <div className="s">{x.s}</div>
@@ -91,416 +68,300 @@ function RcKpis({ items }) {
   );
 }
 
-// ---------- lista de recompra ----------
-
-function rcMatches(r, f) {
-  if (f === 'todos') return true;
-  if (f === 'sem_envio') return !r.sentAt;
-  if (f === 'enviado') return Boolean(r.sentAt);
-  if (f === 'abriu') return Boolean(r.openedAt);
-  if (f === 'concluiu') return r.status === 'concluiu' || r.status === 'comprou';
-  return r.status === f;
+/** Barras horizontais: rótulo · barra · valor · detalhe. `share` 0..1 = comprimento. */
+function RcBars({ items, empty }) {
+  if (!items.some((i) => i.share > 0)) return <div style={{ padding: '10px 0', color: 'var(--fg5)', fontSize: 12 }}>{empty}</div>;
+  return (
+    <div style={{ display: 'grid', gap: 7 }}>
+      {items.map((i) => (
+        <div key={i.id} style={{ display: 'grid', gridTemplateColumns: 'minmax(110px, 1.1fr) 2fr 52px minmax(70px, auto)', alignItems: 'center', gap: 8, fontSize: 12.5 }}>
+          <span style={{ color: 'var(--fg2)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={i.label}>{i.label}</span>
+          <span style={{ height: 8, background: 'var(--bg-sunken, var(--border-soft))', borderRadius: 4, overflow: 'hidden' }}>
+            <span style={{ display: 'block', height: '100%', width: `${Math.max(0, Math.min(1, i.share)) * 100}%`, background: 'var(--accent)', borderRadius: 4 }}/>
+          </span>
+          <span className="mono" style={{ textAlign: 'right', color: 'var(--fg1)' }}>{i.value}</span>
+          <span className="mono" style={{ textAlign: 'right', color: 'var(--fg5)', fontSize: 11.5 }}>{i.detail}</span>
+        </div>
+      ))}
+    </div>
+  );
 }
 
-function RcForecast({ forecast, days }) {
-  if (!forecast.length) return null;
-  const cols = forecast[0].buckets;
+// ---------- mês a mês ----------
+
+const RC_FILL = 'var(--money)';
+const RC_FILL_SOFT = 'color-mix(in oklab, var(--money) 28%, transparent)';
+const RC_LINE_SOFT = 'color-mix(in oklab, var(--money) 55%, transparent)';
+
+function rcMonthTip(m) {
+  const label = rcMonthLabel(m.month);
+  if (m.kind === 'past') return `${label}: recebido ${rcUsd(m.renewalsUsd)} em ${fmtInt(m.renewals)} renovações`;
+  const prev = `previsto ${rcUsd(m.expectedUsd)} (até ${rcUsd(m.maxUsd)} se ninguém cancelar)`;
+  return m.kind === 'current' ? `${label}: recebido até agora ${rcUsd(m.renewalsUsd)} + ${prev}` : `${label}: ${prev}`;
+}
+
+function RcMonths({ months }) {
+  const top = Math.max(1, ...months.map((m) => m.renewalsUsd + m.maxUsd));
+  if (!months.some((m) => m.renewalsUsd || m.maxUsd)) {
+    return <div style={{ padding: '14px 0', color: 'var(--fg5)', fontSize: 12 }}>Nenhuma renovação recebida nem prevista nesses meses.</div>;
+  }
+  const h = (v) => `${(v / top) * 100}%`;
   return (
-    <div className="panel" style={{ marginBottom: 12 }}>
-      <div className="panel-title">Quem ainda vai entrar</div>
-      <div className="panel-sub" style={{ fontSize: 11, marginBottom: 10 }}>
-        Pessoas sem link, por quantos dias faltam pro estoque acabar (próximos 30 dias). "Gerar links" traz pra lista quem acaba em até {days} dias.
+    <div>
+      <div role="img" aria-label={`Renovações por mês: ${months.map(rcMonthTip).join('; ')}`}
+        style={{ display: 'flex', alignItems: 'flex-end', gap: 4, height: 170, padding: '18px 0 0', borderBottom: '1px solid var(--border)' }}>
+        {months.map((m) => (
+          <div key={m.month} title={rcMonthTip(m)} style={{ flex: 1, minWidth: 0, height: '100%', display: 'flex', flexDirection: 'column', justifyContent: 'flex-end', alignItems: 'center' }}>
+            <div style={{ width: '100%', maxWidth: 34, height: h(m.renewalsUsd + m.maxUsd), minHeight: m.renewalsUsd || m.maxUsd ? 2 : 0, display: 'flex', flexDirection: 'column', justifyContent: 'flex-end',
+              border: m.maxUsd ? `1px dashed ${RC_LINE_SOFT}` : 'none', borderBottom: 'none', borderRadius: '3px 3px 0 0', boxSizing: 'border-box' }}>
+              {m.expectedUsd > 0 && <span style={{ display: 'block', height: `${(m.expectedUsd / (m.renewalsUsd + m.maxUsd)) * 100}%`, background: RC_FILL_SOFT }}/>}
+              {m.renewalsUsd > 0 && <span style={{ display: 'block', height: `${(m.renewalsUsd / (m.renewalsUsd + m.maxUsd)) * 100}%`, background: RC_FILL, borderRadius: m.maxUsd ? 0 : '3px 3px 0 0' }}/>}
+            </div>
+          </div>
+        ))}
       </div>
+      <div style={{ display: 'flex', gap: 4, marginTop: 4 }}>
+        {months.map((m, i) => (
+          <span key={m.month} style={{ flex: 1, minWidth: 0, fontSize: 10, textAlign: 'center', whiteSpace: 'nowrap', overflow: 'hidden',
+            color: m.kind === 'current' ? 'var(--fg1)' : 'var(--fg5)', fontWeight: m.kind === 'current' ? 600 : 400 }}>
+            {months.length > 12 && i % 2 && m.kind !== 'current' ? '' : rcMonthLabel(m.month)}
+          </span>
+        ))}
+      </div>
+      <div style={{ display: 'flex', gap: 14, flexWrap: 'wrap', marginTop: 10, fontSize: 11.5, color: 'var(--fg4)' }}>
+        <span><i style={{ display: 'inline-block', width: 10, height: 10, background: RC_FILL, borderRadius: 2, marginRight: 5 }}/>Recebido</span>
+        <span><i style={{ display: 'inline-block', width: 10, height: 10, background: RC_FILL_SOFT, borderRadius: 2, marginRight: 5 }}/>Previsto (com a retenção medida)</span>
+        <span><i style={{ display: 'inline-block', width: 10, height: 10, border: `1px dashed ${RC_LINE_SOFT}`, borderRadius: 2, marginRight: 5 }}/>Se ninguém cancelar</span>
+      </div>
+      <details style={{ marginTop: 10 }}>
+        <summary style={{ fontSize: 12, color: 'var(--fg4)', cursor: 'pointer' }}>Ver em tabela</summary>
+        <div style={{ overflowX: 'auto', marginTop: 8 }}>
+          <table className="tbl" style={{ fontSize: 12.5, minWidth: 640 }}>
+            <thead>
+              <tr><th>Mês</th><th className="num">Renovações</th><th className="num">Recebido</th><th className="num">Estornado</th><th className="num">Novas</th><th className="num">Encerradas</th><th className="num">Previsto</th><th className="num">Se ninguém cancelar</th></tr>
+            </thead>
+            <tbody>
+              {[...months].reverse().map((m) => (
+                <tr key={m.month}>
+                  <td style={{ fontWeight: m.kind === 'current' ? 600 : 400 }}>{rcMonthLabel(m.month)}{m.kind === 'current' ? ' (este mês)' : m.kind === 'future' ? ' · previsão' : ''}</td>
+                  <td className="num mono">{m.kind === 'future' ? '—' : fmtInt(m.renewals)}</td>
+                  <td className="num mono" style={m.renewalsUsd ? { color: 'var(--money)' } : undefined}>{m.kind === 'future' ? '—' : rcUsd(m.renewalsUsd)}</td>
+                  <td className="num mono">{m.kind === 'future' ? '—' : rcUsd(m.refundedUsd)}</td>
+                  <td className="num mono">{m.kind === 'future' ? '—' : fmtInt(m.newSubs)}</td>
+                  <td className="num mono">{m.kind === 'future' ? '—' : fmtInt(m.ended)}</td>
+                  <td className="num mono">{m.kind === 'past' ? '—' : `${rcUsd(m.expectedUsd)} · ${fmtInt(m.expectedCharges)}`}</td>
+                  <td className="num mono">{m.kind === 'past' ? '—' : rcUsd(m.maxUsd)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </details>
+    </div>
+  );
+}
+
+// ---------- visão geral ----------
+
+function RcOverview({ d }) {
+  const k = d.kpis;
+  const endedSplit = [
+    k.endedPediu && `${fmtInt(k.endedPediu)} pediram`,
+    k.endedSemPagamento && `${fmtInt(k.endedSemPagamento)} pararam de pagar`,
+    k.endedReembolso && `${fmtInt(k.endedReembolso)} reembolso`,
+  ].filter(Boolean).join(' · ');
+  const kpis = [
+    { l: 'Recebido de renovação', v: rcUsd(k.renewalsUsd), money: k.renewalsUsd > 0,
+      s: `${fmtInt(k.renewals)} renovações · desde o início ${rcUsd(k.renewalsAllTimeUsd)}`,
+      title: 'Cobranças depois da 1ª (a compra) no período, sem as estornadas.' },
+    { l: 'Ticket médio da renovação', v: k.avgTicketUsd != null ? rcUsd(k.avgTicketUsd, 2) : '—',
+      s: k.avgTicketAllTimeUsd != null ? `desde o início ${rcUsd(k.avgTicketAllTimeUsd, 2)}` : 'sem renovação ainda' },
+    { l: 'Previsto 30 dias', v: rcUsd(k.forecast30Usd), money: k.forecast30Usd > 0,
+      s: k.forecastHasHistory ? `~${fmtInt(k.forecast30Charges)} cobranças · até ${rcUsd(k.forecast30MaxUsd)} se ninguém cancelar` : 'sem histórico de retenção: conta que todos pagam',
+      title: 'Próximas cobranças de quem está ativo ou em atraso × a chance de continuar medida nas assinaturas mais antigas.' },
+    { l: 'Receita mensal recorrente', v: rcUsd(k.mrrUsd), money: k.mrrUsd > 0, s: 'ativas e em atraso, renovação ÷ ciclo em meses' },
+    { l: 'Assinaturas ativas', v: fmtInt(k.active), s: k.late ? `+ ${fmtInt(k.late)} em atraso` : 'nenhuma em atraso' },
+    { l: 'Novas no período', v: fmtInt(k.newSubs), s: k.newSubs ? `${rcUsd(k.newSubsUsd)} na 1ª cobrança` : '1ª cobrança no período' },
+    { l: 'Encerradas no período', v: fmtInt(k.ended), tone: k.ended ? 'var(--danger)' : undefined,
+      s: [k.churn != null ? `${fmtPct(k.churn, 1)} das ativas no início` : null, endedSplit].filter(Boolean).join(' · ') || '—' },
+    { l: 'Tempo até encerrar', v: rcDays(k.avgDaysToEnd),
+      s: k.avgCyclesToEnd != null ? `${k.avgCyclesToEnd.toFixed(1)} cobranças pagas · desde o início ${rcDays(k.avgDaysToEndAll)}` : k.avgDaysToEndAll != null ? `desde o início ${rcDays(k.avgDaysToEndAll)}` : 'ninguém encerrou ainda',
+      title: 'Média de dias entre a 1ª cobrança e o encerramento, de quem encerrou no período.' },
+  ];
+
+  const ret = d.retention.filter((r) => r.n > 1 && r.eligible > 0);
+  const endedAll = d.endTiming.reduce((s, b) => s + b.count, 0);
+
+  return (<>
+    <RcKpis items={kpis}/>
+
+    <RcPanel title="Mês a mês" sub="Renovações recebidas nos últimos 12 meses (mês BRT) e a previsão dos próximos 5. Previsto = próximas cobranças de cada assinatura ativa × a chance de continuar medida nas mais antigas.">
+      <RcMonths months={d.months}/>
+    </RcPanel>
+
+    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 380px), 1fr))', gap: 12 }}>
+      <RcPanel title="Quantos chegam em cada cobrança" sub="Das assinaturas que já tiveram tempo de pagar a cobrança (início + ciclos + 15 dias de folga), quantas pagaram. A 1ª é a compra.">
+        <RcBars empty="Ainda ninguém teve tempo de chegar na 2ª cobrança."
+          items={ret.map((r) => ({ id: r.n, label: `${r.n}ª cobrança`, share: r.pct ?? 0, value: r.pct != null ? fmtPct(r.pct, 0) : '—', detail: `${fmtInt(r.reached)} de ${fmtInt(r.eligible)}` }))}/>
+      </RcPanel>
+      <RcPanel title="Quando encerram" sub={`Desde o início: ${fmtInt(endedAll)} encerradas, em média ${rcDays(d.kpis.avgDaysToEndAll)} depois da compra${d.kpis.ltvUsd != null ? `, pagando ${rcUsd(d.kpis.ltvUsd)} cada` : ''}. Quem continua não entra na média — a retenção ao lado mostra o quadro todo.`}>
+        <RcBars empty="Ninguém encerrou ainda."
+          items={d.endTiming.map((b) => ({ id: b.id, label: b.label, share: endedAll ? b.count / endedAll : 0, value: fmtInt(b.count), detail: endedAll ? fmtPct(b.count / endedAll, 0) : '—' }))}/>
+      </RcPanel>
+    </div>
+
+    <RcPanel title="Por produto" sub="Situação de agora; novas e renovações no período; ticket, chegam na 2ª, tempo até encerrar e valor por assinante (média das encerradas) desde o início.">
       <div style={{ overflowX: 'auto' }}>
-        <table className="tbl" style={{ fontSize: 12.5, minWidth: 480 }}>
-          <thead><tr><th>Pesquisa</th>{cols.map((c) => <th key={c.id} className="num">{c.label}</th>)}</tr></thead>
+        <table className="tbl" style={{ fontSize: 12.5, minWidth: 1040 }}>
+          <thead>
+            <tr>
+              <th>Produto</th><th className="num">Ativas</th><th className="num">Em atraso</th><th className="num">Encerradas</th>
+              <th className="num">Novas</th><th className="num">Renovações</th><th className="num">Ticket médio</th><th className="num">Chegam na 2ª</th>
+              <th className="num">Tempo até encerrar</th><th className="num">Valor por assinante</th><th className="num">Mensal</th><th className="num">Ciclo</th>
+            </tr>
+          </thead>
           <tbody>
-            {forecast.map((f) => (
-              <tr key={f.variant}>
-                <td style={{ fontWeight: 500 }}>{f.name}</td>
-                {f.buckets.map((b) => <td key={b.id} className="num mono">{fmtInt(b.count)}</td>)}
+            {d.byProduct.map((p) => (
+              <tr key={p.key}>
+                <td style={{ fontWeight: 500 }}><RcPlat slug={p.platform}/> {p.label}</td>
+                <td className="num mono">{fmtInt(p.active)}</td>
+                <td className="num mono" style={p.late ? { color: 'var(--warning)' } : undefined}>{fmtInt(p.late)}</td>
+                <td className="num mono">{fmtInt(p.ended)}</td>
+                <td className="num mono">{fmtInt(p.newSubs)}</td>
+                <td className="num mono" style={p.renewalsUsd ? { color: 'var(--money)' } : undefined}>{rcUsd(p.renewalsUsd)}<div style={{ fontSize: 10.5, color: 'var(--fg5)' }}>{fmtInt(p.renewals)}×</div></td>
+                <td className="num mono">{p.avgTicketUsd != null ? rcUsd(p.avgTicketUsd, 2) : '—'}</td>
+                <td className="num mono" title={`${fmtInt(p.retention2Eligible)} já tiveram tempo de pagar a 2ª`}>{p.retention2 != null ? fmtPct(p.retention2, 0) : '—'}</td>
+                <td className="num mono">{rcDays(p.avgDaysToEnd)}</td>
+                <td className="num mono">{p.ltvUsd != null ? rcUsd(p.ltvUsd) : '—'}</td>
+                <td className="num mono">{rcUsd(p.mrrUsd)}</td>
+                <td className="num mono">{p.cycleDays != null ? `${fmtInt(p.cycleDays)} d` : '—'}</td>
               </tr>
             ))}
           </tbody>
         </table>
       </div>
-    </div>
-  );
-}
+    </RcPanel>
 
-function RcRepurchase({ user }) {
-  const [variant, setVariant] = useStateRc('all');
-  const [days, setDays] = useStateRc(14);
-  const [tests, setTests] = useStateRc(false);
-  const [status, setStatus] = useStateRc('todos');
-  const [selected, setSelected] = useStateRc(() => new Set());
-  const [channel, setChannel] = useStateRc('sms');
-  const [tpl, setTplState] = useStateRc(() => rcLoad(RC_TEMPLATE_KEY, RC_DEFAULT_TEMPLATE));
-  const [tick, setTick] = useStateRc(0);
-  const [busy, setBusy] = useStateRc(null);
-  const [msg, setMsg] = useStateRc(null);
-  const [state, setState] = useStateRc({ status: 'loading', data: null, error: null });
-
-  useEffectRc(() => {
-    let alive = true;
-    setState((s) => ({ ...s, status: 'loading' }));
-    window.NSApi.fetchRepurchase(variant, days, { tests })
-      .then((data) => { if (alive) setState({ status: 'ready', data, error: null }); })
-      .catch((e) => { if (alive) setState({ status: 'error', data: null, error: String(e.message || e) }); });
-    return () => { alive = false; };
-  }, [variant, days, tests, tick]);
-
-  const setTpl = (v) => { setTplState(v); rcSave(RC_TEMPLATE_KEY, v); };
-  const refresh = () => setTick((n) => n + 1);
-
-  if (state.status === 'error') return <ReadState kind="falha" title="Não carregou a lista de recompra">{state.error}</ReadState>;
-  const d = state.data;
-  if (!d) return <div className="panel"><SkelTableRows rows={6} cols={6}/></div>;
-
-  const rows = d.rows.filter((r) => rcMatches(r, status));
-  const chosen = d.rows.filter((r) => selected.has(r.id));
-  const target = chosen.length ? chosen : rows;
-  const allOn = rows.length > 0 && rows.every((r) => selected.has(r.id));
-  const toggle = (id) => setSelected((s) => { const n = new Set(s); if (n.has(id)) n.delete(id); else n.add(id); return n; });
-  const toggleAll = () => setSelected((s) => { const n = new Set(s); rows.forEach((r) => (allOn ? n.delete(r.id) : n.add(r.id))); return n; });
-  const longest = target.reduce((m, r) => Math.max(m, rcFill(tpl, r).length), 0);
-  const sample = target[0] ? rcFill(tpl, target[0]) : rcFill(tpl, { firstName: 'Elizabeth', link: 'https://checkin.healthnwellnes.com/neurorecall/XXXXXXXXXXXXXXXXXXXXXXXX', product: 'NeuroRecall' });
-  const seg = rcSegments(sample.padEnd(Math.max(sample.length, longest), 'x'));
-
-  const generate = async () => {
-    setBusy('generate'); setMsg(null);
-    try {
-      const r = await window.NSApi.postRepurchase({ action: 'generate', variant, withinDays: days });
-      setMsg({ ok: r.created ? `${fmtInt(r.created)} link${r.created > 1 ? 's' : ''} novo${r.created > 1 ? 's' : ''} na lista.` : 'Ninguém novo nessa janela: todos já têm link.' });
-      refresh();
-    } catch (e) { setMsg({ err: String(e.message || e) }); }
-    finally { setBusy(null); }
-  };
-  const markSent = async () => {
-    const ids = target.filter((r) => !r.sentAt).map((r) => r.id);
-    if (!ids.length) { setMsg({ err: 'Todos os escolhidos já estão marcados como enviados.' }); return; }
-    const label = RC_CHANNELS.find((c) => c.id === channel).label;
-    if (!window.confirm(`Marcar ${ids.length} pessoa${ids.length > 1 ? 's' : ''} como enviada${ids.length > 1 ? 's' : ''} por ${label}?`)) return;
-    setBusy('sent'); setMsg(null);
-    try {
-      const r = await window.NSApi.postRepurchase({ action: 'sent', ids, channel });
-      setMsg({ ok: `${fmtInt(r.marked)} marcado${r.marked > 1 ? 's' : ''} como enviado${r.marked > 1 ? 's' : ''} por ${label}.` });
-      setSelected(new Set());
-      refresh();
-    } catch (e) { setMsg({ err: String(e.message || e) }); }
-    finally { setBusy(null); }
-  };
-  const exportCsv = () => {
-    const stamp = new Date().toISOString().slice(0, 10);
-    rcDownload(`recompra_${variant}_${days}d_${stamp}.csv`, rcCsv(target, tpl));
-  };
-  const copyLinks = async () => {
-    const ok = await rcCopy(target.map((r) => `${r.firstName || ''}\t${r.smsPhone || ''}\t${r.link}`).join('\n'));
-    setMsg(ok ? { ok: `${fmtInt(target.length)} links copiados (nome, telefone e link, um por linha).` } : { err: 'O navegador não deixou copiar.' });
-  };
-
-  const k = d.kpis;
-  const kpis = [
-    { l: 'Na lista', v: fmtInt(k.total), s: `estoque acaba em até ${days} dias ou já acabou` },
-    { l: 'Sem envio', v: fmtInt(k.unsent), s: 'ninguém marcou o disparo', tone: k.unsent ? 'var(--warning)' : undefined },
-    { l: 'Enviados', v: fmtInt(k.sent), s: k.total ? `${fmtPct(k.sent / k.total, 0)} da lista` : '—' },
-    { l: 'Abriram', v: fmtInt(k.opened), s: k.sent ? `${fmtPct(k.opened / k.sent, 0)} dos enviados` : '—' },
-    { l: 'Concluíram', v: fmtInt(k.completed), s: k.opened ? `${fmtPct(k.completed / k.opened, 0)} de quem abriu` : '—' },
-    { l: 'Compraram', v: fmtInt(k.purchased), s: k.purchased ? rcUsd(k.revenueUsd) : 'venda volta pelo postback', money: k.purchased > 0 },
-  ];
-
-  return (
-    <div style={{ opacity: state.status === 'loading' ? 0.6 : 1, transition: 'opacity .15s' }}>
-      <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap', marginBottom: 12 }}>
-        <select value={variant} onChange={(e) => { setVariant(e.target.value); setSelected(new Set()); }} aria-label="Pesquisa">
-          <option value="all">Todas as pesquisas</option>
-          {d.variants.map((v) => <option key={v.slug} value={v.slug}>{v.name}{v.active ? '' : ' (desligada)'}</option>)}
-        </select>
-        <div className="seg" role="group" aria-label="Janela: dias até o estoque acabar">
-          {RC_DAYS.map((n) => <button key={n} className={n === days ? 'is-active' : ''} onClick={() => { setDays(n); setSelected(new Set()); }}>{n} dias</button>)}
-        </div>
-        <button className="btn" onClick={generate} disabled={busy === 'generate'} title="Cria o link pessoal de quem entrou na janela. Não envia nada.">
-          {busy === 'generate' ? 'Gerando…' : `Gerar links (até ${days} dias)`}
-        </button>
-        <div style={{ flex: 1 }}/>
-        <label style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 12, color: 'var(--fg4)', cursor: 'pointer' }}>
-          <input type="checkbox" checked={tests} onChange={(e) => setTests(e.target.checked)}/> Incluir testes
-        </label>
-      </div>
-      {msg && <div style={{ fontSize: 12.5, marginBottom: 10, color: msg.ok ? 'var(--success)' : 'var(--danger)' }}>{msg.ok || `Não deu: ${msg.err}`}</div>}
-
-      <RcKpis items={kpis}/>
-      <RcForecast forecast={d.forecast} days={days}/>
-
-      <div className="panel" style={{ marginBottom: 12 }}>
-        <div className="panel-title">Mensagem do SMS</div>
-        <div className="panel-sub" style={{ fontSize: 11, marginBottom: 8 }}>
-          Vai na coluna "mensagem" do CSV, já com o nome e o link de cada um. <span className="mono">{'{nome}'}</span> <span className="mono">{'{link}'}</span> <span className="mono">{'{produto}'}</span>. Fica salva neste navegador.
-        </div>
-        <textarea value={tpl} onChange={(e) => setTpl(e.target.value)} aria-label="Texto do SMS"
-          style={{ width: '100%', minHeight: 64, padding: '8px 10px', fontSize: 12.5, color: 'var(--fg1)', background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: 6, resize: 'vertical' }}/>
-        <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', fontSize: 11.5, color: 'var(--fg4)', marginTop: 4 }}>
-          <span>Até {fmtInt(seg.n)} caracteres com nome e link → <b style={{ color: seg.parts > 2 ? 'var(--warning)' : 'var(--fg2)' }}>{seg.parts} parte{seg.parts > 1 ? 's' : ''} de SMS</b></span>
-          {!seg.gsm && <span style={{ color: 'var(--warning)' }}>Tem caractere especial (travessão, aspas curvas, emoji…): cada parte cai pra 67 caracteres.</span>}
-          {tpl !== RC_DEFAULT_TEMPLATE && <button className="btn btn-ghost" style={{ height: 22, fontSize: 11 }} onClick={() => setTpl(RC_DEFAULT_TEMPLATE)}>Voltar ao padrão</button>}
-        </div>
-      </div>
-
-      <div className="panel" style={{ padding: 0, overflow: 'hidden' }}>
-        <div style={{ padding: '12px 14px', display: 'grid', gap: 10 }}>
-          <div className="seg" style={{ flexWrap: 'wrap', height: 'auto', width: 'fit-content' }} role="group" aria-label="Status">
-            {RC_STATUS.map((s) => (
-              <button key={s.id} className={s.id === status ? 'is-active' : ''} style={{ height: 28 }} onClick={() => setStatus(s.id)}>
-                {s.label} ({fmtInt(d.rows.filter((r) => rcMatches(r, s.id)).length)})
-              </button>
-            ))}
-          </div>
-          <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap', fontSize: 12.5 }}>
-            <span style={{ color: 'var(--fg3)' }}>{chosen.length ? `${fmtInt(chosen.length)} escolhido${chosen.length > 1 ? 's' : ''}` : `Ação vale pros ${fmtInt(rows.length)} da lista abaixo`}</span>
-            <button className="btn btn-ghost" onClick={exportCsv} disabled={!target.length}><Icon name="download" size={12}/> Exportar CSV</button>
-            <button className="btn btn-ghost" onClick={copyLinks} disabled={!target.length}><Icon name="copy" size={12}/> Copiar links</button>
-            <span style={{ width: 1, height: 20, background: 'var(--border)' }}/>
-            <select value={channel} onChange={(e) => setChannel(e.target.value)} aria-label="Canal do envio">
-              {RC_CHANNELS.map((c) => <option key={c.id} value={c.id}>{c.label}</option>)}
-            </select>
-            <button className="btn btn-ghost" onClick={markSent} disabled={busy === 'sent' || !target.some((r) => !r.sentAt)}>
-              {busy === 'sent' ? 'Marcando…' : 'Marcar como enviado'}
-            </button>
-            {chosen.length > 0 && <button className="btn btn-ghost" onClick={() => setSelected(new Set())}>Limpar escolha</button>}
-          </div>
-        </div>
-        {!rows.length ? (
-          <div style={{ padding: '0 14px 14px', color: 'var(--fg5)', fontSize: 12 }}>
-            {d.rows.length ? 'Ninguém com esse status.' : `Ninguém na lista. Use "Gerar links" pra trazer quem acaba em até ${days} dias.`}
-          </div>
-        ) : (
-          <Paginated items={rows} label="pessoas" resetKey={`${variant}-${days}-${status}-${tests}`}>
-            {(page, pager) => (<>
-              <div style={{ overflowX: 'auto' }}>
-                <table className="tbl" style={{ fontSize: 12.5, minWidth: 940 }}>
-                  <thead>
-                    <tr>
-                      <th style={{ width: 32 }}><input type="checkbox" checked={allOn} onChange={toggleAll} aria-label="Escolher todos da lista"/></th>
-                      <th>Cliente</th><th>Telefone</th><th className="num">Frascos</th><th>Estoque acaba</th><th>Status</th><th>Envio</th><th>Link</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {page.map((r) => (
-                      <tr key={r.id}>
-                        <td><input type="checkbox" checked={selected.has(r.id)} onChange={() => toggle(r.id)} aria-label={`Escolher ${r.firstName || r.email}`}/></td>
-                        <td>
-                          <div style={{ fontWeight: 600 }}>{r.firstName || '—'}{r.isTest && <span className="badge neutral" style={{ marginLeft: 6 }}>teste</span>}</div>
-                          <div style={{ color: 'var(--fg4)', fontSize: 11.5 }}>{r.email}</div>
-                        </td>
-                        <td className="mono" style={{ whiteSpace: 'nowrap' }}>
-                          {r.smsPhone || <span style={{ color: 'var(--fg5)' }}>{r.phone ? `${r.phone} (conferir)` : 'sem telefone'}</span>}
-                          {r.smsPhoneInferred && <div style={{ fontSize: 10.5, color: 'var(--warning)' }} title="O número veio com 10 dígitos: o +1 foi deduzido">+1 deduzido</div>}
-                        </td>
-                        <td className="num mono">{r.bottles}</td>
-                        <td style={{ whiteSpace: 'nowrap' }}>
-                          {fmtDateShort(r.stockUntil)}
-                          <div style={{ fontSize: 11, color: r.daysLeft < 0 ? 'var(--danger)' : r.daysLeft <= 3 ? 'var(--warning)' : 'var(--fg4)' }}>{rcDaysText(r.daysLeft)}</div>
-                        </td>
-                        <td>
-                          <span className={`badge ${RC_STATUS_TONE[r.status] || ''}`}>{RC_STATUS_LABEL[r.status] || r.status}</span>
-                          {r.purchasedUsd > 0 && <div className="mono" style={{ fontSize: 11, color: 'var(--money)', marginTop: 2 }}>{rcUsd(r.purchasedUsd)}</div>}
-                        </td>
-                        <td style={{ whiteSpace: 'nowrap', color: 'var(--fg3)' }}>
-                          {r.sentAt ? <>{RC_CHANNEL_LABEL[r.channel] || r.channel || '—'}<div style={{ fontSize: 11, color: 'var(--fg5)' }}>{fmtDateTime(r.sentAt)}</div></> : '—'}
-                        </td>
-                        <td><div style={{ display: 'flex', gap: 4 }}>
-                          <button className="icon-btn" onClick={() => rcCopy(r.link).then((ok) => setMsg(ok ? { ok: `Link de ${r.firstName || r.email} copiado.` } : { err: 'O navegador não deixou copiar.' }))}
-                            aria-label={`Copiar link de ${r.firstName || r.email}`} title="Copiar link"><Icon name="copy" size={12}/></button>
-                          <a className="icon-btn" href={r.link} target="_blank" rel="noopener" title="Abrir (conta como aberto pelo cliente — prefira link de teste)"
-                            aria-label={`Abrir link de ${r.firstName || r.email}`}
-                            onClick={(e) => { if (!r.isTest && !window.confirm('Abrir o link marca como "abriu" na conta do cliente. Abrir mesmo assim?')) e.preventDefault(); }}>
-                            <Icon name="external-link" size={12}/>
-                          </a>
-                        </div></td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-              {pager}
-            </>)}
-          </Paginated>
-        )}
-      </div>
-    </div>
-  );
-}
-
-// ---------- assinaturas ----------
-
-const SB_STATUS = [
-  { id: 'todas', label: 'Todas' },
-  { id: 'active', label: 'Ativas' },
-  { id: 'past_due', label: 'Em atraso' },
-  { id: 'canceled', label: 'Canceladas' },
-];
-const SB_STATUS_LABEL = { active: 'Ativa', past_due: 'Em atraso', canceled: 'Cancelada' };
-const SB_STATUS_TONE = { active: 'ok', past_due: 'warn', canceled: 'neutral' };
-
-function sbCycle(b) {
-  if (!b) return '—';
-  return b === 1 ? '1 frasco/mês' : `${b} frascos a cada ${b} meses`;
-}
-
-function SbTable({ rows, cols, empty, minWidth = 820 }) {
-  if (!rows.length) return <div style={{ padding: '4px 0 6px', color: 'var(--fg5)', fontSize: 12 }}>{empty}</div>;
-  const C = {
-    cliente: { h: 'Cliente', c: (r) => <><div style={{ fontWeight: 600 }}>{r.name || '—'}{r.fromSurvey && <span className="badge" style={{ marginLeft: 6 }}>pesquisa</span>}</div><div style={{ color: 'var(--fg4)', fontSize: 11.5 }}>{r.email || '—'}</div></> },
-    telefone: { h: 'Telefone', c: (r) => <span className="mono">{r.smsPhone || r.phone || '—'}</span> },
-    oferta: { h: 'Oferta', c: (r) => <>{r.product || '—'}<div style={{ fontSize: 11, color: 'var(--fg5)' }}>{sbCycle(r.bottles)}</div></> },
-    status: { h: 'Status', c: (r) => <span className={`badge ${SB_STATUS_TONE[r.status] || ''}`}>{SB_STATUS_LABEL[r.status] || r.status}</span> },
-    valor: { h: 'Cobrança', num: true, c: (r) => <span className="mono">{r.amountUsd != null ? rcUsd(r.amountUsd, 2) : '—'}</span> },
-    cobrancas: { h: 'Cobranças', num: true, c: (r) => <span className="mono">{fmtInt(r.chargeCount)}</span> },
-    pago: { h: 'Total pago', num: true, c: (r) => <span className="mono" style={{ color: r.totalPaidUsd ? 'var(--money)' : undefined }}>{rcUsd(r.totalPaidUsd)}</span> },
-    inicio: { h: 'Início', c: (r) => (r.startedAt ? fmtDateShort(r.startedAt) : '—') },
-    proxima: { h: 'Próxima cobrança', c: (r) => (r.nextChargeAt ? <>{fmtDateShort(r.nextChargeAt)}{r.nextChargeEstimated && <div style={{ fontSize: 10.5, color: 'var(--fg5)' }} title="Última cobrança + ciclo da oferta">estimada</div>}</> : '—') },
-    falha: { h: 'Falha', c: (r) => <>{r.lastFailedAt ? fmtDateTime(r.lastFailedAt) : '—'}<div style={{ fontSize: 11, color: 'var(--fg5)' }}>{r.lastFailureReason || ''}</div></> },
-    tentativa: { h: 'Tentativas', num: true, c: (r) => <span className="mono">{fmtInt(r.failedAttempts)}</span> },
-    retry: { h: 'Próxima tentativa', c: (r) => (r.nextRetryAt ? fmtDateTime(r.nextRetryAt) : <span style={{ color: 'var(--fg5)' }}>a Vupim não vai tentar</span>) },
-    cancelada: { h: 'Cancelada', c: (r) => (r.canceledAt ? <>{fmtDateShort(r.canceledAt)}<div style={{ fontSize: 11, color: 'var(--fg5)' }}>{r.cancelReason || ''}</div></> : '—') },
-  };
-  return (
-    <Paginated items={rows} label="assinaturas" resetKey={cols.join()}>
-      {(page, pager) => (<>
+    {d.byPlatform.length > 1 && (
+      <RcPanel title="Por plataforma" sub="Situação de agora; renovações recebidas no período.">
         <div style={{ overflowX: 'auto' }}>
-          <table className="tbl" style={{ fontSize: 12.5, minWidth }}>
-            <thead><tr>{cols.map((k) => <th key={k} className={C[k].num ? 'num' : undefined}>{C[k].h}</th>)}</tr></thead>
-            <tbody>{page.map((r) => <tr key={r.id}>{cols.map((k) => <td key={k} className={C[k].num ? 'num' : undefined}>{C[k].c(r)}</td>)}</tr>)}</tbody>
+          <table className="tbl" style={{ fontSize: 12.5, minWidth: 520 }}>
+            <thead><tr><th>Plataforma</th><th className="num">Assinaturas</th><th className="num">Ativas</th><th className="num">Em atraso</th><th className="num">Encerradas</th><th className="num">Renovações</th><th className="num">Mensal</th></tr></thead>
+            <tbody>
+              {d.byPlatform.map((p) => (
+                <tr key={p.platform}>
+                  <td style={{ fontWeight: 500 }}><RcPlat slug={p.platform}/> {rcPlatform(p.platform)}</td>
+                  <td className="num mono">{fmtInt(p.total)}</td>
+                  <td className="num mono">{fmtInt(p.active)}</td>
+                  <td className="num mono">{fmtInt(p.late)}</td>
+                  <td className="num mono">{fmtInt(p.ended)}</td>
+                  <td className="num mono" style={p.renewalsUsd ? { color: 'var(--money)' } : undefined}>{rcUsd(p.renewalsUsd)}</td>
+                  <td className="num mono">{rcUsd(p.mrrUsd)}</td>
+                </tr>
+              ))}
+            </tbody>
           </table>
         </div>
-        {pager}
-      </>)}
-    </Paginated>
-  );
+      </RcPanel>
+    )}
+
+    <details className="panel" style={{ marginBottom: 12 }}>
+      <summary style={{ cursor: 'pointer', fontSize: 12.5, color: 'var(--fg3)' }}>Como a aba conta</summary>
+      <ul style={{ margin: '10px 0 0', paddingLeft: 18, fontSize: 12, color: 'var(--fg3)', lineHeight: 1.6 }}>
+        <li><b>Assinatura</b> = mesmo cliente (e-mail) + mesmo produto recorrente na mesma plataforma. A 1ª cobrança é a compra; as seguintes são renovações.</li>
+        <li><b>Produto recorrente</b> entra sozinho quando aparece a 1ª renovação (ou o 1º aviso de cancelamento/falha de recorrência) de qualquer plataforma. A Vupim entra pelo webhook de assinatura.</li>
+        <li><b>Ciclo</b> = intervalo entre as cobranças do próprio assinante; sem renovação ainda, o do produto (ou da oferta, na Vupim); sem nada, 30 dias.</li>
+        <li><b>Em atraso</b> = a cobrança esperada não veio há mais de 3 dias, ou a plataforma avisou falha de pagamento.</li>
+        <li><b>Encerrada</b>: pediu cancelamento (a plataforma avisou), reembolso da última cobrança, ou parou de pagar (15 dias sem a cobrança esperada, mesmo sem aviso — a data é a da cobrança que não veio).</li>
+        <li><b>Previsto</b> = cobranças futuras de quem não encerrou, no valor da última renovação, vezes a chance de continuar medida em quem já teve tempo de pagar. Sem histórico suficiente, mostra só o "se ninguém cancelar".</li>
+        <li>Lê os avisos (IPN) das plataformas: produto JVZoo sem IPN cadastrado não aparece aqui.</li>
+      </ul>
+    </details>
+  </>);
 }
 
-function sbCsv(rows) {
-  const esc = (v) => {
-    const s = v == null ? '' : String(v);
-    return /[",\n;]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
-  };
-  const head = ['assinatura', 'status', 'nome', 'email', 'telefone', 'oferta', 'cobranca_usd', 'tentativas', 'falhou_em', 'motivo', 'proxima_tentativa'];
-  return '﻿' + [head.join(','), ...rows.map((r) => [
-    r.externalId, SB_STATUS_LABEL[r.status], r.name, r.email, r.smsPhone || r.phone, r.product, r.amountUsd,
-    r.failedAttempts, r.lastFailedAt, r.lastFailureReason, r.nextRetryAt,
-  ].map(esc).join(','))].join('\n');
+// ---------- assinantes ----------
+
+function rcCsv(rows) {
+  const stamp = new Date().toISOString().slice(0, 10);
+  downloadCsv(`assinaturas_${stamp}.csv`,
+    ['plataforma', 'produto', 'nome', 'email', 'telefone', 'status', 'motivo', 'inicio', 'ultima_cobranca', 'cobrancas', 'total_pago_usd', 'renovacao_usd', 'ciclo_dias', 'proxima_cobranca', 'encerrou_em', 'dias_ate_encerrar'],
+    rows.map((r) => [
+      rcPlatform(r.platform), r.product, r.name || '', r.email || '', r.phone || '', RC_STATUS_LABEL[r.status], r.endReason ? RC_REASON_LABEL[r.endReason] : (r.failureReason || ''),
+      r.startedAt.slice(0, 10), r.lastChargeAt.slice(0, 10), r.cycles, r.totalPaidUsd, r.renewalUsd, r.cycleDays,
+      r.nextChargeAt ? r.nextChargeAt.slice(0, 10) : '', r.endedAt ? r.endedAt.slice(0, 10) : '', r.daysToEnd ?? '',
+    ]));
 }
 
-function RcSubscriptions({ filters }) {
+function RcSubscribers({ d }) {
   const [status, setStatus] = useStateRc('todas');
   const [q, setQ] = useStateRc('');
-  const [state, setState] = useStateRc({ status: 'loading', data: null, error: null });
-
-  useEffectRc(() => {
-    let alive = true;
-    setState((s) => ({ ...s, status: 'loading' }));
-    window.NSApi.fetchSubscriptions(filters)
-      .then((data) => { if (alive) setState({ status: 'ready', data, error: null }); })
-      .catch((e) => { if (alive) setState({ status: 'error', data: null, error: String(e.message || e) }); });
-    return () => { alive = false; };
-  }, [filters.dateRange.start, filters.dateRange.end]);
-
-  if (state.status === 'error') return <ReadState kind="falha" title="Não carregou as assinaturas">{state.error}</ReadState>;
-  const d = state.data;
-  if (!d) return <div className="panel"><SkelTableRows rows={6} cols={6}/></div>;
-  const k = d.kpis;
-
-  if (!d.rows.length) {
-    return (
-      <ReadState kind="vazio" title="Nenhuma assinatura ainda">
-        As assinaturas entram sozinhas pelo webhook da Vupim, a partir da primeira cobrança de uma oferta recorrente (as da pesquisa começaram em 28/10).
-        No painel da Vupim (Integrações → Webhooks), os eventos <span className="mono">subscription.renewed</span>, <span className="mono">subscription.payment_failed</span> e <span className="mono">subscription.canceled</span> precisam estar marcados.
-      </ReadState>
-    );
-  }
-
   const needle = q.trim().toLowerCase();
   const rows = d.rows.filter((r) => (status === 'todas' || r.status === status)
-    && (!needle || [r.name, r.email, r.smsPhone, r.phone, r.product, r.externalId].some((v) => v && String(v).toLowerCase().includes(needle))));
-  const kpis = [
-    { l: 'Ativas', v: fmtInt(k.active), s: `${fmtInt(k.fromSurvey)} vieram da pesquisa` },
-    { l: 'Receita mensal recorrente', v: rcUsd(k.mrrUsd), s: 'ativas, cobrança ÷ meses do ciclo', money: k.mrrUsd > 0 },
-    { l: 'Em atraso', v: fmtInt(k.pastDue), s: 'renovação não cobrada', tone: k.pastDue ? 'var(--warning)' : undefined },
-    { l: 'Novas no período', v: fmtInt(k.newInPeriod), s: '1ª cobrança no período' },
-    { l: 'Renovações no período', v: fmtInt(k.renewalsInPeriod), s: k.renewalsInPeriod ? rcUsd(k.renewalsUsd) : `${fmtInt(k.failedInPeriod)} com falha`, money: k.renewalsUsd > 0 },
-    { l: 'Canceladas no período', v: fmtInt(k.canceledInPeriod), s: k.churn != null ? `churn ${fmtPct(k.churn, 1)} das ativas no início` : '—', tone: k.canceledInPeriod ? 'var(--danger)' : undefined },
-  ];
+    && (!needle || [r.name, r.email, r.phone, r.product, r.externalId].some((v) => v && String(v).toLowerCase().includes(needle))));
+  const count = (id) => (id === 'todas' ? d.rows.length : d.rows.filter((r) => r.status === id).length);
 
   return (
-    <div style={{ opacity: state.status === 'loading' ? 0.6 : 1, transition: 'opacity .15s' }}>
-      <RcKpis items={kpis}/>
-
-      <div className="panel" style={{ marginBottom: 12, padding: 0, overflow: 'hidden' }}>
-        <div style={{ padding: '12px 14px', display: 'flex', gap: 10, alignItems: 'flex-start', flexWrap: 'wrap' }}>
-          <div style={{ flex: 1, minWidth: 240 }}>
-            <div className="panel-title">Pagamentos que falharam</div>
-            <div className="panel-sub" style={{ fontSize: 11 }}>Renovação não cobrada (cartão recusado, sem saldo…). É a lista de recuperação: um SMS pedindo pra atualizar o cartão costuma salvar a assinatura.</div>
+    <div className="panel" style={{ padding: 0, overflow: 'hidden' }}>
+      <div style={{ padding: '12px 14px', display: 'grid', gap: 10 }}>
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+          <div className="seg" role="group" aria-label="Status" style={{ flexWrap: 'wrap', height: 'auto' }}>
+            {RC_STATUS.map((s) => (
+              <button key={s.id} className={s.id === status ? 'is-active' : ''} style={{ height: 28 }} onClick={() => setStatus(s.id)}>{s.label} ({fmtInt(count(s.id))})</button>
+            ))}
           </div>
-          <button className="btn btn-ghost" disabled={!d.pastDue.length} onClick={() => rcDownload(`assinaturas_em_atraso_${new Date().toISOString().slice(0, 10)}.csv`, sbCsv(d.pastDue))}>
-            <Icon name="download" size={12}/> Exportar
-          </button>
+          <input type="search" value={q} onChange={(e) => setQ(e.target.value)} placeholder="Nome, e-mail, telefone, produto…" aria-label="Buscar assinatura"
+            style={{ flex: '1 1 220px', maxWidth: 320, padding: '6px 10px', fontSize: 12.5, color: 'var(--fg1)', background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: 6 }}/>
+          <div style={{ flex: 1 }}/>
+          <button className="btn btn-ghost" disabled={!rows.length} onClick={() => rcCsv(rows)}><Icon name="download" size={12}/> Exportar CSV</button>
         </div>
-        <div style={{ padding: '0 14px 12px' }}>
-          <SbTable rows={d.pastDue} cols={['cliente', 'telefone', 'oferta', 'valor', 'falha', 'tentativa', 'retry']} empty="Nenhuma assinatura em atraso."/>
-        </div>
+        <div style={{ fontSize: 11.5, color: 'var(--fg5)' }}>Cancelar, pausar ou trocar plano é no painel de cada plataforma. Próxima cobrança "estimada" = última cobrança + ciclo.</div>
       </div>
-
-      <div>
-        <div className="panel" style={{ marginBottom: 12 }}>
-          <div className="panel-title">Próximas cobranças</div>
-          <div className="panel-sub" style={{ fontSize: 11, marginBottom: 10 }}>Nos próximos 14 dias. "Estimada" = última cobrança + ciclo da oferta (a Vupim só manda a data no aviso de renovação).</div>
-          <SbTable rows={d.upcoming} cols={['cliente', 'oferta', 'valor', 'proxima']} minWidth={0} empty="Nenhuma cobrança nos próximos 14 dias."/>
-        </div>
-        <div className="panel" style={{ marginBottom: 12 }}>
-          <div className="panel-title">Por oferta</div>
-          <div className="panel-sub" style={{ fontSize: 11, marginBottom: 10 }}>Situação de agora; total pago desde o início.</div>
-          <div style={{ overflowX: 'auto' }}>
-            <table className="tbl" style={{ fontSize: 12.5 }}>
-              <thead><tr><th>Oferta</th><th className="num">Ativas</th><th className="num">Em atraso</th><th className="num">Canceladas</th><th className="num">Mensal</th><th className="num">Total pago</th></tr></thead>
-              <tbody>
-                {d.byOffer.map((o) => (
-                  <tr key={o.offer}>
-                    <td style={{ fontWeight: 500 }}>{o.offer}</td>
-                    <td className="num mono">{fmtInt(o.active)}</td>
-                    <td className="num mono">{fmtInt(o.pastDue)}</td>
-                    <td className="num mono">{fmtInt(o.canceled)}</td>
-                    <td className="num mono" style={{ color: 'var(--money)' }}>{rcUsd(o.mrrUsd)}</td>
-                    <td className="num mono">{rcUsd(o.totalPaidUsd)}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </div>
-      </div>
-
-      <div className="panel" style={{ padding: 0, overflow: 'hidden' }}>
-        <div style={{ padding: '12px 14px', display: 'grid', gap: 10 }}>
-          <div>
-            <div className="panel-title">Todas as assinaturas</div>
-            <div className="panel-sub" style={{ fontSize: 11 }}>Cancelar, pausar ou trocar o plano é no painel da Vupim (ela não tem API). O que mudar lá chega aqui pelo webhook.</div>
-          </div>
-          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
-            <div className="seg" role="group" aria-label="Status">
-              {SB_STATUS.map((s) => (
-                <button key={s.id} className={s.id === status ? 'is-active' : ''} onClick={() => setStatus(s.id)}>
-                  {s.label} ({fmtInt(s.id === 'todas' ? d.rows.length : d.rows.filter((r) => r.status === s.id).length)})
-                </button>
-              ))}
+      {!rows.length ? (
+        <div style={{ padding: '0 14px 14px', color: 'var(--fg5)', fontSize: 12 }}>Nenhuma assinatura com esse filtro.</div>
+      ) : (
+        <Paginated items={rows} label="assinaturas" resetKey={`${status}-${needle}-${d.filters.platform}-${d.filters.product}`}>
+          {(page, pager) => (<>
+            <div style={{ overflowX: 'auto' }}>
+              <table className="tbl" style={{ fontSize: 12.5, minWidth: 980 }}>
+                <thead>
+                  <tr><th>Cliente</th><th>Produto</th><th>Status</th><th className="num">Cobranças</th><th className="num">Total pago</th><th>Início</th><th>Última cobrança</th><th>Próxima / encerrou</th></tr>
+                </thead>
+                <tbody>
+                  {page.map((r) => (
+                    <tr key={r.key}>
+                      <td>
+                        <div style={{ fontWeight: 600 }}>{r.name || '—'}{r.fromSurvey && <span className="badge" style={{ marginLeft: 6 }}>pesquisa</span>}</div>
+                        <div style={{ color: 'var(--fg4)', fontSize: 11.5 }}>{r.email || '—'}</div>
+                      </td>
+                      <td>
+                        <RcPlat slug={r.platform}/> {r.product}
+                        <div style={{ fontSize: 11, color: 'var(--fg5)' }}>a cada {fmtInt(r.cycleDays)} dias{r.cycleSource !== 'cobrancas' ? ` (${r.cycleSource === 'oferta' ? 'pela oferta' : r.cycleSource === 'produto' ? 'pelo produto' : 'padrão'})` : ''} · {rcUsd(r.renewalUsd, 2)}</div>
+                      </td>
+                      <td>
+                        <span className={`badge ${RC_STATUS_TONE[r.status] || ''}`}>{RC_STATUS_LABEL[r.status]}</span>
+                        {(r.endReason || r.failureReason) && <div style={{ fontSize: 11, color: 'var(--fg5)', marginTop: 2 }}>{r.endReason ? RC_REASON_LABEL[r.endReason] : `falha: ${r.failureReason}`}</div>}
+                      </td>
+                      <td className="num mono">{fmtInt(r.cycles)}</td>
+                      <td className="num mono" style={r.totalPaidUsd ? { color: 'var(--money)' } : undefined}>{rcUsd(r.totalPaidUsd)}</td>
+                      <td style={{ whiteSpace: 'nowrap' }}>{fmtDateShort(r.startedAt)}</td>
+                      <td style={{ whiteSpace: 'nowrap' }}>{fmtDateShort(r.lastChargeAt)}</td>
+                      <td style={{ whiteSpace: 'nowrap' }}>
+                        {r.status === 'ended'
+                          ? <>{fmtDateShort(r.endedAt)}<div style={{ fontSize: 11, color: 'var(--fg5)' }}>após {rcDays(r.daysToEnd)}</div></>
+                          : r.nextChargeAt
+                            ? <>{fmtDateShort(r.nextChargeAt)}{r.nextEstimated && <div style={{ fontSize: 10.5, color: 'var(--fg5)' }}>estimada</div>}{r.lastFailedAt && <div style={{ fontSize: 10.5, color: 'var(--warning)' }} title={fmtDateTime(r.lastFailedAt)}>falhou {fmtDateShort(r.lastFailedAt)}</div>}</>
+                            : '—'}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
             </div>
-            <input type="search" value={q} onChange={(e) => setQ(e.target.value)} placeholder="Nome, e-mail, telefone, oferta…" aria-label="Buscar assinatura"
-              style={{ minWidth: 240, padding: '6px 10px', fontSize: 12.5, color: 'var(--fg1)', background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: 6 }}/>
-          </div>
-        </div>
-        <div style={{ padding: '0 14px 12px' }}>
-          <SbTable rows={rows} cols={['cliente', 'oferta', 'status', 'valor', 'cobrancas', 'pago', 'inicio', 'proxima', 'cancelada']} empty="Nenhuma assinatura com esse filtro."/>
-        </div>
-      </div>
+            {pager}
+          </>)}
+        </Paginated>
+      )}
     </div>
   );
 }
@@ -508,28 +369,62 @@ function RcSubscriptions({ filters }) {
 // ---------- página ----------
 
 const RC_SECTIONS = [
-  { id: 'recompra', label: 'Lista de recompra' },
-  { id: 'assinaturas', label: 'Assinaturas' },
+  { id: 'geral', label: 'Visão geral' },
+  { id: 'assinantes', label: 'Assinantes' },
 ];
 
-function RecurrencesPage({ filters, user }) {
-  const [section, setSectionState] = useStateRc(() => rcLoad(RC_SECTION_KEY, 'recompra'));
-  const sec = RC_SECTIONS.some((s) => s.id === section) ? section : 'recompra';
+function RecurrencesPage({ filters }) {
+  const [section, setSectionState] = useStateRc(() => rcLoad(RC_SECTION_KEY, 'geral'));
+  const [platform, setPlatform] = useStateRc('');
+  const [product, setProduct] = useStateRc('');
+  const [state, setState] = useStateRc({ status: 'loading', data: null, error: null });
+  const sec = RC_SECTIONS.some((s) => s.id === section) ? section : 'geral';
   const setSection = (id) => { setSectionState(id); rcSave(RC_SECTION_KEY, id); };
+
+  useEffectRc(() => {
+    let alive = true;
+    setState((s) => ({ ...s, status: 'loading' }));
+    window.NSApi.fetchRecurrences(filters, { platform: platform || null, product: product || null })
+      .then((data) => { if (alive) setState({ status: 'ready', data, error: null }); })
+      .catch((e) => { if (alive) setState({ status: 'error', data: null, error: String(e.message || e) }); });
+    return () => { alive = false; };
+  }, [filters.dateRange.start, filters.dateRange.end, platform, product]);
+
+  if (state.status === 'error') return <div className="page-in"><ReadState kind="falha" title="Não carregou as recorrências">{state.error}</ReadState></div>;
+  const d = state.data;
+  if (!d) return <div className="page-in"><div className="panel"><SkelTableRows rows={6} cols={6}/></div></div>;
+  if (!d.platforms.length) {
+    return (
+      <div className="page-in">
+        <ReadState kind="vazio" title="Nenhuma recorrência ainda">
+          Um produto entra aqui sozinho quando aparece a 1ª renovação (ou o 1º aviso de cancelamento de recorrência) em qualquer plataforma. A Vupim entra pelo webhook de assinatura.
+        </ReadState>
+      </div>
+    );
+  }
+  const products = d.products.filter((p) => !platform || p.platform === platform);
+
   return (
-    <div className="page-in">
-      <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', marginBottom: 12 }}>
+    <div className="page-in" style={{ opacity: state.status === 'loading' ? 0.6 : 1, transition: 'opacity .15s' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginBottom: 12 }}>
         <div className="seg" role="tablist" aria-label="Seções da aba Recorrências">
           {RC_SECTIONS.map((s) => (
             <button key={s.id} role="tab" aria-selected={s.id === sec} className={s.id === sec ? 'is-active' : ''} onClick={() => setSection(s.id)}>{s.label}</button>
           ))}
         </div>
-        <span style={{ fontSize: 11.5, color: 'var(--fg5)' }}>
-          {sec === 'recompra' ? 'Antes da recompra: quem recebe o link da pesquisa. A janela é em dias até o estoque acabar (o período do topo não vale aqui).'
-            : 'Depois da recompra: assinaturas da Vupim. O período do topo vale pra novas, renovações e cancelamentos.'}
+        <select value={platform} onChange={(e) => { setPlatform(e.target.value); setProduct(''); }} aria-label="Plataforma">
+          <option value="">Todas as plataformas</option>
+          {d.platforms.map((p) => <option key={p.id} value={p.id}>{rcPlatform(p.id)} ({fmtInt(p.count)})</option>)}
+        </select>
+        <select value={product} onChange={(e) => setProduct(e.target.value)} aria-label="Produto" style={{ maxWidth: 320 }}>
+          <option value="">Todos os produtos</option>
+          {products.map((p) => <option key={p.key} value={p.key}>{platform ? '' : `${platBadge(p.platform).short} · `}{p.label} ({fmtInt(p.count)})</option>)}
+        </select>
+        <span style={{ fontSize: 11.5, color: 'var(--fg5)', flex: '1 1 260px' }}>
+          O período do topo vale pra renovações recebidas, novas e encerradas. Ativas, receita mensal e previsão são de agora.
         </span>
       </div>
-      {sec === 'recompra' ? <RcRepurchase user={user}/> : <RcSubscriptions filters={filters}/>}
+      {sec === 'geral' ? <RcOverview d={d}/> : <RcSubscribers d={d}/>}
     </div>
   );
 }

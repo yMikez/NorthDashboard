@@ -1,9 +1,9 @@
-// Aba Recorrências → Lista de recompra (quem está com o estoque acabando).
+// Aba Pesquisas → Disparos (quem está com o estoque acabando e recebe o link).
 //
-//   GET  /api/metrics/recurrences/repurchase?variant=all&withinDays=14[&tests=1]
-//   POST /api/metrics/recurrences/repurchase  { action: "generate", variant?: "all", withinDays: 14 }
+//   GET  /api/metrics/surveys/repurchase?variant=all&withinDays=14[&tests=1]
+//   POST /api/metrics/surveys/repurchase  { action: "generate", variant?: "all", withinDays: 14 }
 //        gera os convites (link pessoal) de quem entrou na janela — não envia nada
-//   POST /api/metrics/recurrences/repurchase  { action: "sent", ids: [...], channel: "sms" }
+//   POST /api/metrics/surveys/repurchase  { action: "sent", ids: [...], channel: "sms" }
 //        marca como enviado (só o primeiro envio conta)
 //
 // Quem tem a aba opera a lista (é quem dispara); nome, e-mail e telefone de
@@ -20,7 +20,7 @@ export const dynamic = 'force-dynamic';
 const CHANNELS = new Set(['sms', 'email', 'whatsapp', 'manual']);
 
 export async function GET(req: Request) {
-  const auth = await requireTab('recurrences');
+  const auth = await requireTab('surveys');
   if (!auth.ok) return auth.response;
   const url = new URL(req.url);
   try {
@@ -30,13 +30,13 @@ export async function GET(req: Request) {
       includeTests: url.searchParams.get('tests') === '1',
     }));
   } catch (err) {
-    logger.error({ err }, 'metrics/recurrences/repurchase failed');
+    logger.error({ err }, 'metrics/surveys/repurchase failed');
     return NextResponse.json({ error: 'failed' }, { status: 500 });
   }
 }
 
 export async function POST(req: Request) {
-  const auth = await requireTab('recurrences');
+  const auth = await requireTab('surveys');
   if (!auth.ok) return auth.response;
   let body: Record<string, unknown>;
   try {
@@ -66,7 +66,7 @@ export async function POST(req: Request) {
     }
     return NextResponse.json({ error: 'action: generate | sent' }, { status: 400 });
   } catch (err) {
-    logger.error({ err }, 'metrics/recurrences/repurchase POST failed');
+    logger.error({ err }, 'metrics/surveys/repurchase POST failed');
     return NextResponse.json({ error: 'failed' }, { status: 500 });
   }
 }

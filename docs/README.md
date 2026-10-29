@@ -18,6 +18,7 @@ regra, atualize aqui junto.
 | [specs/calculo-margem.md](specs/calculo-margem.md) | Margem de contribuição da operação (aba Lucro real) |
 | [specs/cohort-reembolso.md](specs/cohort-reembolso.md) | Coorte de reembolso por dia da venda (aba Reembolsos) |
 | [specs/crm-afiliados.md](specs/crm-afiliados.md) | Régua do CRM de afiliados (aba CRM) |
+| [specs/recorrencias.md](specs/recorrencias.md) | Assinaturas de todas as plataformas (aba Recorrências) |
 
 ## Integrações com parceiros (`integracoes/`)
 

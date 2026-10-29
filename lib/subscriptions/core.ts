@@ -1,4 +1,4 @@
-// Assinaturas (aba Recorrências): evento da plataforma → linha de histórico →
+// Assinaturas da Vupim: evento da plataforma → linha de histórico →
 // estado da assinatura. Tudo puro (sem banco) pra testar e pra recalcular o
 // estado do zero a cada evento — a Vupim entrega "pelo menos uma vez" e fora
 // de ordem, então o estado nunca é "o último evento", e sim o histórico todo.
@@ -18,7 +18,6 @@ export type SubEventKind = 'charge' | 'renewed' | 'failed' | 'canceled' | 'refun
 export type SubStatus = 'active' | 'past_due' | 'canceled';
 
 export const DAYS_PER_BOTTLE = 30;
-const DAY_MS = 86400000;
 
 export interface SubEventRow {
   eventId: string;
@@ -194,22 +193,4 @@ export function projectSubscription(events: readonly SubEventRow[]): SubProjecti
     firstTransactionId: first?.transactionId ?? null,
     lastTransactionId: last?.transactionId ?? null,
   };
-}
-
-/**
- * Próxima cobrança: o fim do período pago quando a plataforma diz; senão a
- * última cobrança + o ciclo (frascos × 30 dias), marcada como estimada.
- */
-export function nextCharge(s: {
-  status: string; periodEnd: Date | null; lastChargeAt: Date | null; bottles: number | null;
-}): { at: Date; estimated: boolean } | null {
-  if (s.status === 'canceled') return null;
-  if (s.periodEnd) return { at: s.periodEnd, estimated: false };
-  if (!s.lastChargeAt) return null;
-  return { at: new Date(s.lastChargeAt.getTime() + (s.bottles ?? 1) * DAYS_PER_BOTTLE * DAY_MS), estimated: true };
-}
-
-/** Valor por mês (receita recorrente mensal): cobrança ÷ meses do ciclo. */
-export function monthlyValue(amountUsd: number | null, bottles: number | null): number {
-  return amountUsd ? Math.round((amountUsd / Math.max(1, bottles ?? 1)) * 100) / 100 : 0;
 }

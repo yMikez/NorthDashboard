@@ -39,7 +39,7 @@ autenticação.
 | `sale.created`, `sale.declined`, `sale.shipped`, `checkout.initiated`, `checkout.abandoned` | Só ficam no `IngestLog` (não viram venda) |
 | `webhook.test` e qualquer evento com `livemode: false` | Só registra (teste do painel ou venda-teste do checkout) |
 
-Toda entrega com `subscriptionId` (1ª cobrança, renovação, falha de pagamento, cancelamento, estorno) também vai pro histórico da assinatura (`SubscriptionEvent`, idempotente pelo `eventId`); o estado em `Subscription` é recalculado do histórico inteiro (`lib/subscriptions/core.ts`). A Vupim não tem API de assinatura: cancelar/pausar é no painel dela.
+Toda entrega com `subscriptionId` (1ª cobrança, renovação, falha de pagamento, cancelamento, estorno) também vai pro histórico da assinatura (`SubscriptionEvent`, idempotente pelo `eventId`); o estado em `Subscription` é recalculado do histórico inteiro (`lib/subscriptions/core.ts`). A Vupim não tem API de assinatura: cancelar/pausar é no painel dela. A aba Recorrências lê esse histórico junto com as outras plataformas ([specs/recorrencias.md](../specs/recorrencias.md)).
 
 Estorno reescreve a linha da própria venda (mesmo `transactionId`), como JVZoo e
 ClickBank: a data da venda fica em `orderedAt` e a data do estorno em

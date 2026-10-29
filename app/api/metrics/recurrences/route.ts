@@ -1,11 +1,11 @@
-// Aba Recorrências → Assinaturas.
-//   GET /api/metrics/recurrences/subscriptions?start_date=&end_date=
-// Período = novas, renovações, falhas e cancelamentos no intervalo; ativas,
-// em atraso e receita mensal são o estado de agora.
+// Aba Recorrências — assinaturas de todas as plataformas.
+//   GET /api/metrics/recurrences?start_date=&end_date=[&platform=jvzoo][&product=jvzoo:123]
+// Período = renovações recebidas, novas e encerradas no intervalo; ativas,
+// em atraso, receita mensal e previsão são o estado de agora.
 
 import { NextResponse } from 'next/server';
 import { requireTab } from '@/lib/auth/guard';
-import { getSubscriptionsDashboard } from '@/lib/services/subscriptions';
+import { getRecurrences } from '@/lib/services/recurrences';
 import { logger } from '@/lib/logger';
 
 export const runtime = 'nodejs';
@@ -21,9 +21,13 @@ export async function GET(req: Request) {
     return NextResponse.json({ error: 'start_date and end_date are required (ISO 8601)' }, { status: 400 });
   }
   try {
-    return NextResponse.json(await getSubscriptionsDashboard({ start, end }));
+    return NextResponse.json(await getRecurrences({
+      start, end,
+      platform: url.searchParams.get('platform'),
+      product: url.searchParams.get('product'),
+    }));
   } catch (err) {
-    logger.error({ err }, 'metrics/recurrences/subscriptions failed');
+    logger.error({ err }, 'metrics/recurrences failed');
     return NextResponse.json({ error: 'failed' }, { status: 500 });
   }
 }

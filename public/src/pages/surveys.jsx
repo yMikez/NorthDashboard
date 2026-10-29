@@ -1,10 +1,11 @@
-/* global React, Icon, fmtCurrency, fmtInt, fmtPct, fmtDateTime, fmtDateShort, SkelTableRows, Paginated, ReadState */
+/* global React, Icon, fmtCurrency, fmtInt, fmtPct, fmtDateTime, fmtDateShort, SkelTableRows, Paginated, ReadState, SvDispatch */
 /* Aba Pesquisas — quiz pós-compra (fim do tratamento). Uma pesquisa por
    produto (slug próprio em checkin.healthnwellnes.com), cada uma com teste
    A/B opcional. Seções: visão geral (funil, dia a dia, todas as pesquisas),
    vendas (tela final, botão, público, quando abriu, canal), respostas (cada
-   pergunta e resposta → compra), testes A/B, fila do CS e, pro admin,
-   configuração (ofertas, textos, pesquisa nova, link de teste).
+   pergunta e resposta → compra), testes A/B, fila do CS, disparos (lista de
+   quem recebe o link, em surveyDispatch.jsx) e, pro admin, configuração
+   (ofertas, textos, pesquisa nova, link de teste).
    Período = quando cada coisa aconteceu (link gerado, enviado, aberto,
    respondido, comprado); testes A/B têm o período deles.
    API: GET/PATCH /api/metrics/surveys · /api/admin/surveys/{variants,experiments,invites} */
@@ -1416,6 +1417,7 @@ const SV_SECTIONS = [
   { id: 'respostas', label: 'Respostas' },
   { id: 'ab', label: 'Testes A/B' },
   { id: 'cs', label: 'CS' },
+  { id: 'disparos', label: 'Disparos' },
   { id: 'config', label: 'Configurar', admin: true },
 ];
 
@@ -1669,6 +1671,8 @@ function SurveysPage({ filters, user }) {
       {sec === 'ab' && <SvExperiments key={d.variant} d={d} current={current} admin={admin} onChanged={refresh}/>}
 
       {sec === 'cs' && <SvCsQueue rows={d.csQueue} onChanged={refresh}/>}
+
+      {sec === 'disparos' && <SvDispatch/>}
 
       {sec === 'config' && admin && (<>
         <SvVariantEditor key={d.variant} slug={d.variant} experiment={current.experiment} onSaved={refresh}/>
