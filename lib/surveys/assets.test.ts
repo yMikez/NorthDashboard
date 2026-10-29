@@ -28,6 +28,31 @@ describe('fotos da pesquisa', () => {
     expect(sanitizeVariantConfig({ productName: 'X', image: 'https://evil.example/x.png' })).toMatchObject({ ok: false });
   });
 
+  it('textos da tela final reescritos valem por público (e o de quem tomou todo dia)', () => {
+    const res = sanitizeVariantConfig({
+      productName: 'NeuroRecall',
+      fullPlanFrom: 6,
+      offers: { kits: { 6: { url: 'https://vupim.com/c/6', price: 234 } } },
+      copy: {
+        'end.oferta.title': 'Finish strong, {nome}',
+        'end.oferta.title@completo': 'Six more months of focus',
+        'end.oferta.body@completo_constante': 'Daily streak text',
+        'end.oferta.cta': 'Get my {kit} bottles',
+      },
+    });
+    if (!res.ok) throw new Error(res.error);
+    const page = (bottles: number) => renderSurveyPage({
+      cfg: res.config, ctx: { firstName: 'Ann', bottles }, slug: 'neurorecall', token: '', preview: true,
+      answers: {}, outcome: 'oferta', couponPct: null, followUp: false,
+    });
+    expect(page(3)).toContain('Finish strong, Ann');
+    expect(page(6)).toContain('Six more months of focus');
+    expect(page(6)).toContain('Daily streak text');
+    expect(page(3)).toContain('Get my 6 bottles');
+    // O 6+ tem botão padrão próprio: o campo "6+" do editor é que muda ele.
+    expect(page(6)).toContain('Keep going for');
+  });
+
   it('a página mostra a foto enviada', () => {
     const html = renderSurveyPage({
       cfg: { productName: 'NeuroRecall', image: '/api/survey/asset/cmvsx1abc000001' },

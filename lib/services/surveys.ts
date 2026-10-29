@@ -116,14 +116,31 @@ async function previewConfig(variant: SurveyVariant, p?: PreviewArm): Promise<{ 
   return arm && exp ? { cfg: armConfig(base, arm), exp: exp.id, arm: arm.key } : { cfg: base, exp: null, arm: null };
 }
 
-/** Pré-visualização pro dash: dados de exemplo, nada é gravado. ?bottles=6 mostra o público completo. */
-export async function surveyPreviewHtml(slug: string, bottles?: unknown, p?: PreviewArm): Promise<string | null> {
+/** Tela final pra abrir direto na pré-visualização: cs | recorrencia | oferta | obrigado | cupom10… */
+function previewEnd(raw: unknown): { outcome: OutcomeDecision['outcome']; couponPct: number | null } | null {
+  if (typeof raw !== 'string') return null;
+  if (['cs', 'recorrencia', 'oferta', 'obrigado'].includes(raw)) return { outcome: raw as OutcomeDecision['outcome'], couponPct: null };
+  const m = /^cupom(\d{1,2})$/.exec(raw);
+  return m ? { outcome: 'cupom', couponPct: Number(m[1]) } : null;
+}
+
+/**
+ * Pré-visualização pro dash: dados de exemplo, nada é gravado. ?bottles=6
+ * mostra o público completo; `end` abre direto numa tela final e `daily`
+ * simula quem tomou todo dia (o texto "constante" do público 6+).
+ */
+export async function surveyPreviewHtml(
+  slug: string, bottles?: unknown, p?: PreviewArm, view?: { end?: unknown; daily?: boolean },
+): Promise<string | null> {
   const variant = await db.surveyVariant.findUnique({ where: { slug } });
   if (!variant) return null;
   const { cfg, exp, arm } = await previewConfig(variant, p);
+  const end = previewEnd(view?.end);
   return renderSurveyPage({
     cfg, ctx: { firstName: 'John', bottles: previewBottles(cfg, bottles) },
-    slug, token: '', preview: true, answers: {}, outcome: null, couponPct: null, followUp: false,
+    slug, token: '', preview: true,
+    answers: view?.daily ? { q3: 'todo_dia' } : {},
+    outcome: end?.outcome ?? null, couponPct: end?.couponPct ?? null, followUp: false,
     previewArm: exp && arm ? { exp, arm } : null,
   });
 }

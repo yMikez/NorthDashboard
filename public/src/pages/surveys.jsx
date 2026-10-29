@@ -326,7 +326,8 @@ const SV_INTRO_FIELDS = [
   { key: 'intro.atalho', label: 'Link de atalho (vai direto pro pedido)', who: 'todos', rows: 1 },
 ];
 const SV_INTRO_KEYS = new Set(SV_INTRO_FIELDS.map((f) => f.key));
-const svIsIntro = (key) => SV_INTRO_KEYS.has(key) || key.split('@')[0].startsWith('intro.');
+// Textos com campo próprio (página inicial, telas finais, letra miúda e planos): fora da lista genérica.
+const svIsStructured = (key) => SV_INTRO_KEYS.has(key) || /^(intro|end|fine|plans)\./.test(key.split('@')[0]);
 
 function SvIntroFields({ intro, defaults, onChange }) {
   const area = { ...SV_INPUT, resize: 'vertical', fontFamily: 'inherit' };
@@ -357,6 +358,115 @@ function SvIntroFields({ intro, defaults, onChange }) {
       <div style={{ fontSize: 11, color: 'var(--fg5)', marginTop: 6 }}>
         Vazio = texto padrão (o cinza dentro do campo). Variáveis: {'{nome} {produto} {frascos} {plano} {dias} {total}'} — sem o primeiro nome do cliente, a frase se ajusta sozinha.
       </div>
+    </div>
+  );
+}
+
+// Telas finais: a oferta que leva ao botão do checkout (por público) e as telas sem oferta.
+const SV_END_SCREENS = [
+  { id: 'oferta', label: 'Kit de recompra', desc: 'O caminho padrão: o kit que completa o plano, no preço de recompra.', fields: ['title', 'body', 'cta', 'alt'] },
+  { id: 'recorrencia', label: 'Assinatura', desc: 'Quem pediu "1 frasco por mês" ou clicou no atalho da página inicial.', fields: ['title', 'body', 'cta', 'alt'] },
+  { id: 'cupom', label: 'Kit com cupom', desc: 'Objeção de preço ou hesitação: o mesmo kit com 10, 15 ou 20% (só aparece com código de cupom cadastrado). Os textos valem pras três faixas; {desconto} vira o % de cada uma.', fields: ['title', 'body', 'cta', 'alt'] },
+  { id: 'obrigado', label: 'Agradecimento', desc: 'Sem oferta cadastrada, ou depois de "Not now" na oferta.', fields: ['title', 'body', 'followup'], single: true },
+  { id: 'cs', label: 'CS (sem oferta)', desc: 'Nota 1, ou parou por médico/mal-estar: só agradece e avisa que o CS liga em até 24h.', fields: ['title', 'body'], single: true },
+];
+const SV_END_LABEL = {
+  title: 'Título', body: 'Texto', cta: 'Botão de compra', alt: 'Link alternativo (embaixo do botão)',
+  followup: 'Linha extra (quem marcou "ver mais progresso antes")',
+};
+const SV_FINE_FIELDS = [
+  { key: 'end.dispensar', label: 'Link de recusar a oferta' },
+  { key: 'fine.assinatura', label: 'Letra miúda sob o botão · assinatura' },
+  { key: 'fine.kit', label: 'Letra miúda sob o botão · kit recorrente' },
+  { key: 'fine.kit_unica', label: 'Letra miúda sob o botão · kit de compra única' },
+  { key: 'plans.title', label: 'Link que abre a lista de planos' },
+  { key: 'plans.assinatura', label: 'Lista de planos · assinatura' },
+  { key: 'plans.kit', label: 'Lista de planos · kit recorrente ({n} e {every})' },
+  { key: 'plans.kit_unica', label: 'Lista de planos · kit de compra única ({n})' },
+  { key: 'plans.best', label: 'Selo do melhor preço' },
+  { key: 'plans.per', label: 'Preço por frasco na lista ({preco})' },
+];
+const SV_VARS = [
+  ['{nome}', 'primeiro nome'], ['{produto}', 'nome do produto'], ['{frascos}', 'frascos que comprou'],
+  ['{plano}', 'meses do plano (6)'], ['{dias}', 'dias de uso'], ['{kit}', 'frascos do kit oferecido'],
+  ['{preco_kit}', 'preço do kit'], ['{preco_pote}', 'preço por frasco no kit'], ['{preco_regular_pote}', 'preço normal por frasco (front)'],
+  ['{preco_1o}', '1ª cobrança da assinatura'], ['{preco_mes}', 'assinatura por mês'], ['{assinatura_frase}', 'frase pronta com o preço da assinatura'],
+  ['{assinatura_curto}', 'preço curto da assinatura'], ['{cobranca_kit}', 'ciclo do kit (ex.: every 2 months)'], ['{cupom}', 'código do cupom'],
+  ['{desconto}', '% do cupom'], ['{preco_cupom}', 'preço do kit com cupom'], ['{validade}', 'dias que o cupom fica reservado'],
+];
+
+function SvVarsHelp() {
+  return (
+    <details style={{ marginTop: 8 }}>
+      <summary style={{ fontSize: 11.5, color: 'var(--fg4)', cursor: 'pointer' }}>Variáveis que dá pra usar nos textos</summary>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: '4px 14px', marginTop: 6, fontSize: 11.5 }}>
+        {SV_VARS.map(([v, d]) => <span key={v}><span className="mono">{v}</span> <span style={{ color: 'var(--fg5)' }}>{d}</span></span>)}
+      </div>
+    </details>
+  );
+}
+
+function svTextField(texts, defaults, onChange, key, label, rows) {
+  const D = defaults || {};
+  const area = { ...SV_INPUT, resize: 'vertical', fontFamily: 'inherit', minHeight: rows > 1 ? 22 * rows + 14 : 34 };
+  return (
+    <label key={key} style={{ display: 'block' }}>
+      <span style={SV_LABEL}>{label}</span>
+      <textarea style={area} rows={rows} value={texts[key] || ''} onChange={(e) => onChange({ ...texts, [key]: e.target.value })}
+        placeholder={D[key] ?? (texts[key.split('@')[0]] || D[key.split('@')[0]]) ?? ''} aria-label={label}/>
+    </label>
+  );
+}
+
+/** Uma tela final por vez; nas de oferta, 2–3 frascos × 6+ (e o texto de quem tomou todo dia). */
+function SvEndFields({ texts, defaults, onChange, previewBase, cupomPct }) {
+  const [screen, setScreen] = useStateSv('oferta');
+  const sc = SV_END_SCREENS.find((x) => x.id === screen);
+  const rowsOf = (f) => (f === 'body' ? 5 : f === 'title' ? 2 : 1);
+  const hasDaily = (f) => (defaults || {})[`end.${sc.id}.${f}@completo_constante`] != null;
+  const field = (key, label, rows) => svTextField(texts, defaults, onChange, key, label, rows);
+  const endParam = sc.id === 'cupom' ? (cupomPct ? `cupom${cupomPct}` : null) : sc.id;
+  const views = sc.single ? [['3', '', 'abrir']] : [['3', '', '2–3 frascos'], ['6', '', '6+'], ['6', '&daily=1', '6+ que tomou todo dia']];
+  return (
+    <div>
+      <div className="seg" style={{ flexWrap: 'wrap', height: 'auto', marginBottom: 8, width: 'fit-content' }} role="group" aria-label="Tela final">
+        {SV_END_SCREENS.map((x) => (
+          <button key={x.id} type="button" style={{ height: 28 }} className={x.id === screen ? 'is-active' : ''} onClick={() => setScreen(x.id)}>{x.label}</button>
+        ))}
+      </div>
+      <div style={{ fontSize: 12, color: 'var(--fg3)', marginBottom: 10 }}>{sc.desc}</div>
+      {sc.single ? (
+        <div style={{ display: 'grid', gap: 8 }}>{sc.fields.map((f) => field(`end.${sc.id}.${f}`, SV_END_LABEL[f], rowsOf(f)))}</div>
+      ) : (
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: 14 }}>
+          {[['', 'Quem comprou 2–3 frascos (completar o plano)'], ['@completo', 'Quem comprou 6+ frascos (constância)']].map(([seg, title]) => (
+            <div key={seg || 'base'} style={{ display: 'grid', gap: 8, alignContent: 'start' }}>
+              <div style={{ fontSize: 11.5, fontWeight: 600, color: 'var(--fg3)' }}>{title}</div>
+              {sc.fields.flatMap((f) => [
+                field(`end.${sc.id}.${f}${seg}`, SV_END_LABEL[f], rowsOf(f)),
+                ...(seg && f === 'body' && hasDaily(f) ? [field(`end.${sc.id}.body@completo_constante`, 'Texto · quem tomou todo dia', 5)] : []),
+              ])}
+            </div>
+          ))}
+        </div>
+      )}
+      {previewBase && (
+        <div style={{ fontSize: 12, marginTop: 8, display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center' }}>
+          <span style={{ color: 'var(--fg4)' }}>Ver esta tela (versão salva):</span>
+          {endParam ? views.map(([b, extra, label]) => (
+            <a key={label} href={`${previewBase}&bottles=${b}&end=${endParam}${extra}`} target="_blank" rel="noopener">{label}</a>
+          )) : <span style={{ color: 'var(--fg5)' }}>cadastre um código de cupom pra ver esta tela</span>}
+        </div>
+      )}
+      <SvVarsHelp/>
+    </div>
+  );
+}
+
+function SvFineFields({ texts, defaults, onChange }) {
+  return (
+    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: 10 }}>
+      {SV_FINE_FIELDS.map((f) => svTextField(texts, defaults, onChange, f.key, f.label, f.key.startsWith('fine.') ? 2 : 1))}
     </div>
   );
 }
@@ -486,8 +596,8 @@ function svCfgDraft(c) {
     q4: (c.q4 || []).map((o) => ({ id: o.id, label: o.label })),
     // Campos sem formulário passam como estão.
     rest: { planBottles: c.planBottles, daysPerBottle: c.daysPerBottle, trackingParam: c.trackingParam, couponParam: c.couponParam },
-    intro: Object.fromEntries(Object.entries(c.copy || {}).filter(([k]) => svIsIntro(k))),
-    copy: Object.entries(c.copy || {}).filter(([k]) => !svIsIntro(k)).map(([k, text]) => ({ base: k.split('@')[0], seg: k.split('@')[1] || '', text })),
+    texts: Object.fromEntries(Object.entries(c.copy || {}).filter(([k]) => svIsStructured(k))),
+    copy: Object.entries(c.copy || {}).filter(([k]) => !svIsStructured(k)).map(([k, text]) => ({ base: k.split('@')[0], seg: k.split('@')[1] || '', text })),
   };
 }
 
@@ -511,14 +621,14 @@ function svCfgOf(d) {
     q4: d.q4.filter((o) => o.label.trim()).map((o) => ({ id: o.id || svSlugId(o.label, taken), label: o.label.trim() })),
     copy: {
       ...Object.fromEntries(d.copy.filter((r) => r.base && r.text.trim()).map((r) => [r.seg ? `${r.base}@${r.seg}` : r.base, r.text.trim()])),
-      ...Object.fromEntries(Object.entries(d.intro || {}).filter(([, t]) => t && t.trim()).map(([k, t]) => [k, t.trim()])),
+      ...Object.fromEntries(Object.entries(d.texts || {}).filter(([, t]) => t && t.trim()).map(([k, t]) => [k, t.trim()])),
     },
   };
 }
 
 /** Frases reescritas: escolhe a frase, o público e escreve por cima do padrão. */
 function SvCopyRows({ rows, defaults, onChange }) {
-  const keys = Object.keys(defaults || {}).filter((k) => !k.includes('@') && !svIsIntro(k));
+  const keys = Object.keys(defaults || {}).filter((k) => !k.includes('@') && !svIsStructured(k));
   const groups = [];
   for (const k of keys) {
     const g = k.split('.')[0];
@@ -562,7 +672,7 @@ function SvCopyRows({ rows, defaults, onChange }) {
  * Campos da configuração. armMode = versão de teste A/B: público e rastreio
  * são da pesquisa e não aparecem.
  */
-function SvConfigFields({ draft, onChange, defaults, armMode }) {
+function SvConfigFields({ draft, onChange, defaults, armMode, previewBase }) {
   const set = (patch) => onChange((d) => ({ ...d, ...patch }));
   const setRow = (key, i, patch) => onChange((d) => ({ ...d, [key]: d[key].map((r, j) => (j === i ? { ...r, ...patch } : r)) }));
   const addRow = (key, row) => onChange((d) => ({ ...d, [key]: [...d[key], row] }));
@@ -588,7 +698,7 @@ function SvConfigFields({ draft, onChange, defaults, armMode }) {
       <SvImagePicker value={draft.image} onChange={(image) => set({ image })}/>
 
       <div style={SV_H}>Página inicial <span style={{ fontWeight: 400, color: 'var(--fg5)' }}>· a primeira tela que o cliente vê ao abrir o link</span></div>
-      <SvIntroFields intro={draft.intro || {}} defaults={defaults} onChange={(intro) => set({ intro })}/>
+      <SvIntroFields intro={draft.texts || {}} defaults={defaults} onChange={(texts) => set({ texts })}/>
 
       <div style={SV_H}>Assinatura de 1 frasco por mês</div>
       <div style={{ display: 'grid', gridTemplateColumns: 'minmax(220px, 3fr) repeat(2, minmax(110px, 1fr))', gap: 10 }}>
@@ -642,6 +752,13 @@ function SvConfigFields({ draft, onChange, defaults, armMode }) {
         <button className="btn btn-ghost" onClick={() => addRow('fronts', { n: '', price: '' })}>+ Preço</button>
       </div>
 
+      <div style={SV_H}>Tela final <span style={{ fontWeight: 400, color: 'var(--fg5)' }}>· a oferta que leva ao botão do checkout; escolha a tela, vazio = texto padrão</span></div>
+      <SvEndFields texts={draft.texts || {}} defaults={defaults} onChange={(texts) => set({ texts })} previewBase={previewBase}
+        cupomPct={(draft.coupons.find((c) => c.code && c.pct !== '') || {}).pct}/>
+
+      <div style={SV_H}>Letra miúda, lista de planos e recusa <span style={{ fontWeight: 400, color: 'var(--fg5)' }}>· aparecem nas telas de oferta</span></div>
+      <SvFineFields texts={draft.texts || {}} defaults={defaults} onChange={(texts) => set({ texts })}/>
+
       <div style={SV_H}>Pergunta 4 · o que a pessoa notou <span style={{ fontWeight: 400, color: 'var(--fg5)' }}>· opções do produto (em inglês); "Nada ainda" e "Cedo demais" entram sempre</span></div>
       <div style={{ display: 'grid', gap: 6 }}>
         {draft.q4.map((o, i) => (
@@ -654,7 +771,7 @@ function SvConfigFields({ draft, onChange, defaults, armMode }) {
         <div><button className="btn btn-ghost" onClick={() => addRow('q4', { id: '', label: '' })} disabled={draft.q4.length >= 8}>+ Opção</button></div>
       </div>
 
-      <div style={SV_H}>Frases reescritas <span style={{ fontWeight: 400, color: 'var(--fg5)' }}>· opcional; o que não estiver aqui usa o texto padrão</span></div>
+      <div style={SV_H}>Perguntas e outros textos <span style={{ fontWeight: 400, color: 'var(--fg5)' }}>· opcional; o que não estiver aqui usa o texto padrão</span></div>
       <SvCopyRows rows={draft.copy} defaults={defaults} onChange={(copy) => set({ copy })}/>
     </div>
   );
@@ -726,7 +843,7 @@ function SvVariantEditor({ slug, experiment, onSaved }) {
               <input type="checkbox" checked={page.active} onChange={(e) => setPage({ ...page, active: e.target.checked })}/> Pesquisa no ar (gera convites)
             </label>
           </div>
-          <SvConfigFields draft={draft} onChange={setDraft} defaults={state.defaults}/>
+          <SvConfigFields draft={draft} onChange={setDraft} defaults={state.defaults} previewBase={`/api/survey/page?slug=${encodeURIComponent(slug)}&preview=1`}/>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 14, flexWrap: 'wrap' }}>
             <button className="btn" onClick={save} disabled={saving}>{saving ? 'Salvando…' : 'Salvar e publicar'}</button>
             <span style={{ fontSize: 11.5, color: 'var(--fg5)' }}>Versão atual: {state.version}. Cada resposta guarda a versão que viu.</span>
@@ -1027,7 +1144,8 @@ function SvExperimentEditor({ slug, expId, onDone, onCancel }) {
             </div>
             {i > 0 && open === i && a.draft && (
               <div style={{ marginTop: 4 }}>
-                <SvConfigFields draft={a.draft} onChange={setDraft(i)} defaults={state.defaults} armMode/>
+                <SvConfigFields draft={a.draft} onChange={setDraft(i)} defaults={state.defaults} armMode
+                  previewBase={editing ? `/api/survey/page?slug=${encodeURIComponent(slug)}&preview=1&exp=${encodeURIComponent(expId)}&arm=${'ABCD'[i]}` : null}/>
               </div>
             )}
           </div>
