@@ -576,7 +576,7 @@ function fetchLeads(filters, { segment = 'all', sort = 'ltv', group = 'channel',
     segment, sort, group, page: String(page), q: q || null,
   });
 }
-// Aba Pesquisas (quiz pós-compra). Período = data do convite; os outros
+// Aba Pesquisas (quiz pós-compra). Período = quando cada coisa aconteceu; os outros
 // filtros globais não se aplicam (a variante já é o produto).
 function fetchSurveys(filters, variant, { tests = false } = {}) {
   return fetchJSON('/api/metrics/surveys', {

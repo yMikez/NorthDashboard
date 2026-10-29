@@ -1,5 +1,6 @@
 // GET   /api/metrics/surveys?variant=&start_date=&end_date=   aba Pesquisas
-//       (período = data do convite; &tests=1 inclui os convites de teste)
+//       (período = quando cada coisa aconteceu: gerado, enviado, aberto, respondido,
+//       comprado; &tests=1 inclui os convites de teste)
 // PATCH /api/metrics/surveys  { id, status: aberto|ligado|resolvido, note? }  fila do CS
 
 import { NextResponse } from 'next/server';

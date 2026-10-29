@@ -5,7 +5,8 @@
    vendas (tela final, botão, público, quando abriu, canal), respostas (cada
    pergunta e resposta → compra), testes A/B, fila do CS e, pro admin,
    configuração (ofertas, textos, pesquisa nova, link de teste).
-   Período = data do convite; testes A/B têm o período deles.
+   Período = quando cada coisa aconteceu (link gerado, enviado, aberto,
+   respondido, comprado); testes A/B têm o período deles.
    API: GET/PATCH /api/metrics/surveys · /api/admin/surveys/{variants,experiments,invites} */
 
 const { useState: useStateSv, useEffect: useEffectSv } = React;
@@ -112,6 +113,12 @@ function SvSalesTable({ rows, baseLabel, cols = ['base', 'completed', 'clicked',
   );
 }
 
+/**
+ * % só quando faz sentido: com o período por data do evento, um passo pode ter
+ * mais gente que o anterior (link gerado ontem e aberto hoje) — aí mostra —.
+ */
+const svShare = (n, of) => (n && of && n <= of ? fmtPct(n / of, 0) : '—');
+
 /** Do convite à compra: cada passo com % do anterior e % dos convites. */
 function SvFunnel({ k }) {
   const steps = [
@@ -138,8 +145,8 @@ function SvFunnel({ k }) {
               <span style={{ display: 'block', height: '100%', width: `${(s.n / max) * 100}%`, background: s.money ? 'var(--money)' : 'var(--accent)', borderRadius: 4 }}/>
             </span>
             <span className="mono" style={{ textAlign: 'right', color: s.money && s.n ? 'var(--money)' : 'var(--fg1)', fontWeight: s.money ? 600 : 400 }}>{fmtInt(s.n)}</span>
-            <span className="mono" style={{ textAlign: 'right', color: 'var(--fg4)' }}>{i && prev ? fmtPct(s.n / prev, 0) : '—'}</span>
-            <span className="mono" style={{ textAlign: 'right', color: 'var(--fg5)' }}>{i && k.invites ? fmtPct(s.n / k.invites, 0) : '—'}</span>
+            <span className="mono" style={{ textAlign: 'right', color: 'var(--fg4)' }}>{svShare(i ? s.n : 0, prev)}</span>
+            <span className="mono" style={{ textAlign: 'right', color: 'var(--fg5)' }}>{svShare(i ? s.n : 0, k.invites)}</span>
           </div>
         );
       })}
@@ -1471,12 +1478,12 @@ function SurveysPage({ filters, user }) {
   const hasArms = d.recent.some((r) => r.arm);
 
   const kpis = [
-    { l: 'Convites', v: fmtInt(k.invites), s: `${fmtInt(k.sent)} enviados` },
-    { l: 'Abriram', v: fmtInt(k.opened), s: k.invites ? `${fmtPct(k.opened / k.invites, 0)} dos convites` : '—' },
-    { l: 'Concluíram', v: fmtInt(k.completed), s: k.opened ? `${fmtPct(k.completed / k.opened, 0)} de quem abriu` : '—' },
+    { l: 'Links gerados', v: fmtInt(k.invites), s: `${fmtInt(k.sent)} marcados como enviados` },
+    { l: 'Abriram', v: fmtInt(k.opened), s: svShare(k.opened, k.sent) !== '—' ? `${svShare(k.opened, k.sent)} dos enviados` : 'links abertos no período' },
+    { l: 'Concluíram', v: fmtInt(k.completed), s: svShare(k.completed, k.opened) !== '—' ? `${svShare(k.completed, k.opened)} de quem abriu` : 'pesquisas concluídas no período' },
     { l: 'Nota média', v: k.satisfactionAvg != null ? `${k.satisfactionAvg.toFixed(1)}★` : '—', s: 'de 1 a 5' },
-    { l: 'Clicaram no checkout', v: fmtInt(k.checkoutClicks), s: k.completed ? `${fmtPct(k.checkoutClicks / k.completed, 0)} de quem concluiu` : '—' },
-    { l: 'Compraram', v: fmtInt(k.purchases), s: k.purchases ? `${svUsd(k.revenueUsd)} · ${fmtPct(k.purchases / Math.max(1, k.opened), 1)} de quem abriu` : 'venda volta pelo postback', money: true },
+    { l: 'Clicaram no checkout', v: fmtInt(k.checkoutClicks), s: svShare(k.checkoutClicks, k.completed) !== '—' ? `${svShare(k.checkoutClicks, k.completed)} de quem concluiu` : 'cliques no período' },
+    { l: 'Compraram', v: fmtInt(k.purchases), s: k.purchases ? `${svUsd(k.revenueUsd)} no período` : 'venda volta pelo postback', money: true },
   ];
 
   return (
@@ -1549,16 +1556,16 @@ function SurveysPage({ filters, user }) {
         </div>
 
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(380px, 1fr))', gap: 12 }}>
-          <SvPanel title="Do convite à compra" sub="Cada passo: quantas pessoas, % do passo anterior e % dos convites. Abriram é sobre os enviados (ou os convites, se ninguém marcou envio).">
+          <SvPanel title="Do convite à compra" sub="Quantas pessoas fizeram cada passo no período (link gerado antes conta quando a pessoa age no período). % do passo anterior e dos links gerados, quando faz sentido.">
             <SvFunnel k={k}/>
           </SvPanel>
-          <SvPanel title="Dia a dia" sub="Por dia do evento (BRT), dos convites do período. Passando de 45 dias, agrupa por semana.">
+          <SvPanel title="Dia a dia" sub="Por dia (BRT) em que aconteceu. Passando de 45 dias, agrupa por semana.">
             <SvDaily rows={d.daily}/>
           </SvPanel>
         </div>
 
         {d.compare.length > 1 && (
-          <SvPanel title="Todas as pesquisas" sub="Convites criados no período, por pesquisa. % sobre quem abriu.">
+          <SvPanel title="Todas as pesquisas" sub="Por pesquisa: links gerados e aberturas no período; concluíram, clicaram e compraram = o que veio de quem abriu no período.">
             <SvSalesTable rows={d.compare.map((r) => ({ ...r, label: r.active ? r.label : `${r.label} (desligada)` }))} baseLabel="Abriram"
               cols={['invited', 'base', 'completed', 'clicked', 'purchases', 'revenue', 'rpv']}/>
           </SvPanel>
@@ -1573,13 +1580,13 @@ function SurveysPage({ filters, user }) {
           <SvPanel title="Botão clicado → venda" sub="Em qual checkout a pessoa clicou por último (inclui quem trocou de plano em “See all plans”). % sobre quem clicou.">
             <SvSalesTable rows={d.offerSales} baseLabel="Clicaram" cols={['base', 'purchases', 'revenue', 'rpv']} empty="Ninguém clicou no checkout no período."/>
           </SvPanel>
-          <SvPanel title="Público" sub="Quem comprou 2–3 frascos (copy de completar o plano) × 6+ (copy de constância). % sobre quem abriu.">
+          <SvPanel title="Público" sub="Quem comprou 2–3 frascos (copy de completar o plano) × 6+ (copy de constância). % sobre quem abriu no período.">
             <SvSalesTable rows={d.segments} baseLabel="Abriram" cols={['invited', 'base', 'completed', 'clicked', 'purchases', 'revenue']}/>
           </SvPanel>
-          <SvPanel title="Quando abriu" sub="Quantos dias faltavam pro estoque acabar quando a pessoa abriu o link — mostra o melhor momento de disparar. % sobre quem abriu.">
+          <SvPanel title="Quando abriu" sub="Quantos dias faltavam pro estoque acabar quando a pessoa abriu o link — mostra o melhor momento de disparar. % sobre quem abriu no período.">
             <SvSalesTable rows={d.timing} baseLabel="Abriram" cols={['base', 'completed', 'clicked', 'purchases', 'revenue']}/>
           </SvPanel>
-          <SvPanel title="Canal" sub="Por onde o convite saiu (quem dispara marca o canal). % sobre quem abriu.">
+          <SvPanel title="Canal" sub="Por onde o convite saiu (quem dispara marca o canal). % sobre quem abriu no período.">
             <SvSalesTable rows={d.channels} baseLabel="Abriram" cols={['invited', 'base', 'completed', 'clicked', 'purchases', 'revenue']}/>
           </SvPanel>
         </div>
@@ -1590,7 +1597,7 @@ function SurveysPage({ filters, user }) {
 
       {sec === 'respostas' && (<>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(340px, 1fr))', gap: 12 }}>
-          <SvPanel title="Onde as pessoas param" sub="Quantos chegaram em cada pergunta. % sobre quem abriu o link.">
+          <SvPanel title="Onde as pessoas param" sub="De quem respondeu no período, quantos chegaram em cada pergunta. % sobre quem abriu no período.">
             <SvBars items={d.steps} total={k.opened}/>
           </SvPanel>
           <SvPanel title="Tela final" sub="Decidida pelas respostas: CS (nota 1, médico, mal-estar) → assinatura → kit com cupom (10/15/20% pela objeção) → kit no preço de recompra.">

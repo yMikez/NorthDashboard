@@ -979,7 +979,8 @@ function salesRow(id: string, label: string, rows: InvRow[], sales: SalesIndex, 
  */
 function breakdown(
   rows: InvRow[], keyOf: (i: InvRow) => string | string[] | null | undefined, label: (k: string) => string,
-  sales: SalesIndex, opts: { order?: readonly string[]; invited?: boolean } = {},
+  sales: SalesIndex,
+  opts: { order?: readonly string[]; base?: (i: InvRow) => boolean; invited?: (i: InvRow) => boolean } = {},
 ): SurveySalesRow[] {
   const groups = new Map<string, InvRow[]>();
   for (const i of rows) {
@@ -996,7 +997,8 @@ function breakdown(
     : [...groups.keys()].sort((a, b) => groups.get(b)!.length - groups.get(a)!.length);
   return keys.map((k) => {
     const g = groups.get(k)!;
-    return opts.invited ? salesRow(k, label(k), g.filter((i) => i.openedAt), sales, g.length) : salesRow(k, label(k), g, sales);
+    const base = opts.base ? g.filter(opts.base) : g;
+    return salesRow(k, label(k), base, sales, opts.invited ? g.filter(opts.invited).length : undefined);
   });
 }
 
@@ -1100,9 +1102,29 @@ export async function getSurveyDashboard(opts: {
   if (!variant) return empty;
   const cfg = cfgOf(variant);
 
-  // Todas as pesquisas do período (a comparação usa todas; o resto, só a escolhida).
+  // Período = QUANDO cada coisa aconteceu (link gerado, enviado, aberto,
+  // respondido, clicado, comprado), não a data em que o link foi gerado: um
+  // link de ontem aberto hoje conta em "Abriram" de hoje. A comparação usa
+  // todas as pesquisas; o resto, só a escolhida.
+  const range = { gte: opts.start, lte: opts.end };
+  const inRange = (d: Date | null | undefined) => d != null && d >= opts.start && d <= opts.end;
+  // Compra no período de quem não teve outro movimento nele (abriu ontem, comprou hoje).
+  const periodOrders = await dbRead.order.findMany({
+    where: { trackingId: { startsWith: SURVEY_TRACKING_PREFIX }, status: 'APPROVED', orderedAt: range },
+    select: { trackingId: true },
+  });
+  const boughtIds = [...new Set(periodOrders.map((o) => o.trackingId!.slice(SURVEY_TRACKING_PREFIX.length)))];
   const all = await db.surveyInvite.findMany({
-    where: { createdAt: { gte: opts.start, lte: opts.end }, ...testFilter },
+    where: {
+      ...testFilter,
+      OR: [
+        { createdAt: range }, { sentAt: range }, { openedAt: range },
+        { response: { is: { OR: [
+          { startedAt: range }, { completedAt: range }, { checkoutAt: range },
+          ...(boughtIds.length ? [{ id: { in: boughtIds } }] : []),
+        ] } } },
+      ],
+    },
     include: { response: true },
   });
   const invites = all.filter((i) => i.variantId === variant.id);
@@ -1117,14 +1139,27 @@ export async function getSurveyDashboard(opts: {
     : [];
   const sales = await surveySales([...all, ...expInvites].flatMap((i) => (i.response ? [i.response.id] : [])));
 
-  const responses = invites.map((i) => i.response).filter((r): r is SurveyResponse => r != null);
+  const created = (i: InvRow) => inRange(i.createdAt);
+  const openedIn = (i: InvRow) => inRange(i.openedAt);
+  const opened = invites.filter(openedIn);
+  const done = invites.filter((i) => inRange(i.response?.completedAt));
+  const clicked = invites.filter((i) => inRange(i.response?.checkoutAt));
+  // Respostas do período: começou ou concluiu no período.
+  const responses = invites
+    .filter((i) => i.response && (inRange(i.response.startedAt) || inRange(i.response.completedAt)))
+    .map((i) => i.response!);
   const ans = responses.map(answersOf);
-  const completed = responses.filter((r) => r.completedAt);
-  const opened = invites.filter((i) => i.openedAt);
-  const done = invites.filter((i) => i.response?.completedAt);
-  const clicked = invites.filter((i) => i.response?.checkoutAt);
+  const completed = done.map((i) => i.response!);
   const sat = ans.map((a) => a.q2).filter((n): n is number => typeof n === 'number');
-  const kpiSales = salesRow('all', 'all', invites, sales);
+  // Compra pela data do 1º pedido; receita pela data de cada pedido.
+  let periodPurchases = 0;
+  let periodRevenue = 0;
+  for (const i of invites) {
+    const sale = i.response ? sales.get(i.response.id) : undefined;
+    if (!sale) continue;
+    if (inRange(sale.firstAt)) periodPurchases++;
+    for (const o of sale.orders) if (inRange(o.at)) periodRevenue += o.usd;
+  }
 
   const stepCount = (pred: (a: SurveyAnswers) => boolean) => ans.filter(pred).length;
   const q4Labels: Record<string, string> = { ...Object.fromEntries(q4Options(cfg).map((o) => [o.id, o.label])), nada: 'Nada ainda', cedo: 'Cedo demais' };
@@ -1147,14 +1182,14 @@ export async function getSurveyDashboard(opts: {
     variants: variantsOut,
     variant: variant.slug,
     kpis: {
-      invites: invites.length,
-      sent: invites.filter((i) => i.sentAt).length,
+      invites: invites.filter(created).length,
+      sent: invites.filter((i) => inRange(i.sentAt)).length,
       opened: opened.length,
-      started: responses.length,
-      completed: completed.length,
-      checkoutClicks: kpiSales.clicked,
-      purchases: kpiSales.purchases,
-      revenueUsd: kpiSales.revenueUsd,
+      started: invites.filter((i) => inRange(i.response?.startedAt)).length,
+      completed: done.length,
+      checkoutClicks: clicked.length,
+      purchases: periodPurchases,
+      revenueUsd: round2(periodRevenue),
       satisfactionAvg: avg(sat),
     },
     steps: [
@@ -1179,9 +1214,11 @@ export async function getSurveyDashboard(opts: {
       lbl(LABELS.outcome), sales, { order: Object.keys(LABELS.outcome) }),
     offerSales: breakdown(clicked, (i) => i.response!.checkoutOutcome ?? 'kit', offerLabel, sales,
       { order: ['assinatura', ...Object.keys(cfg.offers?.kits ?? {}).map((n) => `kit:${n}`), 'cupom'] }),
-    segments: breakdown(invites, (i) => segmentOf(cfg, i.bottles), lbl(LABELS.segment), sales, { order: ['parcial', 'completo'], invited: true }),
+    segments: breakdown(invites.filter((i) => created(i) || openedIn(i)), (i) => segmentOf(cfg, i.bottles), lbl(LABELS.segment), sales,
+      { order: ['parcial', 'completo'], base: openedIn, invited: created }),
     timing: breakdown(opened, timingBucket, lbl(LABELS.timing), sales, { order: TIMING_ORDER }),
-    channels: breakdown(invites, (i) => i.channel || (i.sentAt ? 'outro' : 'nao_enviado'), lbl(LABELS.channel), sales, { invited: true }),
+    channels: breakdown(invites.filter((i) => created(i) || openedIn(i)), (i) => i.channel || (i.sentAt ? 'outro' : 'nao_enviado'), lbl(LABELS.channel), sales,
+      { base: openedIn, invited: created }),
     answerSales: [
       { id: 'q2', title: 'Satisfação (pergunta 2)', rows: breakdown(done, (i) => (doneAns(i).q2 != null ? String(doneAns(i).q2) : null), lbl(LABELS.q2), sales, { order: ['1', '2', '3', '4', '5'] }) },
       { id: 'q1', title: 'Por que não levou os 6 (pergunta 1)', rows: breakdown(done, (i) => doneAns(i).q1, lbl(LABELS.q1), sales, { order: Object.keys(LABELS.q1) }) },
@@ -1193,7 +1230,7 @@ export async function getSurveyDashboard(opts: {
     daily: dailySeries(invites, sales, opts.start, opts.end),
     compare: variants.map((v) => {
       const g = all.filter((i) => i.variantId === v.id);
-      return { ...salesRow(v.slug, v.name, g.filter((i) => i.openedAt), sales, g.length), active: v.active };
+      return { ...salesRow(v.slug, v.name, g.filter(openedIn), sales, g.filter(created).length), active: v.active };
     }),
     experiments: experiments.map((e) => experimentReport(e, cfg, expInvites, sales)),
 
@@ -1208,7 +1245,7 @@ export async function getSurveyDashboard(opts: {
       };
     }),
     recent: invites
-      .filter((i) => i.response)
+      .filter((i) => i.response && (inRange(i.response.startedAt) || inRange(i.response.updatedAt) || inRange(i.response.completedAt)))
       .sort((a, b) => (b.response!.updatedAt.getTime() - a.response!.updatedAt.getTime()))
       .slice(0, 200)
       .map((i) => {

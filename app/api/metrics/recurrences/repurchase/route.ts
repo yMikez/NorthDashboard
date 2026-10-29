@@ -58,7 +58,7 @@ export async function POST(req: Request) {
       const withinDays = Number(body.withinDays ?? 14) || 14;
       const results = [];
       for (const slug of await activeSurveySlugs(variant)) {
-        const res = await createSurveyInvites({ slug, withinDays });
+        const res = await createSurveyInvites({ slug, withinDays, limit: 5000 });
         if (res) results.push({ variant: res.variant, eligible: res.eligible, created: res.created });
       }
       logger.info({ results, withinDays, by: auth.user.email }, 'repurchase generated');

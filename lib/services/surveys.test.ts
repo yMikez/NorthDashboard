@@ -17,6 +17,7 @@ const mockDb = vi.hoisted(() => {
   });
   return {
     surveyVariant: {
+      findMany: vi.fn(async () => mem.variants),
       findUnique: vi.fn(async ({ where }: any) => mem.variants.find((v) => (where.slug ? v.slug === where.slug : v.id === where.id)) ?? null),
       findFirst: vi.fn(async ({ where }: any = {}) => mem.variants.find((v) => matches(v, where)) ?? null),
       update: vi.fn(async ({ where, data }: any) => {
@@ -32,6 +33,10 @@ const mockDb = vi.hoisted(() => {
       }),
     },
     surveyInvite: {
+      // Filtro de data fica pro código (o teste é justamente ele); aqui só o "teste ou não".
+      findMany: vi.fn(async ({ where }: any = {}) => mem.invites
+        .filter((i) => where?.isTest === undefined || (i.isTest ?? false) === where.isTest)
+        .map((i) => ({ ...i, response: i.response ?? null }))),
       findUnique: vi.fn(async ({ where }: any) => {
         const i = mem.invites.find((x) => x.token === where.token);
         if (!i) return null;
@@ -47,6 +52,8 @@ const mockDb = vi.hoisted(() => {
       }),
     },
     surveyExperiment: {
+      findMany: vi.fn(async ({ where }: any = {}) => mem.experiments.filter((e) =>
+        (!where?.status || e.status === where.status) && (!where?.variantId || e.variantId === where.variantId))),
       findFirst: vi.fn(async ({ where }: any) => mem.experiments.find((e) => matches(e, where)) ?? null),
       findUnique: vi.fn(async ({ where }: any) => {
         const e = byId(mem.experiments, where.id);
@@ -63,6 +70,8 @@ const mockDb = vi.hoisted(() => {
         return e;
       }),
     },
+    surveyResponse: { findMany: vi.fn(async () => []) },
+    order: { findMany: vi.fn(async () => []) },
     product: { count: vi.fn(async ({ where }: any) => (mem.families.has(where.family) ? 1 : 0)) },
     $transaction: vi.fn(async (ops: Promise<unknown>[]) => Promise.all(ops)),
   };
@@ -70,7 +79,7 @@ const mockDb = vi.hoisted(() => {
 vi.mock('../db', () => ({ db: mockDb, dbRead: mockDb }));
 
 import {
-  createSurveyExperiment, createSurveyVariant, surveyPageHtml, updateSurveyExperiment, updateSurveyVariant,
+  createSurveyExperiment, createSurveyVariant, getSurveyDashboard, surveyPageHtml, updateSurveyExperiment, updateSurveyVariant,
 } from './surveys';
 
 const CFG = {
@@ -197,5 +206,27 @@ describe('pesquisa nova', () => {
     expect(await updateSurveyVariant('neurorecall-2', { active: true })).toMatchObject({ ok: false, status: 409 });
     await updateSurveyVariant('neurorecall', { active: false });
     expect(await updateSurveyVariant('neurorecall-2', { active: true })).toMatchObject({ ok: true });
+  });
+});
+
+describe('aba Pesquisas: período pela data de cada coisa', () => {
+  it('link gerado ontem e aberto hoje conta nas aberturas de hoje (e não some do dia de ontem)', async () => {
+    Object.assign(mem.invites[0], {
+      createdAt: new Date('2026-10-28T22:00:00Z'), sentAt: new Date('2026-10-28T23:00:00Z'),
+      openedAt: new Date('2026-10-29T12:00:00Z'), isTest: false, channel: 'sms',
+      response: {
+        id: 'r1', answers: { q2: 4 }, startedAt: new Date('2026-10-29T12:01:00Z'), updatedAt: new Date('2026-10-29T12:02:00Z'),
+        completedAt: new Date('2026-10-29T12:02:00Z'), outcome: 'oferta', couponPct: null, checkoutAt: null, checkoutOutcome: null,
+      },
+    });
+    // Dia em BRT: 03:00 UTC até 02:59 UTC do dia seguinte.
+    const today = await getSurveyDashboard({ slug: 'neurorecall', start: new Date('2026-10-29T03:00:00Z'), end: new Date('2026-10-30T02:59:59Z') });
+    expect(today.kpis).toMatchObject({ invites: 0, sent: 0, opened: 1, started: 1, completed: 1, satisfactionAvg: 4 });
+    expect(today.outcomes.find((o) => o.id === 'oferta')?.count).toBe(1);
+    expect(today.recent).toHaveLength(1);
+
+    const yesterday = await getSurveyDashboard({ slug: 'neurorecall', start: new Date('2026-10-28T03:00:00Z'), end: new Date('2026-10-29T02:59:59Z') });
+    expect(yesterday.kpis).toMatchObject({ invites: 1, sent: 1, opened: 0, completed: 0 });
+    expect(yesterday.channels.find((c) => c.id === 'sms')).toMatchObject({ invited: 1, base: 0 });
   });
 });
