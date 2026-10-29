@@ -364,8 +364,8 @@ function SvIntroFields({ intro, defaults, onChange }) {
 
 // Telas finais: a oferta que leva ao botão do checkout (por público) e as telas sem oferta.
 const SV_END_SCREENS = [
-  { id: 'oferta', label: 'Kit de recompra', desc: 'O caminho padrão: o kit que completa o plano, no preço de recompra.', fields: ['title', 'body', 'cta', 'alt'] },
-  { id: 'recorrencia', label: 'Assinatura', desc: 'Quem pediu "1 frasco por mês" ou clicou no atalho da página inicial.', fields: ['title', 'body', 'cta', 'alt'] },
+  { id: 'oferta', label: 'Kit de recompra', desc: 'Quem vê: a maioria — quem não pediu "1 frasco por mês" e não caiu no cupom. Botão = kit no preço de recompra; link alternativo = assinatura.', fields: ['title', 'body', 'cta', 'alt'] },
+  { id: 'recorrencia', label: 'Assinatura', desc: 'Quem vê: quem marcou "1 frasco por mês" na pergunta 5 ou clicou no atalho da página inicial. Botão = assinatura; link alternativo = kit.', fields: ['title', 'body', 'cta', 'alt'] },
   { id: 'cupom', label: 'Kit com cupom', desc: 'Objeção de preço ou hesitação: o mesmo kit com 10, 15 ou 20% (só aparece com código de cupom cadastrado). Os textos valem pras três faixas; {desconto} vira o % de cada uma.', fields: ['title', 'body', 'cta', 'alt'] },
   { id: 'obrigado', label: 'Agradecimento', desc: 'Sem oferta cadastrada, ou depois de "Not now" na oferta.', fields: ['title', 'body', 'followup'], single: true },
   { id: 'cs', label: 'CS (sem oferta)', desc: 'Nota 1, ou parou por médico/mal-estar: só agradece e avisa que o CS liga em até 24h.', fields: ['title', 'body'], single: true },
@@ -427,13 +427,39 @@ function SvEndFields({ texts, defaults, onChange, previewBase, cupomPct }) {
   const field = (key, label, rows) => svTextField(texts, defaults, onChange, key, label, rows);
   const endParam = sc.id === 'cupom' ? (cupomPct ? `cupom${cupomPct}` : null) : sc.id;
   const views = sc.single ? [['3', '', 'abrir']] : [['3', '', '2–3 frascos'], ['6', '', '6+'], ['6', '&daily=1', '6+ que tomou todo dia']];
+  // Qual tela tem texto seu: o cliente vê UMA delas, pelas respostas — tela não editada fica no padrão.
+  const edited = (id) => Object.entries(texts).some(([k, v]) => k.startsWith(`end.${id}.`) && v && v.trim());
+  const offers = SV_END_SCREENS.filter((x) => !x.single);
+  const pending = offers.filter((x) => !edited(x.id));
+  const copyToOthers = () => {
+    const others = offers.filter((x) => x.id !== sc.id);
+    if (!window.confirm(`Copiar o título e o texto de "${sc.label}" (2–3 e 6+) pra ${others.map((x) => `"${x.label}"`).join(' e ')}? O botão e o link alternativo ficam como estão, porque cada tela leva pra um checkout diferente.`)) return;
+    const next = { ...texts };
+    for (const x of others) {
+      for (const k of ['title', 'body', 'title@completo', 'body@completo', 'body@completo_constante']) {
+        const [f, seg] = k.split('@');
+        const v = texts[`end.${sc.id}.${f}${seg ? `@${seg}` : ''}`];
+        if (v && v.trim()) next[`end.${x.id}.${f}${seg ? `@${seg}` : ''}`] = v;
+      }
+    }
+    onChange(next);
+  };
   return (
     <div>
       <div className="seg" style={{ flexWrap: 'wrap', height: 'auto', marginBottom: 8, width: 'fit-content' }} role="group" aria-label="Tela final">
         {SV_END_SCREENS.map((x) => (
-          <button key={x.id} type="button" style={{ height: 28 }} className={x.id === screen ? 'is-active' : ''} onClick={() => setScreen(x.id)}>{x.label}</button>
+          <button key={x.id} type="button" style={{ height: 28 }} className={x.id === screen ? 'is-active' : ''} onClick={() => setScreen(x.id)}
+            title={edited(x.id) ? 'Tem texto seu' : 'Texto padrão'}>
+            {x.label}{edited(x.id) ? ' ●' : ''}
+          </button>
         ))}
       </div>
+      {edited(sc.id) && !sc.single && pending.length > 0 && (
+        <div style={{ fontSize: 12, color: 'var(--warning)', marginBottom: 8, display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+          <span>O cliente vê uma tela de oferta conforme as respostas: {pending.map((x) => `"${x.label}"`).join(' e ')} {pending.length > 1 ? 'ainda estão' : 'ainda está'} com o texto padrão.</span>
+          <button type="button" className="btn btn-ghost" style={{ height: 24, fontSize: 11.5 }} onClick={copyToOthers}>Copiar título e texto desta tela pras outras ofertas</button>
+        </div>
+      )}
       <div style={{ fontSize: 12, color: 'var(--fg3)', marginBottom: 10 }}>{sc.desc}</div>
       {sc.single ? (
         <div style={{ display: 'grid', gap: 8 }}>{sc.fields.map((f) => field(`end.${sc.id}.${f}`, SV_END_LABEL[f], rowsOf(f)))}</div>
