@@ -184,7 +184,9 @@ describe('renderSurveyPage', () => {
 
   it('plano incompleto: copy de completar o plano, kit de 3, uma tela por faixa de cupom', () => {
     const html = renderSurveyPage(base);
-    expect(html).toContain('bottle 3 of your 6-month NeuroRecall plan');
+    // Título curto (1 linha); o "terminando o frasco X do plano" fica no texto.
+    expect(html).toContain('<h1 class="fit" tabindex="-1">John, how&#39;s NeuroRecall going?</h1>');
+    expect(html).toContain('finish bottle 3 of your 6-month plan');
     expect(html).toContain('id="q1"');
     expect(html).toContain('Complete my plan for $177');
     expect(html).toContain('Continue my plan for $39');

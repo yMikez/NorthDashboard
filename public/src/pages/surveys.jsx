@@ -316,6 +316,68 @@ function svSlugId(label, taken) {
   return id;
 }
 
+// Formatação simples nos textos (a página converte): **negrito** *itálico* __sublinhado__ ~~riscado~~, Enter = nova linha.
+const SV_FMT = [
+  { m: '**', label: 'B', title: 'Negrito (Ctrl+B)', key: 'b', style: { fontWeight: 700 } },
+  { m: '*', label: 'I', title: 'Itálico (Ctrl+I)', key: 'i', style: { fontStyle: 'italic', fontFamily: 'Georgia, serif' } },
+  { m: '__', label: 'U', title: 'Sublinhado (Ctrl+U)', key: 'u', style: { textDecoration: 'underline' } },
+  { m: '~~', label: 'S', title: 'Riscado (preço antigo)', key: null, style: { textDecoration: 'line-through' } },
+];
+// Título que cabe em 1 linha no celular (≈ 343 px a 18 px) — o mesmo limite da página (lib/surveys/richText.ts).
+const SV_TITLE_CHARS = 34;
+const SV_SAMPLE = { nome: 'Elizabeth', produto: 'NeuroRecall', frascos: '3', plano: '6', kit: '3', dias: '90', total: '5', desconto: '10', cupom: 'KEEP10', validade: '7', faltam: '3' };
+/** Caracteres do título como o cliente vê (sem as marcações, variáveis com valores típicos). */
+function svTitleLen(text) {
+  return String(text || '').replace(/\*\*|__|~~|\*/g, '').replace(/\s*\n\s*/g, ' ')
+    .replace(/\{(\w+)\}/g, (m, k) => SV_SAMPLE[k] ?? (k.startsWith('preco') ? '$192' : 'xxxxxx')).length;
+}
+const svIsOneLineTitle = (key) => /^(intro|end\.[a-z]+)\.title$/.test(String(key).split('@')[0]);
+
+/** Campo de texto com a barra de formatação (e, no título, o aviso de 1 linha). */
+function SvRich({ label, value, onChange, placeholder, rows = 1, isTitle = false }) {
+  const ref = React.useRef(null);
+  const wrap = (m) => {
+    const el = ref.current;
+    if (!el) return;
+    const a = el.selectionStart;
+    const b = el.selectionEnd;
+    const sel = value.slice(a, b) || 'texto';
+    onChange(value.slice(0, a) + m + sel + m + value.slice(b));
+    requestAnimationFrame(() => { el.focus(); el.setSelectionRange(a + m.length, a + m.length + sel.length); });
+  };
+  const onKeyDown = (e) => {
+    if (!(e.ctrlKey || e.metaKey)) return;
+    const f = SV_FMT.find((x) => x.key && x.key === e.key.toLowerCase());
+    if (f) { e.preventDefault(); wrap(f.m); }
+  };
+  const len = isTitle ? svTitleLen(value || placeholder) : 0;
+  const long = len > SV_TITLE_CHARS;
+  return (
+    <div>
+      <div style={{ display: 'flex', alignItems: 'flex-end', gap: 6, marginBottom: 3 }}>
+        <span style={{ ...SV_LABEL, marginBottom: 0, flex: 1 }}>{label}</span>
+        <span style={{ display: 'flex', gap: 2 }} role="group" aria-label={`Formatar: ${label}`}>
+          {SV_FMT.map((f) => (
+            <button key={f.m} type="button" className="icon-btn" title={f.title} aria-label={f.title}
+              onMouseDown={(e) => e.preventDefault()} onClick={() => wrap(f.m)}
+              style={{ width: 22, height: 20, fontSize: 11.5, lineHeight: 1, ...f.style }}>{f.label}</button>
+          ))}
+        </span>
+      </div>
+      <textarea ref={ref} rows={rows} value={value} onChange={(e) => onChange(e.target.value)} onKeyDown={onKeyDown}
+        placeholder={placeholder} aria-label={label}
+        style={{ ...SV_INPUT, resize: 'vertical', fontFamily: 'inherit', minHeight: rows > 1 ? 22 * rows + 14 : 34 }}/>
+      {isTitle && (
+        <div style={{ fontSize: 10.5, marginTop: 2, color: long ? 'var(--warning)' : 'var(--fg5)' }}>
+          {long
+            ? `≈ ${len} caracteres: longo pra 1 linha no celular (até ~${SV_TITLE_CHARS}). A fonte encolhe até onde der; se não couber, quebra em 2 linhas.`
+            : `≈ ${len} caracteres · cabe em 1 linha no celular`}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // Página inicial: campos próprios (as mesmas chaves de texto da página, fora da lista genérica).
 const SV_INTRO_FIELDS = [
   { key: 'intro.title', label: 'Título', who: '2–3 frascos', rows: 2 },
@@ -330,14 +392,9 @@ const SV_INTRO_KEYS = new Set(SV_INTRO_FIELDS.map((f) => f.key));
 const svIsStructured = (key) => SV_INTRO_KEYS.has(key) || /^(intro|end|fine|plans)\./.test(key.split('@')[0]);
 
 function SvIntroFields({ intro, defaults, onChange }) {
-  const area = { ...SV_INPUT, resize: 'vertical', fontFamily: 'inherit' };
   const field = (f) => (
-    <label key={f.key} style={{ display: 'block' }}>
-      <span style={SV_LABEL}>{f.label}</span>
-      <textarea style={{ ...area, minHeight: f.rows > 1 ? 22 * f.rows + 14 : 34 }} rows={f.rows} value={intro[f.key] || ''}
-        onChange={(e) => onChange({ ...intro, [f.key]: e.target.value })} placeholder={(defaults || {})[f.key] || ''}
-        aria-label={`Página inicial: ${f.label} (${f.who})`}/>
-    </label>
+    <SvRich key={f.key} label={f.label} rows={f.rows} value={intro[f.key] || ''} isTitle={svIsOneLineTitle(f.key)}
+      onChange={(v) => onChange({ ...intro, [f.key]: v })} placeholder={(defaults || {})[f.key] || ''}/>
   );
   const col = (who) => SV_INTRO_FIELDS.filter((f) => f.who === who);
   return (
@@ -356,7 +413,7 @@ function SvIntroFields({ intro, defaults, onChange }) {
         {col('todos').map(field)}
       </div>
       <div style={{ fontSize: 11, color: 'var(--fg5)', marginTop: 6 }}>
-        Vazio = texto padrão (o cinza dentro do campo). Variáveis: {'{nome} {produto} {frascos} {plano} {dias} {total}'} — sem o primeiro nome do cliente, a frase se ajusta sozinha.
+        Vazio = texto padrão (o cinza dentro do campo). Formatação: selecione o trecho e use B, I, U ou S (vira **negrito**, *itálico*, __sublinhado__, ~~riscado~~); Enter = nova linha (no título, não). Variáveis: {'{nome} {produto} {frascos} {plano} {dias} {total}'} — sem o primeiro nome do cliente, a frase se ajusta sozinha.
       </div>
     </div>
   );
@@ -408,13 +465,10 @@ function SvVarsHelp() {
 
 function svTextField(texts, defaults, onChange, key, label, rows) {
   const D = defaults || {};
-  const area = { ...SV_INPUT, resize: 'vertical', fontFamily: 'inherit', minHeight: rows > 1 ? 22 * rows + 14 : 34 };
   return (
-    <label key={key} style={{ display: 'block' }}>
-      <span style={SV_LABEL}>{label}</span>
-      <textarea style={area} rows={rows} value={texts[key] || ''} onChange={(e) => onChange({ ...texts, [key]: e.target.value })}
-        placeholder={D[key] ?? (texts[key.split('@')[0]] || D[key.split('@')[0]]) ?? ''} aria-label={label}/>
-    </label>
+    <SvRich key={key} label={label} rows={rows} value={texts[key] || ''} isTitle={svIsOneLineTitle(key)}
+      onChange={(v) => onChange({ ...texts, [key]: v })}
+      placeholder={D[key] ?? (texts[key.split('@')[0]] || D[key.split('@')[0]]) ?? ''}/>
   );
 }
 
@@ -679,8 +733,7 @@ function SvCopyRows({ rows, defaults, onChange }) {
             {SV_SEGMENTS.map((s) => <option key={s.id} value={s.id}>{s.label}</option>)}
           </select>
           <div>
-            <textarea style={{ ...SV_INPUT, minHeight: 54, resize: 'vertical' }} value={r.text} onChange={(e) => set(i, { text: e.target.value })}
-              placeholder={def(r)} aria-label={`Texto novo de ${r.base || 'frase'}`}/>
+            <SvRich label={r.base ? `Texto novo de ${r.base}` : 'Texto novo'} rows={2} value={r.text} onChange={(v) => set(i, { text: v })} placeholder={def(r)}/>
             {r.base && <div style={{ fontSize: 11, color: 'var(--fg5)', marginTop: 3 }}>Padrão: {def(r) || '—'}</div>}
           </div>
           <button className="icon-btn" onClick={() => onChange(rows.filter((_, j) => j !== i))} aria-label="Remover frase" title="Remover"><Icon name="x" size={12}/></button>

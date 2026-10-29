@@ -9,6 +9,7 @@
 // mostra a que o servidor escolheu.
 
 import { isSurveyImagePath } from './assets';
+import { plainText, richText } from './richText';
 import {
   DEFAULT_COPY, Q1_OPTS, Q3_OPTS, Q3B_OPTS, Q5_OPTS, Q5_MAX,
   availableOffers, copyText, couponVars, cycleText, fillText, kitSizeFor, plansOf, q4Options, questionOrder, segmentOf,
@@ -60,6 +61,7 @@ body{font:17px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,
 section{display:none}section.on{display:block;animation:in .22s ease-out}
 @keyframes in{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
 h1{font-size:25px;line-height:1.28;margin:0 0 12px;letter-spacing:-.01em;outline:0}
+strong{font-weight:700}s{opacity:.75}
 .lead{color:var(--muted);margin:0 0 22px}
 .hero{display:block;width:150px;height:auto;aspect-ratio:594/640;object-fit:contain;margin:0 auto 18px}
 .hero.sm{width:118px;margin-bottom:14px}
@@ -108,13 +110,17 @@ function $(s,r){return (r||document).querySelector(s)}
 function $$(s,r){return Array.prototype.slice.call((r||document).querySelectorAll(s))}
 var bar=$('#bar'),back=$('#back'),stepn=$('#stepn');
 function show(id){
-  $$('section').forEach(function(s){s.classList.toggle('on',s.id===id)});cur=id;var n=STEP[id];
+  $$('section').forEach(function(s){s.classList.toggle('on',s.id===id)});cur=id;var n=STEP[id];fit($('#'+id));
   if(id.indexOf('end-')===0){var c=A.q3==='todo_dia'?'constante':'padrao';var sec=$('#'+id);
     if($('[data-body="constante"]',sec))$$('[data-body]',sec).forEach(function(p){p.hidden=p.getAttribute('data-body')!==c})}
   bar.style.width=(n?(n-.5)/D.total*100:(id==='intro'?0:100))+'%';
   back.hidden=!n||!hist.length;stepn.textContent=n?D.stepLabel.replace('{n}',n):'';
   window.scrollTo(0,0);var h=$('#'+id+' h1');if(h&&h.focus)h.focus({preventScroll:true});
 }
+function fit(sec){var h=sec&&$('h1.fit',sec);if(!h)return;h.style.fontSize='';h.style.whiteSpace='nowrap';
+  var s=parseFloat(getComputedStyle(h).fontSize);while(h.scrollWidth>h.clientWidth+1&&s>17){s-=.5;h.style.fontSize=s+'px'}
+  if(h.scrollWidth>h.clientWidth+1){h.style.whiteSpace='';h.style.fontSize=''}}
+window.addEventListener('resize',function(){if(cur)fit($('#'+cur))});
 function go(id){if(cur)hist.push(cur);show(id)}
 back.onclick=function(){var p=hist.pop();if(p)show(p)};
 function post(body){
@@ -180,7 +186,9 @@ export function renderSurveyPage(input: RenderSurveyInput): string {
   const kit = kitSizeFor(cfg, segment, ctx.bottles);
   const av = availableOffers(cfg, kit);
   const vars = surveyVars(cfg, ctx);
-  const tv = (key: string, v = vars) => esc(fillText(copyText(cfg, key, segment), v));
+  const tv = (key: string, v = vars) => richText(esc(fillText(copyText(cfg, key, segment), v)));
+  /** Título da página inicial e das telas finais: 1 linha (a página encolhe a fonte pra caber). */
+  const th = (key: string, v = vars) => `<h1 class="fit" tabindex="-1">${richText(esc(fillText(copyText(cfg, key, segment), v)), { singleLine: true })}</h1>`;
   const t = (key: string) => tv(key);
   const img = imageOf(cfg);
   const hero = (cls = 'hero') => (img ? `<img class="${cls}" src="${img}" width="594" height="640" alt="${esc(cfg.productName)}">` : '');
@@ -201,7 +209,7 @@ export function renderSurveyPage(input: RenderSurveyInput): string {
       `<button type="button" class="opt" data-q="${q}" data-v="${v}" aria-pressed="false"><span class="box"></span>${t(`${q}.${v}`)}</button>`).join('')}</div>`;
   const multi = (q: string, opts: { id: string; label: string }[]) =>
     `<div data-multi>${opts.map((o) =>
-      `<button type="button" class="opt" data-q="${q}" data-v="${esc(o.id)}" aria-pressed="false"><span class="box"></span>${esc(fillText(o.label, vars))}</button>`).join('')}</div>`;
+      `<button type="button" class="opt" data-q="${q}" data-v="${esc(o.id)}" aria-pressed="false"><span class="box"></span>${richText(esc(fillText(o.label, vars)), { singleLine: true })}</button>`).join('')}</div>`;
   const question = (id: string, title: string, inner: string, attrs = '') =>
     `<section id="${id}"${attrs}><h1 tabindex="-1">${title}</h1>${inner}</section>`;
 
@@ -212,7 +220,7 @@ export function renderSurveyPage(input: RenderSurveyInput): string {
     if (segment !== 'completo') return padrao;
     const constKey = `${key}@completo_constante`;
     if (cfg.copy?.[constKey] == null && !(constKey in DEFAULT_COPY)) return padrao;
-    return padrao + `<p class="lead" data-body="constante" hidden>${mark(esc(fillText(copyText(cfg, key, 'completo_constante'), v)))}</p>`;
+    return padrao + `<p class="lead" data-body="constante" hidden>${mark(richText(esc(fillText(copyText(cfg, key, 'completo_constante'), v))))}</p>`;
   };
   const kitCycle = kit != null ? cfg.offers?.kits?.[String(kit)]?.everyMonths ?? null : null;
   /** O que vai ser cobrado, sob o botão principal. */
@@ -233,7 +241,7 @@ export function renderSurveyPage(input: RenderSurveyInput): string {
     }).join('')}</details>`
     : '';
   const offer = (id: string, base: string, primary: CheckoutKind, alt: CheckoutKind | null, v = vars, pct?: number, code?: string) =>
-    `<section id="${id}">${hero('hero sm')}<h1 tabindex="-1">${tv(`${base}.title`, v)}</h1>${body(`${base}.body`, v, code)}`
+    `<section id="${id}">${hero('hero sm')}${th(`${base}.title`, v)}${body(`${base}.body`, v, code)}`
     + `<a class="btn" href="${esc(goUrl(primary, pct))}"${target}>${tv(`${base}.cta`, v)}</a>${fine(primary, v)}`
     + (alt ? `<a class="alt" href="${esc(goUrl(alt))}"${target}>${tv(`${base}.alt`, v)}</a>` : '')
     + plansList
@@ -248,7 +256,7 @@ export function renderSurveyPage(input: RenderSurveyInput): string {
   });
 
   const sections = [
-    `<section id="intro">${hero()}<h1 tabindex="-1">${t('intro.title')}</h1><p class="lead">${t('intro.body')}</p>`
+    `<section id="intro">${hero()}${th('intro.title')}<p class="lead">${t('intro.body')}</p>`
       + `<button type="button" class="btn" id="start">${t('intro.cta')}</button>`
       + (av.assinatura || av.kit ? `<button type="button" class="atalho" id="atalho">${t('intro.atalho')}</button>` : '')
       + '</section>',
@@ -264,11 +272,11 @@ export function renderSurveyPage(input: RenderSurveyInput): string {
       + `<label class="cap" for="comentario">${t('q5.comentario')}</label><textarea id="comentario" maxlength="2000"></textarea>`
       + `<button type="button" class="btn" data-next disabled>${t('q5.enviar')}</button>`,
       ` data-max="${Q5_MAX}"`),
-    `<section id="end-cs"><h1 tabindex="-1">${t('end.cs.title')}</h1><p class="lead">${t('end.cs.body')}</p></section>`,
+    `<section id="end-cs">${th('end.cs.title')}<p class="lead">${t('end.cs.body')}</p></section>`,
     av.assinatura ? offer('end-recorrencia', 'end.recorrencia', 'assinatura', av.kit ? 'kit' : null) : '',
     av.kit ? offer('end-oferta', 'end.oferta', 'kit', av.assinatura ? 'assinatura' : null) : '',
     ...coupons,
-    `<section id="end-obrigado"><h1 tabindex="-1">${t('end.obrigado.title')}</h1><p class="lead">${t('end.obrigado.body')}</p>`
+    `<section id="end-obrigado">${th('end.obrigado.title')}<p class="lead">${t('end.obrigado.body')}</p>`
       + `<p class="lead" id="followup"${input.followUp ? '' : ' hidden'}>${t('end.obrigado.followup')}</p></section>`,
   ].join('');
 
@@ -283,7 +291,7 @@ export function renderSurveyPage(input: RenderSurveyInput): string {
     goUrl: { assinatura: goUrl('assinatura'), kit: goUrl('kit') },
     order,
     total: order.length,
-    stepLabel: fillText(copyText(cfg, 'nav.step', segment), { total: String(order.length) }),
+    stepLabel: plainText(fillText(copyText(cfg, 'nav.step', segment), { total: String(order.length) })),
     answers: input.answers,
     start: input.outcome ? endSectionId(input.outcome, input.couponPct) : 'intro',
   };
@@ -291,14 +299,14 @@ export function renderSurveyPage(input: RenderSurveyInput): string {
     + `<span class="brand">${esc(cfg.productName)}</span><span class="stepn" id="stepn"></span></div>`
     + '<div class="bar"><i id="bar"></i></div>';
   const script = `<script type="application/json" id="d">${JSON.stringify(data).replace(/</g, '\\u003c')}</script><script>${JS}</script>`;
-  return page(fillText(copyText(cfg, 'page.title'), vars), accentOf(cfg), top + sections, script);
+  return page(plainText(fillText(copyText(cfg, 'page.title'), vars)), accentOf(cfg), top + sections, script);
 }
 
 /** Link inválido, expirado ou de variante desligada. */
 export function renderSurveyInvalid(cfg: SurveyVariantConfig | null): string {
   const c = cfg ?? { productName: '' };
   const vars = surveyVars(c, { firstName: null, bottles: 0 });
-  const t = (key: string) => esc(fillText(copyText(c, key), vars));
+  const t = (key: string) => richText(esc(fillText(copyText(c, key), vars)));
   return page(c.productName || 'Check-in', accentOf(c),
     `<div class="top"><span></span><span class="brand">${esc(c.productName)}</span><span></span></div>`
     + `<div class="bar"><i style="width:100%"></i></div>`

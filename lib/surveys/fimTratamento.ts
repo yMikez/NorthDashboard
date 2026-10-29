@@ -112,9 +112,10 @@ export const DEFAULT_COPY: Record<string, string> = {
   'nav.continue': 'Continue',
   'nav.step': 'Question {n} of {total}',
 
-  'intro.title': "{nome}, you're about to finish bottle {frascos} of your {plano}-month {produto} plan.",
-  'intro.body': "Before you run out, we'd love to hear how these {dias} days went. {total} quick questions, about 1 minute.",
-  'intro.title@completo': '{nome}, your {produto} is about to run out.',
+  // Títulos curtos (≤ ~34 caracteres): a página encolhe a fonte pra caber em 1 linha no celular.
+  'intro.title': "{nome}, how's {produto} going?",
+  'intro.body': "You're about to finish bottle {frascos} of your {plano}-month plan. Before you run out, we'd love to hear how these {dias} days went. {total} quick questions, about 1 minute.",
+  'intro.title@completo': 'Your {produto} is almost out',
   'intro.body@completo': "Before it does, we'd love to hear how these {dias} days went. {total} quick questions, about 1 minute.",
   'intro.cta': "Tell us how it's going",
   'intro.atalho': 'Already know you want more? Reorder now →',
@@ -159,15 +160,15 @@ export const DEFAULT_COPY: Record<string, string> = {
   'q5.comentario': "Anything you'd like our care team to know? (optional)",
   'q5.enviar': 'Send my answers',
 
-  'end.cs.title': 'Thank you for telling us, {nome}.',
+  'end.cs.title': 'We hear you, {nome}.',
   'end.cs.body': 'Someone from our care team will reach out within 24 hours to help you personally.',
 
   // Recorrência: 1 frasco por mês, 1º mês com desconto.
-  'end.recorrencia.title': 'Finish your {plano}-month plan, one bottle at a time',
+  'end.recorrencia.title': 'Finish your plan, 1 bottle a month',
   'end.recorrencia.body': "When you ordered, we recommended the full {plano} months, because {produto} is made for steady, daily use. You're at month {frascos}, right where many people stop too early. Get your next bottles one a month, so you never pay for the whole plan at once. {assinatura_frase}",
   'end.recorrencia.cta': 'Continue my plan for {preco_1o}',
   'end.recorrencia.alt': 'Prefer {kit} bottles at once? {preco_kit}',
-  'end.recorrencia.title@completo': 'Never run out, or miss a day, again',
+  'end.recorrencia.title@completo': 'Never run out again',
   'end.recorrencia.body@completo': "Most missed doses aren't a choice: a busy week, a trip, a bottle that ran out before the next one arrived. With 1 bottle a month, the next one is at your door before the last one ends. {assinatura_frase}",
   'end.recorrencia.body@completo_constante': 'You took it every day, which is exactly how {produto} is meant to be used. Keep that streak going without thinking about it: 1 bottle a month, at your door before the last one ends. {assinatura_frase}',
   'end.recorrencia.cta@completo': 'Start for {preco_1o}',
