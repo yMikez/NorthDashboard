@@ -24,9 +24,14 @@ Tudo do schema `public` (é onde chegam os avisos; o dado oficial não marca rec
 | ClickBank | `BILL` | `CANCEL-REBILL` | `INSF` |
 | BuyGoods | `rebill` | `canceledfromrebill` | `failedrebill` |
 | Digistore24 | `pay_sequence_no` > 1 | `rebill_cancelled`, `last_paid_day` | `payment_missed`, `payment_denial` |
-| Vupim | `Subscription`/`SubscriptionEvent` (webhook de assinatura) | idem | idem |
+| Vupim | toda entrega com `subscriptionId` (1ª cobrança, `subscription.renewed`) | `subscription.canceled` | `subscription.payment_failed` |
 
 `uncancel-rebill`/`rebill_resumed` desfazem um cancelamento anterior.
+
+Vupim: assinatura = `subscriptionId` (a própria Vupim diz). Lê o histórico gravado
+(`SubscriptionEvent`, desde 28/10) junto com o `IngestLog` desde o 1º dia da
+integração (21/10), sem repetir evento (`eventId`). Valor em outra moeda sem
+`amountUsd` converte pela `exchangeRate`.
 
 - Pedido que foi aprovado e depois virou estorno/cancelamento continua sendo
   cobrança (`approvedAt` fica gravado). Linha criada só pelo aviso, nunca

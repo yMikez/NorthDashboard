@@ -11,7 +11,9 @@
 //                não viram venda (CANCEL-REBILL, INSF, canceledfromrebill,
 //                rebill_cancelled, payment_missed…). Liga pela mesma chave:
 //                plataforma + e-mail + produto.
-//   Vupim      → Subscription/SubscriptionEvent (webhook de assinatura).
+//   Vupim      → toda entrega com subscriptionId (1ª cobrança, renovação,
+//                falha, cancelamento, estorno): o histórico gravado em
+//                SubscriptionEvent + o IngestLog desde o 1º dia, sem repetir.
 // O resto (status, ciclo, retenção, previsão) é lib/recurrences/core.ts.
 
 import { Prisma } from '@prisma/client';
@@ -22,7 +24,11 @@ import { parseBuyGoodsIngest } from '../connectors/buygoods/ingest';
 import { parseDigistoreIngest } from '../connectors/digistore24/ingest';
 import type { NormalizedOrder } from '../shared/types';
 import { SURVEY_TRACKING_PREFIX } from '../surveys/fimTratamento';
-import { DAYS_PER_BOTTLE } from '../subscriptions/core';
+import type { VupimEnvelope } from '../connectors/vupim/types';
+import { normalizePhone } from '../shared/phone';
+import {
+  DAYS_PER_BOTTLE, parseVupimSubscriptionEvent, VUPIM_SUBSCRIPTION_EVENTS, type SubEventKind, type SubEventRow,
+} from '../subscriptions/core';
 import { analyze, buildSubs, type RecCharge, type RecDashboard, type RecEvent, type RecEventKind, type RecSubInput } from '../recurrences/core';
 
 /** eventType (minúsculo) de renovação nos pedidos. */
@@ -203,16 +209,75 @@ async function loadOrderSubs(events: EndEvent[]): Promise<RecSubInput[]> {
   return [...subs.values()];
 }
 
+/**
+ * Avisos da Vupim que mexem em assinatura, desde o 1º dia da integração
+ * (21/10). O histórico em SubscriptionEvent só começou em 28/10 — sem isto as
+ * assinaturas vendidas antes não apareciam.
+ */
+export const vupimSubscriptionLogsSql = () => Prisma.sql`
+  SELECT "eventType", payload FROM "IngestLog"
+  WHERE "platformSlug" = 'vupim'
+    AND "eventType" IN (${Prisma.join(VUPIM_SUBSCRIPTION_EVENTS)})
+    AND payload->'data'->>'subscriptionId' IS NOT NULL
+  ORDER BY "receivedAt"`;
+
+interface VupimAcc {
+  externalId: string;
+  email: string | null; name: string | null; phone: string | null;
+  productName: string | null; offerName: string | null; offerId: string | null; bottles: number | null; src: string | null;
+  events: Map<string, SubEventRow>;
+}
+
+/** Vupim: o histórico gravado (Subscription) + os avisos do IngestLog, sem repetir evento (eventId). */
 async function loadVupimSubs(): Promise<RecSubInput[]> {
-  const subs = await db.subscription.findMany({ include: { events: true } });
-  return subs.map((s) => {
+  const [subs, logs] = await Promise.all([
+    db.subscription.findMany({ include: { events: true } }),
+    db.$queryRaw<Array<{ eventType: string; payload: unknown }>>(vupimSubscriptionLogsSql()),
+  ]);
+  const acc = new Map<string, VupimAcc>();
+  for (const s of subs) {
+    acc.set(s.externalId, {
+      externalId: s.externalId, email: s.email, name: s.name, phone: s.phone,
+      productName: s.productName, offerName: s.offerName, offerId: s.offerId, bottles: s.bottles, src: s.src,
+      events: new Map(s.events.map((e) => [e.eventId, {
+        eventId: e.eventId, kind: e.kind as SubEventKind, at: e.at, amountUsd: e.amountUsd == null ? null : Number(e.amountUsd),
+        chargeNumber: e.chargeNumber, attempt: e.attempt, nextRetryAt: e.nextRetryAt, periodEnd: e.periodEnd,
+        reason: e.reason, transactionId: e.transactionId,
+      }])),
+    });
+  }
+  for (const l of logs) {
+    const p = parseVupimSubscriptionEvent(l.payload as VupimEnvelope, l.eventType);
+    if (!p) continue;
+    let a = acc.get(p.externalId);
+    if (!a) {
+      a = {
+        externalId: p.externalId, email: null, name: null, phone: null,
+        productName: null, offerName: null, offerId: null, bottles: null, src: null, events: new Map(),
+      };
+      acc.set(p.externalId, a);
+    }
+    a.email ??= p.customer.email;
+    a.name ??= p.customer.name;
+    a.phone ??= normalizePhone(p.customer.phone);
+    a.productName ??= p.product.productName;
+    a.offerName ??= p.product.offerName;
+    a.offerId ??= p.product.offerId;
+    a.bottles ??= p.product.bottles;
+    a.src ??= p.src;
+    if (!a.events.has(p.eventId)) a.events.set(p.eventId, p);
+  }
+
+  return [...acc.values()].map((s) => {
     const charges = new Map<string, RecCharge>();
     const events: RecEvent[] = [];
-    const sorted = [...s.events].sort((a, b) => a.at.getTime() - b.at.getTime());
+    let periodEnd: Date | null = null;
+    const sorted = [...s.events.values()].sort((a, b) => a.at.getTime() - b.at.getTime());
     for (const e of sorted) {
       const ref = e.transactionId ?? e.eventId;
       if (e.kind === 'charge' || e.kind === 'renewed') {
-        if (!charges.has(ref)) charges.set(ref, { at: e.at, usd: Number(e.amountUsd ?? 0), refundedAt: null, ref });
+        if (!charges.has(ref)) charges.set(ref, { at: e.at, usd: e.amountUsd ?? 0, refundedAt: null, ref });
+        if (e.periodEnd && (!periodEnd || e.periodEnd > periodEnd)) periodEnd = e.periodEnd;
       } else if (e.kind === 'refunded' || e.kind === 'chargeback') {
         const hit = (e.transactionId && charges.get(e.transactionId)) || [...charges.values()].filter((c) => c.at <= e.at).pop();
         if (hit) hit.refundedAt ??= e.at;
@@ -228,7 +293,7 @@ async function loadVupimSubs(): Promise<RecSubInput[]> {
       email: s.email, name: s.name, phone: s.phone, externalId: s.externalId,
       charges: [...charges.values()], events,
       cycleHintDays: s.bottles ? s.bottles * DAYS_PER_BOTTLE : null,
-      periodEnd: s.periodEnd,
+      periodEnd,
       fromSurvey: Boolean(s.src?.startsWith(SURVEY_TRACKING_PREFIX)),
     };
   });

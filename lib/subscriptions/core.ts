@@ -13,6 +13,7 @@
 // nome da oferta ("2 bottles" = a cada 2 meses; 1 frasco = mensal).
 
 import type { VupimEnvelope } from '../connectors/vupim/types';
+import { vupimMajor } from '../connectors/vupim/ingest';
 
 export type SubEventKind = 'charge' | 'renewed' | 'failed' | 'canceled' | 'refunded' | 'chargeback';
 export type SubStatus = 'active' | 'past_due' | 'canceled';
@@ -63,12 +64,18 @@ export function bottlesFromName(...names: (string | null | undefined)[]): number
   return null;
 }
 
-/** Dinheiro da Vupim vem em unidade mínima; *Usd em centavos de dólar. */
+/**
+ * Dinheiro da Vupim vem em unidade mínima; *Usd em centavos de dólar. Outra
+ * moeda sem *Usd: pela exchangeRate (USD por unidade da moeda), igual ao pedido.
+ */
 function usd(d: Record<string, unknown>): number | null {
   const amountUsd = typeof d.amountUsd === 'number' ? d.amountUsd : null;
   if (amountUsd != null) return Math.round(amountUsd) / 100;
   const currency = typeof d.currency === 'string' ? d.currency.toUpperCase() : 'USD';
-  return currency === 'USD' && typeof d.amount === 'number' ? Math.round(d.amount) / 100 : null;
+  if (typeof d.amount !== 'number') return null;
+  if (currency === 'USD') return Math.round(d.amount) / 100;
+  const rate = typeof d.exchangeRate === 'number' ? d.exchangeRate : null;
+  return rate != null ? Math.round(vupimMajor(d.amount, currency) * rate * 100) / 100 : null;
 }
 
 const KIND_BY_EVENT: Record<string, SubEventKind> = {
@@ -80,6 +87,9 @@ const KIND_BY_EVENT: Record<string, SubEventKind> = {
   'sale.chargeback': 'chargeback',
   'sale.chargeback_lost': 'chargeback',
 };
+
+/** Eventos (chave normalizada, = IngestLog.eventType) que podem mexer numa assinatura. */
+export const VUPIM_SUBSCRIPTION_EVENTS = ['sale.approved', ...Object.keys(KIND_BY_EVENT)];
 
 /** Evento da Vupim que mexe numa assinatura (null = não mexe ou é teste). */
 export function parseVupimSubscriptionEvent(env: VupimEnvelope, event: string): ParsedSubEvent | null {

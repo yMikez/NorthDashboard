@@ -90,3 +90,12 @@ describe('telefone pra SMS', () => {
     expect(smsPhoneUS('1234567890')).toBeNull();
   });
 });
+
+describe('valor em outra moeda', () => {
+  it('sem *Usd, converte pela exchangeRate (USD por unidade da moeda)', () => {
+    const p = parseVupimSubscriptionEvent(env('sale.approved', { subscriptionId: 's1', amount: 25000, currency: 'BRL', exchangeRate: 0.2 }), 'sale.approved');
+    expect(p?.amountUsd).toBe(50);
+    const semTaxa = parseVupimSubscriptionEvent(env('sale.approved', { subscriptionId: 's2', amount: 25000, currency: 'BRL' }), 'sale.approved');
+    expect(semTaxa?.amountUsd).toBeNull();
+  });
+});
