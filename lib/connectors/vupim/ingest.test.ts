@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import fixture from './__fixtures__/sale-approved.json';
 import legacyFixture from './__fixtures__/sale-approved-legacy.json';
 import type { VupimEnvelope } from './types';
-import { parseVupimOrder, vupimEventKey, vupimMajor, vupimProductName, vupimShouldApply, VupimCurrencyError, VUPIM_ORDER_EVENTS } from './ingest';
+import { parseVupimOrder, vupimAffiliateKey, vupimEventKey, vupimMajor, vupimProductName, vupimShouldApply, VupimCurrencyError, VUPIM_ORDER_EVENTS } from './ingest';
 import { signVupimBody, signVupimTimestamped, verifyVupimSignature, vupimSecrets } from './signature';
 
 // Exemplos LITERAIS da doc da Vupim (sale.approved) — https://vupim.com/docs/webhook.
@@ -179,5 +179,15 @@ describe('assinatura (X-Webhook-Signature)', () => {
   it('troca de segredo: aceita o antigo e o novo ao mesmo tempo', () => {
     expect(vupimSecrets(' whsec_novo , whsec_antigo ,')).toEqual(['whsec_novo', 'whsec_antigo']);
     expect(verifyVupimSignature(raw, signVupimBody(raw, 'whsec_antigo'), vupimSecrets('whsec_novo,whsec_antigo'))).toBe('VALID');
+  });
+});
+
+describe('vupimAffiliateKey', () => {
+  it('ID do painel (VP + 32) vira o do webhook; o resto passa igual', () => {
+    expect(vupimAffiliateKey(' VPQ7xLmN2pR4sT6uV8wY0zA1bC3dE5fG7h ')).toBe('Q7xLmN2pR4sT6uV8wY0zA1bC3dE5fG7h');
+    expect(vupimAffiliateKey('Q7xLmN2pR4sT6uV8wY0zA1bC3dE5fG7h')).toBe('Q7xLmN2pR4sT6uV8wY0zA1bC3dE5fG7h');
+    // "VP" que é parte de um ID de 32 não é prefixo.
+    expect(vupimAffiliateKey('VPx2Nc5Bv8Mq1Wl4Ek7Rt0Yu3Io6Pa9Sd')).toBe('VPx2Nc5Bv8Mq1Wl4Ek7Rt0Yu3Io6Pa9Sd');
+    expect(vupimAffiliateKey('usr_5c1e77')).toBe('usr_5c1e77');
   });
 });

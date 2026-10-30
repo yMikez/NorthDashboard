@@ -91,6 +91,17 @@ function splitName(name: string | null): { first: string | null; last: string | 
   return { first: parts[0] ?? null, last: parts.length > 1 ? parts.slice(1).join(' ') : null };
 }
 
+/**
+ * ID do afiliado como o webhook manda (affiliateId: 32 letras/números). O
+ * painel da Vupim mostra o mesmo ID com "VP" na frente — conferido em
+ * 30/10/2026: o cookie affiliate_ref do link do parceiro é o ID passado por
+ * ele sem o "VP".
+ */
+export function vupimAffiliateKey(raw: string): string {
+  const t = raw.trim();
+  return /^VP[A-Za-z0-9]{32}$/.test(t) ? t.slice(2) : t;
+}
+
 /** Nome do SKU: oferta (pacote) com o produto quando a oferta não o repete. */
 export function vupimProductName(d: VupimData): string {
   const product = str(d.productName);

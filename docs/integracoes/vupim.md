@@ -60,7 +60,7 @@ ClickBank: a data da venda fica em `orderedAt` e a data do estorno em
 | `affiliateCommission` | CPA pago ao afiliado (`cpaPaidUsd`) |
 | `taxAmount` | imposto |
 | `fees` / `feesUsd` | taxa da Vupim; sem ela (webhook antigo), bruto − imposto − produtor − afiliado |
-| `affiliateId`, `affiliate.name`, `affiliate.email` | conta do afiliado, nome, e-mail (vínculo entre plataformas) |
+| `affiliateId`, `affiliate.name`, `affiliate.email` | conta do afiliado, nome, e-mail (vínculo entre plataformas). O painel mostra o mesmo ID com `VP` na frente; a marca de recuperação tira o prefixo |
 | `customer.id` / `email` / `firstName` / `lastName` / `phone` / `locale` / `state` / `city` | cliente (id estável; e-mail se faltar), nome, telefone só dígitos, idioma, local |
 | `utmSource`, `utmCampaign`, `clickId`, `src`/`sck`/`subIds.sub1` | origem do tráfego, campanha, click id, tracking |
 | `createdAt` (UTC) | data da venda |

@@ -5403,7 +5403,7 @@ function RecoveryManage({ affs, sugs, onChanged }) {
           setExt(v); setSemVenda(null);
           // Link de checkout colado: a plataforma é BuyGoods.
           if (/buygoods\.com|[?&]aff_id=/i.test(v)) setPlat('buygoods');
-        }} placeholder={plat === 'buygoods' ? 'https://buygoods.com/secure/checkout.html?…  ou  62@13457' : plat === 'vupim' ? 'ID do afiliado na Vupim' : '3722234'}
+        }} placeholder={plat === 'buygoods' ? 'https://buygoods.com/secure/checkout.html?…  ou  62@13457' : plat === 'vupim' ? 'ID do afiliado no painel da Vupim (VP…)' : '3722234'}
           style={{ ...coInputStyle, width: plat === 'buygoods' || plat === 'vupim' ? 320 : 150 }}/></label>
         <label style={coFieldLabel}><span>Empresa</span>
           <input value={empresa} onChange={(e) => setEmpresa(e.target.value)} list="ns-empresas-recuperacao" placeholder="MailX" style={{ ...coInputStyle, width: 160 }}/>

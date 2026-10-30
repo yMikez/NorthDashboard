@@ -22,6 +22,7 @@ import { Prisma } from '@prisma/client';
 import { db, dbRead } from '../db';
 import { isStorelessBuyGoodsKey, parseBuyGoodsAffiliateRef } from '../connectors/buygoods/affiliateKey';
 import { SMS_UTM_SOURCE } from '../connectors/sms/config';
+import { vupimAffiliateKey } from '../connectors/vupim/ingest';
 import { EXTRA_ROW_REFUND_PLATFORMS } from './profitModel';
 
 export interface RecoveryFilters {
@@ -609,6 +610,8 @@ export async function upsertRecoveryAffiliate(input: {
     if (!ref.ok) return { error: ref.error, status: 400 };
     externalId = ref.key;
   }
+  // Vupim: o ID copiado do painel vem com "VP" na frente; a venda chega sem.
+  if (input.platformSlug === 'vupim') externalId = vupimAffiliateKey(externalId);
   let aff = await db.affiliate.findFirst({
     where: { externalId, platform: { slug: input.platformSlug } },
     select: { id: true, nickname: true },
