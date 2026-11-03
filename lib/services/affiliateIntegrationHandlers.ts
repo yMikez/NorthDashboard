@@ -12,6 +12,7 @@ import {
 } from './affiliateMappingCore';
 import type { ApplyResult } from './affiliateMapping';
 import type { MetricsCache } from './affiliateMetricsExport';
+import { PRODUCTS_DEFAULT_DAYS, PRODUCTS_MAX_DAYS, type AffiliateAccountProductsOut, type ProductsCache } from './affiliateProductsExport';
 
 export interface HandlerResponse {
   status: number;
@@ -160,6 +161,37 @@ export async function handleAffiliateMetrics(url: URL, req: { header(name: strin
   const hit = deps.cache.get(key);
   if (hit) return { status: 200, body: hit.body, headers: { ...headers, 'X-Cache': 'HIT', 'X-Cache-At': new Date(hit.at).toISOString() } };
   const body = await deps.compute(period.start, period.end);
+  deps.cache.set(key, body);
+  return { status: 200, body, headers: { ...headers, 'X-Cache': 'MISS' } };
+}
+
+// ---------------------------------------------------------------------
+// GET …/products?days=N — o que cada afiliado já vende, por conta e produto
+// (afiliação automática do NorthScale Afiliados)
+// ---------------------------------------------------------------------
+export interface ProductsDeps {
+  inboundKey: () => Promise<string | null>;
+  compute: (since: Date) => Promise<AffiliateAccountProductsOut[]>;
+  cache: ProductsCache;
+  now?: () => Date;
+}
+
+/** Janela em dias a partir de agora (padrão 180, teto 730). Lista JSON, cache de 5 min por janela. */
+export async function handleAffiliateProducts(url: URL, req: { header(name: string): string | null }, deps: ProductsDeps): Promise<HandlerResponse> {
+  const auth = await authorizeIntegration(req, deps.inboundKey);
+  if (!auth.ok) return auth.response;
+  const raw = url.searchParams.get('days');
+  const days = raw === null || raw.trim() === '' ? PRODUCTS_DEFAULT_DAYS : Number(raw);
+  if (!Number.isInteger(days) || days < 1 || days > PRODUCTS_MAX_DAYS) {
+    return { status: 400, body: { statusCode: 400, message: `days deve ser um inteiro entre 1 e ${PRODUCTS_MAX_DAYS}`, error: 'Bad Request' } };
+  }
+  const now = deps.now ? deps.now() : new Date();
+  const since = new Date(now.getTime() - days * 86_400_000);
+  const headers = { 'X-Days': String(days), 'X-Since': since.toISOString() };
+  const key = String(days);
+  const hit = deps.cache.get(key);
+  if (hit) return { status: 200, body: hit.body, headers: { ...headers, 'X-Cache': 'HIT', 'X-Cache-At': new Date(hit.at).toISOString() } };
+  const body = await deps.compute(since);
   deps.cache.set(key, body);
   return { status: 200, body, headers: { ...headers, 'X-Cache': 'MISS' } };
 }

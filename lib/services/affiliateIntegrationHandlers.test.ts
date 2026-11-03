@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
-import { checkIntegrationKey, handleAffiliateWebhook, handleAffiliateMetrics } from './affiliateIntegrationHandlers';
+import { checkIntegrationKey, handleAffiliateWebhook, handleAffiliateMetrics, handleAffiliateProducts } from './affiliateIntegrationHandlers';
+import { createProductsCache, shapeAffiliateProducts } from './affiliateProductsExport';
 import { createMetricsCache } from './affiliateMetricsExport';
 import type { ApplyResult } from './affiliateMapping';
 
@@ -211,5 +212,58 @@ describe('GET /api/integrations/affiliates/metrics', () => {
     const r = await handleAffiliateMetrics(url('period=mtd'), req(hdr), d);
     expect(r.status).toBe(200);
     expect(r.body).toEqual([]);
+  });
+});
+
+describe('GET /api/integrations/affiliates/products', () => {
+  const NOW = new Date('2026-11-03T15:00:00.000Z');
+  const list = [{ affiliate_id: 'cmfgq1x2a0000v8l4h3k9d2pw', platform: 'jvzoo', account_id: '1234567', account_name: 'maria', products: [] }];
+  type ProductsDeps = Parameters<typeof handleAffiliateProducts>[2];
+  const deps = (over: { inboundKey?: ProductsDeps['inboundKey']; cache?: ProductsDeps['cache'] } = {}) => ({
+    inboundKey: over.inboundKey ?? (async () => KEY),
+    compute: vi.fn(async (_since: Date) => list),
+    cache: over.cache ?? createProductsCache(),
+    now: () => NOW,
+  });
+  const url = (qs: string) => new URL(`https://dash.thenorthscales.com/api/integrations/affiliates/products?${qs}`);
+  const hdr = { 'X-Api-Key': KEY };
+
+  it('401 sem chave; 503 sem chave configurada', async () => {
+    expect((await handleAffiliateProducts(url(''), req({}), deps())).status).toBe(401);
+    expect((await handleAffiliateProducts(url(''), req(hdr), deps({ inboundKey: async () => null }))).status).toBe(503);
+  });
+
+  it('400 em days fora de 1–730 ou não inteiro', async () => {
+    for (const qs of ['days=0', 'days=731', 'days=2.5', 'days=abc']) {
+      expect((await handleAffiliateProducts(url(qs), req(hdr), deps())).status).toBe(400);
+    }
+  });
+
+  it('200: janela padrão de 180 dias a partir de agora, lista JSON e cache por janela', async () => {
+    const d = deps();
+    const r = await handleAffiliateProducts(url(''), req(hdr), d);
+    expect(r.status).toBe(200);
+    expect(r.body).toEqual(list);
+    expect(r.headers).toMatchObject({ 'X-Days': '180', 'X-Cache': 'MISS' });
+    expect(d.compute.mock.calls[0][0].toISOString()).toBe('2026-05-07T15:00:00.000Z');
+    expect((await handleAffiliateProducts(url('days=180'), req(hdr), d)).headers?.['X-Cache']).toBe('HIT');
+    await handleAffiliateProducts(url('days=30'), req(hdr), d);
+    expect(d.compute).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe('shapeAffiliateProducts', () => {
+  const at = (iso: string) => new Date(iso);
+  it('agrupa por conta, ordena produtos por vendas, CPA em número e só quando > 0', () => {
+    const out = shapeAffiliateProducts([
+      { affiliate_id: 'a1', platform: 'buygoods', account_id: '62@13457', account_name: 'ana', product_id: 'cog-1', product_name: 'Cognizil 1 bottle', family: 'Cognizil', fe_sales: 3, last_sale_at: at('2026-11-01T10:00:00Z'), cpa_usd: 230 as unknown as number, cpa_at: at('2026-11-01T10:00:00Z'), currency: 'USD' },
+      { affiliate_id: 'a1', platform: 'buygoods', account_id: '62@13457', account_name: 'ana', product_id: 'cog-6', product_name: 'Cognizil 6 bottles', family: 'Cognizil', fe_sales: 9, last_sale_at: at('2026-10-30T10:00:00Z'), cpa_usd: '240.50' as unknown as number, cpa_at: at('2026-10-30T10:00:00Z'), currency: 'USD' },
+      { affiliate_id: 'a1', platform: 'jvzoo', account_id: '1234567', account_name: null, product_id: '444171', product_name: 'NeuroMind', family: null, fe_sales: 1, last_sale_at: at('2026-10-01T10:00:00Z'), cpa_usd: null, cpa_at: null, currency: null },
+    ]);
+    expect(out).toHaveLength(2);
+    expect(out[0]).toMatchObject({ affiliate_id: 'a1', platform: 'buygoods', account_id: '62@13457', account_name: 'ana' });
+    expect(out[0].products.map((p) => [p.product_id, p.cpa_usd])).toEqual([['cog-6', 240.5], ['cog-1', 230]]);
+    expect(out[0].products[0].last_sale_at).toBe('2026-10-30T10:00:00.000Z');
+    expect(out[1].products[0]).toMatchObject({ product_id: '444171', cpa_usd: null, cpa_at: null });
   });
 });

@@ -502,6 +502,34 @@ Resposta válida também no formato envelopado:
 
 ---
 
+## 7b. `GET …/products` (o que cada afiliado já vende — afiliação automática)
+
+`GET {DASHBOARD_URL}/api/integrations/affiliates/products?days=180` — mesma chave `X-Api-Key` do webhook e das métricas (401 chave errada, 503 sem chave, 400 com `days` fora de 1–730). Cache de 5 min por janela, limpo quando o mapeamento muda.
+
+O que cada afiliado já vende, **por conta e produto**, só com pedidos já ligados a um `affiliate_id` (`mappedAffiliateId`, a mesma ligação do ranking — conta nova entra assim que o mapeamento chega): front-end aprovado, fora de rede, com valor e fora de teste; venda Digistore estornada fica de fora. O CPA é o da **venda mais recente com CPA > 0** daquele produto (a régua do "CPA atual" das abas, mas por produto).
+
+```json
+[
+  {
+    "affiliate_id": "cmfgq1x2a0000v8l4h3k9d2pw",
+    "platform": "buygoods",
+    "account_id": "62@13457",
+    "account_name": "mariasilva",
+    "products": [
+      { "product_id": "cognizil-6", "product_name": "Cognizil 6 bottles", "family": "Cognizil",
+        "fe_sales": 9, "last_sale_at": "2026-10-30T10:00:00.000Z",
+        "cpa_usd": 240, "cpa_at": "2026-10-30T10:00:00.000Z", "currency": "USD" }
+    ]
+  }
+]
+```
+
+- `account_id` vem como nas vendas (BuyGoods `aff_id@loja`; o ID por produto é o `aff_id`).
+- `cpa_usd` null = nenhuma venda com CPA na janela. `currency` é a moeda original dessa venda: BuyGoods/Digistore/ClickBank gravam o valor sem converter, então quem consome ignora CPA fora de USD.
+- O NorthAffiliates casa o produto pelo ID JVZoo dos links de checkout e, nas outras plataformas, pelo nome (`family` ou `product_name`, sem espaço, acento e caixa): o `family` do catálogo precisa bater com o nome do produto lá.
+
+---
+
 ## 8. Ranking (interno desta API)
 
 ### Job de métricas (`RankingSyncService` + `IntegrationSchedulerService`)
