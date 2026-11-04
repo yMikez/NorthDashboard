@@ -68,7 +68,7 @@ function nsDateStr(d) {
 }
 
 // ---------- tooltip sólido (superfície --bg-elev, sem blur) ----------
-function NSTooltipContent({ active, payload, label, currency, formatFor }) {
+function NSTooltipContent({ active, payload, label, currency, formatFor, labelFormat = fmtDateLong }) {
   if (!active || !payload || payload.length === 0) return null;
   return (
     <div style={{
@@ -78,7 +78,7 @@ function NSTooltipContent({ active, payload, label, currency, formatFor }) {
       boxShadow: 'var(--shadow-lg)',
     }}>
       <div style={{ fontSize: 10, color: 'var(--fg5)', marginBottom: 6 }}>
-        {fmtDateLong(label)}
+        {labelFormat(label)}
       </div>
       {payload.map((p) => (
         <div key={p.dataKey} style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 2 }}>
@@ -103,9 +103,10 @@ function NSTooltipContent({ active, payload, label, currency, formatFor }) {
 //   toggles:  legenda clicável que esconde/mostra séries
 //   brush:    true | false | 'auto' (auto: liga quando data.length > 14)
 //   refLines: [{ y, label?, color? }] — linhas horizontais de referência (metas)
+//   xFormat:  eixo X que não é data (ex.: horas "00".."23") — formata o eixo e a dica
 function NSTimeSeries({
   data, series, height = 260, currency = 'USD', format = 'money',
-  focusKey = null, toggles = false, brush = 'auto', refLines = [],
+  focusKey = null, toggles = false, brush = 'auto', refLines = [], xFormat = null,
 }) {
   const R = window.Recharts;
   const [hidden, setHidden] = useStateN(() => new Set());
@@ -189,7 +190,7 @@ function NSTimeSeries({
       <ResponsiveContainer width="100%" height={height}>
         <ComposedChart data={rows} margin={{ top: 8, right: narrow ? 6 : 12, bottom: 0, left: 0 }}>
           <CartesianGrid vertical={false} stroke={nsAlpha(nsTok('--fg1', '#0D0D0D'), 0.1)} strokeDasharray="3 6"/>
-          <XAxis dataKey="date" tickFormatter={fmtDateShort} minTickGap={28}
+          <XAxis dataKey="date" tickFormatter={xFormat || fmtDateShort} minTickGap={28}
             interval={narrow ? 'preserveStartEnd' : undefined}
             axisLine={false} tickLine={false}
             tick={{ fontSize: 10, fill: 'var(--fg5)', fontFamily: 'var(--f-mono)' }}/>
@@ -208,7 +209,7 @@ function NSTimeSeries({
               } : undefined}/>
           ))}
           <Tooltip
-            content={<NSTooltipContent currency={currency} formatFor={formatFor}/>}
+            content={<NSTooltipContent currency={currency} formatFor={formatFor} labelFormat={xFormat || fmtDateLong}/>}
             cursor={{ stroke: nsAlpha(nsTok('--accent', '#4260E6'), 0.35), strokeDasharray: '3 3' }}
           />
           {visible.map((s) => {
@@ -233,7 +234,7 @@ function NSTimeSeries({
           })}
           {showBrush && (
             <Brush dataKey="date" height={24} travellerWidth={8}
-              tickFormatter={fmtDateShort}
+              tickFormatter={xFormat || fmtDateShort}
               stroke={nsTok('--accent', '#4260E6')} fill={nsAlpha(nsTok('--fg1', '#0D0D0D'), 0.08)}
               traveller={undefined}/>
           )}

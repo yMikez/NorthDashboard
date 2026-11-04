@@ -32,6 +32,7 @@ const PANELS = {
   range: { start: '', end: '' },
   daily: [],
   previous: null,
+  hourly: null,
   netAfterCpa: { usd: 61_234.56, frontGrossUsd: 150_000, frontCpaUsd: 40_000, opexPct: 10 },
   stages: {
     totalUsd: 170_000,

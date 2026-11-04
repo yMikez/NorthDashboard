@@ -100,6 +100,7 @@ const PANELS: OverviewPanels = {
   range: { start: '', end: '' },
   daily: [],
   previous: null,
+  hourly: null,
   netAfterCpa: { usd: 432.1, frontGrossUsd: 950, frontCpaUsd: 200, opexPct: 10 },
   stages: {
     totalUsd: 1000,

@@ -143,24 +143,62 @@ function panelValue(metric, p) {
   return p.netAfterCpa;
 }
 
+// Uma hora do overview-panels → [numerador, denominador] da métrica. AOV é
+// receita ÷ sessões (também no acumulado); o resto é soma.
+function hourParts(metric, p, eventMode) {
+  if (metric === 'gross') return [eventMode ? p.grossOriginal : p.gross, 1];
+  if (metric === 'orders') return [p.orders, 1];
+  if (metric === 'aov') return [p.feRevenue, p.feSessions];
+  if (metric === 'refunds') return [p.refundUsd, 1];
+  return [p.netAfterCpa, 1];
+}
+
+// As 24 horas da métrica; `upto` deixa vazias as horas que ainda não chegaram.
+function hourSeries(metric, hours, { cumulative, eventMode, upto = 23 }) {
+  let num = 0;
+  let den = 0;
+  return hours.map((p, h) => {
+    if (h > upto) return null;
+    const [a, b] = hourParts(metric, p, eventMode);
+    num = cumulative ? num + a : a;
+    den = cumulative ? den + b : b;
+    return metric === 'aov' ? (den ? num / den : 0) : num;
+  });
+}
+
 function TimeSeriesPanel({ metric, setMetric, kpis, prev, buckets, panels, cur, presetLabel, eventMode }) {
+  const [hourMode, setHourMode] = useStateOv('hour');
   const byDay = new Map((panels?.daily || []).map((d) => [d.date, d]));
-  const needsPanels = metric === 'refunds' || metric === 'netAfterCpa' || metric === 'aov';
+  // Um dia só: o gráfico é por hora, contra o dia anterior inteiro (a série
+  // por hora vem toda do overview-panels).
+  const singleDay = buckets.length === 1;
+  const hourly = singleDay ? panels?.hourly || null : null;
+  const needsPanels = singleDay || metric === 'refunds' || metric === 'netAfterCpa' || metric === 'aov';
   const def = TS_METRICS.find((m) => m.id === metric) || TS_METRICS[0];
   // Período anterior, dia i <-> dia i. No modo "Evento" o bruto anterior não
   // existe nessa lente: a linha some só pra essa métrica.
   const prevDaily = panels?.previous?.daily || null;
-  const showPrev = !!prevDaily && !(eventMode && metric === 'gross');
+  const showPrev = hourly ? true : !!prevDaily && !(eventMode && metric === 'gross');
 
-  const data = buckets.map((b, i) => {
-    const p = byDay.get(b.day);
-    const value = metric === 'gross' ? b.gross
-      : metric === 'orders' ? b.approvedOrders
-      : (panelValue(metric, p) ?? 0);
-    const row = { date: b.date, value };
-    if (showPrev) row.prev = panelValue(metric, prevDaily[i]);
-    return row;
-  });
+  let data;
+  if (hourly) {
+    const brtNow = new Date(Date.now() - 3 * 3600 * 1000);
+    const upto = hourly.day === brtNow.toISOString().slice(0, 10) ? brtNow.getUTCHours() : 23;
+    const opts = { cumulative: hourMode === 'cum', eventMode };
+    const curH = hourSeries(metric, hourly.current, { ...opts, upto });
+    const prevH = hourSeries(metric, hourly.previous, opts);
+    data = hourly.current.map((p, h) => ({ date: p.date, value: curH[h], prev: prevH[h] }));
+  } else {
+    data = buckets.map((b, i) => {
+      const p = byDay.get(b.day);
+      const value = metric === 'gross' ? b.gross
+        : metric === 'orders' ? b.approvedOrders
+        : (panelValue(metric, p) ?? 0);
+      const row = { date: b.date, value };
+      if (showPrev) row.prev = panelValue(metric, prevDaily[i]);
+      return row;
+    });
+  }
   const sumPrev = (k) => (prevDaily ? prevDaily.reduce((acc, d) => acc + d[k], 0) : null);
 
   // Valor do período + variação (quando há período anterior comparável).
@@ -207,15 +245,25 @@ function TimeSeriesPanel({ metric, setMetric, kpis, prev, buckets, panels, cur, 
               </span>
             )}
           </div>
-          <div className="panel-sub">{extra ? `${extra} · ` : ''}{TS_NOTE[metric]}</div>
+          <div className="panel-sub">{extra ? `${extra} · ` : ''}{TS_NOTE[metric]}{hourly ? ' · por hora (Brasília)' : ''}</div>
         </div>
+        {hourly && (
+          <div className="seg" title="Valor de cada hora ou somado desde 00h" style={{ flexShrink: 0 }}>
+            <button className={hourMode === 'hour' ? 'is-active' : ''} onClick={() => setHourMode('hour')}>Por hora</button>
+            <button className={hourMode === 'cum' ? 'is-active' : ''} onClick={() => setHourMode('cum')}>Acumulado</button>
+          </div>
+        )}
       </div>
       {needsPanels && !panels
         ? <div style={{ height: 300, display: 'grid', placeItems: 'center', color: 'var(--fg5)', fontSize: 12 }}>carregando…</div>
         : <NSTimeSeries data={data} height={300} currency={cur}
+            {...(hourly ? { xFormat: (h) => `${Number(h)}h`, brush: false } : {})}
             series={[
-              { key: 'value', label: showPrev ? 'Este período' : def.label, color, format: def.format },
-              ...(showPrev ? [{ key: 'prev', label: 'Período anterior', color: 'var(--fg4)', kind: 'line', dashed: true, format: def.format }] : []),
+              { key: 'value', label: hourly ? fmtDateShort(hourly.day) : showPrev ? 'Este período' : def.label, color, format: def.format },
+              ...(showPrev ? [{
+                key: 'prev', label: hourly ? `${fmtDateShort(hourly.prevDay)} · dia anterior` : 'Período anterior',
+                color: 'var(--fg4)', kind: 'line', dashed: true, format: def.format,
+              }] : []),
             ]}/>}
     </div>
   );

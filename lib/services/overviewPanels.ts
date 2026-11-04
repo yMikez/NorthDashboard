@@ -31,8 +31,12 @@ import { affiliateSqlCond } from '../shared/affiliateFilter';
 
 export const REFUND_WINDOW_DAYS = 60;
 
-const BRT_DAY = (col: Prisma.Sql) =>
+type Bucket = (col: Prisma.Sql) => Prisma.Sql;
+const BRT_DAY: Bucket = (col) =>
   Prisma.sql`to_char(((${col}) AT TIME ZONE 'UTC') AT TIME ZONE 'America/Sao_Paulo', 'YYYY-MM-DD')`;
+/** Hora BRT "00".."23" — série por hora quando o período é um dia só. */
+export const BRT_HOUR: Bucket = (col) =>
+  Prisma.sql`to_char(((${col}) AT TIME ZONE 'UTC') AT TIME ZONE 'America/Sao_Paulo', 'HH24')`;
 
 /** Filtros de ORDEM da barra (alias o / pl / pr). */
 export function orderScopeSql(f: MetricsFilters): Prisma.Sql[] {
@@ -59,9 +63,9 @@ const where = (f: MetricsFilters, extra: Prisma.Sql[]) =>
  * de recuperação vence o SMS (mesma venda não conta duas vezes); o resto é
  * front. `recoveryIds` = Affiliate.id das contas de recuperação ativas.
  */
-export function approvedByChannelSql(f: MetricsFilters, recoveryIds: string[]): Prisma.Sql {
+export function approvedByChannelSql(f: MetricsFilters, recoveryIds: string[], bucket: Bucket = BRT_DAY): Prisma.Sql {
   return Prisma.sql`
-    SELECT ${BRT_DAY(Prisma.sql`o."orderedAt"`)} AS day,
+    SELECT ${bucket(Prisma.sql`o."orderedAt"`)} AS day,
            pl."slug" AS platform,
            o."productType"::text AS ptype,
            CASE WHEN o."affiliateId" = ANY(${recoveryIds}::text[]) THEN 'rec:' || o."affiliateId"
@@ -78,9 +82,9 @@ export function approvedByChannelSql(f: MetricsFilters, recoveryIds: string[]): 
 }
 
 /** Estornos por dia DO ESTORNO (série "Reembolso" do gráfico). Chargeback tem card próprio. */
-export function refundsByDaySql(f: MetricsFilters): Prisma.Sql {
+export function refundsByDaySql(f: MetricsFilters, bucket: Bucket = BRT_DAY): Prisma.Sql {
   return Prisma.sql`
-    SELECT ${BRT_DAY(Prisma.sql`o."refundedAt"`)} AS day,
+    SELECT ${bucket(Prisma.sql`o."refundedAt"`)} AS day,
            COUNT(*)::int AS n,
            COALESCE(SUM(ABS(o."grossAmountUsd")), 0)::float8 AS usd
     FROM "Order" o
@@ -96,7 +100,7 @@ export function refundsByDaySql(f: MetricsFilters): Prisma.Sql {
  * sessão inteira — mesma base do card de AOV (feSessionStats em metrics.ts),
  * só que quebrada por dia. Σ dos dias = o do card.
  */
-export function feSessionsByDaySql(f: MetricsFilters): Prisma.Sql {
+export function feSessionsByDaySql(f: MetricsFilters, bucket: Bucket = BRT_DAY): Prisma.Sql {
   const base: Prisma.Sql[] = [Prisma.sql`o."orderedAt" >= ${f.startDate}`, Prisma.sql`o."orderedAt" <= ${f.endDate}`];
   if (f.platformSlugs?.length) base.push(Prisma.sql`pl."slug" = ANY(${f.platformSlugs})`);
   if (f.countries?.length) base.push(Prisma.sql`o."country" = ANY(${f.countries})`);
@@ -121,8 +125,24 @@ export function feSessionsByDaySql(f: MetricsFilters): Prisma.Sql {
       FROM fe JOIN base b ON b.skey = fe.skey
       GROUP BY fe.skey, fe.fe_at
     )
-    SELECT ${BRT_DAY(Prisma.sql`s.fe_at`)} AS day, COUNT(*)::int AS sessions, COALESCE(SUM(s.rev), 0)::float8 AS revenue
+    SELECT ${bucket(Prisma.sql`s.fe_at`)} AS day, COUNT(*)::int AS sessions, COALESCE(SUM(s.rev), 0)::float8 AS revenue
     FROM s GROUP BY 1`;
+}
+
+/**
+ * Bruto "Data do evento" por hora (modo Evento do gráfico): valor original de
+ * toda venda feita na hora, qualquer status — a mesma conta do gross_original
+ * da daily_metrics.
+ */
+export function grossOriginalByHourSql(f: MetricsFilters): Prisma.Sql {
+  return Prisma.sql`
+    SELECT ${BRT_HOUR(Prisma.sql`o."orderedAt"`)} AS day,
+           COALESCE(SUM(COALESCE(o."originalGrossUsd", ABS(o."grossAmountUsd"))), 0)::float8 AS usd
+    FROM "Order" o
+    JOIN "Platform" pl ON pl.id = o."platformId"
+    JOIN "Product" pr ON pr.id = o."productId"
+    WHERE ${where(f, [])}
+    GROUP BY 1`;
 }
 
 /** Call center (Tauk/Logicall) por dia: venda aprovada menos estorno parcial. */
@@ -170,11 +190,21 @@ export interface OverviewPanelsDay {
   recovery: number;
 }
 
+/** Uma hora BRT (date = "00".."23") + o bruto "Data do evento" da hora. */
+export interface OverviewPanelsHour extends OverviewPanelsDay {
+  grossOriginal: number;
+}
+
 export interface OverviewPanels {
   range: { start: string; end: string };
   daily: OverviewPanelsDay[];
   /** Mesma série no período imediatamente anterior, de mesma duração (dia i ↔ dia i). */
   previous: { start: string; end: string; daily: OverviewPanelsDay[] } | null;
+  /**
+   * Período de UM dia (BRT): a série por hora, no dia e no dia anterior
+   * inteiro (hora h ↔ hora h). null com mais de um dia.
+   */
+  hourly: { day: string; prevDay: string; current: OverviewPanelsHour[]; previous: OverviewPanelsHour[] } | null;
   netAfterCpa: { usd: number; frontGrossUsd: number; frontCpaUsd: number; opexPct: number };
   stages: {
     totalUsd: number;
@@ -214,9 +244,14 @@ export function brtDays(start: Date, end: Date): string[] {
   return out;
 }
 
+/** As 24 horas BRT, como o BRT_HOUR devolve. */
+export const BRT_HOURS = Array.from({ length: 24 }, (_, h) => String(h).padStart(2, '0'));
+
 export function assembleOverviewPanels(input: {
   start: Date;
   end: Date;
+  /** Baldes da série (padrão: os dias BRT de start a end). */
+  keys?: string[];
   channels: ChannelRow[];
   refunds: Array<{ day: string; n: number; usd: number }>;
   sessions: Array<{ day: string; sessions: number; revenue: number }>;
@@ -225,8 +260,8 @@ export function assembleOverviewPanels(input: {
   models: Map<string, PlatformModel>;
   opexPct: number;
   recoveryLabels: Map<string, string>;
-}): Omit<OverviewPanels, 'refunds60d' | 'previous'> {
-  const days = brtDays(input.start, input.end);
+}): Omit<OverviewPanels, 'refunds60d' | 'previous' | 'hourly'> {
+  const days = input.keys ?? brtDays(input.start, input.end);
   const empty = (d: string): OverviewPanelsDay => ({
     date: d, gross: 0, orders: 0, refundUsd: 0, refundCount: 0, netAfterCpa: 0, feSessions: 0, feRevenue: 0, front: 0, backend: 0, recovery: 0,
   });
@@ -319,6 +354,18 @@ export function previousWindow(start: Date, end: Date): { start: Date; end: Date
   return { start: new Date(prevEnd.getTime() - span), end: prevEnd };
 }
 
+/** Dia BRT inteiro anterior a `day` ("YYYY-MM-DD"): 00:00 a 23:59:59.999 BRT. */
+export function previousBrtDay(day: string): { day: string; start: Date; end: Date } {
+  const start = new Date(Date.parse(`${day}T03:00:00Z`) - 86_400_000);
+  return { day: start.toISOString().slice(0, 10), start, end: new Date(start.getTime() + 86_400_000 - 1) };
+}
+
+/** Junta o bruto "Data do evento" de cada hora às horas montadas. */
+export function withGrossOriginal(hours: OverviewPanelsDay[], original: Array<{ day: string; usd: number }>): OverviewPanelsHour[] {
+  const byHour = new Map(original.map((r) => [r.day, r.usd]));
+  return hours.map((h) => ({ ...h, grossOriginal: r2(byHour.get(h.date) ?? 0) }));
+}
+
 /** Janela dos últimos 60 dias de VENDA (BRT): começa à 00:00 BRT de hoje − 59. */
 export function refundWindow(now: Date): { start: Date; end: Date } {
   const todayBrt = new Date(now.getTime() - 3 * 3600_000).toISOString().slice(0, 10);
@@ -327,6 +374,24 @@ export function refundWindow(now: Date): { start: Date; end: Date } {
 }
 
 // ---------- Leitura ----------
+
+type ProfitInputs = Awaited<ReturnType<typeof getProfitModelInputs>>;
+
+/** A série do gráfico (sem back-end) por hora BRT, nas 24 horas. */
+async function hourlySeries(f: MetricsFilters, recoveryIds: string[], pm: ProfitInputs, recoveryLabels: Map<string, string>): Promise<OverviewPanelsHour[]> {
+  const [channels, refunds, sessions, original] = await Promise.all([
+    db.$queryRaw<ChannelRow[]>(approvedByChannelSql(f, recoveryIds, BRT_HOUR)),
+    db.$queryRaw<Array<{ day: string; n: number; usd: number }>>(refundsByDaySql(f, BRT_HOUR)),
+    db.$queryRaw<Array<{ day: string; sessions: number; revenue: number }>>(feSessionsByDaySql(f, BRT_HOUR)),
+    db.$queryRaw<Array<{ day: string; usd: number }>>(grossOriginalByHourSql(f)),
+  ]);
+  const { daily } = assembleOverviewPanels({
+    start: f.startDate, end: f.endDate, keys: BRT_HOURS,
+    channels, refunds, sessions, callCenter: null, salesbound: null,
+    models: pm.byPlatform, opexPct: pm.opexPct, recoveryLabels,
+  });
+  return withGrossOriginal(daily, original);
+}
 
 export async function getOverviewPanels(f: MetricsFilters, now = new Date()): Promise<OverviewPanels> {
   const scoped = hasOrderScope(f);
@@ -342,8 +407,18 @@ export async function getOverviewPanels(f: MetricsFilters, now = new Date()): Pr
   const win = refundWindow(now);
   const prevWin = previousWindow(f.startDate, f.endDate);
   const pf: MetricsFilters = { ...f, startDate: prevWin.start, endDate: prevWin.end };
+  // Um dia só: o gráfico vira por hora, contra o dia anterior INTEIRO (no
+  // "Hoje" o período anterior de mesma duração seria um pedaço de ontem).
+  const days = brtDays(f.startDate, f.endDate);
+  const prevDay = days.length === 1 ? previousBrtDay(days[0]) : null;
+  const hourlyP = prevDay
+    ? Promise.all([
+        hourlySeries(f, recoveryIds, pm, recoveryLabels),
+        hourlySeries({ ...f, startDate: prevDay.start, endDate: prevDay.end }, recoveryIds, pm, recoveryLabels),
+      ]).then(([current, previous]) => ({ day: days[0], prevDay: prevDay.day, current, previous }))
+    : Promise.resolve(null);
 
-  const [channels, refunds, sessions, callCenter, salesbound, cohorts, prevChannels, prevRefunds, prevSessions] = await Promise.all([
+  const [channels, refunds, sessions, callCenter, salesbound, cohorts, prevChannels, prevRefunds, prevSessions, hourly] = await Promise.all([
     db.$queryRaw<ChannelRow[]>(approvedByChannelSql(f, recoveryIds)),
     db.$queryRaw<Array<{ day: string; n: number; usd: number }>>(refundsByDaySql(f)),
     db.$queryRaw<Array<{ day: string; sessions: number; revenue: number }>>(feSessionsByDaySql(f)),
@@ -364,6 +439,7 @@ export async function getOverviewPanels(f: MetricsFilters, now = new Date()): Pr
     db.$queryRaw<ChannelRow[]>(approvedByChannelSql(pf, recoveryIds)),
     db.$queryRaw<Array<{ day: string; n: number; usd: number }>>(refundsByDaySql(pf)),
     db.$queryRaw<Array<{ day: string; sessions: number; revenue: number }>>(feSessionsByDaySql(pf)),
+    hourlyP,
   ]);
 
   const panels = assembleOverviewPanels({
@@ -394,6 +470,7 @@ export async function getOverviewPanels(f: MetricsFilters, now = new Date()): Pr
   return {
     ...panels,
     previous: { start: pf.startDate.toISOString(), end: pf.endDate.toISOString(), daily: prevPanels.daily },
+    hourly,
     refunds60d: {
       windowDays: REFUND_WINDOW_DAYS,
       start: win.start.toISOString(),

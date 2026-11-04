@@ -3,8 +3,8 @@ import type { Prisma } from '@prisma/client';
 import type { PGlite } from '@electric-sql/pglite';
 import { migratedPglite } from '../test/pgliteDb';
 import {
-  affiliateRefundsSql, approvedByChannelSql, assembleOverviewPanels, brtDays, callCenterByDaySql, feSessionsByDaySql,
-  previousWindow, refundWindow, refundsByDaySql, salesboundByDaySql, type ChannelRow,
+  affiliateRefundsSql, approvedByChannelSql, assembleOverviewPanels, brtDays, BRT_HOUR, BRT_HOURS, callCenterByDaySql, feSessionsByDaySql,
+  grossOriginalByHourSql, previousBrtDay, previousWindow, refundWindow, refundsByDaySql, salesboundByDaySql, withGrossOriginal, type ChannelRow,
 } from './overviewPanels';
 
 const pgValue = (v: unknown) => (Array.isArray(v) ? `{${v.map((x) => JSON.stringify(String(x))).join(',')}}` : v);
@@ -85,6 +85,16 @@ describe('overviewPanels — SQL (PGlite)', () => {
     expect(rows).toEqual([{ key: 'jvzoo:111', baseCount: 2, baseUsd: 200, refundCount: 1, refundUsd: 100 }]);
   });
 
+  it('por hora (Brasília): canais, sessões e bruto "Data do evento" de um dia', async () => {
+    const day5 = { startDate: new Date('2026-10-05T03:00:00Z'), endDate: new Date('2026-10-06T02:59:59.999Z') };
+    // 15:00 UTC = 12h BRT; a pendente de 999 só entra no bruto do evento.
+    const rows = (await q(approvedByChannelSql(day5, ['a_rec'], BRT_HOUR))) as unknown as ChannelRow[];
+    expect([...new Set(rows.map((r) => r.day))]).toEqual(['12']);
+    expect(rows.reduce((s, r) => s + r.gross, 0)).toBe(230);
+    expect(await q(feSessionsByDaySql(day5, BRT_HOUR))).toEqual([{ day: '12', sessions: 2, revenue: 230 }]);
+    expect(await q(grossOriginalByHourSql(day5))).toEqual([{ day: '12', usd: 230 + 999 }]);
+  });
+
   it('call center: aprovada menos estorno parcial; SalesBound: venda menos anulação', async () => {
     expect(await q(callCenterByDaySql(OCT))).toEqual([{ day: '2026-10-05', provider: 'tauk', usd: 180 }]);
     expect(await q(salesboundByDaySql(OCT))).toEqual([{ day: '2026-10-06', usd: 400 }]);
@@ -129,6 +139,20 @@ describe('assembleOverviewPanels', () => {
     const p = assembleOverviewPanels({ ...base, channels, refunds: [], sessions: [], callCenter: null, salesbound: null });
     expect(p.stages.backend).toEqual({ usd: 0, parts: [], available: false });
   });
+
+  it('por hora: as 24 horas, vazias incluídas, com o bruto do evento de cada uma', () => {
+    const hours = assembleOverviewPanels({
+      ...base, keys: BRT_HOURS, callCenter: null, salesbound: null,
+      channels: [{ day: '09', platform: 'jvzoo', ptype: 'FRONTEND', channel: 'front', gross: 100, cpa: 40, orders: 1 }],
+      refunds: [{ day: '14', n: 1, usd: 70 }],
+      sessions: [{ day: '09', sessions: 1, revenue: 100 }],
+    }).daily;
+    const withOriginal = withGrossOriginal(hours, [{ day: '09', usd: 160 }]);
+    expect(withOriginal.map((h) => h.date)).toEqual(BRT_HOURS);
+    expect(withOriginal[9]).toMatchObject({ gross: 100, grossOriginal: 160, orders: 1, netAfterCpa: 35, feSessions: 1 });
+    expect(withOriginal[14]).toMatchObject({ refundUsd: 70, gross: 0, grossOriginal: 0 });
+    expect(withOriginal[0]).toMatchObject({ gross: 0, grossOriginal: 0 });
+  });
 });
 
 describe('janelas', () => {
@@ -138,5 +162,8 @@ describe('janelas', () => {
     expect(w.start.toISOString()).toBe('2026-08-25T03:00:00.000Z');
     const p = previousWindow(new Date('2026-10-16T03:00:00Z'), new Date('2026-10-23T02:59:59.999Z'));
     expect([p.start.toISOString(), p.end.toISOString()]).toEqual(['2026-10-09T03:00:00.000Z', '2026-10-16T02:59:59.999Z']);
+    // Dia anterior inteiro (também na virada de mês).
+    const d = previousBrtDay('2026-11-01');
+    expect([d.day, d.start.toISOString(), d.end.toISOString()]).toEqual(['2026-10-31', '2026-10-31T03:00:00.000Z', '2026-11-01T02:59:59.999Z']);
   });
 });
