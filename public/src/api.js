@@ -758,6 +758,16 @@ async function adminSaveIntegrationSetting(key, value) {
 // Monitor de call center (aba Produtos): vendas/dia dos produtos vigiados
 // + watchlist admin (adicionar/remover produto do monitoramento).
 function fetchCallCenter() { return coGet('/api/metrics/callcenter'); }
+// ---------- Ranking de afiliados (Afiliados › Ranking) ----------
+// Agregado afiliado × dia do FE (dados oficiais) + cadastro de parceiros; a
+// nota é calculada na página. Premissas: GET para quem tem a aba, PUT admin.
+function fetchAffiliateRanking() { return fetchJSON('/api/metrics/affiliate-ranking', {}); }
+function fetchAffiliateRankingOrders({ contas, de, ate }) {
+  return fetchJSON('/api/metrics/affiliate-ranking/orders', { contas: (contas || []).join(','), de, ate });
+}
+function fetchAffiliateScoreConfig() { return coGet('/api/admin/affiliate-ranking/config'); }
+function saveAffiliateScoreConfig(premissas) { return coSend('/api/admin/affiliate-ranking/config', 'PUT', { premissas }); }
+
 // Config do modelo de lucro CPA (opex% + régua do status). Admin.
 function fetchProfitConfig() { return coGet('/api/admin/profit-config'); }
 function patchProfitConfig(body) { return coSend('/api/admin/profit-config', 'PATCH', body); }
@@ -933,6 +943,10 @@ window.NSApi = _wrapMutations({
   addCallCenterWatch,
   deleteCallCenterWatch,
   fetchProfitConfig,
+  fetchAffiliateRanking,
+  fetchAffiliateRankingOrders,
+  fetchAffiliateScoreConfig,
+  saveAffiliateScoreConfig,
   patchProfitConfig,
   fetchProfitSplit,
   patchAffiliateRefundOverride,

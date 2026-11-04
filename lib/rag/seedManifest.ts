@@ -19,6 +19,7 @@ export const SEED_DOCS: readonly string[] = [
   'margem-de-contribuicao.md',
   'coorte-de-reembolso.md',
   'funil-e-etapas.md',
+  'ranking-afiliados.md',
   // Referências: como cada parte da operação/integração funciona.
   'dicionario-campos.md',
   'call-center.md',

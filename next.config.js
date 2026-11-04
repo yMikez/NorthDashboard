@@ -13,6 +13,7 @@ const nextConfig = {
       { source: '/', destination: '/index.html' },
       { source: '/overview', destination: '/index.html' },
       { source: '/funnel', destination: '/index.html' },
+      { source: '/affiliate-ranking', destination: '/index.html' },
       { source: '/leaderboard', destination: '/index.html' },
       { source: '/all-affiliates', destination: '/index.html' },
       { source: '/products', destination: '/index.html' },

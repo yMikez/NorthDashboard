@@ -36,6 +36,11 @@ export const NAV_GROUPS: NavGroup[] = [
     "label": "Afiliados",
     "items": [
       {
+        "id": "affiliate-ranking",
+        "label": "Ranking",
+        "icon": "trophy"
+      },
+      {
         "id": "leaderboard",
         "label": "Afiliados",
         "icon": "ns-ranking"
@@ -159,6 +164,7 @@ export const NS_ICON_SVG = {
   "ns-funil": "<path d=\"M4 5h16l-6.2 7v6.2L10.2 20v-8z\"/>",
   "monitor-play": "<path d=\"M15.033 9.44a.647.647 0 0 1 0 1.12l-4.065 2.352a.645.645 0 0 1-.968-.56V7.648a.645.645 0 0 1 .967-.56z\"/><path d=\"M12 17v4\"/><path d=\"M8 21h8\"/><path d=\"M4 3h16a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2Z\"/>",
   "percent": "<path d=\"m19 5-14 14\"/><path d=\"M6.5 8.5a1.5 1.5 0 1 0 0-3 1.5 1.5 0 0 0 0 3Z\"/><path d=\"M17.5 18.5a1.5 1.5 0 1 0 0-3 1.5 1.5 0 0 0 0 3Z\"/>",
+  "trophy": "<path d=\"M6 9H4.5a2.5 2.5 0 0 1 0-5H6\"/><path d=\"M18 9h1.5a2.5 2.5 0 0 0 0-5H18\"/><path d=\"M4 22h16\"/><path d=\"M10 14.66V17c0 .55-.47.98-.97 1.21C7.85 18.75 7 20.24 7 22\"/><path d=\"M14 14.66V17c0 .55.47.98.97 1.21C16.15 18.75 17 20.24 17 22\"/><path d=\"M18 2H6v7a6 6 0 0 0 12 0V2Z\"/>",
   "ns-ranking": "<path d=\"M9 20.5V10h6v10.5M3.5 20.5v-6H9M15 20.5v-8h5.5v8M3 20.5h18\"/><path d=\"M12 3.5l.9 1.8 2 .3-1.4 1.4.3 2-1.8-1-1.8 1 .3-2-1.4-1.4 2-.3z\" fill=\"currentColor\" stroke=\"none\"/>",
   "trending-up": "<path d=\"M3.5 20.5 9 12l4 4 7.5-10\"/><path d=\"M20.5 6v4.5M20.5 6H16\"/>",
   "message-square": "<path d=\"M4 6.5A2.5 2.5 0 0 1 6.5 4h11A2.5 2.5 0 0 1 20 6.5v8a2.5 2.5 0 0 1-2.5 2.5H9l-5 4z\"/><path d=\"M8 9.5h8M8 12.8h5\"/>",

@@ -6,7 +6,8 @@ const ROUTES = {
   'funnel':         { title: 'Funil',       em: 'completo',    crumbs: ['Análise', 'Funil'] },
   'vsl':            { title: 'VSLs',        em: 'por página do funil', crumbs: ['Análise', 'VSLs'] },
   'refund-cohorts': { title: 'Reembolsos',  em: 'por coorte',  crumbs: ['Análise', 'Reembolsos'] },
-  'leaderboard':    { title: 'Ranking',     em: 'de afiliados', crumbs: ['Afiliados', 'Ranking'] },
+  'affiliate-ranking': { title: 'Ranking',  em: 'de afiliados', crumbs: ['Afiliados', 'Ranking'] },
+  'leaderboard':    { title: 'Afiliados',   em: 'resultado por afiliado', crumbs: ['Afiliados', 'Afiliados'] },
   'all-affiliates': { title: 'Diretório',   em: 'de afiliados', crumbs: ['Afiliados', 'Todos'] },
   'affiliate-analysis': { title: 'Análise', em: 'de afiliados', crumbs: ['Afiliados', 'Análise'] },
   'affiliate-crm':  { title: 'CRM',          em: 'de afiliados', crumbs: ['Afiliados', 'CRM'] },
@@ -302,7 +303,8 @@ function App({ user }) {
           {hashState.route === 'funnel'         && <FunnelPage filters={filters}/>}
           {hashState.route === 'vsl'            && <VslPage filters={filters} user={user}/>}
           {hashState.route === 'refund-cohorts' && <RefundCohortsPage filters={filters}/>}
-          {hashState.route === 'leaderboard'    && <LeaderboardPage filters={filters} onOpenAffiliate={setDrawerAff} user={user}/>}
+          {hashState.route === 'affiliate-ranking' && <AffiliateRankingPage user={user}/>}
+          {hashState.route === 'leaderboard'    &&<LeaderboardPage filters={filters} onOpenAffiliate={setDrawerAff} user={user}/>}
           {/* Fundida com o Ranking (modelo planilha CPA) — rota antiga rende a mesma página. */}
           {hashState.route === 'all-affiliates' && <LeaderboardPage filters={filters} onOpenAffiliate={setDrawerAff} user={user}/>}
           {hashState.route === 'affiliate-analysis' && <AffiliateAnalysisPage filters={filters} user={user}/>}

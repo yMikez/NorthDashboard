@@ -10,6 +10,7 @@ export type TabId =
   | 'funnel'
   | 'vsl'
   | 'refund-cohorts'
+  | 'affiliate-ranking'
   | 'leaderboard'
   | 'all-affiliates'
   | 'affiliate-analysis'
@@ -37,7 +38,10 @@ export const AVAILABLE_TABS: TabSpec[] = [
   // VSLs: quem tem a aba vê e edita (troca VSL de página no ar, roda teste A/B).
   { id: 'vsl',            label: 'VSLs',                group: 'Análise' },
   { id: 'refund-cohorts', label: 'Reembolsos',          group: 'Análise' },
-  { id: 'leaderboard',    label: 'Ranking',             group: 'Afiliados' },
+  // Ranking: nota de 0 a 100 por afiliado + Premissas + pedidos do afiliado
+  // (receita, CPA, reembolso e lucro por afiliado). Premissas: só admin muda.
+  { id: 'affiliate-ranking', label: 'Ranking',          group: 'Afiliados' },
+  { id: 'leaderboard',    label: 'Afiliados',           group: 'Afiliados' },
   { id: 'all-affiliates', label: 'Todos os afiliados',  group: 'Afiliados' },
   { id: 'affiliate-analysis', label: 'Análise',         group: 'Afiliados' },
   // CRM: aba própria de propósito — quem opera o WhatsApp recebe só ela,

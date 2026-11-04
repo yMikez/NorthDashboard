@@ -17,6 +17,9 @@ function Sidebar({ active, onNav, user, open, onClose }) {
     {
       label: 'Afiliados',
       items: [
+        // Ranking: nota de 0 a 100 por afiliado (modelo do time de dados,
+        // docs/kb/ranking-afiliados.md), com Premissas e a página do afiliado.
+        { id: 'affiliate-ranking', label: 'Ranking', icon: 'trophy' },
         // Ranking + Diretório fundidos numa aba só (modelo planilha CPA).
         // 'all-affiliates' continua rota válida (redireciona pra mesma página).
         { id: 'leaderboard', label: 'Afiliados', icon: 'ns-ranking' },
@@ -416,6 +419,9 @@ const ROUTES_WITHOUT_STAGE = new Set(['leads']);
 // Networks: a aba tem filtros próprios (rede, integrante, produto, tráfego);
 // do filtro global só o período vale.
 const ROUTES_PERIOD_ONLY = new Set(['networks', 'surveys', 'recurrences']);
+// Ranking de afiliados: a tela tem a barra de filtros própria (safra, mínimo
+// de FEs, plataforma, agrupar) — a barra global some nela.
+const ROUTES_OWN_FILTERS = new Set(['affiliate-ranking']);
 // Filtro "Afiliado" (conta de plataforma ou pessoa unificada): vale em todas
 // as abas de venda. Onde não se aplica, o seletor fica apagado com o motivo
 // — a escolha continua na URL e volta a valer ao trocar de aba.
@@ -665,6 +671,9 @@ function FilterBar({ filters, setFilters, options, route }) {
   // Afiliado = pessoa (contas unificadas) ou conta de plataforma solta.
   const affiliateOpts = (options?.affiliates || []).map((a) => ({ id: a.id, label: a.label, meta: a.meta }));
   const affiliateNA = AFFILIATE_NOT_APPLICABLE[route] || null;
+
+  // FilterBar não tem hooks: o retorno antecipado não muda a ordem de hooks.
+  if (ROUTES_OWN_FILTERS.has(route)) return null;
 
   return (
     <div className="filters">
