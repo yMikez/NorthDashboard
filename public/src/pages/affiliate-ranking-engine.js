@@ -11,7 +11,8 @@
      opts.salvarPremissas  (premissas) => Promise
      opts.buscarPedidos    ({ contas, de, ate }) => Promise<pedido[]>
      opts.buscarTodosPedidos () => Promise<pacote>   todas as vendas (GET /api/metrics/affiliate-ranking/all-orders)
-     opts.pagina           'ranking' | 'lista' (Visão Geral) | 'reemb' (Reembolso Prev.): a tela de entrada */
+     opts.pagina           'ranking' | 'lista' (Visão Geral) | 'visao' (Visão Geral › Pontuação por curva)
+                           | 'reemb' (Reembolso Prev.): a tela de entrada */
 (function(){
 function montar(root,opts){
 const _offs=[];
@@ -50,8 +51,19 @@ root.innerHTML=`<div class="filters af-filtros" aria-label="Filtros do ranking">
   <nav class="subtabs" aria-label="Telas do ranking">
     <button type="button" data-pg="ranking">Ranking</button><button type="button" data-pg="premissas">Premissas</button>
   </nav>
+  <nav class="subtabs vg" aria-label="Telas da Visão Geral" hidden>
+        <button type="button" data-pg="lista">Afiliados</button><button type="button" data-pg="visao">Pontuação por curva</button>
+      </nav>
   <section class="bigs" id="bigs" aria-label="Big numbers"></section>
-  <div id="pg-visao" hidden><section class="cbox"><div class="curvas" id="curvas"></div></section></div>
+  <div id="pg-visao" hidden>
+        <div class="def">
+          <span>Curva pela <b>receita do funil</b>:</span>
+          <span><span class="tag A">A</span> até 80%</span><span><span class="tag B">B</span> 80% a 95%</span><span><span class="tag C">C</span> o resto</span>
+          <span><span class="sb" title="Curva S: premium"><i>S</i></span> curva A com 100+ pontos</span>
+          <span>Notas: <span class="fb">bom 9–10</span> · <span class="fm">médio 7–8</span> · <span class="fr">ruim 0–6</span></span>
+        </div>
+        <section class="cbox"><div class="curvas" id="curvas"></div></section>
+      </div>
   <div id="pg-ranking" hidden><section class="rks" id="rankings"></section></div>
   <div id="pg-lista" hidden><div id="lista"></div></div>
   <div id="pg-reemb" hidden><div id="reemb"></div></div>
@@ -804,13 +816,13 @@ function renderAfiliado(R){
         <div><h3>FEs por semana</h3>${chW('fes',v=>n(v),1,'FEs')}</div>
         <div><h3>AOV por semana</h3>${chW('aov',v=>usd(v),3,'AOV')}</div>
         <div><h3>Lucro/cliente previsto por semana</h3>${chW('lpf',v=>usd(v),3,'Lucro/cliente previsto')}</div></div></section>`;}
-  const b=document.getElementById('afVolta');if(b)b.onclick=()=>irPara(st.voltar&&st.voltar!=='af'&&st.voltar!=='visao'?st.voltar:'ranking');
+  const b=document.getElementById('afVolta');if(b)b.onclick=()=>irPara(st.voltar&&st.voltar!=='af'?st.voltar:'ranking');
 }
 
 /* ---------- navegação e filtros ---------- */
 const PGS={visao:['Visão geral','Visão geral dos afiliados'],ranking:['Ranking','Ranking dos afiliados'],premissas:['Premissas','Premissas da pontuação']};
 function pagina(pg){const af=/^af-[A-Za-z0-9-]+$/.test(pg||'');if(af&&st.pg!=='af'&&st.pg)st.voltar=st.voltar||st.pg;
-  st.pg=af?'af':PGS[pg]&&pg!=='visao'?pg:'ranking';if(af)st.afId=pg.slice(3);
+  st.pg=af?'af':PGS[pg]?pg:'ranking';if(af)st.afId=pg.slice(3);
   root.querySelectorAll('[data-pg]').forEach(b=>b.setAttribute('aria-current',b.dataset.pg===st.pg?'page':'false'));
   [...Object.keys(PGS),'af'].forEach(k=>document.getElementById('pg-'+k).hidden=st.pg!==k);document.getElementById('bigs').hidden=st.pg==='premissas'||st.pg==='af';
   const pq=st.pg==='premissas';if(!pq&&st.simAberto){st.simAberto=false;document.body.classList.remove('modal-on')}root.querySelector('.af-filtros').hidden=false;document.getElementById('safraLn').hidden=false;document.getElementById('rodape').hidden=pq;
@@ -1181,12 +1193,15 @@ function renderLista(R){
   const lp=el.querySelector('#lsLimpa');if(lp)lp.onclick=()=>{lsSt.filtro=null;renderLista(R)};
 }
 
-// navegação: a tela Afiliados esconde as abas Ranking/Premissas e os big numbers do ranking; o menu marca a tela da vez
+// navegação: a Visão Geral tem duas subabas, Afiliados (lista) e Pontuação por curva (visao: a Visão geral do site, com
+// os big numbers dos critérios e os blocos A/B/C). Nela somem as abas Ranking/Premissas; o menu marca a tela da vez.
+PGS.visao=['Visão Geral','Visão geral dos afiliados'];
+const ehVg=p=>p==='lista'||p==='visao';
 const _paginaLs=pagina;
-pagina=function(p){_paginaLs(p);const ls=st.pg==='lista';
+pagina=function(p){_paginaLs(p);const ls=st.pg==='lista',vg=ehVg(st.pg)||(st.pg==='af'&&ehVg(st.voltar));
   const b=document.getElementById('bigs');if(b&&ls)b.hidden=true;
-  root.querySelectorAll('.subtabs').forEach(x=>x.hidden=ls||(st.pg==='af'&&st.voltar==='lista'));
-  const grupo=st.pg==='af'?(st.voltar==='lista'?'lista':'ranking'):ls?'lista':'ranking';
+  root.querySelectorAll('.subtabs').forEach(x=>x.hidden=x.classList.contains('vg')?!ehVg(st.pg):vg);
+  const grupo=vg?'lista':'ranking';
   root.querySelectorAll('.side-item[data-pg]').forEach(x=>x.classList.toggle('is-active',x.dataset.pg===grupo));
   if(ls&&st.R)renderLista(st.R)};
 const _renderLs=render;
@@ -1705,7 +1720,8 @@ function rpLigaTabela(el,R){
 const _paginaRp=pagina;
 pagina=function(p){rpFechaFicha();const ant=st.pg;_paginaRp(p);const rp=st.pg==='reemb';if(rp&&ant!=='reemb'&&!(ant==='af'&&st.voltar==='reemb'))rpSt.auto=true;
   if(rp||(st.pg==='af'&&st.voltar==='reemb')){const b=document.getElementById('bigs');if(b)b.hidden=true;root.querySelectorAll('.subtabs').forEach(x=>x.hidden=true)}
-  const grupo=st.pg==='af'?(st.voltar==='lista'?'lista':st.voltar==='reemb'?'reemb':'ranking'):st.pg==='lista'?'lista':rp?'reemb':'ranking';
+  const vgp=p=>p==='lista'||p==='visao';
+  const grupo=st.pg==='af'?(vgp(st.voltar)?'lista':st.voltar==='reemb'?'reemb':'ranking'):vgp(st.pg)?'lista':rp?'reemb':'ranking';
   root.querySelectorAll('.side-item[data-pg]').forEach(x=>x.classList.toggle('is-active',x.dataset.pg===grupo));
   if(rp&&st.R)renderReemb(st.R)};
 const _renderRp=render;
@@ -1727,8 +1743,8 @@ const ajustaTopo=()=>{const t=document.querySelector('.top'),af=root.querySelect
   const fixo=t&&getComputedStyle(t).position==='sticky';af.style.setProperty('--af-topo',(fixo?Math.round(t.getBoundingClientRect().height):0)+'px')};
 ajustaTopo();_on(window,'resize',ajustaTopo);
 render();   // de novo, já com os avisos das Premissas
-// tela de entrada: Visão Geral (lista) ou Reembolso Prev. (reemb); o padrão é o Ranking
-if(['lista','reemb','premissas'].includes(opts.pagina))pagina(opts.pagina);
+// tela de entrada: Visão Geral (lista; subaba visao) ou Reembolso Prev. (reemb); o padrão é o Ranking
+if(['lista','visao','reemb','premissas'].includes(opts.pagina))pagina(opts.pagina);
 
 return {destroy(){_offs.forEach(f=>f());clearTimeout(_salvaT);['espBar','pdToast'].forEach(id=>{const b=document.getElementById(id);if(b)b.remove()});
   ['rpFull','rpDrill','rpAl','rpBack'].forEach(id=>{const b=document.getElementById(id);if(b)b.remove()});

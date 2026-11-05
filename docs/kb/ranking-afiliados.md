@@ -15,8 +15,12 @@ bônus e penalidades) ficam no banco (`AffiliateScoreConfig`) e só admin muda.
 Três abas usam o mesmo motor e o mesmo modelo (permissões `affiliate-overview`,
 `affiliate-ranking`, `affiliate-refund`; qualquer uma libera os dados):
 
-- **Visão Geral** (primeira do grupo Afiliados): a base de afiliados com
-  resultado (receita, CPA, reembolso, lucro, Status CPA, tendência) e alertas.
+- **Visão Geral** (primeira do grupo Afiliados), com duas subabas:
+  - **Afiliados**: a base de afiliados com resultado (receita, CPA, reembolso,
+    lucro, Status CPA, tendência) e alertas;
+  - **Pontuação por curva**: os big numbers dos critérios e um bloco por curva
+    A, B e C (radar das notas, tabela de critérios com bons/médios/ruins,
+    bônus e penalidades, top 3 e piores 3), como no painel de afiliados.
 - **Ranking**: a nota de cada afiliado, Premissas e a página do afiliado.
 - **Reembolso Prev.**: quando o lucro da safra vira zero, as curvas de reembolso
   por safra e por quebra, quem puxa a curva e a tabela afiliado × safra.
