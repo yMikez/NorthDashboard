@@ -8,7 +8,7 @@
 import { Prisma } from '@prisma/client';
 import { db } from '../db';
 import {
-  type ContaCadastro, type LinhaDia, type PedidoLinha, type PedidosPacote, type Premissas, type RankingPayload,
+  type ContaCadastro, type LinhaDia, type NomeOficial, type PedidoLinha, type PedidosPacote, type Premissas, type RankingPayload,
   empacotarPedidos, mapearContas, montarPayload, sanitizarPremissas,
 } from './affiliateRankingCore';
 
@@ -25,7 +25,7 @@ const rt = (n: number) => Prisma.raw(
  * do FE (a soma não duplica).
  */
 export async function getAffiliateRankingData(): Promise<RankingPayload> {
-  const [linhas, pub, cadastro] = await Promise.all([
+  const [linhas, pub, cadastro, oficiais] = await Promise.all([
     db.$queryRaw<LinhaDia[]>(Prisma.sql`
       SELECT p.fe_plataforma || ' ' || p.fe_afiliado_id AS afiliado,
              to_char(p.fe_dia, 'YYYY-MM-DD') AS dia,
@@ -57,8 +57,15 @@ export async function getAffiliateRankingData(): Promise<RankingPayload> {
       JOIN "Platform" pl ON pl.id = a."platformId"
       LEFT JOIN "AffiliatePartner" ap ON ap.id = a."partnerId"
       WHERE pl.slug IN ('jvzoo', 'vupim')`),
+    // nome real da conta na plataforma (affiliate_name da JVZoo), publicado pelo time de dados: vence o apelido do cadastro
+    db.$queryRaw<NomeOficial[]>(Prisma.sql`
+      SELECT pl.slug, o."externalId", o.nickname
+      FROM dados_oficiais."Affiliate" o
+      JOIN dados_oficiais."Platform" pl ON pl.id = o."platformId"
+      WHERE pl.slug IN ('jvzoo', 'vupim') AND nullif(btrim(o.nickname), '') IS NOT NULL`)
+      .catch(() => [] as NomeOficial[]),   // sem a tabela (ou sem permissão): fica o apelido do cadastro, a tela não cai
   ]);
-  const { nomes, parceiros } = mapearContas(cadastro);
+  const { nomes, parceiros } = mapearContas(cadastro, oficiais);
   const gerado = (pub[0]?.publicado_em ?? new Date()).toISOString();
   return montarPayload(linhas, nomes, parceiros, gerado, pub[0]?.publicacao_id ?? null);
 }

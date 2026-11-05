@@ -27,6 +27,21 @@ describe('mapearContas', () => {
     expect(nomes).toEqual({ 'JVZoo 1': 'Ana', 'JVZoo 2': 'Bia' });
     expect(parceiros).toEqual({ 'JVZoo 1': ['p1', 'Ana Souza'], ['Vupim ' + 'x'.repeat(32)]: ['p1', 'Ana Souza'] });
   });
+  it('o nome real da plataforma vence o apelido provisório do cadastro', () => {
+    const { nomes, parceiros } = mapearContas(
+      [
+        { slug: 'jvzoo', externalId: '3565681', nickname: 'xxxxxxUS', partnerId: null, partnerName: null },
+        { slug: 'jvzoo', externalId: '2', nickname: 'Bia', partnerId: 'p2', partnerName: null },
+      ],
+      [
+        { slug: 'jvzoo', externalId: '3565681', nickname: ' Fares Kellou ' },
+        { slug: 'jvzoo', externalId: '2', nickname: '' },
+        { slug: 'jvzoo', externalId: '9', nickname: 'Só no oficial' },
+      ],
+    );
+    expect(nomes).toEqual({ 'JVZoo 3565681': 'Fares Kellou', 'JVZoo 2': 'Bia', 'JVZoo 9': 'Só no oficial' });
+    expect(parceiros).toEqual({ 'JVZoo 2': ['p2', 'Bia'] });
+  });
 });
 
 describe('montarPayload', () => {
