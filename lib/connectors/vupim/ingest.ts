@@ -131,9 +131,8 @@ const VUPIM_DOWN_N_RE = /\b(?:last\s*chance|down\s*sell)\s*0*(\d+)\b/i;
  * A Vupim numera o upsell como N (OTO1=1, OTO2=2, OTO3=3) e o downsell já
  * como N+1 (Last Chance 1 = 2, Last Chance 2 = 3). Sem o +1 no upsell, o
  * OTO2 caía no "Upsell 1" (o Funil sobe etapa < 2 pra 2), o OTO3 aparecia
- * como "Upsell 2" e o "Upsell 3" nunca aparecia (corrigido em 05/11/2026;
- * os pedidos antigos foram acertados pela migração
- * 20261105120000_vupim_funnel_step_upsell).
+ * como "Upsell 2" e o "Upsell 3" nunca aparecia (corrigido em 05/11/2026,
+ * só para os pedidos novos; os já gravados não foram alterados).
  *
  * Sem funnelStep no payload: tenta o número pelo nome da etapa/oferta.
  */
