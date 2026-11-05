@@ -17,18 +17,17 @@ function Sidebar({ active, onNav, user, open, onClose }) {
     {
       label: 'Afiliados',
       items: [
-        // Ranking: nota de 0 a 100 por afiliado (modelo do time de dados,
-        // docs/kb/ranking-afiliados.md), com Premissas e a página do afiliado.
-        { id: 'affiliate-ranking', label: 'Ranking', icon: 'trophy' },
-        // Visão Geral (base de afiliados com resultado e alertas) e Reembolso Prev.
-        // (curva de reembolso prevista): mesmo motor e modelo do Ranking.
+        // Visão Geral (base de afiliados com resultado e alertas), Ranking (nota
+        // de 0 a 100, Premissas e a página do afiliado) e Reembolso Prev. (curva
+        // de reembolso prevista): modelo do time de dados, docs/kb/ranking-afiliados.md.
         { id: 'affiliate-overview', label: 'Visão Geral', icon: 'layout-dashboard' },
+        { id: 'affiliate-ranking', label: 'Ranking', icon: 'trophy' },
         { id: 'affiliate-refund', label: 'Reembolso Prev.', icon: 'percent' },
         // Telas do Mike, em paralelo às do time de dados até a validação.
         // Ranking + Diretório fundidos numa aba só (modelo planilha CPA).
         // 'all-affiliates' continua rota válida (redireciona pra mesma página).
-        { id: 'leaderboard', label: 'Afiliados Mike', icon: 'ns-ranking' },
-        { id: 'affiliate-analysis', label: 'Análise Mike', icon: 'trending-up' },
+        { id: 'leaderboard', label: 'Afiliados', icon: 'ns-ranking' },
+        { id: 'affiliate-analysis', label: 'Análise', icon: 'trending-up' },
         { id: 'affiliate-crm', label: 'CRM Mike', icon: 'message-square' },
         // Redes de afiliados (NorthAffiliates) — separadas dos individuais.
         { id: 'networks', label: 'Networks Mike', icon: 'link' },

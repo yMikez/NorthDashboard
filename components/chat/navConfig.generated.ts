@@ -36,14 +36,14 @@ export const NAV_GROUPS: NavGroup[] = [
     "label": "Afiliados",
     "items": [
       {
-        "id": "affiliate-ranking",
-        "label": "Ranking",
-        "icon": "trophy"
-      },
-      {
         "id": "affiliate-overview",
         "label": "Visão Geral",
         "icon": "layout-dashboard"
+      },
+      {
+        "id": "affiliate-ranking",
+        "label": "Ranking",
+        "icon": "trophy"
       },
       {
         "id": "affiliate-refund",
@@ -52,12 +52,12 @@ export const NAV_GROUPS: NavGroup[] = [
       },
       {
         "id": "leaderboard",
-        "label": "Afiliados Mike",
+        "label": "Afiliados",
         "icon": "ns-ranking"
       },
       {
         "id": "affiliate-analysis",
-        "label": "Análise Mike",
+        "label": "Análise",
         "icon": "trending-up"
       },
       {

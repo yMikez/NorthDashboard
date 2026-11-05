@@ -12,17 +12,18 @@ cálculo roda na página (`public/src/pages/affiliate-ranking-engine.js`, gerado
 partir do painel de afiliados do time de dados). As premissas (pesos, metas,
 bônus e penalidades) ficam no banco (`AffiliateScoreConfig`) e só admin muda.
 
-Três abas usam o mesmo motor e o mesmo modelo (permissões `affiliate-ranking`,
-`affiliate-overview`, `affiliate-refund`; qualquer uma libera os dados):
+Três abas usam o mesmo motor e o mesmo modelo (permissões `affiliate-overview`,
+`affiliate-ranking`, `affiliate-refund`; qualquer uma libera os dados):
 
+- **Visão Geral** (primeira do grupo Afiliados): a base de afiliados com
+  resultado (receita, CPA, reembolso, lucro, Status CPA, tendência) e alertas.
 - **Ranking**: a nota de cada afiliado, Premissas e a página do afiliado.
-- **Visão Geral**: a base de afiliados com resultado (receita, CPA, reembolso,
-  lucro, Status CPA, tendência) e alertas.
 - **Reembolso Prev.**: quando o lucro da safra vira zero, as curvas de reembolso
   por safra e por quebra, quem puxa a curva e a tabela afiliado × safra.
 
-As telas do Mike (Afiliados, Análise, CRM, Networks) seguem no menu com o sufixo
-"Mike" enquanto as duas versões são validadas em paralelo.
+As telas do Mike seguem no menu enquanto as duas versões são validadas em
+paralelo: Afiliados e Análise com o nome de sempre, CRM e Networks com o
+sufixo "Mike".
 
 ## De onde vêm os dados
 

@@ -40,17 +40,16 @@ export const AVAILABLE_TABS: TabSpec[] = [
   // VSLs: quem tem a aba vê e edita (troca VSL de página no ar, roda teste A/B).
   { id: 'vsl',            label: 'VSLs',                group: 'Análise' },
   { id: 'refund-cohorts', label: 'Reembolsos',          group: 'Análise' },
-  // Ranking: nota de 0 a 100 por afiliado + Premissas + pedidos do afiliado
-  // (receita, CPA, reembolso e lucro por afiliado). Premissas: só admin muda.
-  { id: 'affiliate-ranking', label: 'Ranking',          group: 'Afiliados' },
-  // Visão Geral e Reembolso Prev.: mesmo modelo do Ranking (time de dados) — base de
-  // afiliados com resultado e alertas; reembolso previsto por safra, produto e funil.
+  // Visão Geral, Ranking e Reembolso Prev.: modelo do time de dados — base de
+  // afiliados com resultado e alertas; nota de 0 a 100 + Premissas + pedidos do
+  // afiliado (Premissas: só admin muda); reembolso previsto por safra, produto e funil.
   { id: 'affiliate-overview', label: 'Visão Geral',     group: 'Afiliados' },
+  { id: 'affiliate-ranking', label: 'Ranking',          group: 'Afiliados' },
   { id: 'affiliate-refund', label: 'Reembolso Prev.',   group: 'Afiliados' },
   // Telas do Mike: rodam em paralelo às do time de dados até a validação.
-  { id: 'leaderboard',    label: 'Afiliados Mike',      group: 'Afiliados' },
+  { id: 'leaderboard',    label: 'Afiliados',           group: 'Afiliados' },
   { id: 'all-affiliates', label: 'Todos os afiliados',  group: 'Afiliados' },
-  { id: 'affiliate-analysis', label: 'Análise Mike',    group: 'Afiliados' },
+  { id: 'affiliate-analysis', label: 'Análise',         group: 'Afiliados' },
   // CRM: aba própria de propósito — quem opera o WhatsApp recebe só ela,
   // sem ver receita, margem nem CPA da operação inteira.
   { id: 'affiliate-crm',  label: 'CRM Mike',            group: 'Afiliados' },
