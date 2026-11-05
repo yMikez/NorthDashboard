@@ -849,6 +849,25 @@ body.pd-cheia{overflow:hidden}
 .af .ls-coo-t td.hc.pv{font-style:italic;font-weight:500;opacity:.85}
 @media (max-width:1100px){.af .ls-bigs{grid-template-columns:repeat(3,minmax(0,1fr))}.af .ls-als{grid-template-columns:repeat(2,minmax(0,1fr))}}
 @media (max-width:560px){.af .ls-bigs{grid-template-columns:repeat(2,minmax(0,1fr))}.af .ls-als{grid-template-columns:minmax(0,1fr)}}
+/* filtros flutuantes: selo discreto com os filtros aplicados quando a barra sai da tela; "Alterar" abre a barra num painel */
+.af .af-flt{position:fixed;z-index:40;bottom:16px;transform:translateX(-50%);display:flex;align-items:center;gap:6px;max-width:calc(100vw - 24px);overflow-x:auto;white-space:nowrap;scrollbar-width:none;
+  padding:4px 4px 4px 10px;font:500 11.5px/1 var(--f-body);color:var(--fg3);
+  background:color-mix(in oklab,var(--bg-raised) 84%,transparent);-webkit-backdrop-filter:blur(8px);backdrop-filter:blur(8px);
+  border:1px solid var(--border);border-radius:999px;box-shadow:0 6px 18px rgba(0,0,0,.12);animation:afFltIn .16s ease-out}
+.af .af-flt[hidden],.af .af-flt-pop[hidden]{display:none}
+.af .af-flt .i{display:inline-flex;color:var(--fg5)}
+.af .af-flt .s{color:var(--fg5)}
+.af .af-flt .c{display:inline-flex;align-items:center;gap:2px}
+.af .af-flt .c.nd{color:var(--glow-cyan);font-weight:600}
+.af .af-flt .x{border:0;background:transparent;color:inherit;cursor:pointer;padding:0 2px;font-size:13px;line-height:1;opacity:.7;min-height:0}
+.af .af-flt .x:hover{opacity:1}
+.af .af-flt .alt{border:0;border-radius:999px;background:var(--bg-subtle);color:var(--fg2);font:600 11px/1 var(--f-body);padding:6px 10px;cursor:pointer;margin-left:4px;min-height:0}
+.af .af-flt .alt:hover{background:var(--bg-hover);color:var(--fg1)}
+.af .af-flt .alt[aria-expanded="true"]{background:color-mix(in oklab,var(--accent) 14%,transparent);color:var(--glow-cyan)}
+.af .af-flt-pop{position:fixed;z-index:41;transform:translateX(-50%);width:max-content;background:var(--bg-raised);border:1px solid var(--border);border-radius:10px;box-shadow:0 10px 30px rgba(0,0,0,.14);padding:10px 12px;animation:afFltIn .16s ease-out}
+.af .af-flt-pop .af-filtros{margin:0;border:0;padding:0;background:transparent;position:static;box-shadow:none}
+@keyframes afFltIn{from{opacity:0;translate:0 6px}to{opacity:1;translate:0 0}}
+@media (prefers-reduced-motion:reduce){.af .af-flt,.af .af-flt-pop{animation:none}}
 
 /* ---- tela Reembolso Prev. (tokens do dash do Mike; cores das séries validadas p/ daltonismo, claro e escuro) ----
    --rp-*: gráfico principal e Curva Afiliado. --rk0…5: cor pelo resultado (0 = menor reembolso, cor forte; 5 = maior, cor fria). */
