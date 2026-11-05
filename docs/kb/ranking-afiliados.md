@@ -47,6 +47,13 @@ de sempre, enquanto as duas versões são validadas em paralelo.
 
 - O filtro de período define a **safra**: as vendas do período, com tudo o que
   renderam até hoje. Padrão: últimos 30 dias.
+- **Hoje entra** (dia de Brasília), com as vendas que já chegaram na última
+  publicação. Receita, FEs e reembolso somam o que já chegou. FEs em 30 dias, o
+  bônus de volume e a variação contra o período anterior contam só a parte do dia
+  que já passou, para o dia aberto não parecer queda.
+- A venda fica na safra do **FE de origem**: o upsell feito depois da meia-noite
+  conta no dia do FE (por isso "Este mês" pode diferir por centavos da tela
+  Afiliados, que conta pela data da venda).
 - O ranking só inclui quem tem **30+ FEs** no período (dá para mudar).
 
 ## Curva Afiliado (A/B/C) e S
