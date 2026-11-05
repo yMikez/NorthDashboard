@@ -95,7 +95,13 @@ const C=Object.fromEntries(DADOS.campos.map((k,i)=>[k,i+2]));
 const AFS=DADOS.afs, D0=new Date(DADOS.d0+'T12:00:00Z');
 const dIso=i=>new Date(D0.getTime()+i*864e5).toISOString().slice(0,10), dIdx=s=>Math.round((new Date(s+'T12:00:00Z')-D0)/864e5);
 const dTx=i=>{const s=dIso(i);return s.slice(8,10)+'/'+s.slice(5,7)};
-const HOJE=DADOS.gerado.slice(0,10), FIM=Math.min(dIdx(DADOS.d1),dIdx(HOJE)-1);   // o dia da extração ainda está aberto
+// hoje (dia de Brasília) entra como dia aberto: as somas usam o que já chegou; as contas por dia (FEs em 30 dias, bônus de
+// volume, comparação com o período anterior) contam só a parte do dia que já passou (FRAC_HOJE)
+const _HB=new Intl.DateTimeFormat('en-CA',{timeZone:'America/Sao_Paulo',year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',hourCycle:'h23'})
+  .formatToParts(new Date(DADOS.gerado)).reduce((o,p)=>(o[p.type]=p.value,o),{});
+const HOJE=`${_HB.year}-${_HB.month}-${_HB.day}`, FIM=Math.min(dIdx(DADOS.d1),dIdx(HOJE)), ABERTO=FIM===dIdx(HOJE);
+const FRAC_HOJE=ABERTO?Math.max(1/24,(+_HB.hour*60+ +_HB.minute)/1440):1, HORA_HOJE=_HB.hour+':'+_HB.minute;
+const diasEf=(p0,p1)=>p1-p0+1-(ABERTO&&p1>=FIM?1-FRAC_HOJE:0);
 const MESES=[...new Set(DADOS.rows.map(r=>dIso(r[1]).slice(0,7)))].filter(m=>dIdx(m+'-01')<=FIM).sort();
 const mesTx=k=>['jan','fev','mar','abr','mai','jun','jul','ago','set','out','nov','dez'][+k.slice(5)-1]+'/'+k.slice(2,4);
 const fimMes=k=>{const [y,m]=k.split('-').map(Number);return dIdx(new Date(Date.UTC(y,m,0)).toISOString().slice(0,10))};
@@ -189,7 +195,7 @@ function anterior(){
 /* safra = as vendas do período, com tudo o que renderam até hoje. Reembolso 60d = o que já caiu em até 60 dias + o que
    ainda vai cair (10d × fator do afiliado, só nas vendas que não têm 60 dias). Safra fechada (60+ dias): tudo real. */
 function calcular(pp=periodo(),off=0){
-  const [p0,p1]=pp,dias=p1-p0+1,b1=p1+off,fechada=p1<=FIM-60;
+  const [p0,p1]=pp,dias=p1-p0+1,de=diasEf(p0,p1),b1=p1+off,fechada=p1<=FIM-60;
   const jan=k=>{let j1=Math.min(b1,FIM-k)-off,j0=p0;if(j1<j0)j0=Math.max(0,j1-Math.max(p1-p0,29));return [j0,j1,j1>=j0]};
   const [r0,r1,temRe]=jan(10),[q0,q1,temQ]=jan(30);
   const Z=()=>({fes:0,funil:0,liq:0,custo:0,fcob:0,call:0,dev:0,base:0,vendas:0,disp:0,imFu:0,imD:0,imR:0,d60:0,idS:0,fut:0});
@@ -214,11 +220,11 @@ function calcular(pp=periodo(),off=0){
     a.re60=a.funil?(a.d60+a.fut)/a.funil:null;
     a.lpf=a.fes?(a.liq-a.custo-a.fut)/a.fes:null;a.lpfHoje=a.fes?(a.liq-a.custo)/a.fes:null;
     a.liqTot=a.liq-a.custo-a.fut+a.call;a.lpc=a.fes?a.liqTot/a.fes:null;
-    a.fes30=a.fes/dias*30;a.aov=a.fes?a.funil/a.fes:null;a.tdisp=a.vendas>=20?a.disp/a.vendas:null;
+    a.fes30=a.fes/de*30;a.aov=a.fes?a.funil/a.fes:null;a.tdisp=a.vendas>=20?a.disp/a.vendas:null;
     a.n={re60:a.re60==null?NEUTRA:reta(a.re60*100,REGUA.re60()),lpf:a.lpf==null?null:reta(a.lpf,REGUA.lpf()),
          fes:reta(a.fes30,REGUA.fes(a.curva)),aov:a.aov==null?null:reta(a.aov,REGUA.aov())};
     let s=0,w=0;for(const e of EIXOS){const x=a.n[e.k];if(x==null)continue;s+=x*e.peso;w+=e.peso}
-    a.base100=w?10*s/w:null;a.bonus=bonusVol(a.fes/dias)+bonusRe(a.re60);
+    a.base100=w?10*s/w:null;a.bonus=bonusVol(a.fes/de)+bonusRe(a.re60);
     a.pCb=penCb(a.tdisp);a.pPrej=penPrej(a.lpc);a.pen=a.pCb+a.pPrej;
     a.pts=a.base100==null?null:a.base100+a.bonus+a.pen;a.rank=a.fes>=st.min&&a.pts!=null;a.S=a.curva==='A'&&a.rank&&a.pts>100}
   const rk=L.filter(a=>a.rank),med={};
@@ -226,9 +232,14 @@ function calcular(pp=periodo(),off=0){
   const t=Z();L.forEach(a=>{for(const k in t)t[k]+=a[k]});
   t.re60=t.funil?(t.d60+t.fut)/t.funil:null;t.agora=t.funil?t.d60/t.funil:null;t.idade=t.funil?t.idS/t.funil:null;
   t.lpf=t.fes?(t.liq-t.custo-t.fut)/t.fes:null;t.lpfHoje=t.fes?(t.liq-t.custo)/t.fes:null;
-  t.fes30=t.fes/dias*30;t.aov=t.fes?t.funil/t.fes:null;t.liqTot=t.liq-t.custo-t.fut+t.call;t.cob=t.funil?t.fcob/t.funil:0;
+  t.fes30=t.fes/de*30;t.aov=t.fes?t.funil/t.fes:null;t.liqTot=t.liq-t.custo-t.fut+t.call;t.cob=t.funil?t.fcob/t.funil:0;
   t.pts=rk.length?rk.reduce((s,a)=>s+a.pts,0)/rk.length:null;
-  return {L,T,rk,med,t,p0,p1,dias,r0,r1,temRe,q0,q1,temQ,fechada}}
+  return {L,T,rk,med,t,p0,p1,dias,diasEf:de,r0,r1,temRe,q0,q1,temQ,fechada}}
+// período anterior de mesmo tamanho; com hoje aberto, as somas dele (receita, FEs, líquido) ficam proporcionais à parte do
+// período atual que já passou, para a variação não acusar queda só porque o dia ainda não terminou
+function calcAnt(R){const pa=anterior();if(!pa)return null;const A=calcular(pa,R.p0-pa[0]),k=R.diasEf/A.dias;
+  if(k<0.9999){['funil','fes','liqTot','liq','custo','fut','call','d60'].forEach(x=>{A.t[x]*=k});A.L.forEach(a=>{a.funil*=k})}
+  return A}
 
 /* ---------- dica de ferramenta ---------- */
 const TIPS=new Map();let tipN=0;
@@ -345,9 +356,9 @@ const dist=parts=>{const v=parts.filter(x=>x[0]>0),tot=v.reduce((s,x)=>s+x[0],0)
 
 function render(){
   TIPS.clear();tipN=0;esconde();
-  const R=calcular(),{L,T,rk,med,t,p0,p1,dias,fechada}=R;
+  const R=calcular(),{L,T,rk,med,t,p0,p1,dias,diasEf:de,fechada}=R;
   renderPremissas();st.R=R;
-  const pa=anterior(),A=pa?calcular(pa,p0-pa[0]):null;
+  const pa=anterior(),A=calcAnt(R);
   const info=regTip(`<div class="t1"><b>Safra ${dTx(p0)} a ${dTx(p1)}</b><span>${dias} dias</span></div>
     <div class="t2">As vendas desse período, com tudo o que renderam até hoje.</div>
     <div class="kv"><span>Situação</span><b>${fechada?'fechada (60+ dias): real':'aberta: previsto'}</b>
@@ -357,7 +368,7 @@ function render(){
     <span>Variação contra</span><b>${pa?dTx(pa[0])+' a '+dTx(pa[1]):'—'}</b></div>
     <div class="nt">Onde ainda não há pedido no armazém, o custo usa a média real de ${pct(PCT_FS)} da receita.</div>`);
   document.getElementById('safraLn').innerHTML=`<span class="st ${fechada?'real':'prev'}">${fechada?'real':'previsto'}</span>`+
-    `<span class="tx">Safra <b>${dTx(p0)}–${dTx(p1)}</b> · ${dias} dias${pa?` · vs ${dTx(pa[0])}–${dTx(pa[1])}`:''}${st.plat?` · ${st.plat}`:''}</span>`+
+    `<span class="tx">Safra <b>${dTx(p0)}–${dTx(p1)}</b> · ${dias} dias${ABERTO&&p1>=FIM?` (hoje até ${HORA_HOJE})`:''}${pa?` · vs ${dTx(pa[0])}–${dTx(pa[1])}`:''}${st.plat?` · ${st.plat}`:''}</span>`+
     (st.plat!=='JVZoo'&&dIso(p1)<VUPIM_INI?`<span class="st vu-av">sem Vupim nesta safra (dados desde 21/10)</span>`:'')+
     `<button class="info" type="button" data-tip="${info}" aria-label="Detalhes da safra">i</button>`;
   const varia=(v,va,modo,melhor)=>{
@@ -394,7 +405,7 @@ function render(){
     const media=rkc.length?rkc.reduce((s,a)=>s+a.pts,0)/rkc.length:null,cS=rkc.filter(a=>a.S).length;
     const vals=EIXOS.map(e=>{const v=rkc.map(a=>a.n[e.k]).filter(x=>x!=null);return v.length?v.reduce((s,x)=>s+x,0)/v.length:null});
     const P={fes:0,funil:0,liq:0,custo:0,fut:0,d60:0};rkc.forEach(a=>{for(const k in P)P[k]+=a[k]});
-    const pv={re60:P.funil?(P.d60+P.fut)/P.funil:null,lpf:P.fes?(P.liq-P.custo-P.fut)/P.fes:null,fes:rkc.length?P.fes/dias*30/rkc.length:null,aov:P.fes?P.funil/P.fes:null};
+    const pv={re60:P.funil?(P.d60+P.fut)/P.funil:null,lpf:P.fes?(P.liq-P.custo-P.fut)/P.fes:null,fes:rkc.length?P.fes/de*30/rkc.length:null,aov:P.fes?P.funil/P.fes:null};
     let linhas=EIXOS.map((e,i)=>{const q={fb:0,fm:0,fr:0};rkc.forEach(a=>{const f=fx(a.n[e.k]);if(f)q[f]++});
       return `<tr><td>${e.r||e.l}</td><td>${e.meta(c)}</td><td>${e.f(pv[e.k])}</td><td class="${fx(vals[i])}">${num(vals[i],1)}</td><td>${dist([[q.fb,'b','bons'],[q.fm,'m','médios'],[q.fr,'r','ruins']])}</td></tr>`}).join('');
     const nb=rkc.filter(a=>a.bonus>=0.5).length,np=rkc.filter(a=>a.lpc!=null&&a.lpc<=-MT.prejMax).length,npp=rkc.filter(a=>a.pPrej<=-0.05&&!(a.lpc<=-MT.prejMax)).length,nc=rkc.filter(a=>a.pCb&&a.pPrej>-0.5).length;
@@ -842,7 +853,7 @@ document.getElementById('fMin').onchange=e=>{st.min=+e.target.value;render()};
 document.getElementById('fPlat').onclick=e=>{const b=e.target.closest('button');if(!b)return;st.plat=b.dataset.v;
   document.querySelectorAll('#fPlat button').forEach(x=>x.setAttribute('aria-pressed',String(x===b)));render()};
 document.getElementById('stamp').textContent=new Date(DADOS.gerado).toLocaleString('pt-BR',{timeZone:'America/Sao_Paulo',day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'});
-document.getElementById('fimTx').textContent=dTx(FIM)+'/'+dIso(FIM).slice(0,4);
+document.getElementById('fimTx').textContent=ABERTO?`hoje (${dTx(FIM)}) ${HORA_HOJE}`:dTx(FIM)+'/'+dIso(FIM).slice(0,4);
 pagina('ranking');
 render();
 
@@ -1121,7 +1132,9 @@ const pctTx=(v,c=1)=>v==null?'—':pct(v,c);
 
 function renderLista(R){
   const el=document.getElementById('lista');if(!el||st.pg!=='lista')return;
-  const {L,t,p0,p1,dias,fechada}=R,pa=anterior(),A=pa?calcular(pa,p0-pa[0]):null,X=lsExtras(R);
+  const {L,t,p0,p1,dias,fechada}=R,A=calcAnt(R),X=lsExtras(R);
+  // hoje aberto: a última semana (e as últimas 4) ainda não terminou; a comparação usa só a parte que já passou
+  const k7=ABERTO?(6+FRAC_HOJE)/7:1,k28=ABERTO?(27+FRAC_HOJE)/28:1;
   const ativos=L.filter(a=>a.fes>0),idsAgora=new Set(ativos.map(a=>a.i));
   const novos=ativos.filter(a=>{const x=X.get(a.i);return x&&x.pri>=p0}),parados=A?A.L.filter(a=>a.fes>=10&&!idsAgora.has(a.i)):[];
   const cpaTot=ativos.reduce((s,a)=>s+((X.get(a.i)||{}).cpa||0),0),temCpa=typeof PED!=='undefined'&&!!PED;
@@ -1146,7 +1159,7 @@ function renderLista(R){
     {k:'re',cls:'bad',l:`reembolso 60d previsto acima de ${P$(MT.re7)}`,ids:rel.filter(a=>a.re60!=null&&a.re60*100>MT.re7)},
     {k:'prej',cls:'bad',l:`prejuízo por cliente pior que −US$ ${n(MT.prejIni)} (com call center)`,ids:rel.filter(a=>a.lpc!=null&&a.lpc<-MT.prejIni)},
     {k:'cb',cls:'warn',l:`disputas acima de ${P$(MT.cbIni)} das vendas (risco de chargeback)`,ids:ativos.filter(a=>a.tdisp!=null&&a.tdisp*100>MT.cbIni)},
-    {k:'queda',cls:'warn',l:'caíram 40%+ na última semana (contra a média das 4 anteriores)',ids:ativos.filter(a=>{const x=X.get(a.i);return x&&x.f28/4>=20&&x.f7<=0.6*x.f28/4})},
+    {k:'queda',cls:'warn',l:'caíram 40%+ na última semana (contra a média das 4 anteriores)',ids:ativos.filter(a=>{const x=X.get(a.i);return x&&x.f28/4>=20&&x.f7<=0.6*x.f28/4*k7})},
     {k:'parado',cls:'warn',l:'pararam: sem FE há 7+ dias (tinham volume no período anterior)',ids:parados},
     {k:'novo',cls:'good',l:'novos com bom começo (30+ FEs, nota 60+)',ids:novos.filter(a=>a.fes>=30&&a.pts!=null&&a.pts>=60)},
   ].map(a=>({...a,ids:a.ids.sort((x,y)=>y.funil-x.funil)}));
@@ -1159,7 +1172,7 @@ function renderLista(R){
   const base=lsSt.filtro==='parado'?parados:ativos,rows=filtro?filtro.ids:base;
   const linha=a=>{const x=X.get(a.i)||{sem:Array(8).fill(0)},s4=x.sem.slice(4).reduce((p,q)=>p+q,0),s0=x.sem.slice(0,4).reduce((p,q)=>p+q,0);
     return {a,nome:nomeAf(a),curva:a.S?'S':a.curva,pts:a.pts,rank:a.rank,fes:a.fes,funil:a.funil,aov:a.aov,cpaFe:x.cpa!=null&&a.fes?x.cpa/a.fes:null,cpa:x.cpa,
-      agora:a.agora,re60:a.re60,tdisp:a.tdisp,custo:a.custo,call:a.call,lpf:a.lpf,lpc:a.lpc,st:statusCpa(a.lpf),sem:x.sem,tend:s0?(s4-s0)/s0:s4?1:null,
+      agora:a.agora,re60:a.re60,tdisp:a.tdisp,custo:a.custo,call:a.call,lpf:a.lpf,lpc:a.lpc,st:statusCpa(a.lpf),sem:x.sem,tend:s0?(s4/k28-s0)/s0:s4?1:null,
       ult:x.ult==null?null:FIM-x.ult}};
   const RS=rows.map(linha);
   const fechadaTx=fechada?'real':'previsto';
@@ -1675,7 +1688,11 @@ function rpTabela(IDS,meses){
   if(af){const lista=[...RPA.get('t')].filter(([i,x])=>x.fu>0&&(!IDS||IDS.has(i))).map(([i])=>T.get(i)).filter(Boolean).sort((x,y)=>y.funil-x.funil);
     for(const a of lista){const nm=nomeAf(a);if(q&&!nm.toLowerCase().includes(q)&&!String(a.af).toLowerCase().includes(q))continue;
       const s=new Set([a.i]);
-      grupos.push({k:'a'+a.i,p:lin(rpCoorte('t',s),nm,{a,na:P.get(a.i),fech:p1<=FIM-60,ctx:'Nota na '+safraTop}),
+      // sem venda na safra do topo: mostra (esmaecidas) a Curva e a nota da safra mais recente em que ele vendeu
+      let na=P.get(a.i),fech=p1<=FIM-60,ctx='Nota na '+safraTop,fb=false;
+      if(!na||na.pts==null)for(const m of [...meses].reverse()){const x=rpCalc('m:'+m).get(a.i);
+        if(x&&x.pts!=null){na=x;fech=mesFech(m);ctx=`Sem venda na ${safraTop}: nota da safra ${mesTx(m)}`;fb=true;break}}
+      grupos.push({k:'a'+a.i,p:lin(rpCoorte('t',s),nm,{a,na,fech,ctx,fb}),
         f:[...meses].reverse().map(m=>lin(rpCoorte('m:'+m,s),mesTx(m)+(fimMes(m)>FIM?' (aberta)':''),{srt:m,na:rpCalc('m:'+m).get(a.i),fech:mesFech(m),ctx:'Nota na safra '+mesTx(m)})).filter(Boolean)})}}
   else{for(const m of [...meses].reverse()){const acc=RPA.get('m:'+m),M=rpCalc('m:'+m);
       const fs=[...acc].filter(([i,x])=>x.fu>0&&(!IDS||IDS.has(i))).map(([i])=>M.get(i)).filter(Boolean).sort((x,y)=>y.funil-x.funil)
@@ -1687,8 +1704,8 @@ function rpTabela(IDS,meses){
   const th=(k,l,cls='',tit='')=>`<th data-ord="${k}" class="ord${cls?' '+cls:''}" tabindex="0" aria-sort="${O&&O.k===k?(O.d>0?'ascending':'descending'):'none'}"${tit?` title="${tit}"`:''}>${l}</th>`;
   let nk=0;
   const cel=(l,filho)=>{const c=l.c,nm=l.a?`<span class="ls-nm" data-af="${afId(l.a)}" tabindex="0">${l.a.S?SB:''}<span class="nmt">${esc(l.rot)}</span></span>`:esc(l.rot);
-    let cvH='',ntH='';if(l.na){const cvv=l.na.S?'S':l.na.curva;cvH=`<span class="tag ${cvv}" title="Curva Afiliado ${cvv}">${cvv}</span>`;
-      if(l.na.pts!=null){const k='f'+(++nk);RP_FICHA.set(k,{a:l.na,fechada:l.fech,ctx:l.ctx});ntH=`<button type="button" class="rp-nt" data-ficha="${k}" title="${esc(l.ctx)} · clique para ver a conta da nota">${sc(l.na.pts)}</button>`}}
+    let cvH='',ntH='';if(l.na){const cvv=l.na.S?'S':l.na.curva,fb=l.fb?' rp-fb':'';cvH=`<span class="tag ${cvv}${fb}" title="${l.fb?esc(l.ctx).replace('nota','Curva'):'Curva Afiliado '+cvv}">${cvv}</span>`;
+      if(l.na.pts!=null){const k='f'+(++nk);RP_FICHA.set(k,{a:l.na,fechada:l.fech,ctx:l.ctx});ntH=`<button type="button" class="rp-nt${fb}" data-ficha="${k}" title="${esc(l.ctx)} · clique para ver a conta da nota">${sc(l.na.pts)}</button>`}}
     return `<td class="tl rp-nm">${filho?'':`<button type="button" class="rp-tg" aria-label="Abrir">›</button>`}${nm}</td><td class="rp-cc">${cvH}</td><td class="rp-cc">${ntH}</td><td>${n(c.fes)}</td><td>${usdC(c.funil)}</td>
       <td>${c.cpa==null?'…':rpPct(c.cpa/c.funil)}</td><td>${rpPct(c.custo/c.funil)}</td>
       ${RP_TAB.map(d=>{const v=rpVal(c.pts,d),pv=d>c.dl;return `<td class="hc ${cor(v,d)}${pv?' pv':''}" title="${pv?'previsto':'real'}">${rpPct(v)}</td>`}).join('')}
