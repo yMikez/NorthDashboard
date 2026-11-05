@@ -999,10 +999,10 @@ function pedidosLinhas(lista){
 
 const PD_COLS=[
   {l:'Data',v:r=>r.em,t:r=>fmtEm(r.em),texto:true,info:'Data e hora da venda. JVZoo no horário de Nova York; Vupim no de Brasília.'},
-  {l:'Pedido',v:r=>r.id,texto:true,max:200},
+  {l:'Pedido',v:r=>r.id,texto:true,max:150},
   {l:'Plataforma',v:r=>r.pl,texto:true},
   {l:'Etapa',v:r=>r.et,h:r=>`<span class="pd-et ${r.et==='FE'?'FE':''}">${esc(r.et)}</span>`,texto:true},
-  {l:'Produto',v:r=>r.pr,texto:true,max:260},
+  {l:'Produto',v:r=>r.pr,texto:true,max:210},
   {l:'Status',v:r=>r.stt,texto:true},
   {l:'Valor',v:r=>r.bruto,fmt:'moeda',num:true,soma:true,t:r=>usd2(r.bruto)},
   {l:'CPA',v:r=>r.cpa,fmt:'moeda',num:true,soma:true,t:r=>usd2(r.cpa),info:'CPA pago ao afiliado nesta venda.'},
@@ -1096,6 +1096,13 @@ function lsExtras(R){
     const conta=c.af[i],pl=DADOS_CONTA.afs[conta][2]||'JVZoo';if(st.plat&&pl!==st.plat)continue;const o=g(MAPA_CONTA[conta]);o.cpa=(o.cpa||0)+(c.cpa[i]||0)}}
   return X}
 
+// tabelas largas (dtCriar): quando não cabem, as colunas de texto (menos a 1ª) encolhem até 96 px; o texto corta com "…" e
+// aparece inteiro ao passar o mouse. Colunas de número nunca encolhem.
+const _dtMedirOrig=dtMedir;
+dtMedir=function(dt,tent=0){_dtMedirOrig(dt,tent);const h=dt.host,sc=h&&h.querySelector('.dt-scroll');if(!sc||!h.offsetWidth||!dt.w)return;
+  const disp=sc.clientWidth-10,soma=dt.w.reduce((a,b)=>a+b,0);if(soma<=disp)return;
+  const cols=dt.cfg.cols,MIN=96,enc=i=>i>0&&cols[i]&&cols[i].texto,folga=dt.w.reduce((s,x,i)=>s+(enc(i)?Math.max(0,x-MIN):0),0);if(folga<=0)return;
+  const corte=Math.min(folga,soma-disp);dt.w=dt.w.map((x,i)=>enc(i)?x-Math.max(0,x-MIN)*corte/folga:x);dtAplicar(dt)};
 // ordenação genérica de tabela simples: clique no cabeçalho (o valor vem de data-v; sem data-v, do texto). Vazio fica no fim.
 function ordenaTabela(tb){if(!tb||!tb.tHead)return;const ths=[...tb.tHead.rows[0].cells];
   ths.forEach((th,j)=>{th.classList.add('ord');th.tabIndex=0;th.setAttribute('aria-sort','none');
@@ -1157,7 +1164,7 @@ function renderLista(R){
   const RS=rows.map(linha);
   const fechadaTx=fechada?'real':'previsto';
   const COLS=[
-    {l:'Afiliado',v:r=>r.nome,texto:true,max:250,h:r=>{const a=r.a;return `<span class="ls-nm" data-af="${afId(a)}" data-tip="${regTip(tipAf(a,fechada))}" data-delay="1" tabindex="0">${a.S?SB:''}<span class="nmt">${esc(r.nome)}</span>${PLB(a)}</span>`}},
+    {l:'Afiliado',v:r=>r.nome,texto:true,max:190,h:r=>{const a=r.a;return `<span class="ls-nm" data-af="${afId(a)}" data-tip="${regTip(tipAf(a,fechada))}" data-delay="1" tabindex="0">${a.S?SB:''}<span class="nmt">${esc(r.nome)}</span>${PLB(a)}</span>`}},
     {l:'Curva Afiliado',v:r=>r.curva,texto:true,h:r=>`<span class="tag ${r.curva}">${r.curva}</span>`},
     {l:'Nota',v:r=>r.pts,num:true,t:r=>r.pts==null?'—':num(r.pts,0),h:r=>r.pts==null?'—':`<span class="${r.rank?'':'ls-fora'}" title="${r.rank?'':'Fora do ranking: menos de '+st.min+' FEs na safra'}">${sc(r.pts)}</span>`,info:'Pontuação de 0 a 100 do Ranking (mesmas premissas). Esmaecida: fora do ranking por ter poucos FEs.'},
     {l:'FEs',v:r=>r.fes,num:true,fmt:'inteiro',soma:true},
