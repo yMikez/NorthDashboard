@@ -790,6 +790,13 @@ body.pd-cheia{overflow:hidden}
 @media (max-width:520px){.af .pd-kpis{grid-template-columns:repeat(2,minmax(0,1fr))}.af .pd-busca{width:100%}}
 
 /* ---- tela Afiliados: big numbers, alertas, tabela e coorte (tokens do dash do Mike) ---- */
+/* largura: as telas de afiliados usam toda a área (o .content do dash para em 1600 px e sobrava faixa vazia à direita) */
+.af.content{max-width:none}
+/* tabelas padrão (dtCriar): título quebra em até 2 linhas e células mais justas, para caber sem rolagem lateral */
+.af table.dt-t thead th,.af table.dt-t thead .th-sort,.af table.dt-t thead .th-l{white-space:normal}
+.af table.dt-t thead .th-l{line-height:1.2}
+.af table.dt-t th{padding:0 6px}
+.af table.dt-t td{padding-left:8px;padding-right:6px}
 .af .ls-bigs{grid-template-columns:repeat(6,minmax(0,1fr))}
 .af .ls-als{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin:0 0 14px}
 .af .ls-al{display:grid;grid-template-columns:auto 1fr;grid-template-rows:auto auto;column-gap:10px;align-items:center;text-align:left;
