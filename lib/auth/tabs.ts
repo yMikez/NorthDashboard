@@ -10,6 +10,9 @@ export type TabId =
   | 'funnel'
   | 'vsl'
   | 'refund-cohorts'
+  | 'affiliate-ranking'
+  | 'affiliate-overview'
+  | 'affiliate-refund'
   | 'leaderboard'
   | 'all-affiliates'
   | 'affiliate-analysis'
@@ -37,7 +40,14 @@ export const AVAILABLE_TABS: TabSpec[] = [
   // VSLs: quem tem a aba vê e edita (troca VSL de página no ar, roda teste A/B).
   { id: 'vsl',            label: 'VSLs',                group: 'Análise' },
   { id: 'refund-cohorts', label: 'Reembolsos',          group: 'Análise' },
-  { id: 'leaderboard',    label: 'Ranking',             group: 'Afiliados' },
+  // Visão Geral, Ranking e Reembolso Prev.: modelo do time de dados — base de
+  // afiliados com resultado e alertas; nota de 0 a 100 + Premissas + pedidos do
+  // afiliado (Premissas: só admin muda); reembolso previsto por safra, produto e funil.
+  { id: 'affiliate-overview', label: 'Visão Geral',     group: 'Afiliados' },
+  { id: 'affiliate-ranking', label: 'Ranking',          group: 'Afiliados' },
+  { id: 'affiliate-refund', label: 'Reembolso Prev.',   group: 'Afiliados' },
+  // Telas do Mike: rodam em paralelo às do time de dados até a validação.
+  { id: 'leaderboard',    label: 'Afiliados',           group: 'Afiliados' },
   { id: 'all-affiliates', label: 'Todos os afiliados',  group: 'Afiliados' },
   { id: 'affiliate-analysis', label: 'Análise',         group: 'Afiliados' },
   // CRM: aba própria de propósito — quem opera o WhatsApp recebe só ela,
@@ -66,6 +76,9 @@ export const AVAILABLE_TABS: TabSpec[] = [
 ];
 
 const TAB_IDS = new Set<string>(AVAILABLE_TABS.map((t) => t.id));
+
+/** Telas do modelo de pontuação (time de dados): qualquer uma delas libera os dados e as premissas. */
+export const AFFILIATE_SCORE_TABS: TabId[] = ['affiliate-ranking', 'affiliate-overview', 'affiliate-refund'];
 
 export function isValidTab(id: string): id is TabId {
   return TAB_IDS.has(id);

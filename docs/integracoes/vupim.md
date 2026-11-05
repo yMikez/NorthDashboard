@@ -53,7 +53,7 @@ ClickBank: a data da venda fica em `orderedAt` e a data do estorno em
 | `transactionId` | `Order.externalId` |
 | `checkoutSessionId` | sessão do funil (`parentExternalId` = `funnelSessionId`), igual no front e em todos os upsells/downsells; renovação usa o próprio `transactionId` |
 | `origin` | `direct`/`call_center` → FRONTEND · `upsell` → UPSELL · `downsell` → DOWNSELL · `renewal` → renovação |
-| `funnelStep` | etapa (0 no front, 1 = primeira página depois da compra…) |
+| `funnelStep` | etapa (0 no front, 1 = primeira página depois da compra…). A Vupim numera o upsell N como N (OTO1=1) e o downsell N como N+1 (Last Chance 1 = 2); o pedido grava na convenção do painel (Upsell N e Downsell N = N+1): upsell soma 1, downsell fica igual. Sem `funnelStep`, o número sai do nome ("OTO 2", "Last Chance 1"). O valor cru fica em `rawMetadata.vupimFunnelStep` (desde 05/11/2026) |
 | `offerId` / `offerName` + `productName` | produto (SKU = oferta; nome = produto + oferta) |
 | `amount` / `amountUsd` | bruto (unidade mínima: 9700 = US$ 97,00; `*Usd` em centavos) |
 | `netAmount` (ou `commission`) | líquido do produtor (`netAmountUsd`) |

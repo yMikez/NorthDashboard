@@ -21,7 +21,8 @@
 // upsells/downsells (doc) → parentExternalId = funnelSessionId, como na
 // Cartpanda. Renovação ancora em si mesma (despacha a própria remessa, como o
 // rebill da JVZoo). Papel pelo `origin`: direct/call_center → FRONTEND,
-// upsell → UPSELL, downsell → DOWNSELL; funnelStep 0 no front.
+// upsell → UPSELL, downsell → DOWNSELL; funnelStep 0 no front e, no
+// upsell, o da Vupim + 1 (convenção do painel — ver vupimFunnelStep).
 //
 // Dinheiro: unidade mínima da moeda. Venda em outra moeda usa os campos *Usd
 // (centavos de dólar, na taxa da própria venda) ou exchangeRate; sem nenhum
@@ -115,6 +116,36 @@ function productType(d: VupimData): NormalizedProductType {
   if (origin === 'upsell') return 'UPSELL';
   if (origin === 'downsell') return 'DOWNSELL';
   return 'FRONTEND';
+}
+
+// Marcadores numerados no nome da oferta/etapa, pra quando o webhook vem sem
+// funnelStep: "OTO1"/"OTO 1"/"Upsell 1" e "Last Chance 1"/"LastChance1".
+const VUPIM_UP_N_RE = /\b(?:oto|upsell|upgrade|up)\s*0*(\d+)\b/i;
+const VUPIM_DOWN_N_RE = /\b(?:last\s*chance|down\s*sell)\s*0*(\d+)\b/i;
+
+/**
+ * Etapa do funil na convenção do painel (a da JVZoo, que o Funil de
+ * metrics.ts espera): front 0; Upsell N = N+1 (UP1=2, UP2=3, UP3=4);
+ * Downsell N = N+1 (DS1=2, DS2=3, DS3=4).
+ *
+ * A Vupim numera o upsell como N (OTO1=1, OTO2=2, OTO3=3) e o downsell já
+ * como N+1 (Last Chance 1 = 2, Last Chance 2 = 3). Sem o +1 no upsell, o
+ * OTO2 caía no "Upsell 1" (o Funil sobe etapa < 2 pra 2), o OTO3 aparecia
+ * como "Upsell 2" e o "Upsell 3" nunca aparecia (corrigido em 05/11/2026,
+ * só para os pedidos novos; os já gravados não foram alterados).
+ *
+ * Sem funnelStep no payload: tenta o número pelo nome da etapa/oferta.
+ */
+export function vupimFunnelStep(type: NormalizedProductType, d: VupimData): number | null {
+  if (type === 'FRONTEND') return 0;
+  const raw = num(d.funnelStep);
+  if (raw != null) return type === 'UPSELL' ? raw + 1 : raw;
+  const re = type === 'UPSELL' ? VUPIM_UP_N_RE : VUPIM_DOWN_N_RE;
+  for (const text of [str(d.funnelStepName), str(d.offerName), str(d.productName)]) {
+    const m = text ? re.exec(text) : null;
+    if (m) return parseInt(m[1], 10) + 1;
+  }
+  return null;
 }
 
 /**
@@ -231,7 +262,7 @@ export function parseVupimOrder(env: VupimEnvelope, opts: { asSale?: boolean } =
     city: str(c.city) ?? str(d.shipping?.city),
 
     funnelSessionId: sessionId,
-    funnelStep: type === 'FRONTEND' ? 0 : num(d.funnelStep),
+    funnelStep: vupimFunnelStep(type, d),
     clickId: str(d.clickId),
     trackingId: str(d.src) ?? str(d.sck) ?? str(subIds?.sub1),
     campaignKey: str(d.utmCampaign),
@@ -254,6 +285,9 @@ export function parseVupimOrder(env: VupimEnvelope, opts: { asSale?: boolean } =
       parentTransactionId: str(d.parentTransactionId),
       stepCheckoutSessionId: str(d.stepCheckoutSessionId),
       funnelStepName: str(d.funnelStepName),
+      // funnelStep como a Vupim mandou (o pedido guarda a etapa já na
+      // convenção do painel — ver vupimFunnelStep).
+      vupimFunnelStep: num(d.funnelStep),
       productId: str(d.productId),
       offerId: str(d.offerId),
       sku: mainSku,
