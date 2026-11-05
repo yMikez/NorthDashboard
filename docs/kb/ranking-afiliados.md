@@ -121,6 +121,9 @@ Pontuação = base + bônus + penalidades (pode passar de 100). Selo: 80+ forte,
   qualquer série com 20%+ de reembolso nos 10 primeiros dias (ou 5 pp acima da
   safra), semana ou mês piorando, quebra ou afiliado grande puxando a safra, e o
   destaque bom.
+- **Tabela afiliado × safra:** a Curva e a nota são as da safra do topo. Quem não
+  vendeu nela mostra, esmaecidas, a Curva e a nota da safra mais recente em que
+  vendeu (o título da nota diz qual).
 - Achado de 05/11 (safras fechadas de jul–set): a sessão com upsell de US$ 300–500
   — quase sempre FE de 6 potes + Upsell 1 de 12 potes sem o Upsell 2 — devolve
   ~35% contra ~21% de quem só leva o FE, e devolve até o FE. Ainda assim deixa mais

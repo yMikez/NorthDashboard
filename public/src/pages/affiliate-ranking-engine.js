@@ -1688,7 +1688,11 @@ function rpTabela(IDS,meses){
   if(af){const lista=[...RPA.get('t')].filter(([i,x])=>x.fu>0&&(!IDS||IDS.has(i))).map(([i])=>T.get(i)).filter(Boolean).sort((x,y)=>y.funil-x.funil);
     for(const a of lista){const nm=nomeAf(a);if(q&&!nm.toLowerCase().includes(q)&&!String(a.af).toLowerCase().includes(q))continue;
       const s=new Set([a.i]);
-      grupos.push({k:'a'+a.i,p:lin(rpCoorte('t',s),nm,{a,na:P.get(a.i),fech:p1<=FIM-60,ctx:'Nota na '+safraTop}),
+      // sem venda na safra do topo: mostra (esmaecidas) a Curva e a nota da safra mais recente em que ele vendeu
+      let na=P.get(a.i),fech=p1<=FIM-60,ctx='Nota na '+safraTop,fb=false;
+      if(!na||na.pts==null)for(const m of [...meses].reverse()){const x=rpCalc('m:'+m).get(a.i);
+        if(x&&x.pts!=null){na=x;fech=mesFech(m);ctx=`Sem venda na ${safraTop}: nota da safra ${mesTx(m)}`;fb=true;break}}
+      grupos.push({k:'a'+a.i,p:lin(rpCoorte('t',s),nm,{a,na,fech,ctx,fb}),
         f:[...meses].reverse().map(m=>lin(rpCoorte('m:'+m,s),mesTx(m)+(fimMes(m)>FIM?' (aberta)':''),{srt:m,na:rpCalc('m:'+m).get(a.i),fech:mesFech(m),ctx:'Nota na safra '+mesTx(m)})).filter(Boolean)})}}
   else{for(const m of [...meses].reverse()){const acc=RPA.get('m:'+m),M=rpCalc('m:'+m);
       const fs=[...acc].filter(([i,x])=>x.fu>0&&(!IDS||IDS.has(i))).map(([i])=>M.get(i)).filter(Boolean).sort((x,y)=>y.funil-x.funil)
@@ -1700,8 +1704,8 @@ function rpTabela(IDS,meses){
   const th=(k,l,cls='',tit='')=>`<th data-ord="${k}" class="ord${cls?' '+cls:''}" tabindex="0" aria-sort="${O&&O.k===k?(O.d>0?'ascending':'descending'):'none'}"${tit?` title="${tit}"`:''}>${l}</th>`;
   let nk=0;
   const cel=(l,filho)=>{const c=l.c,nm=l.a?`<span class="ls-nm" data-af="${afId(l.a)}" tabindex="0">${l.a.S?SB:''}<span class="nmt">${esc(l.rot)}</span></span>`:esc(l.rot);
-    let cvH='',ntH='';if(l.na){const cvv=l.na.S?'S':l.na.curva;cvH=`<span class="tag ${cvv}" title="Curva Afiliado ${cvv}">${cvv}</span>`;
-      if(l.na.pts!=null){const k='f'+(++nk);RP_FICHA.set(k,{a:l.na,fechada:l.fech,ctx:l.ctx});ntH=`<button type="button" class="rp-nt" data-ficha="${k}" title="${esc(l.ctx)} · clique para ver a conta da nota">${sc(l.na.pts)}</button>`}}
+    let cvH='',ntH='';if(l.na){const cvv=l.na.S?'S':l.na.curva,fb=l.fb?' rp-fb':'';cvH=`<span class="tag ${cvv}${fb}" title="${l.fb?esc(l.ctx).replace('nota','Curva'):'Curva Afiliado '+cvv}">${cvv}</span>`;
+      if(l.na.pts!=null){const k='f'+(++nk);RP_FICHA.set(k,{a:l.na,fechada:l.fech,ctx:l.ctx});ntH=`<button type="button" class="rp-nt${fb}" data-ficha="${k}" title="${esc(l.ctx)} · clique para ver a conta da nota">${sc(l.na.pts)}</button>`}}
     return `<td class="tl rp-nm">${filho?'':`<button type="button" class="rp-tg" aria-label="Abrir">›</button>`}${nm}</td><td class="rp-cc">${cvH}</td><td class="rp-cc">${ntH}</td><td>${n(c.fes)}</td><td>${usdC(c.funil)}</td>
       <td>${c.cpa==null?'…':rpPct(c.cpa/c.funil)}</td><td>${rpPct(c.custo/c.funil)}</td>
       ${RP_TAB.map(d=>{const v=rpVal(c.pts,d),pv=d>c.dl;return `<td class="hc ${cor(v,d)}${pv?' pv':''}" title="${pv?'previsto':'real'}">${rpPct(v)}</td>`}).join('')}
