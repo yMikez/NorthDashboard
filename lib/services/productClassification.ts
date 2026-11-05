@@ -71,6 +71,9 @@ const CANONICAL_FAMILIES = [
   'Memovance PRO', 'Blessed Kit', 'Honey Flush', 'HoneyPril',
   'Hawaiian Harmony', 'Cognizil', 'Gelazen', 'Giant Power', 'OptiCore Pro',
   'NeuroRecall', 'NerveBox', 'Heart Flush',
+  // 05/11/2026: sem elas a família ficava null e o produto não tinha aba no
+  // Funil (Vupim "FE - LungFresh (6 Bottles)", JVZoo "LungFresh - 6 Bottles / FE").
+  'LungFresh', 'FlushPril',
 ];
 
 // Aliases estáticos (chave normalizada → canônica) além das próprias
@@ -83,6 +86,8 @@ const STATIC_KEY_ALIASES: Record<string, string> = {
   mindtrex: 'MindTrex',
   opticore: 'OptiCore Pro',
   horsepeakgelatintk: 'Horse Peak Gelatin',
+  // "Memovance" sem o "Pro" é o mesmo produto (grafia com custo: Memovance PRO).
+  memovance: 'Memovance PRO',
 };
 
 interface KeyEntry { key: string; family: string }
@@ -251,7 +256,7 @@ const FAMILY_NORMALIZATIONS: Array<[RegExp, string]> = [
   [/^luminacept$/i, 'Lumicept'],
   [/^horse\s*peak\s*gelatin(?:\s*[-–]\s*tk)?$/i, 'Horse Peak Gelatin'],
   [/^imm?une\s*guard\s*\+\s*flexy?\s*guard$/i, 'FlexImmuneGuard'],
-  [/^memovance\s*pro$/i, 'Memovance PRO'],
+  [/^memo\s*vance(?:\s*pro)?$/i, 'Memovance PRO'],
   [/^blessed\s*kit$/i, 'Blessed Kit'],
   [/^nerve\s*box$/i, 'NerveBox'],
   [/^honey\s*flush$/i, 'Honey Flush'],
@@ -263,6 +268,8 @@ const FAMILY_NORMALIZATIONS: Array<[RegExp, string]> = [
   [/^neuro\s*recall$/i, 'NeuroRecall'],
   [/^heart\s*flush$/i, 'Heart Flush'],
   [/^horse\s*boost\s*gelatin$/i, 'Horse Boost Gelatin'],
+  [/^lung\s*fresh$/i, 'LungFresh'],
+  [/^flush\s*pril$/i, 'FlushPril'],
 ];
 
 export function normalizeFamily(raw: string): string {
