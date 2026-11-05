@@ -58,18 +58,34 @@ export function contaDe(slug: string, externalId: string): string | null {
   return `${pl} ${id}`;
 }
 
-/** Nomes e parceiros por conta, a partir do cadastro de afiliados do dash. */
-export function mapearContas(contas: ContaCadastro[]): {
+/** Nome real da conta na plataforma (dados_oficiais."Affiliate": affiliate_name da JVZoo, publicado pelo time de dados). */
+export interface NomeOficial {
+  slug: string;
+  externalId: string;
+  nickname: string | null;
+}
+
+/**
+ * Nomes e parceiros por conta. O nome real da plataforma (dados_oficiais) vence
+ * o apelido do cadastro do dash, que às vezes guarda um nome provisório
+ * (ex.: "xxxxxxUS"); sem nome real, fica o apelido. Parceiros vêm do cadastro.
+ */
+export function mapearContas(contas: ContaCadastro[], oficiais: NomeOficial[] = []): {
   nomes: Record<string, string>;
   parceiros: Record<string, [string, string]>;
 } {
   const nomes: Record<string, string> = {};
   const parceiros: Record<string, [string, string]> = {};
+  for (const o of oficiais) {
+    const k = contaDe(o.slug, o.externalId);
+    const n = o.nickname?.trim();
+    if (k && n && !nomes[k]) nomes[k] = n;
+  }
   for (const c of contas) {
     const k = contaDe(c.slug, c.externalId);
     if (!k) continue;
     if (c.nickname && !nomes[k]) nomes[k] = c.nickname;
-    if (c.partnerId) parceiros[k] = [c.partnerId, c.partnerName || c.nickname || k];
+    if (c.partnerId) parceiros[k] = [c.partnerId, c.partnerName || nomes[k] || k];
   }
   return { nomes, parceiros };
 }
