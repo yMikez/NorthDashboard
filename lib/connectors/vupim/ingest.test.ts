@@ -19,8 +19,7 @@ describe('parseVupimOrder — sale.approved (exemplo da doc de 22/10)', () => {
     expect(o).toMatchObject({
       platformSlug: 'vupim', externalId: '019a3f2b-5b7d-7e10-8c3f-7a2b9d4e6f01',
       parentExternalId: '8b1e2c3d-4f5a-4b6c-9d7e-0f1a2b3c4d5e', funnelSessionId: '8b1e2c3d-4f5a-4b6c-9d7e-0f1a2b3c4d5e',
-      // funnelStep 1 da Vupim (OTO1) = etapa 2 do painel (Upsell 1).
-      productExternalId: 'off_2b8d41', productName: 'Neuro Mind Pro 6 Bottles', productType: 'UPSELL', funnelStep: 2,
+      productExternalId: 'off_2b8d41', productName: 'Neuro Mind Pro 6 Bottles', productType: 'UPSELL', funnelStep: 1,
       status: 'APPROVED', eventType: 'sale.approved', billingType: 'SINGLE_PAYMENT',
     });
     expect(o.orderedAt.toISOString()).toBe('2026-10-21T21:10:00.981Z');
@@ -40,7 +39,7 @@ describe('parseVupimOrder — sale.approved (exemplo da doc de 22/10)', () => {
   it('guarda versão, evento, venda pai, SKU e origem da visita', () => {
     expect(o.rawMetadata).toMatchObject({
       vupimVersion: 17926170015401, eventId: '019a3f2b-5e10-7a44-8f21-3c9d7e2b1a60', livemode: true,
-      parentTransactionId: '019a3f29-1d2e-7f30-9a4b-5c6d7e8f9a0b', funnelStepName: 'Upsell 1', vupimFunnelStep: 1, sku: 'NMP-6',
+      parentTransactionId: '019a3f29-1d2e-7f30-9a4b-5c6d7e8f9a0b', funnelStepName: 'Upsell 1', sku: 'NMP-6',
       reserveAmount: 1281, referrer: 'https://example.com/neuro-mind-pro',
     });
   });
@@ -78,28 +77,6 @@ describe('parseVupimOrder — estornos, chargeback, renovação e moeda', () => 
   it('origin: direct → FRONTEND (passo 0), downsell → DOWNSELL', () => {
     expect(parseVupimOrder(variant(approved, 'sale.approved', { origin: 'direct', funnelStep: null }))).toMatchObject({ productType: 'FRONTEND', funnelStep: 0 });
     expect(parseVupimOrder(variant(approved, 'sale.approved', { origin: 'downsell', funnelStep: 2 }))).toMatchObject({ productType: 'DOWNSELL', funnelStep: 2 });
-  });
-  it('etapa na convenção do painel: upsell N da Vupim vira N+1; downsell já vem N+1', () => {
-    const step = (data: Record<string, unknown>) => parseVupimOrder(variant(approved, 'sale.approved', data)).funnelStep;
-    // OTO1 = 1, OTO2 (Digest Flow) = 2, OTO3 (Night Calm) = 3 → Upsell 1·2·3 = 2·3·4.
-    expect(step({ origin: 'upsell', funnelStep: 1 })).toBe(2);
-    expect(step({ origin: 'upsell', funnelStep: 2, offerName: 'Digest Flow 6 Bottles' })).toBe(3);
-    expect(step({ origin: 'upsell', funnelStep: 3, offerName: 'Night Calm 6 Bottles' })).toBe(4);
-    // Last Chance 1 = 2, Last Chance 2 (Digest Flow 3) = 3 → Downsell 1·2 = 2·3.
-    expect(step({ origin: 'downsell', funnelStep: 2, offerName: 'Last Chance 1' })).toBe(2);
-    expect(step({ origin: 'downsell', funnelStep: 3, offerName: 'Last Chance 2 - Digest Flow 3 Bottles' })).toBe(3);
-  });
-  it('sem funnelStep: número pelo nome da etapa/oferta (OTO N, Last Chance N); sem marcador = null', () => {
-    const step = (data: Record<string, unknown>) => parseVupimOrder(variant(approved, 'sale.approved', { funnelStep: null, funnelStepName: null, ...data })).funnelStep;
-    expect(step({ origin: 'upsell', offerName: 'OTO1 - Neuro Mind Pro 6 Bottles' })).toBe(2);
-    expect(step({ origin: 'upsell', offerName: 'OTO 2 Digest Flow' })).toBe(3);
-    expect(step({ origin: 'upsell', offerName: 'Night Calm (OTO3)' })).toBe(4);
-    expect(step({ origin: 'upsell', funnelStepName: 'Upsell 2' })).toBe(3);
-    expect(step({ origin: 'downsell', offerName: 'Last Chance 1' })).toBe(2);
-    expect(step({ origin: 'downsell', offerName: 'LastChance2' })).toBe(3);
-    expect(step({ origin: 'upsell', offerName: 'Neuro Mind Pro 6 Bottles' })).toBeNull();
-    // Marcador do outro papel não vale: upsell com "Last Chance 1" no nome fica sem etapa.
-    expect(step({ origin: 'upsell', offerName: 'Last Chance 1' })).toBeNull();
   });
   it('venda em BRL: valores em USD do payload; estorno convertido pela taxa da venda', () => {
     const brl = { currency: 'BRL', amount: 100000, exchangeRate: 0.18, amountUsd: 18000, netAmountUsd: 11000, taxAmountUsd: 0, feesUsd: 900, affiliateCommissionUsd: 6100 };
