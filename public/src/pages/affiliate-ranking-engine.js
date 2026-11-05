@@ -1751,6 +1751,60 @@ pagina=function(p){rpFechaFicha();const ant=st.pg;_paginaRp(p);const rp=st.pg===
 const _renderRp=render;
 render=function(){_renderRp.apply(this,arguments);if(st.pg==='reemb'&&st.R)renderReemb(st.R)};
 
+/* ---------- filtros flutuantes (Visão Geral, Ranking, Reembolso Prev.) ----------
+   Quando a barra de filtros sai da tela, um selo discreto no alto do conteúdo mostra os filtros aplicados (os que fogem
+   do padrão em destaque; alerta da Visão Geral e filtros do Reembolso Prev. com "×" para tirar). "Alterar" abre a própria
+   barra de filtros num painel flutuante: os mesmos botões, sem lógica duplicada; ela volta ao lugar ao fechar. */
+(function(){
+  const RT=typeof root!=='undefined'?root:document;
+  const onX=(t,ev,fn,o)=>typeof _on==='function'?_on(t,ev,fn,o):t.addEventListener(ev,fn,o);
+  const bar=RT.querySelector('.af-filtros'),af=RT.querySelector('.af');if(!bar||!af)return;
+  const PAD={per:'30d',agr:'parceiro',plat:'',min:30};
+  const ICO_F='<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 5h18l-7 8v6l-4 2v-8z"/></svg>';
+  const sel=document.createElement('div');sel.className='af-flt';sel.hidden=true;
+  const pop=document.createElement('div');pop.className='af-flt-pop';pop.hidden=true;pop.setAttribute('role','dialog');pop.setAttribute('aria-label','Filtros');
+  const ph=document.createElement('div');ph.className='af-flt-ph';
+  af.appendChild(sel);af.appendChild(pop);
+  let aberto=false,chave='';
+  const topo=()=>parseFloat(getComputedStyle(af).getPropertyValue('--af-topo'))||0;
+  const fora=()=>{const r=(aberto?ph:bar).getBoundingClientRect();return r.bottom<topo()+2};
+  const apertado=s=>{const b=bar.querySelector(s+' button[aria-pressed="true"]');return b?b.textContent.trim():''};
+  function chips(){const C=[];
+    C.push({t:st.per==='mes'&&st.mes?'Safra '+mesTx(st.mes):apertado('#fPer')||'Período',nd:st.per!==PAD.per});
+    if(typeof AGRUPA!=='undefined')C.push({t:AGRUPA==='conta'?'Por conta':'Por parceiro',nd:AGRUPA!==PAD.agr});
+    C.push({t:st.plat||'Todas as plataformas',nd:st.plat!==PAD.plat});
+    C.push({t:`Ranking ${st.min}+ FEs`,nd:+st.min!==PAD.min});
+    if(st.pg==='lista'&&lsSt.filtro){const b=RT.querySelector(`[data-al="${lsSt.filtro}"] .t`);C.push({t:'Alerta: '+(b?b.textContent.trim():lsSt.filtro),nd:true,x:'ls'})}
+    if(st.pg==='reemb')for(const d in rpSt.f){const v=rpSt.f[d];if(!v)continue;
+      const g=RT.querySelector(`.rp-fpan .fgrp[data-dim="${d}"]`),b=g&&g.querySelector(`button[data-v="${v}"]`),l=g&&g.parentElement.querySelector('.rp-fl');
+      const vt=b?[...b.childNodes].filter(n=>n.nodeType===3).map(n=>n.textContent).join('').trim():v,lt=l?l.firstChild.textContent.trim():'';
+      C.push({t:lt?lt+': '+vt:vt,nd:true,x:'rp:'+d})}
+    return C}
+  // embaixo, centralizado no conteúdo: não cobre o cabeçalho fixo das tabelas; o painel abre para cima
+  function posiciona(){const r=af.getBoundingClientRect(),cx=Math.round(Math.min(Math.max(r.left+r.width/2,180),innerWidth-180));
+    sel.style.left=cx+'px';pop.style.left=cx+'px';pop.style.bottom=(16+sel.offsetHeight+8)+'px';pop.style.maxWidth=Math.max(280,Math.min(r.width-32,1180))+'px'}
+  function atualiza(){if(!sel.isConnected)return;
+    if(!aberto&&!fora()){sel.hidden=true;chave='';return}
+    const C=chips(),k=JSON.stringify(C)+aberto;
+    if(k!==chave){chave=k;
+      sel.innerHTML=`<span class="i" title="Filtros aplicados">${ICO_F}</span>`+C.map(c=>`<span class="c${c.nd?' nd':''}">${esc(c.t)}${c.x?`<button type="button" class="x" data-x="${c.x}" aria-label="Tirar o filtro ${esc(c.t)}" title="Tirar este filtro">×</button>`:''}</span>`).join('<span class="s" aria-hidden="true">·</span>')+
+        `<button type="button" class="alt" aria-expanded="${aberto}">${aberto?'Fechar':'Alterar'}</button>`}
+    sel.hidden=false;posiciona()}
+  function abre(){if(aberto)return;aberto=true;ph.style.height=bar.offsetHeight+'px';bar.replaceWith(ph);pop.appendChild(bar);pop.hidden=false;atualiza()}
+  function fecha(){if(!aberto)return;aberto=false;pop.hidden=true;ph.replaceWith(bar);atualiza()}
+  sel.addEventListener('click',e=>{const x=e.target.closest('.x');
+    if(x){const k=x.dataset.x;if(k==='ls'){lsSt.filtro=null;if(st.R)renderLista(st.R)}else if(k.startsWith('rp:')){rpSt.f[k.slice(3)]='';if(st.R)renderReemb(st.R)}
+      requestAnimationFrame(atualiza);return}
+    if(e.target.closest('.alt'))aberto?fecha():abre()});
+  onX(document,'click',e=>{if(aberto&&!pop.contains(e.target)&&!sel.contains(e.target)&&e.target.isConnected)fecha()},true);
+  onX(document,'keydown',e=>{if(e.key==='Escape'&&aberto)fecha()});
+  onX(document,'scroll',()=>{if(aberto&&!fora())fecha();else atualiza()},{capture:true,passive:true});
+  onX(window,'resize',()=>{chave='';atualiza()});
+  af.addEventListener('click',()=>requestAnimationFrame(atualiza));
+  const _rF=render;render=function(){_rF.apply(this,arguments);requestAnimationFrame(atualiza)};
+  const _pF=pagina;pagina=function(p){_pF(p);requestAnimationFrame(atualiza)};
+})();
+
 
 const marcaAgr=()=>root.querySelectorAll('#fAgr button').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.v===AGRUPA)));
 root.querySelectorAll('#fAgr button').forEach(b=>b.onclick=()=>{reagrupa(b.dataset.v);marcaAgr()});marcaAgr();
