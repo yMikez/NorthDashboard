@@ -1,16 +1,28 @@
 ---
-title: Ranking de afiliados — nota de 0 a 100, curva ABC + S e premissas
+title: Ranking de afiliados — nota de 0 a 100, Curva Afiliado + S, premissas e reembolso previsto
 kind: policy
-description: Como a aba Afiliados › Ranking dá a nota de cada afiliado (reembolso 60d previsto, lucro por cliente, FEs e AOV), as curvas A/B/C/S, bônus e penalidades, a previsão do reembolso e de onde vêm os dados
-effectiveDate: 2026-11-04
+description: Ranking, Visão Geral e Reembolso Prev. de afiliados: nota de 0 a 100, Curva Afiliado A/B/C/S, bônus e penalidades, previsão do reembolso 60d, quebras e alertas do reembolso e de onde vêm os dados
+effectiveDate: 2026-11-05
 ---
 
-# Ranking de afiliados — nota de 0 a 100, curva ABC + S e premissas
+# Ranking de afiliados — nota de 0 a 100, Curva Afiliado + S, premissas e reembolso previsto
 
-Modelo oficial do time de dados de 28/10/2026, com ajustes de 03 e 04/11/2026. O
+Modelo oficial do time de dados de 28/10/2026, com ajustes de 03, 04 e 05/11/2026. O
 cálculo roda na página (`public/src/pages/affiliate-ranking-engine.js`, gerado a
 partir do painel de afiliados do time de dados). As premissas (pesos, metas,
 bônus e penalidades) ficam no banco (`AffiliateScoreConfig`) e só admin muda.
+
+Três abas usam o mesmo motor e o mesmo modelo (permissões `affiliate-ranking`,
+`affiliate-overview`, `affiliate-refund`; qualquer uma libera os dados):
+
+- **Ranking**: a nota de cada afiliado, Premissas e a página do afiliado.
+- **Visão Geral**: a base de afiliados com resultado (receita, CPA, reembolso,
+  lucro, Status CPA, tendência) e alertas.
+- **Reembolso Prev.**: quando o lucro da safra vira zero, as curvas de reembolso
+  por safra e por quebra, quem puxa a curva e a tabela afiliado × safra.
+
+As telas do Mike (Afiliados, Análise, CRM, Networks) seguem no menu com o sufixo
+"Mike" enquanto as duas versões são validadas em paralelo.
 
 ## De onde vêm os dados
 
@@ -33,10 +45,11 @@ bônus e penalidades) ficam no banco (`AffiliateScoreConfig`) e só admin muda.
   renderam até hoje. Padrão: últimos 30 dias.
 - O ranking só inclui quem tem **30+ FEs** no período (dá para mudar).
 
-## Curva ABC e S
+## Curva Afiliado (A/B/C) e S
 
-- Pela receita do funil no período: **A** até 80% da receita acumulada, **B** até
-  95%, **C** o resto.
+- Pela receita do funil dos **2 meses fechados + o mês da safra** (contando a
+  partir do fim do período escolhido): **A** até 80% da receita acumulada, **B**
+  até 95%, **C** o resto. Assim a curva não muda só porque a safra é curta.
 - **S** = curva A com mais de 100 pontos.
 
 ## Os 4 critérios (nota 0–10 × peso)
@@ -67,14 +80,45 @@ Pontuação = base + bônus + penalidades (pode passar de 100). Selo: 80+ forte,
 
 ## Previsão do reembolso de 60 dias
 
-- Reembolso de 10 dias do afiliado (puxado para a média quando ele vende pouco)
-  × fator 10d→60d do próprio afiliado (com peso pelo volume de venda madura; o
-  resto vem do fator geral, ~2,4).
+- **Previsão de 10 dias** do afiliado: reembolso dos primeiros 10 dias (puxado
+  para a média quando ele vende pouco) × fator 10d→60d do próprio afiliado (com
+  peso pelo volume de venda madura; o resto vem do fator geral, ~2,4).
+- **Reembolso 60d previsto = o que já caiu + a parte que ainda falta de cada
+  venda × a previsão de 10 dias.** A parte que falta de uma venda com `d` dias é
+  `1 − (d/60)^k`, com `k` ajustado à curva mediana (~0,47): quanto mais velha a
+  venda, mais pesa o que já aconteceu.
 - Safra fechada (60+ dias): só valores reais.
-- A curva por dia usa o histórico do próprio afiliado misturado com a mediana
-  geral; quem não tem histórico usa só a mediana.
+- Teste com datas passadas (as-of em 20/08, 27/08 e 03/09): erro médio por
+  afiliado de 2,0 pp → 1,6 pp contra a conta anterior (10d × fator puro).
+- A curva por dia da safra mistura o real de cada venda que já tem aquela idade
+  com o previsto das que ainda não têm; no dia 60 bate com o reembolso previsto.
 
-## Pedidos do afiliado
+## Reembolso Prev. (aba)
+
+- **Teto para lucro > 0** = (líquido − custo + reembolso já caído) ÷ receita: o
+  reembolso acima disso dá prejuízo em 60 dias. A tela mostra o dia em que o lucro
+  vira zero.
+- Quebras em curvas: mês e semana da safra, Curva Afiliado, produto do FE,
+  **caminho no funil** (potes do FE + o que levou depois, ex.: `6p+12p` = FE de 6
+  potes + Upsell 1 de 12) e **valor do upsell** da sessão (só FE, até 150,
+  150–300, 300–500, 500+). Produto, caminho e valor vêm dos pedidos, com o upsell
+  na sessão do FE de origem.
+- **Clique numa série** = o porquê: o reembolso de cada afiliado, produto, caminho
+  e faixa de valor dentro dela e o efeito em US$ de cada um no resultado (a conta
+  fecha no valor da curva).
+- **Alertas** (popup ao abrir a aba e ao mudar filtro): safra no prejuízo,
+  qualquer série com 20%+ de reembolso nos 10 primeiros dias (ou 5 pp acima da
+  safra), semana ou mês piorando, quebra ou afiliado grande puxando a safra, e o
+  destaque bom.
+- Achado de 05/11 (safras fechadas de jul–set): a sessão com upsell de US$ 300–500
+  — quase sempre FE de 6 potes + Upsell 1 de 12 potes sem o Upsell 2 — devolve
+  ~35% contra ~21% de quem só leva o FE, e devolve até o FE. Ainda assim deixa mais
+  dinheiro por cliente. Associação, não causa: confirmar com teste A/B.
+
+## Pedidos
+
+- Visão Geral e Reembolso Prev. leem todas as vendas de uma vez
+  (`GET /api/metrics/affiliate-ranking/all-orders`, colunar, sem dado de cliente).
 
 - A página do afiliado lista todas as vendas cujo FE caiu na safra: valor, CPA,
   reembolso, alerta, chargeback, taxas da plataforma, líquido, custo do produto,

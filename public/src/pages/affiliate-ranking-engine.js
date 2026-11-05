@@ -9,7 +9,9 @@
      opts.premissas        { pesos, ajustes, metas } do banco
      opts.podeEditar       true = admin (as mudanças nas Premissas são salvas para todos)
      opts.salvarPremissas  (premissas) => Promise
-     opts.buscarPedidos    ({ contas, de, ate }) => Promise<pedido[]> */
+     opts.buscarPedidos    ({ contas, de, ate }) => Promise<pedido[]>
+     opts.buscarTodosPedidos () => Promise<pacote>   todas as vendas (GET /api/metrics/affiliate-ranking/all-orders)
+     opts.pagina           'ranking' | 'lista' (Visão Geral) | 'reemb' (Reembolso Prev.): a tela de entrada */
 (function(){
 function montar(root,opts){
 const _offs=[];
@@ -51,6 +53,8 @@ root.innerHTML=`<div class="filters af-filtros" aria-label="Filtros do ranking">
   <section class="bigs" id="bigs" aria-label="Big numbers"></section>
   <div id="pg-visao" hidden><section class="cbox"><div class="curvas" id="curvas"></div></section></div>
   <div id="pg-ranking" hidden><section class="rks" id="rankings"></section></div>
+  <div id="pg-lista" hidden><div id="lista"></div></div>
+  <div id="pg-reemb" hidden><div id="reemb"></div></div>
   <div id="pg-af" hidden><div class="pm" id="afiliado"></div></div>
   <div id="pg-premissas" hidden><section class="pm" id="premissas"></section></div>
   <div class="foot" id="rodape"></div>
@@ -176,7 +180,7 @@ function calcular(pp=periodo(),off=0){
   const [p0,p1]=pp,dias=p1-p0+1,b1=p1+off,fechada=p1<=FIM-60;
   const jan=k=>{let j1=Math.min(b1,FIM-k)-off,j0=p0;if(j1<j0)j0=Math.max(0,j1-Math.max(p1-p0,29));return [j0,j1,j1>=j0]};
   const [r0,r1,temRe]=jan(10),[q0,q1,temQ]=jan(30);
-  const Z=()=>({fes:0,funil:0,liq:0,custo:0,fcob:0,call:0,dev:0,base:0,vendas:0,disp:0,imFu:0,imD:0,d60:0,idS:0,fut:0});
+  const Z=()=>({fes:0,funil:0,liq:0,custo:0,fcob:0,call:0,dev:0,base:0,vendas:0,disp:0,imFu:0,imD:0,imR:0,d60:0,idS:0,fut:0});
   const M=new Map();
   for(const r of DADOS.rows){
     if(st.plat&&r[RPL]!==st.plat)continue;
@@ -184,16 +188,16 @@ function calcular(pp=periodo(),off=0){
     let a=M.get(r[0]);if(!a)M.set(r[0],a={i:r[0],af:AFS[r[0]][0],nome:AFS[r[0]][1],pl:st.plat||AFS[r[0]][2]||'JVZoo',contas:AFS[r[0]][3]||1,...Z()});
     if(noP){const fu=r[C.funil];a.fes+=r[C.fes];a.funil+=fu;a.liq+=r[C.liq_funil];a.fcob+=r[C.funil_coberto];
       a.custo+=r[C.custo_fs]+PCT_FS*Math.max(0,fu-r[C.funil_coberto]);a.call+=r[C.liq_call];
-      a.d60+=D60(r);a.idS+=fu*Math.min(60,FIM-d);if(d>M60){a.imFu+=fu;a.imD+=D60(r)}}
+      a.d60+=D60(r);a.idS+=fu*Math.min(60,FIM-d);if(d>M60){a.imFu+=fu;a.imD+=D60(r);a.imR+=fu*(1-FRAC(FIM-d))}}
     if(noR){a.dev+=D10(r);a.base+=r[C.funil]}
     if(noQ){a.vendas+=r[C.vendas];a.disp+=r[C.disputas]}}
   const L=[...M.values()].filter(a=>a.fes>0||a.funil>0);
   const T=L.reduce((s,a)=>s+Math.max(0,a.funil),0);let acc=0;
-  [...L].sort((x,y)=>y.funil-x.funil).forEach(a=>{a.curva=!T||a.funil<=0?'C':acc<0.8*T?'A':acc<0.95*T?'B':'C';acc+=Math.max(0,a.funil)});
+  const CVJ=curvaJanela(p1);L.forEach(a=>{a.curva=CVJ.cv.get(a.i)||'C'});
   for(const a of L){
     const fa=fatorAf(a.i);a.fator=fa.f;a.fw=fa.w;a.fo=fa.fo;
     a.r10=a.base>0?a.dev/a.base:null;a.p60=(a.base>0?(a.dev+K_R10*R10G)/(a.base+K_R10):R10G)*a.fator;
-    a.fut=Math.max(0,a.p60*a.imFu-a.imD);
+    a.fut=a.p60*a.imR;
     a.agora=a.funil?a.d60/a.funil:null;a.idade=a.funil?a.idS/a.funil:null;
     a.re60=a.funil?(a.d60+a.fut)/a.funil:null;
     a.lpf=a.fes?(a.liq-a.custo-a.fut)/a.fes:null;a.lpfHoje=a.fes?(a.liq-a.custo)/a.fes:null;
@@ -254,7 +258,7 @@ function tipAf(a,fechada){
   const cr=contaNota(a).map(c=>`<tr><td>${c.e.r||c.e.l}</td><td>${c.e.f(c.v)}</td><td class="${fx(c.x)}">${num(c.x,1)}</td><td>${num(c.pts,1)}</td></tr>`).join('');
   const aj=ajustesAf(a).map(j=>`<tr><td>${j.nome}</td><td colspan="2" class="mo">${j.motivo}</td><td class="${j.pts>=0.05?'mais':j.pts<=-0.05?'menos':'zero'}">${ptsTx(j.pts)}</td></tr>`).join('');
   return `<div class="tipaf${a.S?' ouro':''}">
-    <div class="t1"><b>${a.S?SB+' ':''}${esc(nomeAf(a))} ${PLB(a)}</b><span>curva ${a.S?'S':a.curva} · ${String(a.af).startsWith('Parceiro ')?'parceiro · '+a.contas+(a.contas>1?' contas':' conta'):esc(a.af)}</span></div>${a.pl==='Vupim'?`<div class="t2 vu-nt">${NOTA_VU}</div>`:''}
+    <div class="t1"><b>${a.S?SB+' ':''}${esc(nomeAf(a))} ${PLB(a)}</b><span>Curva Afiliado ${a.S?'S':a.curva} · ${String(a.af).startsWith('Parceiro ')?'parceiro · '+a.contas+(a.contas>1?' contas':' conta'):esc(a.af)}</span></div>${a.pl==='Vupim'?`<div class="t2 vu-nt">${NOTA_VU}</div>`:''}
     <div class="tx">
       <div class="trd" style="--c:${corAf(a)}">${radar(EIXOS.map(e=>a.n[e.k]),REF_N)}<div class="tx-pt">${sc(a.pts)}<small>pontos · tracejado = média do ranking</small></div></div>
       <div class="tx-t"><table class="tpt"><thead><tr><th>Critério</th><th>Resultado ${sx}</th><th>Nota</th><th>Pontos</th></tr></thead><tbody>${cr}
@@ -314,7 +318,7 @@ const nomeAf=a=>a.nome?fmtNome(a.nome):String(a.af).startsWith('Vupim ')?'Vupim 
 const PLB=a=>String(a.pl||'JVZoo').split(' + ').map(p=>p==='Vupim'?'<span class="plb vu" title="Vupim (dia de Brasília)">Vupim</span>':'<span class="plb jv" title="JVZoo (dia de Nova York)">JVZoo</span>').join(' ');
 const VUPIM_INI='2026-10-21';
 const NOTA_VU='A Vupim ainda não tem venda com 60 dias (dados desde 21/10): o fator 10d → 60d dela vem do geral (JVZoo).';
-const SB='<span class="sb" title="Curva S: premium"><i>S</i></span>';
+const SB='<span class="sb" title="Curva Afiliado S: premium"><i>S</i></span>';
 const afId=a=>String(a.af).split(' ').pop().replace(/[^A-Za-z0-9-]/g,'');
 let REF_N=[];   // nota média do ranking em cada critério (tracejado dos radares)
 // selo da pontuação: a cor diz a faixa (80+ forte, 60–79 bom, 40–59 atenção, abaixo de 40 ruim)
@@ -388,7 +392,7 @@ function render(){
     const top=rkc.slice(0,3),pior=rkc.slice(Math.max(3,rkc.length-3)).reverse();
     const cab='<span>Bônus/pen. · Pontos</span>';
     return `<article class="panel ${c}">
-      <div class="ch"><div><h2><span class="tag ${c}">${c}</span>Curva ${c}</h2><p><b>${n(g.length)}</b> afiliados · <b>${T?pct(rec/T,0):'—'}</b> da receita</p><p>${n(rkc.length)} no ranking${cS?` · <b>${cS} na curva S</b>`:''}</p></div>
+      <div class="ch"><div><h2><span class="tag ${c}">${c}</span>Curva Afiliado ${c}</h2><p><b>${n(g.length)}</b> afiliados · <b>${T?pct(rec/T,0):'—'}</b> da receita</p><p>${n(rkc.length)} no ranking${cS?` · <b>${cS} na Curva Afiliado S</b>`:''}</p></div>
         <div class="nota"><div class="v">${num(media,0)}<small>/100</small></div><span>pontuação média</span></div></div>
       ${radar(vals,refN)}
       <div class="tw"><table class="tc"><colgroup><col><col style="width:64px"><col style="width:60px"><col style="width:40px"><col style="width:31%"></colgroup>
@@ -412,7 +416,7 @@ function render(){
     const [sk,sd]=st.sort[c],pos=new Map(rkc.map((a,i)=>[a,i+1]));
     const val=a=>sk==='pos'?pos.get(a):sk==='nome'?nomeAf(a).toLowerCase():(a[sk]??-Infinity);
     const ord=[...rkc].sort((x,y)=>{const vx=val(x),vy=val(y);return (vx<vy?-1:vx>vy?1:0)*sd});
-    return `<section class="rk ${c}"><div class="rk-h"><h2><span class="tag ${c}">${c}</span>Ranking Curva ${c}</h2>
+    return `<section class="rk ${c}"><div class="rk-h"><h2><span class="tag ${c}">${c}</span>Ranking Curva Afiliado ${c}</h2>
       <p><b>${n(rkc.length)}</b> no ranking de ${n(g.length)} afiliados · <b>${T?pct(rec/T,0):'—'}</b> da receita · média <b>${num(rkc.length?rkc.reduce((s,a)=>s+a.pts,0)/rkc.length:null,0)}</b> pts</p></div>
       ${rkc.length?`<div class="rw"><table class="tr" data-c="${c}"><thead><tr>${COLS.map(([k,l])=>`<th data-k="${k}"${k===sk?` aria-sort="${sd>0?'ascending':'descending'}"`:''}>${l}</th>`).join('')}</tr></thead>
       <tbody>${ord.map(a=>`<tr data-tip="${regTip(tipAf(a,fechada))}" data-delay="1" data-af="${afId(a)}" tabindex="0">${COLS.map(([k])=>cel(a,k,pos.get(a))).join('')}</tr>`).join('')}</tbody></table></div>`:'<div class="vazio">Nenhum afiliado com o mínimo de FEs nesta curva.</div>'}</section>`}).join('');
@@ -422,14 +426,14 @@ function render(){
   renderAfiliado(R);
   document.getElementById('rodape').innerHTML=
     `Pontuação = notas de 0 a 10 (${EIXOS.map(e=>e.l+' '+e.peso).join(' · ')}) + bônus (volume acima de ${n(MT.volIni)} FEs/dia; reembolso 60d até ${P$(MT.reBIni)}) − penalidades (disputas acima de ${P$(MT.cbIni)} das vendas, até −${fP(AJ.cb)}; prejuízo de 60 dias com call center abaixo de −US$ ${n(MT.prejIni)} por cliente, até −${fP(AJ.prej)}). `+
-    `Safra aberta: previsto pela curva do próprio afiliado. Safra fechada (60+ dias): real. Custo do produto: Full Stack real, ou a média real de ${pct(PCT_FS)} da receita onde ainda não há pedido no armazém (a Vupim usa sempre a média). JVZoo pelo dia de Nova York; Vupim pelo dia de Brasília, desde 21/10.`;
+    `Curva Afiliado (A/B/C): receita do funil de ${mesTx(curvaJanela(periodo()[1]).ini)} a ${mesTx(curvaJanela(periodo()[1]).fim)} (2 meses fechados + o mês da safra). Safra aberta: o que já caiu + a parte que ainda falta (curva (dia/60)^${num(kEq(),2)}) × a previsão de 10 dias. Safra fechada (60+ dias): real. Custo do produto: Full Stack real, ou a média real de ${pct(PCT_FS)} da receita onde ainda não há pedido no armazém (a Vupim usa sempre a média). JVZoo pelo dia de Nova York; Vupim pelo dia de Brasília, desde 21/10.`;
 }
 
 
 /* ---------- aba Premissas: pesos, regras, réguas e exemplos reais ---------- */
 const REGRAS={
   re60:{o:'Quanto do dinheiro das vendas volta ao cliente em até 60 dias da venda: pedido pelo cliente, alerta e disputa, mais as taxas de alerta (US$ 23) e disputa (US$ 49).',
-        c:'Safra aberta: o que já caiu + o que ainda vai cair (10d × fator da curva do afiliado). Safra fechada: real.',u:'%',melhor:'menor'},
+        c:'Safra aberta: o que já caiu + a parte que ainda falta pela curva × a previsão de 10 dias (10d × fator do afiliado). Safra fechada: real.',u:'%',melhor:'menor'},
   lpf:{o:'Quanto cada cliente (FE) deixa no funil da JVZoo depois de CPA, taxas, reembolso e custo real do produto e frete (Full Stack).',
        c:'(Líquido do funil − custo − reembolso que ainda vai cair) ÷ FEs. Sem call center.',u:'US$',melhor:'maior'},
   fes:{o:'Volume: quantos clientes novos (FEs) o afiliado trouxe, em 30 dias.',c:'FEs da safra ÷ dias × 30. A meta muda com a curva do afiliado.',u:'FEs',melhor:'maior'},
@@ -442,7 +446,7 @@ function exemplo(a,fechada){
   const W=EIXOS.reduce((s,e)=>s+(a.n[e.k]==null?0:e.peso),0);
   const lin=EIXOS.map(e=>{const v=e.k==='fes'?a.fes30:a[e.k],x=a.n[e.k],pt=x==null||!W?0:10*x*e.peso/W;
     return `<tr><td>${e.l}</td><td>${e.f(v)}</td><td class="${fx(x)}">${num(x,1)}</td><td>${e.peso}</td><td>${num(pt,1)}</td></tr>`}).join('');
-  return `<article class="pm-ex"><div class="pm-exh"><div><b>${a.S?SB+' ':''}${esc(nomeAf(a))}</b><span>Curva ${a.curva} · ${n(a.fes)} FEs · ${fechada?'real':'previsto'}</span></div>${sc(a.pts)}</div>
+  return `<article class="pm-ex"><div class="pm-exh"><div><b>${a.S?SB+' ':''}${esc(nomeAf(a))}</b><span>Curva Afiliado ${a.curva} · ${n(a.fes)} FEs · ${fechada?'real':'previsto'}</span></div>${sc(a.pts)}</div>
     <div class="tab"><table class="pm-t"><thead><tr><th>Critério</th><th>Resultado</th><th>Nota</th><th>Peso</th><th>Pontos</th></tr></thead><tbody>${lin}
     <tr class="sub"><td>Base (notas × pesos)</td><td></td><td></td><td></td><td>${num(a.base100,1)}</td></tr>
     <tr><td>Bônus</td><td colspan="3">volume ${num(a.fes/(st.dias||30),1)} FEs/dia · reembolso ${pct(a.re60)}</td><td class="fb">${a.bonus>=0.05?'+'+num(a.bonus,1):'0'}</td></tr>
@@ -450,7 +454,7 @@ function exemplo(a,fechada){
     <tr class="tot"><td>Pontuação</td><td></td><td></td><td></td><td>${num(a.pts,1)}</td></tr></tbody></table></div></article>`}
 const POR_QUE={re60:'Dinheiro que volta para o cliente (pedido, alerta e disputa). Quanto menor, melhor.',
   lpf:'O que sobra de cada cliente depois de CPA, taxas, reembolso e produto. Quanto maior, melhor.',
-  fes:'Quantos clientes novos ele traz. A meta é maior para quem é curva A.',
+  fes:'Quantos clientes novos ele traz. A meta é maior para quem é Curva Afiliado A.',
   aov:'Quanto cada cliente gasta no funil. Quanto maior, melhor.'};
 const COR_K={re60:'#4260E6',lpf:'#1F7F63',fes:'#6a80e8',aov:'#B86A16'};
 const LAPIS='<svg class="lp" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20h4L19 9l-4-4L4 16z"/><path d="M14 6l4 4"/></svg>';
@@ -470,7 +474,7 @@ function pqPlacarHTML(s,c){
   const lin=EIXOS.map(e=>`<div class="pq-l"><span>${e.l}</span><span class="pq-m"><b class="${fx(c.nt[e.k])}">${num(c.nt[e.k],1)}</b> × ${e.peso}</span><b>${num(c.pts[e.k],1)}</b></div>`).join('');
   const aj=(nome,motivo,v,lim,tipo)=>{const on=Math.abs(v)>=0.05;return `<div class="pq-a ${tipo} ${on?'on':''}"><span class="pq-ai">${on?'●':'○'}</span><span><b>${nome}</b><small>${motivo}</small></span><b class="pq-av">${on?(v>0?'+':'−')+num(Math.abs(v),1):'0'}<small>de ${lim}</small></b></div>`};
   return `<div class="pq-sc"><div class="pq-big ${scCls(c.tot)}">${num(c.tot,0)}<small>/100</small></div>
-      <div class="pq-st"><span class="pq-tl">${c.S?SB:`<span class="tag ${s.curva}">${s.curva}</span>`}<b>${c.S?'Curva S · premium':'Curva '+s.curva}</b></span><small>Pontuação ${FAIXA_TX(c.tot)}${c.S?' · 100+ na curva A':''}</small><small class="pq-quem">${s.edit?`E se… · nota real ${num(s.ptsReal,0)}`:'Valores reais · '+(st.pqSafra||'')}</small></div></div>
+      <div class="pq-st"><span class="pq-tl">${c.S?SB:`<span class="tag ${s.curva}">${s.curva}</span>`}<b>${c.S?'Curva Afiliado S · premium':'Curva Afiliado '+s.curva}</b></span><small>Pontuação ${FAIXA_TX(c.tot)}${c.S?' · 100+ na Curva Afiliado A':''}</small><small class="pq-quem">${s.edit?`E se… · nota real ${num(s.ptsReal,0)}`:'Valores reais · '+(st.pqSafra||'')}</small></div></div>
     <div class="pq-g"><h3>Pontos das notas <small>nota × peso</small></h3>${lin}<div class="pq-l pq-sub"><span>Soma das notas</span><span></span><b>${num(c.base,1)}</b></div></div>
     <div class="pq-g"><h3>Bônus <small>somam pontos</small></h3>
       ${aj('Volume alto',`${num((s.fes||0)/30,1)} clientes/dia · vale acima de 12`,c.bV,'+'+fP(AJ.vol),'bo')}
@@ -499,14 +503,14 @@ function pqRegras(){
       <tr><td>Reembolso baixo</td><td>reembolso 60d: ${P$(MT.reBIni)} = 0, ${P$(reMid())} = +${fP(AJ.re*0.6)}, ${P$(MT.reBMax)} ou menos = +${fP(AJ.re)}</td><td class="fb">+${fP(AJ.re)}</td></tr>
       <tr><td>Risco de chargeback</td><td>disputas: ${P$(MT.cbIni)} das vendas = 0, ${P$(MT.cbMax)} ou mais = −${fP(AJ.cb)}</td><td class="fr">−${fP(AJ.cb)}</td></tr>
       <tr><td>Prejuízo por cliente</td><td>com call center, 60 dias: −US$ ${n(MT.prejIni)} = 0, −US$ ${n(MT.prejMax)} ou pior = −${fP(AJ.prej)}</td><td class="fr">−${fP(AJ.prej)}</td></tr></tbody></table></div></div>
-    <div class="pq-mr"><h3>Como prevemos o reembolso</h3><p>Pelo reembolso dos primeiros 10 dias × a curva do próprio afiliado (geral × ${num(FATOR,2)} do dia 10 ao 60). Safra com 60+ dias usa o real. Custo do produto: real da Full Stack, ou a média real de ${pct(PCT_FS)} da receita onde ainda não há pedido no armazém.</p></div>`}
+    <div class="pq-mr"><h3>Como prevemos o reembolso</h3><p>O que já caiu + a parte que ainda falta × a previsão de 10 dias (reembolso dos primeiros 10 dias × fator do afiliado; o geral é × ${num(FATOR,2)}). A parte que falta vem da curva (dia/60)^${num(kEq(),2)}, ajustada à mediana: quanto mais velha a venda, mais pesa o que já aconteceu. Safra com 60+ dias usa o real. Custo do produto: real da Full Stack, ou a média real de ${pct(PCT_FS)} da receita onde ainda não há pedido no armazém.</p></div>`}
 const fP=v=>num(v,Number.isInteger(v)?0:1);
 // campo pequeno para editar uma meta no meio do texto
 const mi=(k,rot,st=1)=>`<input type="number" class="mt-in" data-m="${k}" value="${MT[k]}" step="${st}" inputmode="decimal" aria-label="${rot}" title="${rot}">`;
 const META_ED={
   re60:()=>`Bom até ${mi('re9','Reembolso: bom até (%)',0.5)}% · médio até ${mi('re7','Reembolso: médio até (%)',0.5)}%`,
   lpf:()=>`Bom a partir de US$ ${mi('lpf9','Lucro por cliente: bom a partir de (US$)')} · médio a partir de US$ ${mi('lpf7','Lucro por cliente: médio a partir de (US$)')}`,
-  fes:()=>`A ${mi('fesA','Meta de FEs da curva A',10)} · B ${mi('fesB','Meta de FEs da curva B',5)} · C ${mi('fesC','Meta de FEs da curva C',5)} em 30 dias (médio = metade)`,
+  fes:()=>`A ${mi('fesA','Meta de FEs da Curva Afiliado A',10)} · B ${mi('fesB','Meta de FEs da Curva Afiliado B',5)} · C ${mi('fesC','Meta de FEs da Curva Afiliado C',5)} em 30 dias (médio = metade)`,
   aov:()=>`Bom a partir de US$ ${mi('aov9','AOV: bom a partir de (US$)',5)} · médio a partir de US$ ${mi('aov7','AOV: médio a partir de (US$)',5)}`};
 const AJUSTES=()=>[
   {k:'vol',t:'bo',nome:'Volume alto',o:'Afiliado que traz muitos clientes novos todo dia.',quando:`mais de ${mi('volIni','Volume alto: começa acima de (clientes por dia)')} clientes por dia`,vale:`${n(volMid())} por dia = +${fP(AJ.vol*0.6)} · ${mi('volMax','Volume alto: máximo a partir de (clientes por dia)',5)} ou mais = +${fP(AJ.vol)}`},
@@ -523,7 +527,7 @@ function simCampos(s){
     ${campo('lpf','Lucro por cliente','meta '+EIXOS[1].meta(),'US$',1,s.lpf)}
     ${campo('fes','Clientes em 30 dias','meta '+s.curva+': '+n(META_FES[s.curva]),'',10,s.fes)}
     ${campo('aov','Ticket médio','meta '+EIXOS[3].meta(),'US$',5,s.aov)}
-    <div class="pq-f"><span class="pq-fl">Curva<small>pela receita</small></span><span class="pq-fi"><span class="seg pq-cv" id="pqCurva">${['A','B','C'].map(c=>`<button type="button" data-c="${c}" aria-pressed="${s.curva===c}">${c}</button>`).join('')}</span><span class="pq-nt ghost"></span></span></div>
+    <div class="pq-f"><span class="pq-fl">Curva Afiliado<small>pela receita</small></span><span class="pq-fi"><span class="seg pq-cv" id="pqCurva">${['A','B','C'].map(c=>`<button type="button" data-c="${c}" aria-pressed="${s.curva===c}">${c}</button>`).join('')}</span><span class="pq-nt ghost"></span></span></div>
     <div class="pq-f ro"><span class="pq-fl" title="Calculado: clientes em 30 dias ÷ 30">Clientes por dia<small>bônus &gt; 12</small></span><span class="pq-fi"><span class="rov" id="pqFd">—</span><span class="pq-nt ghost"></span></span></div>
     <h3>Para bônus e penalidades</h3>
     ${campo('disp','Disputas','% das vendas · pena &gt; 2%','%',0.1,s.disp)}
@@ -544,7 +548,7 @@ function simEscolhe(id){const a=(st.pqOrd||[]).find(x=>afId(x)===id);if(!a)retur
 const FXS=[{k:'b',l:'Bons',t:'9–10',f:x=>x>=9},{k:'m',l:'Médios',t:'7–8',f:x=>x>=7&&x<9},{k:'r',l:'Ruins',t:'0–6',f:x=>x<7}];
 const limNota=(rg,y)=>{for(let j=1;j<rg.length;j++){const [x0,y0]=rg[j-1],[x1,y1]=rg[j];if((y0-y)*(y1-y)<=0&&y0!==y1)return x0+(y-y0)*(x1-x0)/(y1-y0)}return null};
 function faixaTx(k){
-  if(k==='fes')return {b:`na meta da curva ou acima (A ${n(META_FES.A)} · B ${n(META_FES.B)} · C ${n(META_FES.C)} em 30 dias)`,m:'de metade da meta até a meta',r:'abaixo da metade da meta'};
+  if(k==='fes')return {b:`na meta da Curva Afiliado ou acima (A ${n(META_FES.A)} · B ${n(META_FES.B)} · C ${n(META_FES.C)} em 30 dias)`,m:'de metade da meta até a meta',r:'abaixo da metade da meta'};
   const rg=REGUA[k](),a9=limNota(rg,9),a7=limNota(rg,7);
   if(k==='re60')return {b:`até ${num(a9,0)}%`,m:`${num(a9,0)}% a ${num(a7,0)}%`,r:`acima de ${num(a7,0)}%`};
   return {b:`US$ ${n(a9)} ou mais`,m:`US$ ${n(a7)} a ${n(a9)}`,r:`abaixo de US$ ${n(a7)}`}}
@@ -631,7 +635,7 @@ function renderPremissas(){
     ${faixasHtml(R)}
   </div>
   <div class="pq-leg"><span>Notas: <span class="fb">9–10 bom</span> · <span class="fm">7–8 médio</span> · <span class="fr">0–6 ruim</span></span>
-    <span>Curva pela receita: <span class="tag A">A</span> 80% · <span class="tag B">B</span> até 95% · <span class="tag C">C</span> o resto · ${SB} curva A com 100+</span>
+    <span>Curva Afiliado pela receita dos 3 meses até o fim da safra (2 fechados + o da safra): <span class="tag A">A</span> 80% · <span class="tag B">B</span> até 95% · <span class="tag C">C</span> o resto · ${SB} curva A com 100+</span>
     <button type="button" class="pq-lk" id="pqReg">Ver réguas completas →</button></div>
   <div class="pq-mod" id="pqMod" hidden><div class="pq-mi" role="dialog" aria-modal="true" aria-label="Réguas completas">${pqRegras()}</div></div>
   <div class="pq-mod pz-mod" id="pqSim" hidden><div class="pz-mi" role="dialog" aria-modal="true" aria-labelledby="pzTit">
@@ -750,7 +754,7 @@ function renderAfiliado(R){
     const medRe=DC.map((d,k)=>{const v=G.map(x=>CR.get(x.i)[k]).filter(o=>o[1]>=3000).map(o=>o[0]/o[1]);return v.length>=3?mediana(v):null});
     const minha=DC.map((d,k)=>meu[k][1]>0?meu[k][0]/meu[k][1]:null);
     let ult=-1;DC.forEach((d,k)=>{if(minha[k]!=null)ult=k});
-    const dTip=k=>tipPt(`Dia ${DC[k]} desde a venda`,[[nomeAf(a),minha[k]==null?'—':pct(minha[k])],[`Mediana da curva ${cv}`,medRe[k]==null?'—':pct(medRe[k])],['Base (receita com '+DC[k]+'+ dias)',usdC(meu[k][1])]]);
+    const dTip=k=>tipPt(`Dia ${DC[k]} desde a venda`,[[nomeAf(a),minha[k]==null?'—':pct(minha[k])],[`Mediana da Curva Afiliado ${cv}`,medRe[k]==null?'—':pct(medRe[k])],['Base (receita com '+DC[k]+'+ dias)',usdC(meu[k][1])]]);
     const serAf=DC.map((d,k)=>minha[k]==null?null:[d,minha[k],dTip(k)]).filter(Boolean);
     const serMd=DC.map((d,k)=>medRe[k]==null?null:[d,medRe[k],dTip(k)]).filter(Boolean);
     // projeção até o dia 60 pela forma da curva média, a partir do último dia medido (o acumulado não desce)
@@ -773,7 +777,7 @@ function renderAfiliado(R){
     const nW=ws.length,passo=Math.max(1,Math.ceil(nW/7)),ticks=ws.map((w,i)=>[i,dTx(w.s)]).filter((x,i)=>i%passo===0);
     const band=[];ws.forEach((w,i)=>{if(w.s+6>=p0&&w.s<=p1)band.push([i-0.5,i+0.5])});
     const chW=(k,fmt,mf,tit)=>{const md=ws.map(w=>medW(w.s,k,mf));
-      const tp=i=>tipPt(`${tit} · semana de ${dTx(ws[i].s)}`,[[nomeAf(a),ws[i][k]==null?'—':fmt(ws[i][k])],[`Mediana da curva ${cv}`,md[i]==null?'—':fmt(md[i])],['FEs dele na semana',n(ws[i].fes)]]);
+      const tp=i=>tipPt(`${tit} · semana de ${dTx(ws[i].s)}`,[[nomeAf(a),ws[i][k]==null?'—':fmt(ws[i][k])],[`Mediana da Curva Afiliado ${cv}`,md[i]==null?'—':fmt(md[i])],['FEs dele na semana',n(ws[i].fes)]]);
       return lc({al:tit,x0:-0.5,x1:nW-0.5,ticks,ancora:false,fmt,band:st.per==='tudo'?[]:band,
         ser:[{cls:'md',pts:ws.map((w,i)=>md[i]==null?null:[i,md[i],tp(i)]).filter(Boolean)},
              {cls:'af',pts:ws.map((w,i)=>w[k]==null||(k!=='fes'&&w.fes<1)?null:[i,w[k],tp(i)]).filter(Boolean)}]})};
@@ -781,11 +785,11 @@ function renderAfiliado(R){
     el.innerHTML=`
     <section class="afh${a.S?' ouro':''}"><div class="afh-l">${volta}
         <div class="afh-n"><h2>${a.S?SB+' ':`<span class="tag ${cv}">${cv}</span>`}${nome}</h2>
-        <p>${PLB(a)} ${esc(a.af)} · curva ${a.S?'S (premium)':cv}${pos?` · <b>#${pos}</b> de ${rkc.length} no ranking da curva`:' · fora do ranking (poucos FEs)'} · safra ${dTx(p0)} a ${dTx(p1)} · <b>${real?'real':'previsto'}</b></p>${a.pl==='Vupim'?`<p class="vu-nt">${NOTA_VU}</p>`:''}</div></div>
+        <p>${PLB(a)} ${esc(a.af)} · Curva Afiliado ${a.S?'S (premium)':cv}${pos?` · <b>#${pos}</b> de ${rkc.length} no ranking da curva`:' · fora do ranking (poucos FEs)'} · safra ${dTx(p0)} a ${dTx(p1)} · <b>${real?'real':'previsto'}</b></p>${a.pl==='Vupim'?`<p class="vu-nt">${NOTA_VU}</p>`:''}</div></div>
       <div class="afh-s"><div class="afh-pt">${sc(a.pts)}<small>/100</small></div>
         <div class="afh-c">${num(a.base100,1)} base ${a.bonus>=0.05?`<span class="mais">+ ${num(a.bonus,1)} bônus</span>`:''} ${a.pen<=-0.05?`<span class="menos">− ${num(-a.pen,1)} pen.</span>`:''}</div></div></section>
     <section class="bigs afb">${k('Receita do funil',usdC(a.funil),`${n(a.fes)} FEs na safra`)}${k('Reembolso 60d '+sx,pct(a.re60),`até agora ${pct(a.agora)} · meta ${EIXOS[0].meta()}`)}
-      ${k('Lucro/cliente '+sx,usd(a.lpf),`hoje ${usd(a.lpfHoje)} · meta ${EIXOS[1].meta()}`)}${k('FEs (30 dias)',n(a.fes30),`meta curva ${cv}: ${n(META_FES[cv])}`)}
+      ${k('Lucro/cliente '+sx,usd(a.lpf),`hoje ${usd(a.lpfHoje)} · meta ${EIXOS[1].meta()}`)}${k('FEs (30 dias)',n(a.fes30),`meta Curva Afiliado ${cv}: ${n(META_FES[cv])}`)}
       ${k('AOV',usd(a.aov),'meta '+EIXOS[3].meta())}${k('Líquido c/ call center',usd(a.lpc),'por cliente, 60 dias')}${k('Risco de chargeback',a.tdisp==null?'—':pct(a.tdisp),'disputas · limite '+P$(MT.cbIni))}</section>
     <section class="pm-b afn"><div class="pm-bh"><div><h2>Como a nota dele é montada</h2><p>Radar: linha cheia = ele · tracejado = média do ranking. Ao lado, a conta: nota de cada critério × peso, mais bônus e menos penalidades.</p></div></div>
       <div class="afn-g"><div class="afr" style="--c:${cor}">${radar(EIXOS.map(e=>a.n[e.k]),REF_N)}</div>
@@ -793,8 +797,8 @@ function renderAfiliado(R){
           <tr class="sub"><td colspan="5">Base (notas × pesos)</td><td>${num(a.base100,1)}</td></tr>
           <tr class="grp"><td colspan="6">Bônus e penalidades</td></tr>${aj}
           <tr class="tot"><td colspan="5">Pontuação = base ${num(a.base100,1)} ${a.bonus>=0.05?'+ bônus '+num(a.bonus,1):''} ${a.pen<=-0.05?'− penalidades '+num(-a.pen,1):''}</td><td>${num(a.pts,1)}</td></tr></tbody></table></div></div></section>
-    <section class="pm-b afcv" style="--c:${cor}"><div class="pm-bh"><div><h2>Ele contra a mediana da curva ${cv}</h2><p>Mediana dos ${n(G.length)} afiliados da curva ${cv} na safra ${dTx(p0)} a ${dTx(p1)}. Passe o mouse nos pontos para ver os valores.</p></div>
-        <div class="lg"><span><i></i>${nome}</span><span><i class="md"></i>Mediana da curva ${cv}</span><span><i class="pv"></i>Previsto</span><span><i class="be"></i>Lucro zero</span></div></div>
+    <section class="pm-b afcv" style="--c:${cor}"><div class="pm-bh"><div><h2>Ele contra a mediana da Curva Afiliado ${cv}</h2><p>Mediana dos ${n(G.length)} afiliados da Curva Afiliado ${cv} na safra ${dTx(p0)} a ${dTx(p1)}. Passe o mouse nos pontos para ver os valores.</p></div>
+        <div class="lg"><span><i></i>${nome}</span><span><i class="md"></i>Mediana da Curva Afiliado ${cv}</span><span><i class="pv"></i>Previsto</span><span><i class="be"></i>Lucro zero</span></div></div>
       <div class="afw">
         <div><h3>Reembolso acumulado por dia desde a venda</h3>${chRe}${msgRe}</div>
         <div><h3>FEs por semana</h3>${chW('fes',v=>n(v),1,'FEs')}</div>
@@ -839,6 +843,19 @@ function reagrupa(modo){if(modo===AGRUPA)return;AGRUPA=modo;try{LS.setItem('ns-a
   if(F.length>=5){const md=v=>{const s=[...v].sort((x,y)=>x-y),h=s.length>>1;return s.length%2?s[h]:(s[h-1]+s[h])/2};let m=0;
     CURVA_MED.splice(0,CURVA_MED.length,...[[0,0]].concat(DCH.map((d,k)=>[d,m=Math.max(m,md(F.map(f=>f[k])))])))}
   st.sim=null;if(st.pg==='af')irPara('ranking');render()}
+
+/* previsão do reembolso 60d (decisão do Douglas, 04/11): o que já caiu + a parte que ainda falta × a previsão de 10 dias.
+   A parte que falta de cada venda = 1 − FRAC(idade); FRAC(d) = (d/60)^k, com k ajustado à curva mediana (≈ 0,53).
+   Backtest (49 safras afiliado × semana já fechadas): erro médio 1,3 pp olhando até o D30, contra 2,4 pp do 10d × fator puro. */
+function kEq(){const s=CURVA_MED.map(p=>p[1].toFixed(2)).join();if(kEq.s!==s){kEq.s=s;let b=0.53,be=1e18;
+  for(let k=0.2;k<=1.2;k+=0.005){let e=0;for(const [d,v] of CURVA_MED)if(d>0)e+=((d/60)**k*100-v)**2;if(e<be){be=e;b=k}}kEq.k=b}return kEq.k}
+function FRAC(d){return d<=0?0:d>=60?1:(d/60)**kEq()}
+function curvaJanela(p1){const fim=dIso(Math.max(0,Math.min(p1,FIM))).slice(0,7),[y,m]=fim.split('-').map(Number),ini=new Date(Date.UTC(y,m-3,1)).toISOString().slice(0,7);
+  const j0=Math.max(0,dIdx(ini+'-01')),j1=Math.min(FIM,fimMes(fim)),k=j0+'|'+j1+'|'+st.plat+'|'+AGRUPA,c=curvaJanela.c||(curvaJanela.c=new Map());if(c.has(k))return c.get(k);
+  const fu=new Map();for(const r of DADOS.rows){if(r[1]<j0||r[1]>j1)continue;if(st.plat&&r[RPL]!==st.plat)continue;fu.set(r[0],(fu.get(r[0])||0)+r[C.funil])}
+  const T=[...fu.values()].reduce((s,v)=>s+Math.max(0,v),0);let acc=0;const cv=new Map();
+  [...fu].sort((a,b)=>b[1]-a[1]).forEach(([i,v])=>{cv.set(i,!T||v<=0?'C':acc<0.8*T?'A':acc<0.95*T?'B':'C');acc+=Math.max(0,v)});
+  const o={cv,j0,j1,ini:ini<MESES[0]?MESES[0]:ini,fim};c.set(k,o);return o}
 
 const DT={MAX:140,MAX_TXT:260,MIN:56,LIM:3000,XLS:'https://cdn.jsdelivr.net/npm/exceljs@4.4.0/dist/exceljs.min.js'};
 const ICO={xls:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5M8 13h8M8 17h8M12 11v8"/></svg>',
@@ -1037,6 +1054,664 @@ const _renderAfiliadoOrig=renderAfiliado;
 renderAfiliado=function(R){_renderAfiliadoOrig(R);pedidosMontar(R)};
 
 
+/* ---- todas as vendas de afiliados (Visão Geral e Reembolso Prev.): GET /api/metrics/affiliate-ranking/all-orders ---- */
+let PED=null,PED_ERRO=null;
+if(opts.buscarTodosPedidos)opts.buscarTodosPedidos().then(P=>{if(!root.isConnected)return;
+  const ix=new Map(DADOS_CONTA.afs.map((a,i)=>[a[0],i])),c=P.col,n0=c.af.length,des=dIdx(P.d0),nova=new Int32Array(n0).fill(-1);
+  let n=0;for(let i=0;i<n0;i++)if(ix.has(P.dic.conta[c.af[i]]))nova[i]=n++;
+  const out={};for(const k in c)out[k]=[];
+  for(let i=0;i<n0;i++){if(nova[i]<0)continue;for(const k in c){let v=c[k][i];
+    if(k==='af')v=ix.get(P.dic.conta[v]);else if(k==='fe')v+=des;else if(k==='fid')v=v>=0?nova[v]:-1;out[k].push(v)}}
+  PED={d0:P.d0,dic:P.dic,col:out,n};render()}).catch(e=>{PED_ERRO=e.message||String(e);render()});
+
+/* ---------- tela Afiliados (lista com resultado, alertas e coorte) ----------
+   Mesma conta do Ranking (calcular): mesma safra, filtros, agrupamento e página do afiliado. Acrescenta:
+   big numbers da base, alertas automáticos, a tabela completa (com a lente CPA do dash do Mike: Status CPA) (a coorte de reembolso fica na aba Reembolso Prev.). CPA vem dos pedidos (prévia: pedidos embutidos). */
+PGS.lista=['Visão Geral','Visão geral dos afiliados'];
+const lsSt={filtro:null};
+// régua do Status CPA do dash do Mike (ProfitConfig: saudável ≥ US$ 10, atenção ≥ US$ 0), aplicada ao lucro previsto por FE
+const STATUS_CPA={ok:10,at:0};
+const statusCpa=v=>v==null?null:v>=STATUS_CPA.ok?['Saudável','ok']:v>=STATUS_CPA.at?['Atenção','at']:['Renegociar','rn'];
+
+// extras por linha do ranking: FEs por semana (8 semanas até o último dia), primeira e última venda, CPA da safra
+function lsExtras(R){
+  const X=new Map(),g=i=>{let o=X.get(i);if(!o)X.set(i,o={sem:Array(8).fill(0),pri:null,ult:null,f7:0,f28:0,cpa:null});return o};
+  for(const r of DADOS.rows){if(st.plat&&r[RPL]!==st.plat)continue;const f=r[C.fes];if(!f)continue;const o=g(r[0]),d=r[1];
+    if(o.pri==null||d<o.pri)o.pri=d;if(d<=FIM&&(o.ult==null||d>o.ult))o.ult=d;
+    const k=Math.floor((FIM-d)/7);if(k>=0&&k<8)o.sem[7-k]+=f;
+    if(d>FIM-7&&d<=FIM)o.f7+=f;else if(d>FIM-35&&d<=FIM-7)o.f28+=f}
+  if(typeof PED!=='undefined'&&PED){const c=PED.col;for(let i=0;i<PED.n;i++){const fe=c.fe[i];if(fe<R.p0||fe>R.p1)continue;
+    const conta=c.af[i],pl=DADOS_CONTA.afs[conta][2]||'JVZoo';if(st.plat&&pl!==st.plat)continue;const o=g(MAPA_CONTA[conta]);o.cpa=(o.cpa||0)+(c.cpa[i]||0)}}
+  return X}
+
+// ordenação genérica de tabela simples: clique no cabeçalho (o valor vem de data-v; sem data-v, do texto). Vazio fica no fim.
+function ordenaTabela(tb){if(!tb||!tb.tHead)return;const ths=[...tb.tHead.rows[0].cells];
+  ths.forEach((th,j)=>{th.classList.add('ord');th.tabIndex=0;th.setAttribute('aria-sort','none');
+    const go=()=>{const cur=th.getAttribute('aria-sort'),txt=th.dataset.tipo==='t',d=cur==='descending'?1:cur==='ascending'?-1:(txt?1:-1);
+      ths.forEach(x=>x.setAttribute('aria-sort','none'));th.setAttribute('aria-sort',d>0?'ascending':'descending');
+      const body=tb.tBodies[0],rows=[...body.rows].filter(r=>r.cells.length>1);
+      const val=r=>{const c=r.cells[j];if(!c)return null;const v=c.dataset.v;return v===undefined?c.textContent.trim():v===''?null:(isNaN(+v)?v:+v)};
+      rows.sort((a,b)=>{const x=val(a),y=val(b);if(x==null&&y==null)return 0;if(x==null)return 1;if(y==null)return -1;
+        return (typeof x==='number'&&typeof y==='number'?x-y:String(x).localeCompare(String(y),'pt-BR'))*d}).forEach(r=>body.appendChild(r))};
+    th.onclick=go;th.onkeydown=e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();go()}}})}
+const spark=v=>{const W=84,H=22,m=Math.max(1,...v),p=v.map((x,i)=>[i*(W-4)/(v.length-1)+2,H-3-(x/m)*(H-6)]);
+  const ln=p.map((q,i)=>(i?'L':'M')+q[0].toFixed(1)+' '+q[1].toFixed(1)).join(''),z=p[p.length-1];
+  return `<svg class="ls-sp" viewBox="0 0 ${W} ${H}" width="${W}" height="${H}" aria-hidden="true"><path d="${ln}L${W-2} ${H-2}L2 ${H-2}Z" class="a"/><path d="${ln}" class="l"/><circle cx="${z[0].toFixed(1)}" cy="${z[1].toFixed(1)}" r="2.2" class="p"/></svg>`};
+const diasTx=d=>d==null?'—':d<=0?'hoje':d===1?'ontem':`há ${d} d`;
+const pctTx=(v,c=1)=>v==null?'—':pct(v,c);
+
+function renderLista(R){
+  const el=document.getElementById('lista');if(!el||st.pg!=='lista')return;
+  const {L,t,p0,p1,dias,fechada}=R,pa=anterior(),A=pa?calcular(pa,p0-pa[0]):null,X=lsExtras(R);
+  const ativos=L.filter(a=>a.fes>0),idsAgora=new Set(ativos.map(a=>a.i));
+  const novos=ativos.filter(a=>{const x=X.get(a.i);return x&&x.pri>=p0}),parados=A?A.L.filter(a=>a.fes>=10&&!idsAgora.has(a.i)):[];
+  const cpaTot=ativos.reduce((s,a)=>s+((X.get(a.i)||{}).cpa||0),0),temCpa=typeof PED!=='undefined'&&!!PED;
+  const top5=[...ativos].sort((x,y)=>y.funil-x.funil).slice(0,5).reduce((s,a)=>s+Math.max(0,a.funil),0),conc=t.funil?top5/t.funil:null;
+  const concA=A&&A.t.funil?[...A.L].sort((x,y)=>y.funil-x.funil).slice(0,5).reduce((s,a)=>s+Math.max(0,a.funil),0)/A.t.funil:null;
+  const sx=fechada?'real':'prev.';
+  const vr=(v,va,modo,melhor)=>{if(v==null||va==null||!isFinite(v)||!isFinite(va)||(modo==='%'&&!va))return '<span class="var">—</span>';
+    const d=modo==='%'?(v-va)/Math.abs(va):v-va,tx=modo==='%'?num(Math.abs(d)*100,1)+'%':modo==='pp'?num(Math.abs(d)*100,1)+' pp':modo==='usd'?usd(Math.abs(d)):num(Math.abs(d),0);
+    if(Math.abs(d)<(modo==='%'||modo==='pp'?0.0005:0.5))return `<span class="var">= ${tx}</span>`;
+    return `<span class="var ${(d>0)===(melhor>0)?'up':'down'}">${d>0?'▲':'▼'} ${tx}</span>`};
+  const kpi=(l,v,var_,m,cls='')=>`<article class="kpi${cls}"><span class="k">${l}</span><b class="v">${v}</b>${var_}<span class="m">${m}</span></article>`;
+  const bigs=kpi('Afiliados ativos',n(ativos.length),vr(ativos.length,A&&A.L.filter(a=>a.fes>0).length,'n',1),`${n(novos.length)} novos · ${n(parados.length)} parados`,' total')+
+    kpi('Receita do funil',usdC(t.funil),vr(t.funil,A&&A.t.funil,'%',1),`${n(t.fes)} FEs · AOV ${usd(t.aov)}`)+
+    kpi('CPA pago',temCpa?usdC(cpaTot):'…','<span class="var">&nbsp;</span>',temCpa&&t.fes?`${usd(cpaTot/t.fes)} por FE · ${pct(cpaTot/t.funil,0)} da receita`:'carregando pedidos')+
+    kpi(`Reembolso 60d <i>${sx}</i>`,pct(t.re60),vr(t.re60,A&&A.t.re60,'pp',-1),`já caiu ${pct(t.agora)} · meta ≤ ${P$(MT.re9)}`)+
+    kpi(`Lucro/cliente <i>${sx}</i>`,usd(t.lpf),vr(t.lpf,A&&A.t.lpf,'usd',1),`com call center ${usd(t.fes?t.liqTot/t.fes:null)}`)+
+    kpi('Concentração top 5',pctTx(conc,0),vr(conc,concA,'pp',-1),`da receita em 5 de ${n(ativos.length)} afiliados`);
+
+  // ---- alertas automáticos (clicáveis: filtram a tabela) ----
+  const rel=ativos.filter(a=>a.fes>=st.min);
+  const AL=[
+    {k:'re',cls:'bad',l:`reembolso 60d previsto acima de ${P$(MT.re7)}`,ids:rel.filter(a=>a.re60!=null&&a.re60*100>MT.re7)},
+    {k:'prej',cls:'bad',l:`prejuízo por cliente pior que −US$ ${n(MT.prejIni)} (com call center)`,ids:rel.filter(a=>a.lpc!=null&&a.lpc<-MT.prejIni)},
+    {k:'cb',cls:'warn',l:`disputas acima de ${P$(MT.cbIni)} das vendas (risco de chargeback)`,ids:ativos.filter(a=>a.tdisp!=null&&a.tdisp*100>MT.cbIni)},
+    {k:'queda',cls:'warn',l:'caíram 40%+ na última semana (contra a média das 4 anteriores)',ids:ativos.filter(a=>{const x=X.get(a.i);return x&&x.f28/4>=20&&x.f7<=0.6*x.f28/4})},
+    {k:'parado',cls:'warn',l:'pararam: sem FE há 7+ dias (tinham volume no período anterior)',ids:parados},
+    {k:'novo',cls:'good',l:'novos com bom começo (30+ FEs, nota 60+)',ids:novos.filter(a=>a.fes>=30&&a.pts!=null&&a.pts>=60)},
+  ].map(a=>({...a,ids:a.ids.sort((x,y)=>y.funil-x.funil)}));
+  const alertas=AL.map(a=>{const on=lsSt.filtro===a.k;const nomes=a.ids.slice(0,3).map(x=>esc(nomeAf(x))).join(', ')+(a.ids.length>3?` e mais ${a.ids.length-3}`:'');
+    return `<button type="button" class="ls-al ${a.cls}${on?' on':''}${a.ids.length?'':' zero'}" data-al="${a.k}" ${a.ids.length?'':'disabled'} aria-pressed="${on}">
+      <b>${n(a.ids.length)}</b><span class="t">${a.l}</span><span class="nm">${a.ids.length?nomes:'nenhum'}</span></button>`}).join('');
+
+  // ---- tabela ----
+  const filtro=lsSt.filtro&&AL.find(a=>a.k===lsSt.filtro);
+  const base=lsSt.filtro==='parado'?parados:ativos,rows=filtro?filtro.ids:base;
+  const linha=a=>{const x=X.get(a.i)||{sem:Array(8).fill(0)},s4=x.sem.slice(4).reduce((p,q)=>p+q,0),s0=x.sem.slice(0,4).reduce((p,q)=>p+q,0);
+    return {a,nome:nomeAf(a),curva:a.S?'S':a.curva,pts:a.pts,rank:a.rank,fes:a.fes,funil:a.funil,aov:a.aov,cpaFe:x.cpa!=null&&a.fes?x.cpa/a.fes:null,cpa:x.cpa,
+      agora:a.agora,re60:a.re60,tdisp:a.tdisp,custo:a.custo,call:a.call,lpf:a.lpf,lpc:a.lpc,st:statusCpa(a.lpf),sem:x.sem,tend:s0?(s4-s0)/s0:s4?1:null,
+      ult:x.ult==null?null:FIM-x.ult}};
+  const RS=rows.map(linha);
+  const fechadaTx=fechada?'real':'previsto';
+  const COLS=[
+    {l:'Afiliado',v:r=>r.nome,texto:true,max:250,h:r=>{const a=r.a;return `<span class="ls-nm" data-af="${afId(a)}" data-tip="${regTip(tipAf(a,fechada))}" data-delay="1" tabindex="0">${a.S?SB:''}<span class="nmt">${esc(r.nome)}</span>${PLB(a)}</span>`}},
+    {l:'Curva Afiliado',v:r=>r.curva,texto:true,h:r=>`<span class="tag ${r.curva}">${r.curva}</span>`},
+    {l:'Nota',v:r=>r.pts,num:true,t:r=>r.pts==null?'—':num(r.pts,0),h:r=>r.pts==null?'—':`<span class="${r.rank?'':'ls-fora'}" title="${r.rank?'':'Fora do ranking: menos de '+st.min+' FEs na safra'}">${sc(r.pts)}</span>`,info:'Pontuação de 0 a 100 do Ranking (mesmas premissas). Esmaecida: fora do ranking por ter poucos FEs.'},
+    {l:'FEs',v:r=>r.fes,num:true,fmt:'inteiro',soma:true},
+    {l:'Receita funil',v:r=>r.funil,num:true,fmt:'moeda',soma:true,t:r=>usd(r.funil)},
+    {l:'AOV',v:r=>r.aov,num:true,fmt:'moeda',t:r=>usd(r.aov)},
+    {l:'CPA/FE',v:r=>r.cpaFe,num:true,fmt:'moeda',t:r=>r.cpaFe==null?(temCpa?'—':'…'):usd(r.cpaFe),info:'CPA pago na safra ÷ FEs.'},
+    {l:'Reemb. já caiu',v:r=>r.agora,num:true,t:r=>pctTx(r.agora),info:'Reembolso + taxas que já caíram nas vendas da safra, em % da receita do funil.'},
+    {l:`Reemb. 60d ${fechada?'':'prev.'}`,v:r=>r.re60,num:true,t:r=>pctTx(r.re60),cls:r=>r.re60==null?'':r.re60*100<=MT.re9?'pos':r.re60*100>MT.re7?'neg':'',info:`Reembolso de 60 dias ${fechadaTx} (mesma conta do Ranking). Verde: até ${P$(MT.re9)}; vermelho: acima de ${P$(MT.re7)}.`},
+    {l:'Chargeback',v:r=>r.tdisp,num:true,t:r=>pctTx(r.tdisp),cls:r=>r.tdisp!=null&&r.tdisp*100>MT.cbIni?'neg':'',info:'Disputas ÷ vendas (vendas com 30+ dias, mínimo 20).'},
+    {l:'Custo produto',v:r=>r.custo,num:true,fmt:'moeda',soma:true,t:r=>usd(r.custo),info:'Full Stack real (produto + frete) ou a média real onde não há pedido no armazém.'},
+    {l:'Call center',v:r=>r.call,num:true,fmt:'moeda',soma:true,t:r=>r.call?usd(r.call):'—',cls:r=>r.call?'pos':''},
+    {l:`Lucro/cliente ${fechada?'':'prev.'}`,v:r=>r.lpf,num:true,fmt:'moeda',t:r=>usd(r.lpf),cls:r=>r.lpf==null?'':r.lpf<0?'neg':'pos',info:'(Líquido do funil − custo − reembolso que ainda vai cair) ÷ FEs, sem call center.'},
+    {l:'Com call center',v:r=>r.lpc,num:true,fmt:'moeda',t:r=>usd(r.lpc),cls:r=>r.lpc==null?'':r.lpc<0?'neg':'pos'},
+    {l:'Status CPA',v:r=>r.st&&r.st[0],texto:true,h:r=>r.st?`<span class="ls-st ${r.st[1]}">${r.st[0]}</span>`:'—',info:`Régua do dash (Lucro real): lucro/cliente previsto ≥ US$ ${STATUS_CPA.ok} saudável, ≥ US$ ${STATUS_CPA.at} atenção, abaixo renegociar.`},
+    {l:'Tendência 8 sem.',v:r=>r.tend,num:true,h:r=>`<span class="ls-tend">${spark(r.sem)}<small class="${r.tend==null?'':r.tend<-0.15?'neg':r.tend>0.15?'pos':''}">${r.tend==null?'':(r.tend>0?'+':'')+num(r.tend*100,0)+'%'}</small></span>`,info:'FEs por semana nas últimas 8 semanas (até o último dia com dados). %: últimas 4 contra as 4 anteriores.'},
+    {l:'Última venda',v:r=>r.ult,num:true,t:r=>diasTx(r.ult),cls:r=>r.ult!=null&&r.ult>=7?'neg':''},
+  ];
+  const T={nome:null,curva:null,pts:t.pts,fes:RS.reduce((s,r)=>s+r.fes,0),funil:RS.reduce((s,r)=>s+r.funil,0),custo:RS.reduce((s,r)=>s+r.custo,0),call:RS.reduce((s,r)=>s+r.call,0)};
+  if(!filtro){Object.assign(T,{aov:t.aov,agora:t.agora,re60:t.re60,lpf:t.lpf,lpc:t.fes?t.liqTot/t.fes:null,cpaFe:temCpa&&t.fes?cpaTot/t.fes:null})}
+
+  el.innerHTML=`<section class="bigs ls-bigs">${bigs}</section>
+    <section class="ls-als" aria-label="Alertas">${alertas}</section>
+    <section class="pd-sec ls-sec" id="lsSec"><div class="pd-head"><div><h3>Afiliados <span class="pd-cnt">${n(RS.length)}</span>${filtro?`<button type="button" class="ls-chip" id="lsLimpa">${esc(filtro.l)} ×</button>`:''}</h3>
+      <p>Safra ${dTx(p0)} a ${dTx(p1)} (${dias} dias)${st.plat?' · só '+st.plat:''}. Mesma conta do Ranking; clique no nome para abrir a página do afiliado. A nota esmaecida está fora do ranking (menos de ${n(st.min)} FEs).</p></div>
+      <div class="pd-tools"><input class="pd-busca" id="lsBusca" type="search" placeholder="Buscar afiliado" aria-label="Buscar afiliado">
+      <button type="button" class="dt-btn-excel" id="lsXls" title="Exportar para Excel" aria-label="Exportar para Excel">${ICO.xls}</button></div></div>
+      <div id="lsTab"></div></section>`;
+  const dt=dtCriar(el.querySelector('#lsTab'),{cols:COLS,rows:RS,total:T,ordem:4,totalLabel:filtro?`Total (${n(RS.length)})`:`Total da base (${n(RS.length)})`,vazio:'Nenhum afiliado com esses filtros.',
+    exportar:{titulo:'Visão geral dos afiliados',arquivo:'afiliados',filtros:[['Safra',`${dTx(p0)} a ${dTx(p1)}`],['Plataforma',st.plat||'Todas'],['Alerta',filtro?filtro.l:'—']]}});
+  const b=el.querySelector('#lsBusca');b.oninput=()=>{const q=b.value.trim().toLowerCase();dtLinhas(dt,q?RS.filter(r=>r.nome.toLowerCase().includes(q)||String(r.a.af).toLowerCase().includes(q)):RS,T)};
+  el.querySelector('#lsXls').onclick=e=>dtExcel(dt,e.currentTarget);
+  el.querySelectorAll('[data-al]').forEach(x=>x.onclick=()=>{lsSt.filtro=lsSt.filtro===x.dataset.al?null:x.dataset.al;renderLista(R)});
+  const lp=el.querySelector('#lsLimpa');if(lp)lp.onclick=()=>{lsSt.filtro=null;renderLista(R)};
+}
+
+// navegação: a tela Afiliados esconde as abas Ranking/Premissas e os big numbers do ranking; o menu marca a tela da vez
+const _paginaLs=pagina;
+pagina=function(p){_paginaLs(p);const ls=st.pg==='lista';
+  const b=document.getElementById('bigs');if(b&&ls)b.hidden=true;
+  root.querySelectorAll('.subtabs').forEach(x=>x.hidden=ls||(st.pg==='af'&&st.voltar==='lista'));
+  const grupo=st.pg==='af'?(st.voltar==='lista'?'lista':'ranking'):ls?'lista':'ranking';
+  root.querySelectorAll('.side-item[data-pg]').forEach(x=>x.classList.toggle('is-active',x.dataset.pg===grupo));
+  if(ls&&st.R)renderLista(st.R)};
+const _renderLs=render;
+render=function(){_renderLs.apply(this,arguments);if(st.pg==='lista'&&st.R)renderLista(st.R)};
+
+/* ---------- tela Reembolso Prev. (Afiliados › Reembolso Prev.) ----------
+   História: 1) quando o lucro vira zero; 2) onde o reembolso pesa mais (mês, semana, Curva Afiliado, produto, caminho no funil);
+   2 inclui produto e caminho no funil (pelos pedidos); 3) quem puxa a curva (top N melhores e piores contra a mediana); 4) afiliado × mês da safra.
+   Limpeza de 05/11: saíram ticket médio do funil, nota (circular: a nota vem do reembolso), kit e as 5 curvas de upsell (o caminho no
+   funil explica as cinco). Clique numa série = detalhe por afiliado, produto, caminho e valor; botão Alertas = popup com o que chama atenção.
+   Mesma conta do Ranking (calcular): reembolso = devolvido + taxas de alerta e disputa; 60d previsto = o que já caiu +
+   o que ainda vai cair (fator 10d→60d do afiliado). Margem antes do reembolso = (líquido − custo + reembolso já caído)
+   ÷ receita: é o teto de reembolso para ter lucro em 60 dias. Lucro do funil, sem call center (como a nota).
+   Curva por dia: real = medido nas vendas da safra que já têm aquela idade (mínimo 5% da receita e US$ 1 mil); depois, projeção até o 60d previsto
+   pela forma da curva (mediana geral; a do próprio afiliado quando é um afiliado só). CPA vem dos pedidos.
+   Cores das séries: pelo resultado (menor reembolso 60d = cor forte; maior = cor fria), paleta validada p/ daltonismo. */
+PGS.reemb=['Reembolso Prev.','Reembolso previsto'];
+const rpSt={f:{cv:'',fx:'',nt:''},n:5,sem:4,modo:'af',ord:null,abertos:new Set(),busca:''};
+const RP_FX=[{k:'f1',l:'< US$ 370',s:'< 370',a:-1e9,b:370},{k:'f2',l:'US$ 370–390',s:'370–390',a:370,b:390},{k:'f3',l:'US$ 390–410',s:'390–410',a:390,b:410},{k:'f4',l:'≥ US$ 410',s:'410+',a:410,b:1e9}];
+const RP_NT=[{k:'n5',l:'acima de 100',s:'100+',a:100,b:1e9},{k:'n4',l:'80–100',s:'80–100',a:80,b:100},{k:'n3',l:'60–80',s:'60–80',a:60,b:80},
+  {k:'n2',l:'40–60',s:'40–60',a:40,b:60},{k:'n1',l:'20–40',s:'20–40',a:20,b:40},{k:'n0',l:'abaixo de 20',s:'< 20',a:-1e9,b:20}];
+const rpFaixa=v=>v==null?null:(RP_FX.find(f=>v>=f.a&&v<f.b)||{}).k||null;
+const rpNota=v=>v==null?null:(RP_NT.find(f=>v>=f.a&&v<f.b)||{}).k||null;
+const RP_CV=[['S','S (premium)'],['A','A'],['B','B'],['C','C']];
+const RP_DIM={cv:{l:'Curva Afiliado',op:RP_CV.map(([k,l])=>({k,l:k,s:l}))},fx:{l:'Ticket médio do funil',op:RP_FX},nt:{l:'Nota do afiliado',op:RP_NT}};
+const RP_TAB=[1,3,5,7,10,14,21,30,45];   // colunas da tabela (o dia 60 é o total)
+// ordenação da tabela: valor de cada coluna (nulo vai para o fim); sem ordem escolhida = receita (afiliados) / mês mais novo (safras)
+const RP_ORD={nome:l=>l.srt??l.rot,cv:l=>l.na?{S:0,A:1,B:2,C:3}[l.na.S?'S':l.na.curva]:null,nota:l=>l.na?l.na.pts:null,fes:l=>l.c.fes,funil:l=>l.c.funil,
+  cpa:l=>l.c.cpa==null?null:l.c.cpa/l.c.funil,custo:l=>l.c.custo/l.c.funil,fim:l=>l.c.fim,luc:l=>l.c.luc};
+RP_TAB.forEach(d=>RP_ORD['d'+d]=l=>rpVal(l.c.pts,d));
+const RP_TXT=new Set(['nome','cv']);
+const rpSemIni=d=>{const w=new Date(D0.getTime()+d*864e5).getUTCDay();return d-((w+6)%7)};
+const rpIsoSem=s=>{const t=new Date(s+'T12:00:00Z'),dn=(t.getUTCDay()+6)%7;t.setUTCDate(t.getUTCDate()-dn+3);const y=t.getUTCFullYear(),f=new Date(Date.UTC(y,0,4));
+  return [y,1+Math.round(((t-f)/864e5-3+((f.getUTCDay()+6)%7))/7)]};
+const rpPP=k=>k==='t'?[0,FIM]:k==='p'?periodo():k.startsWith('m:')?[Math.max(0,dIdx(k.slice(2)+'-01')),Math.min(FIM,fimMes(k.slice(2)))]:[Math.max(0,+k.slice(2)),Math.min(FIM,+k.slice(2)+6)];
+const rpPct=(v,c=1)=>v==null||!isFinite(v)?'—':pct(v,c);
+const rpPp=v=>num(Math.abs(v*100),1).replace(/,0$/,'')+' pp';
+// cor pelo resultado: o menor reembolso 60d ganha a cor mais forte; o maior, a mais fria (6 tons, --rk0 … --rk5)
+const RK=6,rpRk=(i,n)=>`var(--rk${n<=1?0:Math.round(i*(RK-1)/(n-1))})`;
+const rpPinta=ss=>{const o=ss.filter(s=>s&&!s.med).sort((a,b)=>a.c.fim-b.c.fim);o.forEach((s,i)=>s.cor=rpRk(i,o.length));return ss};
+const ICO_FS='<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 3h6v6"/><path d="M9 21H3v-6"/><path d="M21 3l-7 7"/><path d="M3 21l7-7"/></svg>';
+const ICO_AL='<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/><path d="M12 9v4"/><path d="M12 17h.01"/></svg>';
+const ICO_FIL='<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M22 3H2l8 9.46V19l4 2v-8.54z"/></svg>';
+
+// ---- acumulados por coorte (mês, semana, safra do topo, tudo) × afiliado ----
+/* Curva da safra inteira, dia a dia (04/11): em cada dia d, cada venda entra com o real se já tem d dias; senão com o que
+   já caiu + a previsão de 10 dias do afiliado × a parte da curva entre a idade dela e o dia d (FRAC(d) − FRAC(idade)).
+   No dia 60 bate exatamente com o reembolso 60d do Ranking. Cheia = 50%+ da receita da safra já tem aquela idade. */
+const RP_EV=[1,3,5,7,10,14,17,21,25,30,35,40,45,50,55,60];
+const rpRowAt=(r,d)=>{if(DCH.includes(d))return RTH(r,d);let a=0,va=0;for(const x of DCH){if(x>d)return va+(RTH(r,x)-va)*(d-a)/(x-a);a=x;va=RTH(r,x)}return va};
+let RPA=null,RPC=null,RPK=null,RP_IDS=null;
+function rpPrepara(){
+  RPA=new Map();RPC=new Map();const [p0,p1]=periodo(),NE=RP_EV.length,FE=RP_EV.map(FRAC);
+  const add=(k,r,age,fa,rd)=>{let m=RPA.get(k);if(!m)RPA.set(k,m=new Map());let o=m.get(r[0]);
+    if(!o)m.set(r[0],o={fu:0,fes:0,mf:Array(NE).fill(0),mr:Array(NE).fill(0),yD:Array(NE).fill(0),yF:Array(NE).fill(0)});
+    const fu=r[C.funil];o.fu+=fu;o.fes+=r[C.fes];
+    for(let j=0;j<NE;j++){const d=RP_EV[j];if(age>=d){o.mf[j]+=fu;o.mr[j]+=rd[j]}else{o.yD[j]+=D60(r);o.yF[j]+=fu*(FE[j]-fa)}}};
+  for(const r of DADOS.rows){if(r[1]>FIM||r[1]<0)continue;if(st.plat&&r[RPL]!==st.plat)continue;
+    const age=FIM-r[1],fa=FRAC(age),rd=RP_EV.map(d=>age>=d?rpRowAt(r,d):0);
+    add('t',r,age,fa,rd);add('m:'+dIso(r[1]).slice(0,7),r,age,fa,rd);add('w:'+rpSemIni(r[1]),r,age,fa,rd);if(r[1]>=p0&&r[1]<=p1)add('p',r,age,fa,rd)}
+  // CPA dos pedidos (positivo = o que sai), nas mesmas coortes
+  RPK=null;if(typeof PED!=='undefined'&&PED){RPK=new Map();const c=PED.col,ad=(k,g,v)=>{let m=RPK.get(k);if(!m)RPK.set(k,m=new Map());m.set(g,(m.get(g)||0)+v)};
+    for(let i=0;i<PED.n;i++){const d=c.fe[i];if(d>FIM||d<0)continue;const conta=c.af[i];if(st.plat&&(DADOS_CONTA.afs[conta][2]||'JVZoo')!==st.plat)continue;
+      const g=MAPA_CONTA[conta],v=c.cpa[i]||0;if(!v)continue;ad('t',g,v);ad('m:'+dIso(d).slice(0,7),g,v);ad('w:'+rpSemIni(d),g,v);if(d>=p0&&d<=p1)ad('p',g,v)}}}
+const rpCalc=k=>{if(!RPC.has(k))RPC.set(k,new Map(calcular(rpPP(k)).L.map(a=>[a.i,a])));return RPC.get(k)};
+const rpVal=(pts,d)=>reta(d,pts.map(p=>[p[0],p[1]]));
+
+// coorte (k) de um conjunto de afiliados (ids = Set ou null = todos)
+function rpCoorte(k,ids){
+  const acc=RPA.get(k);if(!acc)return null;const M=rpCalc(k),K=RPK&&RPK.get(k),NE=RP_EV.length;
+  const o={fu:0,fes:0,mf:Array(NE).fill(0),mx:Array(NE).fill(0),funil:0,liq:0,custo:0,d60:0,fut:0,cpa:RPK?0:null,n:0};
+  acc.forEach((x,i)=>{if(ids&&!ids.has(i))return;const a=M.get(i),p60=a?a.p60:0;o.fu+=x.fu;o.fes+=x.fes;
+    for(let j=0;j<NE;j++){o.mf[j]+=x.mf[j];o.mx[j]+=x.mr[j]+x.yD[j]+p60*x.yF[j]}
+    if(a){o.funil+=a.funil;o.liq+=a.liq;o.custo+=a.custo;o.d60+=a.d60;o.fut+=a.fut;o.n++}if(K&&o.cpa!=null)o.cpa+=K.get(i)||0});
+  if(o.funil<=0)return null;
+  o.re60=(o.d60+o.fut)/o.funil;o.agora=o.d60/o.funil;o.mg=(o.liq+o.d60-o.custo)/o.funil;o.lucUsd=o.liq-o.custo-o.fut;o.luc=o.lucUsd/o.funil;
+  // curva da safra: cheia enquanto 50%+ da receita já tem aquela idade (e pelo menos US$ 1 mil); depois, pontilhada
+  let dl=0,ok=true,v=0;const pts=[[0,0,true]];
+  for(let j=0;j<NE;j++){const d=RP_EV[j],real=ok&&o.mf[j]>=Math.max(0.5*o.fu,1000);if(!real)ok=false;else dl=d;
+    v=Math.max(v,o.mx[j]/o.fu);pts.push([d,v,real])}
+  pts[pts.length-1][1]=Math.max(v,o.re60);
+  o.pts=pts;o.dl=dl;o.fim=pts[pts.length-1][1];o.obs=RP_EV.map((d,j)=>o.mf[j]/o.fu);
+  o.zero=o.mg<=0?0:null;if(o.zero==null)for(let d=0;d<=60;d+=0.25)if(rpVal(pts,d)>=o.mg){o.zero=d;break}
+  return o}
+
+/* ---------- gráfico de linhas (dias 0–60): real cheio, previsto pontilhado e suave, marcador no dia 60, rótulo da cor da série ---------- */
+const RPG=new Map();
+const rpNice=x=>{const p=10**Math.floor(Math.log10(x)),m=x/p;return (m<=1?1:m<=2?2:m<=2.5?2.5:m<=5?5:10)*p};
+function rpDesenha(id){
+  const cfg=RPG.get(id),box=document.getElementById(id);if(!cfg||!box||!box.isConnected)return;
+  const svg=box.querySelector('svg'),tt=box.querySelector('.rp-tt'),W=Math.max(280,Math.floor(box.clientWidth)),H=cfg.h||240;
+  const ser=cfg.series.filter(s=>s&&s.pts&&s.pts.length);
+  if(!ser.length){svg.setAttribute('viewBox',`0 0 ${W} 60`);svg.setAttribute('width',W);svg.setAttribute('height',60);svg.innerHTML=`<text x="${W/2}" y="34" text-anchor="middle" class="rp-vz">Sem vendas com esses filtros.</text>`;return}
+  const lbW=Math.min(cfg.lbW||(W<460?112:150),Math.round(W*0.36)),L=42,R=lbW+10,T=14,B=24,maxC=Math.max(6,Math.floor((lbW-56)/6));
+  let lo=0,hi=0;ser.forEach(s=>s.pts.forEach(p=>{lo=Math.min(lo,p[1]);hi=Math.max(hi,p[1])}));(cfg.refs||[]).forEach(r=>{hi=Math.max(hi,r.v)});
+  const step=rpNice(Math.max(0.01,(hi-lo)/4));hi=Math.ceil(hi*1.04/step)*step;lo=lo<0?Math.floor(lo*1.04/step)*step:0;
+  const X=d=>L+d/60*(W-L-R),Y=v=>T+(hi-v)/(hi-lo)*(H-T-B),f1=v=>v.toFixed(1);
+  let g='';
+  for(let v=lo;v<=hi+1e-9;v+=step)g+=`<line class="${Math.abs(v)<1e-9?'rp-z':'rp-gr'}" x1="${L}" x2="${f1(X(60))}" y1="${f1(Y(v))}" y2="${f1(Y(v))}"/><text class="rp-ax" x="${L-6}" y="${f1(Y(v)+3.5)}" text-anchor="end">${num(v*100,0)}%</text>`;
+  (W-L-R<240?[0,30,60]:W-L-R<380?[0,14,30,45,60]:[0,7,14,21,30,45,60]).forEach(d=>{g+=`<text class="rp-ax" x="${f1(X(d))}" y="${H-6}" text-anchor="${d===0?'start':d===60?'end':'middle'}">${d===0?'dia 0':d===60?'D60':d}</text>`});
+  (cfg.refs||[]).forEach(r=>{g+=`<line class="rp-ref" x1="${L}" x2="${f1(X(60))}" y1="${f1(Y(r.v))}" y2="${f1(Y(r.v))}"/><text class="rp-refl" x="${L+4}" y="${f1(Y(r.v)-4)}">${r.rot}</text>`});
+  (cfg.marks||[]).forEach(m=>{if(m.d==null)return;const x=X(m.d);g+=`<line class="rp-be" x1="${f1(x)}" x2="${f1(x)}" y1="${T}" y2="${H-B}"/><text class="rp-bel" x="${f1(m.d>40?x-5:x+5)}" y="${T+9}" text-anchor="${m.d>40?'end':'start'}">${m.rot}</text>`});
+  const pl=a=>a.map(p=>f1(X(p[0]))+','+f1(Y(p[1]))).join(' ');
+  // a pior série embaixo, a melhor por cima
+  [...ser].reverse().forEach(s=>{const re=s.pts.filter(p=>p[2]),pv=s.pts.filter(p=>!p[2]);if(re.length&&pv.length)pv.unshift(re[re.length-1]);
+    const cl=`rp-l${s.med?' med':''}${cfg.hl?(s.nome===cfg.hl?' hl':' fad'):''}`,cor=`style="stroke:${s.cor}"`;
+    if(re.length>1)g+=`<polyline class="${cl}" ${cor} points="${pl(re)}"/>`;if(pv.length>1)g+=`<polyline class="${cl} pv" ${cor} points="${pl(pv)}"/>`;
+    const z=s.pts[s.pts.length-1];g+=`<circle class="rp-d60${z[2]?'':' pv'}" cx="${f1(X(z[0]))}" cy="${f1(Y(z[1]))}" r="${s.med?4:3.5}" style="fill:${s.cor}"/>`});
+  // rótulos no fim, da cor da série, afastados para não encostar (12 px)
+  const lb=ser.map(s=>({s,y:Y(s.pts[s.pts.length-1][1])})).sort((a,b)=>a.y-b.y);
+  for(let i=1;i<lb.length;i++)lb[i].y=Math.max(lb[i].y,lb[i-1].y+12);
+  const sob=lb.length?lb[lb.length-1].y-(H-B+4):0;if(sob>0)lb.forEach(x=>x.y-=sob);for(let i=0;i<lb.length;i++)lb[i].y=Math.max(lb[i].y,T+4+i*12);
+  const x0=X(60);
+  lb.forEach(({s,y})=>{const v=s.pts[s.pts.length-1][1],yv=Y(v),nm=s.nome.length>maxC?s.nome.slice(0,maxC-1)+'…':s.nome;
+    g+=`${Math.abs(y-yv)>2?`<path class="rp-lk" d="M${f1(x0+5)} ${f1(yv)}L${f1(x0+10)} ${f1(y)}"/>`:''}<text class="rp-lb${s.med?' med':''}${s.q?' ck':''}${cfg.hl?(s.nome===cfg.hl?' hl':' fad'):''}" data-i="${ser.indexOf(s)}" x="${f1(x0+13)}" y="${f1(y+3.5)}" style="fill:${s.cor}"><tspan class="n">${esc(nm)}</tspan> <tspan class="v">${s.fmt?s.fmt(v):rpPct(v)}</tspan></text>`});
+  g+=`<line class="rp-cx" x1="0" x2="0" y1="${T}" y2="${H-B}" visibility="hidden"/><g class="rp-dots"></g><rect class="rp-hit" x="${L}" y="${T}" width="${f1(X(60)-L)}" height="${H-T-B}"/>`;
+  svg.setAttribute('viewBox',`0 0 ${W} ${H}`);svg.setAttribute('width',W);svg.setAttribute('height',H);svg.innerHTML=g;
+  // passar o mouse: linha vertical no dia + valores de todas as séries
+  const hit=svg.querySelector('.rp-hit'),cx=svg.querySelector('.rp-cx'),dots=svg.querySelector('.rp-dots');
+  const sai=()=>{cx.setAttribute('visibility','hidden');dots.innerHTML='';tt.hidden=true};
+  hit.onpointerleave=sai;
+  // clique: abre o detalhe da série mais perto do ponteiro (ou do rótulo clicado)
+  const clic=ser.some(s=>s.q);if(clic){hit.classList.add('ck');svg.querySelectorAll('.rp-lb.ck').forEach(x=>x.onclick=()=>rpDrillAbre(ser[+x.dataset.i],cfg));
+    hit.onclick=e=>{const bb=svg.getBoundingClientRect(),px=(e.clientX-bb.left)*W/bb.width,py=(e.clientY-bb.top)*H/bb.height,d=Math.max(0,Math.min(60,Math.round((px-L)/(X(60)-L)*60)));
+      const s=ser.filter(x=>x.q).map(x=>({x,dy:Math.abs(Y(rpVal(x.pts,d))-py)})).sort((a,b)=>a.dy-b.dy)[0];if(s)rpDrillAbre(s.x,cfg)}}
+  hit.onpointermove=e=>{const bb=svg.getBoundingClientRect(),px=(e.clientX-bb.left)*W/bb.width,d=Math.max(0,Math.min(60,Math.round((px-L)/(X(60)-L)*60))),x=X(d);
+    cx.setAttribute('x1',f1(x));cx.setAttribute('x2',f1(x));cx.setAttribute('visibility','visible');
+    const vs=ser.map(s=>{const re=s.pts.filter(p=>p[2]),dl=re[re.length-1][0];return {s,v:rpVal(s.pts,d),real:d<=dl}}).sort((a,b)=>b.v-a.v);
+    dots.innerHTML=vs.map(o=>`<circle cx="${f1(x)}" cy="${f1(Y(o.v))}" r="4" style="fill:${o.s.cor}"/>`).join('');
+    tt.innerHTML=`<b>${cfg.ttTit?cfg.ttTit(d):'Dia '+d+' depois da venda'}</b>`+vs.slice(0,16).map(o=>`<div class="r"><i style="background:${o.s.cor}"></i><span class="n">${esc(o.s.nome)}</span><span class="v">${o.s.fmt?o.s.fmt(o.v):rpPct(o.v)}${o.real?'':' <em>prev.</em>'}</span>${o.s.extra?`<small>${o.s.extra}</small>`:''}</div>`).join('')+(vs.length>16?`<div class="r"><span class="n">e mais ${vs.length-16}</span></div>`:'');
+    if(clic)tt.insertAdjacentHTML('beforeend','<div class="rp-tth">Clique na linha para ver o porquê</div>');tt.hidden=false;const bw=box.clientWidth,tw=tt.offsetWidth,lx=x*bb.width/W;tt.style.left=(lx+14+tw>bw?Math.max(0,lx-14-tw):lx+14)+'px';tt.style.top='8px'};
+}
+const rpGrafHtml=(id,aria)=>`<div class="rp-g" id="${id}"><svg role="img" aria-label="${esc(aria||'')}"></svg><div class="rp-tt" hidden></div></div>`;
+const rpGraf=(id,cfg)=>{RPG.set(id,cfg);return rpGrafHtml(id,cfg.aria)};
+const rpFsBtn=(id,tit)=>`<button type="button" class="rp-fs" data-fs="${id}" data-fst="${esc(tit)}" title="Tela cheia" aria-label="Abrir em tela cheia: ${esc(tit)}">${ICO_FS}</button>`;
+const rpLeg=itens=>`<div class="rp-leg">${itens.map(x=>`<span><i class="${x.cls||''}" style="${x.cor?'background:'+x.cor:''}"></i>${x.l}</span>`).join('')}</div>`;
+let rpRz=null;_on(window,'resize',()=>{clearTimeout(rpRz);rpRz=setTimeout(()=>{if(st.pg!=='reemb')return;const f=RPG.get('rpGF');if(f)f.h=Math.max(320,innerHeight-190);RPG.forEach((c,id)=>rpDesenha(id))},120)});
+
+// tela cheia: o mesmo gráfico, grande, num modal (Esc ou × fecha)
+function rpTelaCheia(id,tit){
+  const cfg=RPG.get(id),raiz=document.getElementById('reemb');if(!cfg||!raiz)return;
+  let m=document.getElementById('rpFull');if(!m){m=Object.assign(document.createElement('div'),{id:'rpFull',className:'rp-full'});raiz.appendChild(m)}
+  const card=document.getElementById(id).closest('.rp-card,.rp-s'),sub=card&&card.querySelector('.rp-dest,.rp-sub');
+  m.innerHTML=`<div class="rp-fin" role="dialog" aria-modal="true" aria-label="${esc(tit)}"><div class="rp-fh"><div><h3>${esc(tit)}</h3>${sub?`<p>${sub.innerHTML}</p>`:''}</div><button type="button" class="rp-x" aria-label="Fechar">×</button></div>${rpGrafHtml('rpGF',tit)}</div>`;
+  RPG.set('rpGF',{...cfg,h:Math.max(320,innerHeight-190),lbW:Math.max(cfg.lbW||0,200)});
+  m.hidden=false;document.body.classList.add('modal-on');rpDesenha('rpGF');
+  const fecha=()=>{m.hidden=true;RPG.delete('rpGF');document.body.classList.remove('modal-on');window.removeEventListener('keydown',esc_)},esc_=e=>{if(e.key==='Escape')fecha()};
+  m.querySelector('.rp-x').onclick=fecha;m.onclick=e=>{if(e.target===m)fecha()};window.addEventListener('keydown',esc_);m.querySelector('.rp-x').focus()}
+
+// nota clicável: abre a mesma ficha do Ranking (radar, conta da nota e curva), fixa no centro
+let rpFixo=false;const RP_FICHA=new Map();
+const _escRp=esconde;esconde=function(){if(rpFixo)return;return _escRp.apply(this,arguments)};
+const _mosRp=mostra;mostra=function(){if(rpFixo)return;return _mosRp.apply(this,arguments)};
+function rpFechaFicha(){if(!rpFixo)return;rpFixo=false;const t=document.getElementById('tip');t.classList.remove('fixo');_escRp();
+  const b=document.getElementById('rpBack');if(b)b.hidden=true;document.body.classList.remove('modal-on')}
+function rpAbreFicha(k){const o=RP_FICHA.get(k);if(!o)return;cancelaEspera();_escRp();
+  const t=document.getElementById('tip'),raiz=document.getElementById('reemb');
+  let b=document.getElementById('rpBack');if(!b){b=Object.assign(document.createElement('div'),{id:'rpBack',className:'rp-back'});raiz.appendChild(b);b.onclick=rpFechaFicha}
+  t.innerHTML=`<button type="button" class="rp-x rp-tx" aria-label="Fechar">×</button>`+tipAf(o.a,o.fechada).replace(/<div class="nt">[^<]*<\/div>/,
+    `<div class="nt rp-ntb"><span>${esc(o.ctx)}</span><button type="button" class="ls-chip" data-af="${afId(o.a)}">Abrir página do afiliado →</button></div>`);
+  t.classList.add('on','largo','fixo');t.classList.toggle('ouro',!!o.a.S);t.setAttribute('aria-hidden','false');t.style.left='';t.style.top='';
+  rpFixo=true;b.hidden=false;document.body.classList.add('modal-on');t.querySelector('.rp-tx').onclick=rpFechaFicha}
+_on(window,'keydown',e=>{if(e.key==='Escape')rpFechaFicha()});
+
+/* ---------- a tela ---------- */
+let rpEspera=null;
+/* ---------- 3. kit, produto e upsell (05/11): pelos pedidos, cada um ligado ao FE de origem (PED.col.fid) ----------
+   Sessão = o FE + os upsells, downsells e bumps que herdaram esse FE (mesma atribuição do painel). Kit e produto = os do FE.
+   Reembolso = devolvido + alerta + disputa, pelo dia em que caiu. Curva igual à das outras quebras (real cheio, previsto
+   pontilhado); o que falta cair vem da taxa de 60 dias do próprio grupo nas vendas com 60+ dias (todas as safras), com
+   credibilidade de US$ 20 mil puxando para a taxa geral. */
+const RP_PI=new Map();
+function rpProd(k){let o=RP_PI.get(k);if(o)return o;const nm=PED.dic.produto[k]||'',U=nm.toUpperCase();
+  const m1=U.match(/OTO\s*(\d)/),m2=U.match(/\bDS\s*-?\s*(\d)/);
+  const passo=m1?'OTO'+m1[1]:m2?'DS'+m2[1]:/\bOB\b|BUMP|VIP-UPGRADE/.test(U)?'Bump':null;
+  const s=nm.replace(/^\s*(FE|Last\s*Chance\s*\d*)\s*-\s*/i,''),m=s.match(/^(.*?)[\s\-\/]*(\d+)\s*(bottles?|potes?)\b/i);
+  const fam=(m?m[1]:s.split(/\s[\/-]\s/)[0]).replace(/[\s\-\/]+$/,'').trim()||'—';
+  o={passo,fam,famK:fam.toLowerCase().replace(/\s+/g,' '),kit:m?+m[2]:null};RP_PI.set(k,o);return o}
+let RP_PD=null;   // por pedido: dia da venda e dias até o reembolso (calculado uma vez)
+function rpPedDias(){if(RP_PD&&RP_PD.ped===PED)return RP_PD;const c=PED.col,N=PED.n,d0=new Int32Array(N),off=new Int32Array(N).fill(-1);
+  for(let i=0;i<N;i++){d0[i]=c.em[i]?dIdx(c.em[i].slice(0,10)):c.fe[i];if(c.red[i])off[i]=Math.max(0,dIdx(c.red[i])-d0[i])}
+  return RP_PD={ped:PED,d0,off}}
+/* chaves por pedido que não dependem do período: sessão (FE de origem), caminho no funil e faixa de valor da sessão */
+let RP_CK=null,RP_CAMTOP=null,RP_PT=0.25;
+const RP_VAL=[['v0','só FE'],['v1','até US$ 150'],['v2','US$ 150–300'],['v3','US$ 300–500'],['v4','US$ 500+']];
+const RP_VALC=[['v0','só FE'],['v1','até 150'],['v2','150–300'],['v3','300–500'],['v4','500+']];
+function rpPedChaves(){
+  if(RP_CK&&RP_CK.ped===PED)return RP_CK;const c=PED.col,ET=PED.dic.etapa,N=PED.n;
+  const sess=new Int32Array(N),vUp=new Float64Array(N),passos=new Map(),ORD={OTO1:1,DS1:2,OTO2:3,DS2:4,OTO3:5,DS3:6};
+  for(let i=0;i<N;i++){const s=c.fid[i]>=0?c.fid[i]:i;sess[i]=s;if(s!==i&&ET[c.et[i]]!=='FE'){vUp[s]+=c.bruto[i]||0;let l=passos.get(s);if(!l)passos.set(s,l=[]);l.push(i)}}
+  const camS=new Map(),longo=new Map(),cam=new Array(N),val=new Array(N),fam=new Array(N),nomeFam=new Map();
+  const camDe=s=>{let k=camS.get(s);if(k)return k;const P=rpProd(c.pr[s]),fe=P.kit?P.kit+'p':'FE';
+    const l=(passos.get(s)||[]).map(i=>{const pp=rpProd(c.pr[i]),e=ET[c.et[i]],pa=pp.passo||(e==='Upsell'?'UP':e==='Downsell'?'DS':'Bump');return {pa,k:pp.kit,o:ORD[pa]||9}})
+      .filter(x=>x.pa!=='Bump').sort((a,b)=>a.o-b.o);
+    const cur=x=>x.pa==='OTO1'?(x.k?x.k+'p':'UP1'):x.pa==='DS1'?'DS'+(x.k?x.k+'p':''):x.pa==='OTO2'?'UP2':x.pa==='OTO3'?'UP3':x.pa.startsWith('DS')?'DS':x.pa;
+    const lon=x=>x.pa==='OTO1'?'Upsell 1'+(x.k?` de ${x.k} potes`:''):x.pa==='DS1'?'Downsell 1'+(x.k?` de ${x.k} potes`:''):x.pa==='OTO2'?'Upsell 2':x.pa==='OTO3'?'Upsell 3':x.pa.startsWith('DS')?'downsell':'upsell';
+    k=[fe,...l.map(cur)].join('+');camS.set(s,k);if(!longo.has(k))longo.set(k,[P.kit?`FE de ${P.kit} potes`:'FE',...l.map(lon)].join(' → ')+(l.length?'':' (sem upsell)'));return k};
+  for(let i=0;i<N;i++){const s=sess[i],P=rpProd(c.pr[s]);cam[i]=camDe(s);fam[i]=P.famK;if(!nomeFam.has(P.famK))nomeFam.set(P.famK,P.fam);
+    const u=vUp[s];val[i]=!u?'v0':u<=150?'v1':u<=300?'v2':u<=500?'v3':'v4'}
+  return RP_CK={ped:PED,sess,cam,val,fam,longo,nomeFam}}
+// chave de um pedido numa dimensão (o caminho fora dos 6 maiores da safra vira "outros")
+const rpChave=(dim,i,CK)=>dim==='cam'?(RP_CAMTOP&&!RP_CAMTOP.has(CK.cam[i])?'outros':CK.cam[i]):dim==='fam'?CK.fam[i]:dim==='val'?CK.val[i]:null;
+function rpPedidos(IDS){
+  if(typeof PED==='undefined'||!PED||!PED.col.fid)return null;
+  const c=PED.col,ET=PED.dic.etapa,[p0,p1]=periodo(),NE=RP_EV.length,FEv=RP_EV.map(FRAC),N=PED.n,{d0,off:OFF}=rpPedDias(),CK=rpPedChaves(),K=20000;
+  const ok=i=>{const conta=c.af[i];return !(st.plat&&(DADOS_CONTA.afs[conta][2]||'JVZoo')!==st.plat)&&!(IDS&&!IDS.has(MAPA_CONTA[conta]))};
+  // os 6 caminhos com mais receita na safra (o resto vira "outros")
+  const rc=new Map();for(let i=0;i<N;i++){const fe=c.fe[i];if(fe<p0||fe>p1||fe>FIM||!ok(i))continue;rc.set(CK.cam[i],(rc.get(CK.cam[i])||0)+(c.bruto[i]||0))}
+  RP_CAMTOP=new Set([...rc].sort((a,b)=>b[1]-a[1]).slice(0,6).map(x=>x[0]));
+  const D={fam:new Map(),cam:new Map(),val:new Map()},tot={hb:0,hr:0};
+  const novo=()=>({fu:0,n:0,ses:0,mf:Array(NE).fill(0),mr:Array(NE).fill(0),yD:Array(NE).fill(0),yF:Array(NE).fill(0),hb:0,hr:0});
+  for(let i=0;i<N;i++){const fe=c.fe[i];if(fe<0||fe>FIM||!ok(i))continue;
+    const age=FIM-d0[i];if(age<0)continue;
+    const b=c.bruto[i]||0,r=(c.re[i]||0)+(c.al[i]||0)+(c.dt[i]||0),of=r?(OFF[i]>=0?OFF[i]:Math.min(age,30)):0,eFE=ET[c.et[i]]==='FE';
+    const mad=age>=60,r60=of<=60?r:0,naSafra=fe>=p0&&fe<=p1;if(mad){tot.hb+=b;tot.hr+=r60}
+    for(const dim in D){const k=rpChave(dim,i,CK);let o=D[dim].get(k);if(!o)D[dim].set(k,o=novo());
+      if(mad){o.hb+=b;o.hr+=r60}
+      if(!naSafra)continue;o.fu+=b;o.n++;if(eFE)o.ses++;
+      for(let j=0;j<NE;j++){const d=RP_EV[j];if(age>=d){o.mf[j]+=b;if(of<=d)o.mr[j]+=r}else{o.yD[j]+=r;o.yF[j]+=b*(FEv[j]-FRAC(age))}}}}
+  const pT=tot.hb?tot.hr/tot.hb:0;RP_PT=pT||RP_PT;
+  for(const dim in D)D[dim].forEach(o=>{if(!o.fu){o.c=null;return}const pg=(o.hr+K*pT)/(o.hb+K);
+    let dl=0,okk=true,v=0;const pts=[[0,0,true]];
+    for(let j=0;j<NE;j++){const real=okk&&o.mf[j]>=Math.max(0.5*o.fu,1000);if(!real)okk=false;else dl=RP_EV[j];
+      v=Math.max(v,(o.mr[j]+o.yD[j]+pg*o.yF[j])/o.fu);pts.push([RP_EV[j],v,real])}
+    o.c={funil:o.fu,pts,dl,fim:pts[pts.length-1][1]}});
+  return {D,CK,pT}}
+// cards de produto e caminho no funil (entram na seção 2)
+function rpSecUpsell(IDS,card,[p0,p1],cCurva){
+  const R=rpPedidos(IDS);
+  if(!R){const msg=typeof PED_ERRO!=='undefined'&&PED_ERRO?'Não foi possível ler os pedidos.':'Carregando os pedidos…';
+    const vz=x=>`<article class="rp-card w3"><div class="rp-ch"><h4>${x}</h4></div><p class="rp-vz">${msg}</p></article>`;
+    return vz('Por caminho no funil')+vz('Por valor do upsell')+cCurva+vz('Por produto do FE')}
+  const {D,CK}=R,ser=(dim,lista,lg)=>lista.map(([k,l])=>{const o=D[dim].get(k);if(!o||!o.c)return null;
+    return {nome:l,pts:o.c.pts,c:o.c,extra:`${lg?esc(lg(k))+' · ':''}${n(o.ses)} sessões · ${usdC(o.fu)}`,q:{p:[p0,p1],ids:IDS,k:[dim,k]}}}).filter(Boolean);
+  const fams=[...D.fam.entries()].filter(([,o])=>o.c).sort((a,b)=>b[1].fu-a[1].fu).slice(0,6).map(([k])=>[k,CK.nomeFam.get(k)||k]);
+  const cams=[...D.cam.entries()].filter(([k,o])=>o.c&&k!=='outros').sort((a,b)=>b[1].fu-a[1].fu).map(([k])=>[k,k]);if(D.cam.get('outros'))cams.push(['outros','outros']);
+  return card('Por caminho no funil','Potes do FE + o que levou depois (12p = Upsell 1 de 12 potes · UP2 = Upsell 2 · DS = downsell); bump não conta. Os 6 caminhos com mais receita.',
+      ser('cam',cams,k=>k==='outros'?'os outros caminhos':CK.longo.get(k)||k),'rpGC','w3')+
+    card('Por valor do upsell','Sessão inteira, pela soma em US$ dos upsells, downsells e bumps que o cliente levou. 300–500 = quase sempre o Upsell 1 de 12 potes.',
+      ser('val',RP_VALC,k=>(RP_VAL.find(x=>x[0]===k)||[0,k])[1]),'rpGV','w3')+cCurva+
+    card('Por produto do FE','Os 6 produtos com mais receita na safra; sessão inteira (FE + upsells).',ser('fam',fams),'rpGP','w3')}
+
+/* ---------- detalhe de uma série (clique na linha): por que está bom ou ruim ----------
+   Pelos pedidos da série: em cada quebra (afiliado, produto, caminho, valor da sessão), o reembolso 60d de cada item e o
+   efeito dele no reembolso da série em US$ = (taxa do item − taxa da série) × receita do item. Taxa 60d de cada item: o que
+   já caiu + o que falta cair (receita × (1 − FRAC(idade))) × taxa a priori, que mistura a taxa do próprio item (o que caiu ÷
+   o esperado até a idade) com a da série, por credibilidade (US$ 15 mil). Venda com 60+ dias = só o real. */
+function rpDrillCalc(q,alvo){
+  const c=PED.col,N=PED.n,{d0,off:OFF}=rpPedDias(),CK=rpPedChaves(),[a,b]=q.p,K=15000;
+  // no caminho, o valor da sessão já vem do próprio caminho: fica de fora
+  const dims=q.af?['sem','fam','cam','val']:q.k&&q.k[0]==='cam'?['af','fam']:q.k&&q.k[0]==='val'?['af','fam','cam']:['af','fam','cam','val'];
+  const z=()=>({B:0,F:0,E:0,U:0,ses:0}),T=z(),T10={B:0,F:0},G={};dims.forEach(d=>G[d]=new Map());
+  for(let i=0;i<N;i++){const fe=c.fe[i];if(fe<a||fe>b||fe>FIM)continue;const conta=c.af[i];
+    if(st.plat&&(DADOS_CONTA.afs[conta][2]||'JVZoo')!==st.plat)continue;const g=MAPA_CONTA[conta];if(q.ids&&!q.ids.has(g))continue;
+    if(q.k&&rpChave(q.k[0],i,CK)!==q.k[1])continue;
+    const age=FIM-d0[i];if(age<0)continue;const bb=c.bruto[i]||0,r=(c.re[i]||0)+(c.al[i]||0)+(c.dt[i]||0),of=r?(OFF[i]>=0?OFF[i]:Math.min(age,30)):0;
+    const fr=FRAC(age),F=age>=60?(of<=60?r:0):r,E=bb*fr,U=bb*(1-fr),fe1=PED.dic.etapa[c.et[i]]==='FE'?1:0;
+    T.B+=bb;T.F+=F;T.E+=E;T.U+=U;T.ses+=fe1;if(age>=10){T10.B+=bb;if(of<=10)T10.F+=r}
+    for(const d of dims){const k=d==='af'?g:d==='sem'?rpSemIni(fe):rpChave(d==='cam'?'camR':d,i,CK)??(d==='cam'?CK.cam[i]:null);
+      let o=G[d].get(k);if(!o)G[d].set(k,o=z());o.B+=bb;o.F+=F;o.E+=E;o.U+=U;o.ses+=fe1}}
+  if(!T.B)return null;
+  const taxa=(o,pri)=>{const zz=o.E/(o.E+K),cl=o.E?o.F/o.E:pri;return (o.F+o.U*(zz*cl+(1-zz)*pri))/o.B};
+  // calibra pela série do gráfico: a taxa a priori é a que faz o total bater com o 60d da curva
+  let pri=RP_PT,est;if(alvo!=null&&T.U>1){pri=Math.max(0,(alvo*T.B-T.F)/T.U);est=alvo}else est=taxa(T,RP_PT);
+  const out={T,est,d10:T10.B>=Math.max(1000,0.3*T.B)?T10.F/T10.B:null,dims:[]};
+  const TA=rpCalc('t'),nome=(d,k)=>d==='af'?(TA.get(k)?nomeAf(TA.get(k)):'Afiliado '+k):d==='fam'?(CK.nomeFam.get(k)||k):d==='val'?(RP_VAL.find(x=>x[0]===k)||[0,k])[1]:d==='sem'?'semana de '+dTx(Math.max(0,k)):k;
+  const TIT={af:'Por afiliado',fam:'Por produto do FE',cam:'Por caminho no funil',val:'Por valor do upsell',sem:'Por semana da safra'},TX={af:'afiliado',fam:'produto',cam:'caminho',val:'valor do upsell',sem:'semana'};
+  for(const d of dims){const it=[...G[d]].map(([k,o])=>({k,nome:nome(d,k),o,tx:taxa(o,pri),sh:o.B/T.B,af:d==='af'?TA.get(k):null,lg:d==='cam'?CK.longo.get(k):null}));
+    if(it.length<2)continue;
+    // ajuste para a média ponderada dos itens fechar no 60d da série (os efeitos somam zero)
+    const sw=it.reduce((p,x)=>p+x.tx*x.o.B,0),fa=sw>0?est*T.B/sw:1;it.forEach(x=>{x.tx*=fa;x.imp=(x.tx-est)*x.o.B});
+    it.sort((x,y)=>Math.abs(y.imp)-Math.abs(x.imp));
+    let top=it.slice(0,6);const resto=it.slice(6);
+    if(resto.length){const o=z();let sr=0;resto.forEach(x=>{for(const kk in o)o[kk]+=x.o[kk];sr+=x.tx*x.o.B});const tx=sr/o.B;top.push({k:'_r',nome:`outros (${resto.length})`,o,tx,imp:(tx-est)*o.B,sh:o.B/T.B,resto:true})}
+    top.sort((x,y)=>y.imp-x.imp);out.dims.push({d,tit:TIT[d],tx:TX[d],it:top})}
+  return out}
+function rpDrillAbre(s,cfg){
+  if(!s||!s.q)return;const raiz=document.getElementById('reemb');if(!raiz)return;
+  let m=document.getElementById('rpDrill');if(!m){m=Object.assign(document.createElement('div'),{id:'rpDrill',className:'rp-full'});raiz.appendChild(m)}
+  const ped=typeof PED!=='undefined'&&PED&&PED.col.fid;const R=ped?rpDrillCalc(s.q,s.c?s.c.fim:null):null,ref=RP_REF||{};
+  const v60=s.c?s.c.fim:null,dif=v60!=null&&ref.re60!=null?v60-ref.re60:null,ruim=dif!=null&&dif>0.005,bom=dif!=null&&dif<-0.005;
+  let corpo='';
+  if(!R)corpo=`<p class="rp-vz">${ped?'Sem pedidos nessa série.':'Carregando os pedidos…'}</p>`;
+  else{const mx=Math.max(1,...R.dims.flatMap(x=>x.it.map(y=>Math.abs(y.imp))));
+    const lin=(x,d)=>{const cls=x.tx>R.est+0.02?'neg':x.tx<R.est-0.02?'pos':'',w=Math.min(50,50*Math.abs(x.imp)/mx);
+      const nm=x.af?`<span class="rp-dnm ls-nm" data-af="${afId(x.af)}" tabindex="0" title="Abrir a página do afiliado">${esc(x.nome)}</span>`:`<span class="rp-dnm" title="${esc(x.lg||x.nome)}">${esc(x.nome)}</span>`;
+      return `<div class="rp-drow${x.resto?' rs':''}">${nm}<span class="rp-dsh" title="${rpPct(x.sh,0)} da receita da série · ${usdC(x.o.B)}"><i style="width:${Math.max(2,x.sh*100).toFixed(1)}%"></i></span><span class="rp-dpc ${cls}">${rpPct(x.tx)}</span>
+        <span class="rp-dim"><span class="rp-bar rp-dbar"><i class="${x.imp>0?'n':'p'}" style="width:${w.toFixed(1)}%"></i></span><b class="${x.imp>0?'neg':'pos'}">${x.imp>=0?'+':'−'}${usdC(Math.abs(x.imp))}</b></span></div>`};
+    const cab=`<div class="rp-drow rp-dhd"><span></span><span>receita</span><span>60d</span><span>efeito no reembolso</span></div>`;
+    corpo=`<div class="rp-dgrid">${R.dims.map(x=>`<article class="rp-card"><h4>${x.tit}</h4>${cab}${x.it.map(y=>lin(y,x.d)).join('')}</article>`).join('')}</div>`;
+    // por que: os 3 itens que mais empurram na direção do resultado
+    const sinal=ruim?1:bom?-1:0,todos=R.dims.flatMap(x=>x.it.filter(y=>!y.resto&&y.imp*sinal>0).map(y=>({...y,dt:x.tx}))).sort((a,b)=>Math.abs(b.imp)-Math.abs(a.imp)).slice(0,3);
+    s._pq=todos.length?`${ruim?'O que mais puxa para cima':'O que mais ajuda'}: ${todos.map(y=>`<b>${esc(y.nome)}</b> (${y.dt}, ${rpPct(y.tx)}, ${y.imp>=0?'+':'−'}${usdC(Math.abs(y.imp))})`).join(' · ')}.`:''}
+  const kp=(l,v,m2,cl='')=>`<div class="rp-dk1${cl}"><span>${l}</span><b>${v}</b><small>${m2}</small></div>`;
+  const cabTx=v60==null?'':`<b>${esc(s.nome)}</b> fecha 60 dias com <b class="${ruim?'neg':bom?'pos':''}">${rpPct(v60)}</b> de reembolso${dif!=null?`, ${rpPp(dif)} ${dif>0?'acima':'abaixo'} da safra (${rpPct(ref.re60)})`:''}. ${s._pq||''}`;
+  m.innerHTML=`<div class="rp-fin rp-dfin" role="dialog" aria-modal="true" aria-label="${esc('Detalhe: '+s.nome)}"><div class="rp-fh"><div><h3><i class="rp-dsw" style="background:${s.cor}"></i>${esc(s.nome)} <small>${esc(cfg&&cfg.aria||'')}</small></h3><p>${cabTx}</p></div><button type="button" class="rp-x" aria-label="Fechar">×</button></div>
+    <div class="rp-dk">${kp('Reembolso 60d',rpPct(v60),s.c&&s.c.dl<60?'previsto':'real',ruim?' neg':bom?' pos':'')}${kp('Safra do topo',rpPct(ref.re60),'referência')}${kp('Dia 10 (real)',R&&R.d10!=null?rpPct(R.d10):'—','vendas com 10+ dias')}${kp('Receita',R?usdC(R.T.B):'—',R?n(R.T.ses)+' FEs':'')}</div>
+    ${corpo}<p class="rp-nota">Cada linha: barra cinza = parte da receita da série; 60d = reembolso previsto do item (vermelho = acima da série, verde = abaixo); efeito = quanto o item soma (+) ou tira (−) do reembolso da série em US$, pela diferença de taxa × receita. Conta pelos pedidos; pode diferir um pouco do valor do gráfico.</p></div>`;
+  m.hidden=false;document.body.classList.add('modal-on');
+  const fecha=()=>{m.hidden=true;document.body.classList.remove('modal-on');window.removeEventListener('keydown',esc_)},esc_=e=>{if(e.key==='Escape')fecha()};
+  m.querySelector('.rp-x').onclick=fecha;m.onclick=e=>{if(e.target===m)fecha();else if(e.target.closest('[data-af]'))fecha()};window.addEventListener('keydown',esc_);m.querySelector('.rp-x').focus()}
+
+/* ---------- alertas (popup): reembolso alto cedo, tendência das últimas semanas, quebras e afiliados que puxam a safra ---------- */
+let RP_REF=null;
+function rpAlertas(o,zd){
+  const A=[],ref10=rpVal(o.pts,10),ttl=id=>{const c=RPG.get(id);return c?c.aria:''};
+  if(zd!=null)A.push({n:zd<=30?3:2,k:1,t:zd===0?'A safra já começa no prejuízo':`A safra fecha no prejuízo: o lucro vira zero no dia ${num(zd,0)}`,x:`Reembolso previsto de ${rpPct(o.re60)} contra o teto de ${rpPct(o.mg)} (prejuízo previsto de ${usd(-o.lucUsd)}). Depois do dia ${num(zd,0)}, cada reembolso é prejuízo.`,alvo:{id:'rpG0'}});
+  // reembolso alto cedo: dia 10 real ≥ 20%, ou 5 pp acima da safra (a pior série de cada gráfico)
+  RPG.forEach((cfg,id)=>{if(id==='rpG0'||id==='rpGF')return;const ss=cfg.series.filter(s=>s&&s.c&&!s.med),tot=ss.reduce((p,s)=>p+s.c.funil,0);
+    let pior=null;ss.forEach(s=>{if(s.c.dl<10||s.c.funil<Math.max(10000,0.03*tot))return;const v=rpVal(s.c.pts,10);if(v>=0.2||v>=ref10+0.05){if(!pior||v>pior.v)pior={s,v}}});
+    if(pior)A.push({n:pior.v>=0.2?3:2,k:pior.v,t:`${pior.s.nome}: ${rpPct(pior.v)} de reembolso nos 10 primeiros dias`,x:`${ttl(id)}. A safra toda está em ${rpPct(ref10)} no dia 10 (${rpPp(pior.v-ref10)} a mais).`,alvo:{id,serie:pior.s.nome}})});
+  // tendência: a semana mais recente contra as anteriores, no maior dia que ela já tem real
+  const sw=(RPG.get('rpG2')||{series:[]}).series.filter(s=>s&&s.c);
+  if(sw.length>=3){const u=sw[sw.length-1],ant=sw.slice(0,-1),d=[7,5,3,1].find(x=>u.c.dl>=x&&ant.every(s=>s.c.dl>=x));
+    if(d){const vu=rpVal(u.c.pts,d),va=ant.reduce((p,s)=>p+rpVal(s.c.pts,d),0)/ant.length,df=vu-va;
+      if(Math.abs(df)>=0.02)A.push({n:df>0?2:1,k:Math.abs(df),t:`Semana ${u.nome.replace('*','')} ${df>0?'devolvendo mais rápido':'devolvendo menos'}: ${rpPct(vu)} no dia ${d}`,x:`As ${ant.length} semanas anteriores tinham ${rpPct(va)} no mesmo dia (${df>0?'+':'−'}${rpPp(df)}).`,alvo:{id:'rpG2',serie:u.nome}})}}
+  // mês atual contra o anterior no mesmo dia
+  const sm=(RPG.get('rpG1')||{series:[]}).series.filter(s=>s&&s.c);
+  if(sm.length>=2){const u=sm[sm.length-1],a=sm[sm.length-2],d=[10,7,5,3].find(x=>u.c.dl>=x&&a.c.dl>=x);
+    if(d){const df=rpVal(u.c.pts,d)-rpVal(a.c.pts,d);if(Math.abs(df)>=0.02)A.push({n:df>0?2:1,k:Math.abs(df),t:`${u.nome.replace('*','')} ${df>0?'pior':'melhor'} que ${a.nome.replace('*','')} no dia ${d}`,x:`${rpPct(rpVal(u.c.pts,d))} contra ${rpPct(rpVal(a.c.pts,d))} (${df>0?'+':'−'}${rpPp(df)}).`,alvo:{id:'rpG1',serie:u.nome}})}}
+  // quebras que puxam a safra: produto, caminho e Curva Afiliado com 5%+ da receita e 6 pp acima da safra
+  [['rpGP','produto'],['rpGC','caminho'],['rpGV','upsell'],['rpG3','Curva Afiliado']].forEach(([id,l])=>{const ss=(RPG.get(id)||{series:[]}).series.filter(s=>s&&s.c&&s.nome!=='outros'),tot=ss.reduce((p,s)=>p+s.c.funil,0);
+    const pi=ss.filter(s=>s.c.funil>=0.05*tot&&s.c.fim>=o.re60+0.06).sort((a,b)=>b.c.fim-a.c.fim)[0];
+    if(pi)A.push({n:2,k:pi.c.fim-o.re60,t:`${l==='caminho'?'Caminho ':l==='upsell'?'Upsell de US$ ':l==='produto'?'':'Curva '}${pi.nome}: ${rpPct(pi.c.fim)} de reembolso em 60 dias`,x:`${rpPp(pi.c.fim-o.re60)} acima da safra (${rpPct(o.re60)}), com ${rpPct(pi.c.funil/tot,0)} da receita${l==='caminho'&&pi.extra?' · '+pi.extra.split(' · ')[0]:''}.`,alvo:{id,serie:pi.nome}})});
+  // afiliados que puxam: 5%+ da receita da safra e 6 pp acima da safra; e o melhor grande, como destaque bom
+  const sp=(RPG.get('rpG6')||{series:[]}).series.filter(s=>s&&s.c&&!s.med);
+  sp.filter(s=>s.c.funil>=0.05*o.funil&&s.c.fim>=o.re60+0.06).slice(0,2).forEach(s=>A.push({n:2,k:s.c.fim-o.re60,t:`${s.nome} puxa a safra para cima: ${rpPct(s.c.fim)}`,x:`${rpPct(s.c.funil/o.funil,0)} da receita da safra e ${rpPp(s.c.fim-o.re60)} acima dela.`,alvo:{id:'rpG6',serie:s.nome}}));
+  const sb=(RPG.get('rpG5')||{series:[]}).series.filter(s=>s&&s.c&&!s.med&&s.c.funil>=0.05*o.funil&&s.c.fim<=o.re60-0.05)[0];
+  if(sb)A.push({n:1,k:o.re60-sb.c.fim,t:`${sb.nome} segura o reembolso: ${rpPct(sb.c.fim)}`,x:`${rpPct(sb.c.funil/o.funil,0)} da receita da safra e ${rpPp(o.re60-sb.c.fim)} abaixo dela.`,alvo:{id:'rpG5',serie:sb.nome},bom:true});
+  return A.sort((a,b)=>b.n-a.n||(b.k||0)-(a.k||0)).slice(0,8)}
+const RP_NIV={3:['alto','Alerta'],2:['medio','Atenção'],1:['bom','Destaque']};
+function rpAlertasAbre(A){
+  const raiz=document.getElementById('reemb');if(!raiz)return;let m=document.getElementById('rpAl');
+  if(!m){m=Object.assign(document.createElement('div'),{id:'rpAl',className:'rp-full'});raiz.appendChild(m)}
+  m.innerHTML=`<div class="rp-fin rp-alfin" role="dialog" aria-modal="true" aria-label="Alertas do reembolso"><div class="rp-fh"><div><h3>O que chama atenção nesta safra</h3><p>${A.length?`${n(A.length)} ${A.length>1?'pontos':'ponto'}, do mais urgente ao destaque bom. Clique para ir ao gráfico.`:'Nada fora do normal com esses filtros.'}</p></div><button type="button" class="rp-x" aria-label="Fechar">×</button></div>
+    <div class="rp-alis">${A.map((a,i)=>{const nv=a.bom?RP_NIV[1]:RP_NIV[a.n];return `<article class="rp-ali ${nv[0]}"><span class="rp-aln">${nv[1]}</span><div><b>${esc(a.t)}</b><p>${esc(a.x)}</p></div><button type="button" class="rp-alv" data-i="${i}">Ver no gráfico →</button></article>`}).join('')}</div></div>`;
+  m.hidden=false;document.body.classList.add('modal-on');
+  const fecha=()=>{m.hidden=true;document.body.classList.remove('modal-on');window.removeEventListener('keydown',esc_)},esc_=e=>{if(e.key==='Escape')fecha()};
+  m.querySelector('.rp-x').onclick=fecha;m.onclick=e=>{if(e.target===m)fecha()};window.addEventListener('keydown',esc_);
+  m.querySelectorAll('.rp-alv').forEach(b=>b.onclick=()=>{fecha();rpVai(A[+b.dataset.i].alvo)});m.querySelector('.rp-x').focus()}
+// vai até o gráfico e acende a série (as outras ficam apagadas por alguns segundos)
+function rpVai(alvo){const g=document.getElementById(alvo.id);if(!g)return;const card=g.closest('.rp-card')||g.closest('.rp-s');
+  card.scrollIntoView({behavior:'smooth',block:'center'});card.classList.remove('rp-pulse');void card.offsetWidth;card.classList.add('rp-pulse');
+  const cfg=RPG.get(alvo.id);if(cfg&&alvo.serie){cfg.hl=alvo.serie;rpDesenha(alvo.id);clearTimeout(rpVai.t);rpVai.t=setTimeout(()=>{if(RPG.get(alvo.id)===cfg){cfg.hl=null;rpDesenha(alvo.id)}},6000)}}
+
+function renderReemb(R){
+  const el=document.getElementById('reemb');if(!el||st.pg!=='reemb')return;
+  if(typeof PED!=='undefined'&&!PED&&!PED_ERRO&&!rpEspera)rpEspera=setTimeout(()=>{rpEspera=null;if(st.pg==='reemb'&&st.R)renderReemb(st.R)},600);
+  rpFechaFicha();rpPrepara();RPG.clear();RP_FICHA.clear();
+  const [p0,p1]=periodo(),P=rpCalc('p'),F=rpSt.f;
+  // classes de cada afiliado: Curva Afiliado (receita dos 3 meses até o fim da safra), ticket médio e nota (pela safra do topo)
+  const cls=new Map();P.forEach((a,i)=>cls.set(i,{cv:a.S?'S':a.curva,fx:rpFaixa(a.aov),nt:rpNota(a.pts)}));
+  const passa=(c,sem)=>Object.keys(F).every(d=>d===sem||!F[d]||c[d]===F[d]);
+  const ids=sem=>{if(!Object.keys(F).some(d=>d!==sem&&F[d]))return null;const s=new Set();cls.forEach((c,i)=>{if(passa(c,sem))s.add(i)});return s};
+  const IDS=ids();RP_IDS=IDS;
+  const ativos=Object.keys(F).filter(d=>F[d]),opDe=d=>RP_DIM[d].op.find(o=>o.k===F[d]);
+  const filtroTx=[...ativos.map(d=>RP_DIM[d].l+' '+opDe(d).l),st.plat?'só '+st.plat:''].filter(Boolean).join(' · ');
+  const o=rpCoorte('p',IDS);
+  // ---- filtros da tela: sempre abertos (04/11), com os ativos e o Limpar no topo ----
+  const cnt=(d,v)=>{let k=0;cls.forEach(c=>{if(passa(c,d)&&(!v||c[d]===v))k++});return k};
+  const J=curvaJanela(p1),janTx=`${mesTx(J.ini)} a ${mesTx(J.fim)}`;
+  const dica={cv:`pela receita de ${janTx}`,fx:'AOV do funil na safra',nt:'pontuação do Ranking na safra'};
+  const linha=d=>`<div class="rp-frow"><span class="rp-fl">${RP_DIM[d].l}<small>${dica[d]}</small></span><div class="fgrp" data-dim="${d}">`+
+    [{k:'',l:d==='cv'?'Todas':'Todos'},...RP_DIM[d].op].map(op=>{const on=F[d]===op.k,q=cnt(d,op.k);
+      return `<button data-v="${op.k}" aria-pressed="${on}"${q||on?'':' disabled class="rp-off"'}${op.s&&op.s!==op.l&&d==='cv'?` title="${op.s}"`:''}>${op.l} <small class="rp-q">${n(q)}</small></button>`}).join('')+`</div></div>`;
+  const fil=`<section class="rp-fbox" aria-label="Filtros desta tela">
+    <div class="rp-fbar"><span class="rp-ftit">${ICO_FIL}Filtros</span>
+      <div class="rp-ativos">${ativos.length?ativos.map(d=>`<button type="button" class="rp-chip" data-tira="${d}" title="Tirar este filtro">${RP_DIM[d].l}: <b>${opDe(d).l}</b> ×</button>`).join('')+`<button type="button" class="rp-limpa" id="rpLimpa">Limpar</button>`:`<span class="rp-semf">Todos os afiliados da safra · ${n(cls.size)}</span>`}</div>
+      <span class="rp-filtx">Safra ${dTx(p0)} a ${dTx(p1)} · Curva Afiliado por ${janTx}</span><span id="rpAlSlot"></span></div>
+    <div class="rp-fpan" id="rpFpan">${linha('cv')}${linha('fx')}${linha('nt')}
+      <p class="rp-fnota">O número em cada botão = afiliados com os outros filtros aplicados. Curva Afiliado = receita do funil dos 2 meses fechados + o mês da safra (S = A com 100+ pontos).</p></div></section>`;
+  if(!o){el.innerHTML=fil+`<section class="pd-sec"><p class="rp-vz">Nenhum afiliado com ${filtroTx||'vendas'} na safra de ${dTx(p0)} a ${dTx(p1)}. Troque um dos filtros acima.</p></section>`;rpLigaFiltros(el,R);return}
+
+  // ---- 1. quando o lucro vira zero ----
+  const c100=v=>'US$ '+num(Math.abs(v*100),0),neg=o.luc<0,zd=o.zero;
+  const zTx=zd==null?'não vira zero em 60 dias':zd===0?'prejuízo desde a venda':'vira zero no dia '+num(zd,0);
+  const hero=`<p class="rp-hist">Na safra de <b>${dTx(p0)} a ${dTx(p1)}</b>${filtroTx?' ('+filtroTx+')':''}, de cada <b>US$ 100</b> vendidos no funil sobram <b>${c100(o.mg)}</b> depois do CPA, das taxas e do custo do produto. O reembolso previsto em 60 dias leva <b class="${o.re60>o.mg?'neg':''}">${c100(o.re60)}</b>.
+    ${neg?`O lucro <b class="neg">${zTx}</b> e a safra fecha com <b class="neg">prejuízo de ${usd(-o.lucUsd)}</b> (${c100(o.luc)} a cada US$ 100).`:`A safra fecha com <b class="pos">lucro de ${usd(o.lucUsd)}</b> (${c100(o.luc)} a cada US$ 100).`}
+    Para ter lucro em 60 dias, o reembolso precisa ficar <b>abaixo de ${rpPct(o.mg)}</b>${neg?`: faltam <b class="neg">${rpPp(o.re60-o.mg)}</b>`:`: há folga de <b class="pos">${rpPp(o.mg-o.re60)}</b>`}. A meta do ranking é ${P$(MT.re9)}.</p>`;
+  const kpi=(l,v,m,c='')=>`<article class="kpi${c}"><span class="k">${l}</span><b class="v">${v}</b><span class="m">${m}</span></article>`;
+  const bigs=kpi('Reembolso 60d previsto',rpPct(o.re60),`já caiu ${rpPct(o.agora)} · meta ≤ ${P$(MT.re9)}`,' total')+
+    kpi('Teto para lucro > 0',rpPct(o.mg),'margem antes do reembolso (já sem CPA, taxas e custo)')+
+    kpi('Lucro vira zero',zd==null?'não vira':zd===0?'dia 0':'dia '+num(zd,0),zd==null?'lucro positivo no dia 60':zd===0?'a margem já começa negativa':`depois disso, cada reembolso é prejuízo`,zd!=null?(zd<=30?' rp-bad':' rp-warn'):' rp-good')+
+    kpi('Lucro previsto em 60 dias',usd(o.lucUsd),`${rpPct(o.luc)} da receita · ${usd(o.fes?o.lucUsd/o.fes:null)} por cliente`,neg?' rp-bad':' rp-good')+
+    kpi('Receita da safra',usdC(o.funil),`${n(o.fes)} FEs${o.cpa!=null?' · CPA '+rpPct(o.cpa/o.funil,0)+' da receita':''}`);
+  const qS={p:[p0,p1],ids:IDS};RP_REF={re60:o.re60};
+  const sRe={nome:'Reembolso',cor:'var(--rp-2)',pts:o.pts,c:o,q:qS},sLu={nome:'Lucro previsto',cor:'var(--rp-1)',pts:o.pts.map(p=>[p[0],o.mg-p[1],p[2]]),c:{...o,fim:o.re60},q:qS};
+  const gPrin=rpGraf('rpG0',{h:300,lbW:170,aria:'Reembolso acumulado e lucro previsto por dia desde a venda',series:[sRe,sLu],
+    refs:[{v:MT.re9/100,rot:'meta do ranking '+P$(MT.re9)}],marks:[{d:zd,rot:zd===0?'prejuízo desde a venda':zd==null?null:'lucro 0 · dia '+num(zd,0)}].filter(m=>m.rot)});
+
+  // ---- 2. onde o reembolso pesa mais: mês, semana, Curva Afiliado, ticket médio e nota ----
+  const meses=MESES.filter(m=>RPA.has('m:'+m));
+  const sMes=meses.map(m=>{const c=rpCoorte('m:'+m,IDS);return c&&{nome:mesTx(m)+(fimMes(m)>FIM?'*':''),pts:c.pts,c,extra:`teto ${rpPct(c.mg)} · ${usdC(c.funil)}`,q:{p:rpPP('m:'+m),ids:IDS}}}).filter(Boolean);
+  const NS=[4,6,8,12].includes(rpSt.sem)?rpSt.sem:4;
+  const sems=[...RPA.keys()].filter(k=>k.startsWith('w:')).map(k=>+k.slice(2)).sort((a,b)=>a-b).slice(-NS);
+  const sSem=sems.map(w=>{const c=rpCoorte('w:'+w,IDS),[y,nn]=rpIsoSem(dIso(Math.max(0,w)));
+    return c&&{nome:`${nn}ª sem.`+(w+6>FIM?'*':''),pts:c.pts,c,extra:`${nn}ª semana de ${y} (${dTx(Math.max(0,w))} a ${dTx(w+6)}) · teto ${rpPct(c.mg)}`,q:{p:rpPP('w:'+w),ids:IDS}}}).filter(Boolean);
+  const porDim=(d,nome)=>{const idd=ids(d);return RP_DIM[d].op.map(op=>{const s=new Set();cls.forEach((c,i)=>{if(c[d]===op.k&&(!idd||idd.has(i)))s.add(i)});
+    const c=s.size?rpCoorte('p',s):null;return c&&{nome:nome(op),pts:c.pts,c,extra:`${n(s.size)} afiliados · teto ${rpPct(c.mg)}`,q:{p:[p0,p1],ids:s}}}).filter(Boolean)};
+  const sCv=porDim('cv',op=>op.k==='S'?'S':op.k);
+  const dest=ss=>{const v=ss.filter(s=>s.c.funil>=Math.max(5000,0.02*o.funil));if(v.length<2)return '';const so=[...v].sort((a,b)=>b.c.fim-a.c.fim),pi=so[0],me=so[so.length-1];
+    return `<p class="rp-dest">Maior: <b>${esc(pi.nome.replace('*',''))}</b> ${rpPct(pi.c.fim)} · menor: <b>${esc(me.nome.replace('*',''))}</b> ${rpPct(me.c.fim)} · diferença de ${rpPp(pi.c.fim-me.c.fim)}.</p>`};
+  const peq=ss=>{const tot=ss.reduce((p,s)=>p+s.c.funil,0);return ss.filter(s=>s.c.funil>=0.01*tot)};   // fora: série com menos de 1% da receita do gráfico (amostra pequena)
+  const card=(t,sub,ss0,id,w,ext='')=>{const ss=rpPinta(peq(ss0)),fo=ss0.length-ss.length;
+    return `<article class="rp-card ${w}"><div class="rp-ch"><h4>${t}</h4><div class="rp-cht">${ext}${rpFsBtn(id,t)}</div></div><p class="rp-sub">${sub}${fo?` ${fo} com menos de 1% da receita fora do gráfico.`:''}</p>${dest(ss)}${rpGraf(id,{h:230,series:ss,aria:t})}</article>`};
+  const semSel=`<select class="fsel rp-semsel" id="rpSem" aria-label="Quantas semanas mostrar">${[4,6,8,12].map(v=>`<option value="${v}"${v===NS?' selected':''}>Últimas ${v}</option>`).join('')}</select>`;
+  const quebras=card('Por mês da safra','Todas as safras; * = ainda aberta.',sMes,'rpG1','w3')+card('Por semana da safra','Segunda a domingo; * = ainda aberta.',sSem,'rpG2','w3',semSel)+
+    rpSecUpsell(IDS,card,[p0,p1],card('Por Curva Afiliado',`Safra do topo; Curva Afiliado por ${janTx}.`,sCv,'rpG3','w3'));
+
+  // ---- 3. quem puxa a curva: top N melhores e piores contra a mediana ----
+  const N=Math.max(1,Math.min(15,rpSt.n|0||5));
+  const rk=[...P.values()].filter(a=>a.rank&&a.re60!=null&&(!IDS||IDS.has(a.i)));
+  const curAf=a=>{const c=rpCoorte('p',new Set([a.i]));return c&&{nome:nomeAf(a),pts:c.pts,c,a,extra:`${n(a.fes)} FEs · nota ${a.pts==null?'—':num(a.pts,0)}`,q:{p:[p0,p1],ids:new Set([a.i]),af:true}}};
+  const todos=rk.map(curAf).filter(Boolean).sort((x,y)=>x.c.fim-y.c.fim);
+  let med=null;if(todos.length>=3){const md=v=>{const s=[...v].sort((a,b)=>a-b),h=s.length>>1;return s.length%2?s[h]:(s[h-1]+s[h])/2};
+    med={nome:'Mediana',med:true,cor:'var(--fg2)',extra:`${n(todos.length)} afiliados do ranking`,pts:[0,...DCH].map(d=>[d,md(todos.map(t=>rpVal(t.pts,d))),todos.filter(t=>d<=t.c.dl).length*2>=todos.length])}}
+  const mel=rpPinta(todos.slice(0,N).map(t=>({...t}))),pio=rpPinta(todos.slice(-N).reverse().map(t=>({...t})));
+  const mf=med?med.pts[med.pts.length-1][1]:null,mm=s=>s.length?s.reduce((p,t)=>p+t.c.fim,0)/s.length:null;
+  const topo=`<div class="rp-nbox"><label for="rpN">Quantos afiliados</label><input id="rpN" class="pd-busca" type="number" min="1" max="15" step="1" value="${N}" inputmode="numeric"></div>`;
+  const quem=todos.length<2?`<p class="rp-vz">Poucos afiliados no ranking com esses filtros (mínimo de ${n(st.min)} FEs).</p>`:
+    `<div class="rp-duo"><article class="rp-card"><div class="rp-ch"><h4>Os ${n(mel.length)} melhores <small>menor reembolso 60d</small></h4><div class="rp-cht">${rpFsBtn('rpG5','Os '+mel.length+' melhores contra a mediana')}</div></div><p class="rp-dest">Média deles: <b class="pos">${rpPct(mm(mel))}</b> contra a mediana de ${rpPct(mf)}.</p>${rpGraf('rpG5',{h:260,series:[...mel,med].filter(Boolean),aria:'Melhores afiliados contra a mediana'})}</article>
+      <article class="rp-card"><div class="rp-ch"><h4>Os ${n(pio.length)} piores <small>maior reembolso 60d</small></h4><div class="rp-cht">${rpFsBtn('rpG6','Os '+pio.length+' piores contra a mediana')}</div></div><p class="rp-dest">Média deles: <b class="neg">${rpPct(mm(pio))}</b> contra a mediana de ${rpPct(mf)}.</p>${rpGraf('rpG6',{h:260,series:[...pio,med].filter(Boolean),aria:'Piores afiliados contra a mediana'})}</article></div>`;
+
+  // ---- 4. afiliado × mês da safra (ou safra × afiliado) ----
+  const tab=rpTabela(IDS,meses);
+
+  el.innerHTML=fil+`
+    <section class="pd-sec rp-s"><div class="pd-head"><div><h3><span class="rp-n">1</span>Quando o lucro vira zero</h3></div></div>
+      ${hero}<section class="bigs rp-bigs">${bigs}</section>
+      <div class="rp-ch rp-g0h">${rpLeg([{l:'Reembolso acumulado (% da receita)',cor:'var(--rp-2)'},{l:'Lucro previsto (% da receita)',cor:'var(--rp-1)'},{l:'linha cheia = 50%+ da receita já real · pontilhada = previsto · ● = dia 60',cls:'tx'}])}<div class="rp-cht">${rpFsBtn('rpG0','Reembolso × lucro previsto, dia a dia')}</div></div>${gPrin}
+      <p class="rp-nota">Lucro = receita − CPA − taxas − custo do produto − reembolso (sem call center, como a nota do ranking). O lucro cai na mesma medida em que o reembolso sobe; ele vira zero quando o reembolso alcança o teto (${rpPct(o.mg)}).</p></section>
+    <section class="pd-sec rp-s"><div class="pd-head"><div><h3><span class="rp-n">2</span>Onde o reembolso pesa mais</h3><p>Curva de reembolso acumulado por safra. <b>Clique numa linha para ver o porquê</b> (por afiliado, produto, caminho no funil e valor do upsell). Linha cheia = a maior parte (50%+) da receita já tem aquela idade; pontilhada = previsto até o dia 60 (●). Na frente de cada curva, o reembolso de 60 dias. Cor forte = menor reembolso; cor fria = maior. Passe o mouse para ver cada dia.</p></div></div>
+      <div class="rp-quad">${quebras}</div></section>
+    <section class="pd-sec rp-s"><div class="pd-head"><div><h3><span class="rp-n">3</span>Quem puxa a curva</h3><p>Afiliados do ranking (${n(st.min)}+ FEs) na safra do topo, pelo reembolso 60d. Cada um com a própria curva; em cinza, a mediana de todos.</p></div><div class="pd-tools">${topo}</div></div>
+      ${quem}</section>
+    <section class="pd-sec rp-s" id="rpTabS">${tab}</section>
+    <p class="rp-nota rp-como"><b>Como calculamos.</b> Reembolso = valor devolvido + taxas de alerta e disputa, acumulado por dia desde a venda. A curva é da safra inteira: em cada dia, a venda que já tem aquela idade entra com o real; a que não tem, com o que já caiu + a parte da curva que falta até aquele dia (pela curva (dia/60)^${num(kEq(),2)}, ajustada à mediana) × a previsão de 10 dias (reembolso de 10 dias × fator do afiliado). É a mesma conta da nota do Ranking. Teto = (líquido − custo + reembolso já caído) ÷ receita. CPA dos pedidos. Filtros de ticket: abaixo de US$ 370, 370–390, 390–410 e US$ 410+ (a meta de AOV do ranking); de nota, de 20 em 20 pontos. Produto e caminho no funil: pelos pedidos, com o upsell na sessão do FE de origem; o que falta cair vem da taxa de 60 dias do próprio grupo nas vendas com 60+ dias.</p>`;
+  RPG.forEach((c,id)=>rpDesenha(id));
+  rpLigaFiltros(el,R);
+  {const A=rpAlertas(o,zd),slot=el.querySelector('#rpAlSlot'),nA=A.filter(a=>a.n>=2&&!a.bom).length;
+   if(slot){slot.innerHTML=`<button type="button" class="rp-alb${A.some(a=>a.n>=3)?' alto':nA?' medio':''}" title="O que chama atenção nesta safra">${ICO_AL}Alertas <b>${n(A.length)}</b></button>`;slot.firstChild.onclick=()=>rpAlertasAbre(A)}
+   const ch=[p0,p1,st.plat,st.min,typeof AGRUPA!=='undefined'?AGRUPA:'',JSON.stringify(rpSt.f)].join('|'),pronto=typeof PED==='undefined'||PED;
+   if(pronto&&(rpSt.auto||ch!==rpSt.alCh)){rpSt.auto=false;rpSt.alCh=ch;if(A.length)setTimeout(()=>{if(st.pg==='reemb')rpAlertasAbre(A)},350)}}
+  const ni=el.querySelector('#rpN');if(ni)ni.onchange=()=>{const v=Math.max(1,Math.min(15,Math.round(+ni.value)||5));rpSt.n=v;renderReemb(R)};
+  const ss=el.querySelector('#rpSem');if(ss)ss.onchange=()=>{rpSt.sem=+ss.value;renderReemb(R)};
+  el.querySelectorAll('[data-fs]').forEach(b=>b.onclick=()=>rpTelaCheia(b.dataset.fs,b.dataset.fst));
+  rpLigaTabela(el,R);
+}
+function rpLigaFiltros(el,R){
+  el.querySelectorAll('.rp-fpan .fgrp[data-dim] button').forEach(b=>b.onclick=()=>{rpSt.f[b.parentElement.dataset.dim]=b.dataset.v;renderReemb(R)});
+  el.querySelectorAll('[data-tira]').forEach(b=>b.onclick=()=>{rpSt.f[b.dataset.tira]='';renderReemb(R)});
+  const lp=el.querySelector('#rpLimpa');if(lp)lp.onclick=()=>{for(const d in rpSt.f)rpSt.f[d]='';renderReemb(R)};
+}
+
+// ---- tabela: afiliado › mês da safra (ou mês › afiliado), com Curva Afiliado, nota e reembolso acumulado por dia ----
+// barra do lucro líquido: a partir do meio, verde para a direita (lucro), vermelha para a esquerda (prejuízo); meia barra = 20% (acima disso, cheia)
+const rpBarra=v=>{if(v==null||!isFinite(v))return '';const w=Math.min(50,50*Math.abs(v)/0.2);return `<span class="rp-bar" aria-hidden="true"><i class="${v<0?'n':'p'}" style="width:${w.toFixed(1)}%"></i></span>`};
+function rpTabela(IDS,meses){
+  const T=rpCalc('t'),P=rpCalc('p'),[p0,p1]=periodo(),af=rpSt.modo==='af',q=rpSt.busca.trim().toLowerCase();
+  const lin=(c,rot,extra)=>c&&{c,rot,...extra};
+  const cor=(v,d)=>{if(v==null)return '';const cv=reta(d,CURVA_MED)/100,me=MT.re9/100*cv,li=MT.re7/100*cv;return v<=me?'g':v<=li?'y':'r'};
+  const mesFech=m=>fimMes(m)<=FIM-60,safraTop=`safra do topo (${dTx(p0)} a ${dTx(p1)})`;
+  const grupos=[];
+  if(af){const lista=[...RPA.get('t')].filter(([i,x])=>x.fu>0&&(!IDS||IDS.has(i))).map(([i])=>T.get(i)).filter(Boolean).sort((x,y)=>y.funil-x.funil);
+    for(const a of lista){const nm=nomeAf(a);if(q&&!nm.toLowerCase().includes(q)&&!String(a.af).toLowerCase().includes(q))continue;
+      const s=new Set([a.i]);
+      grupos.push({k:'a'+a.i,p:lin(rpCoorte('t',s),nm,{a,na:P.get(a.i),fech:p1<=FIM-60,ctx:'Nota na '+safraTop}),
+        f:[...meses].reverse().map(m=>lin(rpCoorte('m:'+m,s),mesTx(m)+(fimMes(m)>FIM?' (aberta)':''),{srt:m,na:rpCalc('m:'+m).get(a.i),fech:mesFech(m),ctx:'Nota na safra '+mesTx(m)})).filter(Boolean)})}}
+  else{for(const m of [...meses].reverse()){const acc=RPA.get('m:'+m),M=rpCalc('m:'+m);
+      const fs=[...acc].filter(([i,x])=>x.fu>0&&(!IDS||IDS.has(i))).map(([i])=>M.get(i)).filter(Boolean).sort((x,y)=>y.funil-x.funil)
+        .filter(a=>!q||nomeAf(a).toLowerCase().includes(q)).map(a=>lin(rpCoorte('m:'+m,new Set([a.i])),nomeAf(a),{a,na:a,fech:mesFech(m),ctx:'Nota na safra '+mesTx(m)})).filter(Boolean);
+      const p=lin(rpCoorte('m:'+m,IDS),mesTx(m)+(fimMes(m)>FIM?' (aberta)':''),{srt:m});if(p&&(fs.length||!q))grupos.push({k:'m'+m,p,f:fs})}}
+  const O=rpSt.ord;if(O&&RP_ORD[O.k]){const gv=RP_ORD[O.k],cmp=(x,y)=>{const a=gv(x),b=gv(y);if(a==null&&b==null)return 0;if(a==null)return 1;if(b==null)return -1;
+    return (typeof a==='string'||typeof b==='string'?String(a).localeCompare(String(b),'pt-BR'):a-b)*O.d};grupos.sort((g,h)=>cmp(g.p,h.p));grupos.forEach(g=>g.f.sort(cmp))}
+  rpTabela.ult=grupos;
+  const th=(k,l,cls='',tit='')=>`<th data-ord="${k}" class="ord${cls?' '+cls:''}" tabindex="0" aria-sort="${O&&O.k===k?(O.d>0?'ascending':'descending'):'none'}"${tit?` title="${tit}"`:''}>${l}</th>`;
+  let nk=0;
+  const cel=(l,filho)=>{const c=l.c,nm=l.a?`<span class="ls-nm" data-af="${afId(l.a)}" tabindex="0">${l.a.S?SB:''}<span class="nmt">${esc(l.rot)}</span></span>`:esc(l.rot);
+    let cvH='',ntH='';if(l.na){const cvv=l.na.S?'S':l.na.curva;cvH=`<span class="tag ${cvv}" title="Curva Afiliado ${cvv}">${cvv}</span>`;
+      if(l.na.pts!=null){const k='f'+(++nk);RP_FICHA.set(k,{a:l.na,fechada:l.fech,ctx:l.ctx});ntH=`<button type="button" class="rp-nt" data-ficha="${k}" title="${esc(l.ctx)} · clique para ver a conta da nota">${sc(l.na.pts)}</button>`}}
+    return `<td class="tl rp-nm">${filho?'':`<button type="button" class="rp-tg" aria-label="Abrir">›</button>`}${nm}</td><td class="rp-cc">${cvH}</td><td class="rp-cc">${ntH}</td><td>${n(c.fes)}</td><td>${usdC(c.funil)}</td>
+      <td>${c.cpa==null?'…':rpPct(c.cpa/c.funil)}</td><td>${rpPct(c.custo/c.funil)}</td>
+      ${RP_TAB.map(d=>{const v=rpVal(c.pts,d),pv=d>c.dl;return `<td class="hc ${cor(v,d)}${pv?' pv':''}" title="${pv?'previsto':'real'}">${rpPct(v)}</td>`}).join('')}
+      <td class="hc ${cor(c.fim,60)}${c.dl<60?' pv':''}" title="${c.dl<60?'previsto':'real'}"><b>${rpPct(c.fim)}</b></td><td class="rp-lq ${c.luc<0?'neg':'pos'}">${rpBarra(c.luc)}<b>${rpPct(c.luc)}</b></td>`};
+  const corpo=grupos.map(g=>{const ab=rpSt.abertos.has(g.k)||!!q&&!af;
+    return `<tr class="rp-pai${ab?' ab':''}" data-k="${g.k}">${cel(g.p,false)}</tr>`+g.f.map(l=>`<tr class="rp-fi" data-p="${g.k}"${ab?'':' hidden'}>${cel(l,true)}</tr>`).join('')}).join('');
+  return `<div class="pd-head"><div><h3><span class="rp-n">4</span>Reembolso por ${af?'afiliado e safra':'safra e afiliado'} <span class="pd-cnt">${n(grupos.length)}</span></h3>
+      <p>Clique na linha para abrir ${af?'as safras do afiliado':'os afiliados da safra'}; clique na nota para ver a conta; clique no cabeçalho para ordenar (as linhas de dentro seguem a mesma ordem). % da receita do funil. Reembolso acumulado até o dia N: fundo cheio = real, <span class="rp-hach">hachurado</span> = previsto (ainda não aconteceu). Cor pela meta do ranking proporcional ao dia (verde até ${P$(MT.re9)} no dia 60, amarelo até ${P$(MT.re7)}). Nota e Curva Afiliado: ${af?'na linha do afiliado, da safra do topo; nas safras, a de cada mês':'a de cada mês'}. Lucro líquido = depois de CPA, taxas, custo e reembolso 60d, sem call center.</p></div>
+    <div class="pd-tools"><div class="fgrp" id="rpModo" aria-label="Ordem da tabela"><button data-v="af" aria-pressed="${af}">Afiliado › Safra</button><button data-v="safra" aria-pressed="${!af}">Safra › Afiliado</button></div>
+      <button type="button" class="ls-chip" id="rpAbre">${grupos.length&&grupos.every(g=>rpSt.abertos.has(g.k))?'Fechar todos':'Abrir todos'}</button>
+      <input class="pd-busca" id="rpBusca" type="search" placeholder="Buscar afiliado" aria-label="Buscar afiliado" value="${esc(rpSt.busca)}">
+      <button type="button" class="dt-btn-excel" id="rpXls" title="Exportar para Excel (CSV)" aria-label="Exportar">${ICO.xls}</button></div></div>
+    <div class="rp-tw"><table class="rp-t"><thead><tr>${th('nome',af?'Afiliado / safra':'Safra / afiliado','tl')}${th('cv','Curva','rp-cc','Curva Afiliado (A/B/C/S)')}${th('nota','Nota','rp-cc','Pontuação do Ranking')}${th('fes','FEs')}${th('funil','Receita')}${th('cpa','CPA','','CPA pago ÷ receita do funil')}${th('custo','Custo','','Custo do produto (Full Stack) ÷ receita')}
+      ${RP_TAB.map(d=>th('d'+d,'D'+d)).join('')}${th('fim','60d','','Reembolso total de 60 dias (real ou previsto)')}${th('luc','Lucro líquido','rp-lqh','Lucro líquido previsto em % da receita: (líquido − custo − reembolso que ainda vai cair) ÷ receita. A barra vai para a direita (verde) quando sobra lucro e para a esquerda (vermelho) quando dá prejuízo; meia barra = 20% da receita (acima disso, cheia).')}</tr></thead>
+      <tbody>${corpo||`<tr><td class="tl" colspan="${RP_TAB.length+9}">Nenhum afiliado com esses filtros.</td></tr>`}</tbody></table></div>`;
+}
+function rpLigaTabela(el,R){
+  const s=el.querySelector('#rpTabS');if(!s)return;const meses=MESES.filter(m=>RPA.has('m:'+m));
+  const re=()=>{const foco=document.activeElement&&document.activeElement.id==='rpBusca';s.innerHTML=rpTabela(RP_IDS,meses);rpLigaTabela(el,R);
+    if(foco){const b=s.querySelector('#rpBusca');b.focus();b.setSelectionRange(b.value.length,b.value.length)}};
+  s.querySelectorAll('#rpModo button').forEach(b=>b.onclick=()=>{rpSt.modo=b.dataset.v;rpSt.abertos.clear();rpSt.ord=null;re()});
+  s.querySelectorAll('th[data-ord]').forEach(h=>{const go=()=>{const k=h.dataset.ord,O=rpSt.ord;rpSt.ord={k,d:O&&O.k===k?-O.d:RP_TXT.has(k)?1:-1};re()};
+    h.onclick=go;h.onkeydown=e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();go()}}});
+  s.querySelector('#rpAbre').onclick=()=>{const g=rpTabela.ult||[],todos=g.length&&g.every(x=>rpSt.abertos.has(x.k));rpSt.abertos.clear();if(!todos)g.forEach(x=>rpSt.abertos.add(x.k));re()};
+  const b=s.querySelector('#rpBusca');let t=null;b.oninput=()=>{clearTimeout(t);t=setTimeout(()=>{rpSt.busca=b.value;re()},200)};
+  s.querySelectorAll('[data-ficha]').forEach(x=>x.onclick=e=>{e.stopPropagation();rpAbreFicha(x.dataset.ficha)});
+  s.querySelectorAll('tr.rp-pai').forEach(tr=>tr.onclick=e=>{if(e.target.closest('[data-af],[data-ficha]'))return;const k=tr.dataset.k,ab=!rpSt.abertos.has(k);
+    ab?rpSt.abertos.add(k):rpSt.abertos.delete(k);tr.classList.toggle('ab',ab);s.querySelectorAll(`tr.rp-fi[data-p="${k}"]`).forEach(x=>x.hidden=!ab)});
+  s.querySelector('#rpXls').onclick=()=>{const L=[[rpSt.modo==='af'?'Afiliado':'Safra',rpSt.modo==='af'?'Safra':'Afiliado','Curva Afiliado','Nota','FEs','Receita US$','CPA %','Custo %',...RP_TAB.map(d=>'Reemb. D'+d+' %'),'Reemb. 60d %','Real ou previsto','Lucro líquido %']];
+    const f=v=>v==null||!isFinite(v)?'':(v*100).toFixed(2).replace('.',','),row=(a,b,l)=>{const c=l.c,na=l.na;return [a,b,na?(na.S?'S':na.curva):'',na&&na.pts!=null?na.pts.toFixed(1).replace('.',','):'',c.fes,c.funil.toFixed(2).replace('.',','),c.cpa==null?'':f(c.cpa/c.funil),f(c.custo/c.funil),...RP_TAB.map(d=>f(rpVal(c.pts,d))),f(c.fim),c.dl>=60?'real':'previsto',f(c.luc)]};
+    (rpTabela.ult||[]).forEach(g=>{L.push(row(g.p.rot,'Total',g.p));g.f.forEach(l=>L.push(row(g.p.rot,l.rot,l)))});
+    download('reembolso_por_'+(rpSt.modo==='af'?'afiliado_safra':'safra_afiliado')+'.csv',L)};
+}
+
+// navegação: a tela esconde as abas Ranking/Premissas e os big numbers do ranking; o menu marca o item da vez
+const _paginaRp=pagina;
+pagina=function(p){rpFechaFicha();const ant=st.pg;_paginaRp(p);const rp=st.pg==='reemb';if(rp&&ant!=='reemb'&&!(ant==='af'&&st.voltar==='reemb'))rpSt.auto=true;
+  if(rp||(st.pg==='af'&&st.voltar==='reemb')){const b=document.getElementById('bigs');if(b)b.hidden=true;root.querySelectorAll('.subtabs').forEach(x=>x.hidden=true)}
+  const grupo=st.pg==='af'?(st.voltar==='lista'?'lista':st.voltar==='reemb'?'reemb':'ranking'):st.pg==='lista'?'lista':rp?'reemb':'ranking';
+  root.querySelectorAll('.side-item[data-pg]').forEach(x=>x.classList.toggle('is-active',x.dataset.pg===grupo));
+  if(rp&&st.R)renderReemb(st.R)};
+const _renderRp=render;
+render=function(){_renderRp.apply(this,arguments);if(st.pg==='reemb'&&st.R)renderReemb(st.R)};
+
+
 const marcaAgr=()=>root.querySelectorAll('#fAgr button').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.v===AGRUPA)));
 root.querySelectorAll('#fAgr button').forEach(b=>b.onclick=()=>{reagrupa(b.dataset.v);marcaAgr()});marcaAgr();
 // premissas: quem não é admin vê e simula, mas não salva para todos
@@ -1052,8 +1727,11 @@ const ajustaTopo=()=>{const t=document.querySelector('.top'),af=root.querySelect
   const fixo=t&&getComputedStyle(t).position==='sticky';af.style.setProperty('--af-topo',(fixo?Math.round(t.getBoundingClientRect().height):0)+'px')};
 ajustaTopo();_on(window,'resize',ajustaTopo);
 render();   // de novo, já com os avisos das Premissas
+// tela de entrada: Visão Geral (lista) ou Reembolso Prev. (reemb); o padrão é o Ranking
+if(['lista','reemb','premissas'].includes(opts.pagina))pagina(opts.pagina);
 
 return {destroy(){_offs.forEach(f=>f());clearTimeout(_salvaT);['espBar','pdToast'].forEach(id=>{const b=document.getElementById(id);if(b)b.remove()});
+  ['rpFull','rpDrill','rpAl','rpBack'].forEach(id=>{const b=document.getElementById(id);if(b)b.remove()});
   document.body.classList.remove('modal-on','pg-pq','pd-cheia','dt-resizing');root.innerHTML=''}};
 }
 window.NSAfRanking={montar};

@@ -20,13 +20,18 @@ function Sidebar({ active, onNav, user, open, onClose }) {
         // Ranking: nota de 0 a 100 por afiliado (modelo do time de dados,
         // docs/kb/ranking-afiliados.md), com Premissas e a página do afiliado.
         { id: 'affiliate-ranking', label: 'Ranking', icon: 'trophy' },
+        // Visão Geral (base de afiliados com resultado e alertas) e Reembolso Prev.
+        // (curva de reembolso prevista): mesmo motor e modelo do Ranking.
+        { id: 'affiliate-overview', label: 'Visão Geral', icon: 'layout-dashboard' },
+        { id: 'affiliate-refund', label: 'Reembolso Prev.', icon: 'percent' },
+        // Telas do Mike, em paralelo às do time de dados até a validação.
         // Ranking + Diretório fundidos numa aba só (modelo planilha CPA).
         // 'all-affiliates' continua rota válida (redireciona pra mesma página).
-        { id: 'leaderboard', label: 'Afiliados', icon: 'ns-ranking' },
-        { id: 'affiliate-analysis', label: 'Análise', icon: 'trending-up' },
-        { id: 'affiliate-crm', label: 'CRM', icon: 'message-square' },
+        { id: 'leaderboard', label: 'Afiliados Mike', icon: 'ns-ranking' },
+        { id: 'affiliate-analysis', label: 'Análise Mike', icon: 'trending-up' },
+        { id: 'affiliate-crm', label: 'CRM Mike', icon: 'message-square' },
         // Redes de afiliados (NorthAffiliates) — separadas dos individuais.
-        { id: 'networks', label: 'Networks', icon: 'link' },
+        { id: 'networks', label: 'Networks Mike', icon: 'link' },
       ]
     },
     {
@@ -421,7 +426,7 @@ const ROUTES_WITHOUT_STAGE = new Set(['leads']);
 const ROUTES_PERIOD_ONLY = new Set(['networks', 'surveys', 'recurrences']);
 // Ranking de afiliados: a tela tem a barra de filtros própria (safra, mínimo
 // de FEs, plataforma, agrupar) — a barra global some nela.
-const ROUTES_OWN_FILTERS = new Set(['affiliate-ranking']);
+const ROUTES_OWN_FILTERS = new Set(['affiliate-ranking', 'affiliate-overview', 'affiliate-refund']);
 // Filtro "Afiliado" (conta de plataforma ou pessoa unificada): vale em todas
 // as abas de venda. Onde não se aplica, o seletor fica apagado com o motivo
 // — a escolha continua na URL e volta a valer ao trocar de aba.

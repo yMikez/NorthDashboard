@@ -8,8 +8,8 @@
 import { Prisma } from '@prisma/client';
 import { db } from '../db';
 import {
-  type ContaCadastro, type LinhaDia, type Premissas, type RankingPayload,
-  mapearContas, montarPayload, sanitizarPremissas,
+  type ContaCadastro, type LinhaDia, type PedidoLinha, type PedidosPacote, type Premissas, type RankingPayload,
+  empacotarPedidos, mapearContas, montarPayload, sanitizarPremissas,
 } from './affiliateRankingCore';
 
 /** rtN = reembolso + taxas (alerta + disputa) que caíram até o dia N desde a venda: a curva por dia. */
@@ -116,6 +116,35 @@ export async function getAffiliateOrders(contas: string[], de: string, ate: stri
     WHERE p.fe_plataforma || ' ' || p.fe_afiliado_id IN (${Prisma.join(contas)})
       AND p.fe_dia BETWEEN ${de}::date AND ${ate}::date
     ORDER BY p.vendido_em DESC`);
+}
+
+/**
+ * Todas as vendas com FE de origem e afiliado, empacotadas (Visão Geral e Reembolso Prev. precisam de todas de uma vez:
+ * CPA da safra, curva por produto, caminho no funil e o detalhe de cada série). Mesmas junções de getAffiliateOrders.
+ */
+export async function getAffiliateAllOrders(): Promise<PedidosPacote> {
+  const linhas = await db.$queryRaw<PedidoLinha[]>(Prisma.sql`
+    SELECT p.fe_plataforma || ' ' || p.fe_afiliado_id AS conta, p.plataforma, p.venda_id, p.fe_venda_id,
+           to_char(p.fe_dia, 'YYYY-MM-DD') AS fe_dia,
+           to_char(p.vendido_em AT TIME ZONE CASE WHEN p.plataforma = 'JVZoo' THEN 'America/New_York' ELSE 'America/Sao_Paulo' END,
+                   'YYYY-MM-DD') AS dia,
+           p.etapa,
+           coalesce(pj.name, pv.name) AS produto,
+           coalesce(oj."cpaPaidUsd", ov."cpaPaidUsd")::float8 AS cpa,
+           p.bruto::float8 AS bruto,
+           coalesce(p.reembolso, 0)::float8 AS reembolso,
+           to_char(p.reembolso_dia, 'YYYY-MM-DD') AS reembolso_dia,
+           coalesce(p.taxa_alerta, 0)::float8 AS taxa_alerta,
+           coalesce(p.taxa_disputa, 0)::float8 AS taxa_disputa
+    FROM dados_oficiais.afiliados_pedidos p
+    LEFT JOIN dados_oficiais."Order" oj ON p.plataforma = 'JVZoo' AND oj."rawMetadata"->>'paykey' = p.venda_id
+    LEFT JOIN dados_oficiais."Product" pj ON pj.id = oj."productId"
+    LEFT JOIN "Order" ov ON p.plataforma = 'Vupim' AND ov."externalId" = p.venda_id
+          AND ov."platformId" = (SELECT id FROM "Platform" WHERE slug = 'vupim')
+    LEFT JOIN "Product" pv ON pv.id = ov."productId"
+    WHERE p.fe_venda_id IS NOT NULL AND p.fe_afiliado_id IS NOT NULL
+    ORDER BY p.vendido_em`);
+  return empacotarPedidos(linhas);
 }
 
 // ---------- Premissas compartilhadas ----------

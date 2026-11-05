@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
-  CAMPOS, contaDe, isDiaIso, mapearContas, montarPayload, parseContas, PREMISSAS_PADRAO, sanitizarPremissas,
+  CAMPOS, contaDe, empacotarPedidos, isDiaIso, mapearContas, montarPayload, parseContas, PREMISSAS_PADRAO, sanitizarPremissas,
 } from './affiliateRankingCore';
 
 describe('contaDe', () => {
@@ -85,5 +85,30 @@ describe('parseContas / isDiaIso', () => {
     expect(isDiaIso('2026-11-04')).toBe(true);
     expect(isDiaIso('04/11/2026')).toBe(false);
     expect(isDiaIso(null)).toBe(false);
+  });
+});
+
+describe('empacotarPedidos', () => {
+  const base = { conta: 'JVZoo 1', plataforma: 'JVZoo', fe_dia: '2026-10-01', dia: '2026-10-01', produto: 'NeuroRecall 6 Bottles - FE',
+    bruto: 294, cpa: 150, reembolso: 0, reembolso_dia: null, taxa_alerta: 0, taxa_disputa: 0 };
+  it('liga o upsell ao FE de origem e conta os dias desde o primeiro FE', () => {
+    const p = empacotarPedidos([
+      { ...base, venda_id: 'WP-1', fe_venda_id: 'WP-1', etapa: 'FE' },
+      { ...base, venda_id: 'WP-2', fe_venda_id: 'WP-1', etapa: 'Upsell', produto: 'NeuroRecall 12 Bottles (Upgrade) - OTO1 (6B)', bruto: '348.5', cpa: null,
+        reembolso: 348.5, reembolso_dia: '2026-10-05' },
+      { ...base, conta: 'Vupim abc', plataforma: 'Vupim', venda_id: 'v9', fe_venda_id: 'WP-1', fe_dia: '2026-10-03', etapa: 'FE' },
+    ]);
+    expect(p.d0).toBe('2026-10-01');
+    expect(p.col.fid).toEqual([0, 0, -1]);   // a conta Vupim procura o FE na Vupim: não acha
+    expect(p.col.fe).toEqual([0, 0, 2]);
+    expect(p.dic.etapa).toEqual(['FE', 'Upsell']);
+    expect(p.col.et).toEqual([0, 1, 0]);
+    expect(p.col.bruto[1]).toBe(348.5);
+    expect(p.col.cpa[1]).toBe(0);
+    expect(p.col.red).toEqual([null, '2026-10-05', null]);
+    expect(p.dic.conta).toEqual(['JVZoo 1', 'Vupim abc']);
+  });
+  it('lista vazia não quebra', () => {
+    expect(empacotarPedidos([]).col.af).toEqual([]);
   });
 });

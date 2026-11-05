@@ -765,6 +765,7 @@ function fetchAffiliateRanking() { return fetchJSON('/api/metrics/affiliate-rank
 function fetchAffiliateRankingOrders({ contas, de, ate }) {
   return fetchJSON('/api/metrics/affiliate-ranking/orders', { contas: (contas || []).join(','), de, ate });
 }
+function fetchAffiliateAllOrders() { return fetchJSON('/api/metrics/affiliate-ranking/all-orders', {}); }
 function fetchAffiliateScoreConfig() { return coGet('/api/admin/affiliate-ranking/config'); }
 function saveAffiliateScoreConfig(premissas) { return coSend('/api/admin/affiliate-ranking/config', 'PUT', { premissas }); }
 
@@ -945,6 +946,7 @@ window.NSApi = _wrapMutations({
   fetchProfitConfig,
   fetchAffiliateRanking,
   fetchAffiliateRankingOrders,
+  fetchAffiliateAllOrders,
   fetchAffiliateScoreConfig,
   saveAffiliateScoreConfig,
   patchProfitConfig,

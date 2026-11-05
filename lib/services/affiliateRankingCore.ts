@@ -167,3 +167,68 @@ export function parseContas(q: string | null): string[] {
 }
 
 export const isDiaIso = (s: string | null): s is string => !!s && /^\d{4}-\d{2}-\d{2}$/.test(s) && !Number.isNaN(diaUtc(s));
+
+// ---------- Todos os pedidos (Visão Geral e Reembolso Prev.) ----------
+
+/** Uma venda como sai do banco para o pacote de todos os pedidos (positivos = o que sai). */
+export interface PedidoLinha {
+  conta: string;
+  plataforma: string;
+  venda_id: string;
+  fe_venda_id: string | null;
+  fe_dia: string;
+  dia: string;
+  etapa: string;
+  produto: string | null;
+  bruto: number | string | null;
+  cpa: number | string | null;
+  reembolso: number | string | null;
+  reembolso_dia: string | null;
+  taxa_alerta: number | string | null;
+  taxa_disputa: number | string | null;
+}
+
+/** Pacote colunar (o mesmo formato do pedidos.json da prévia): dicionários + uma lista por campo. */
+export interface PedidosPacote {
+  d0: string;
+  dic: { conta: string[]; etapa: string[]; produto: string[] };
+  col: {
+    af: number[]; fe: number[]; em: string[]; et: number[]; pr: number[]; bruto: number[]; cpa: number[];
+    re: number[]; red: (string | null)[]; al: number[]; dt: number[]; fid: number[];
+  };
+}
+
+/**
+ * Empacota as vendas: `fe` = dias do FE de origem desde d0 (a safra), `em` = dia da venda, `fid` = posição do FE de
+ * origem na própria lista (liga upsell, downsell e bump à sessão; -1 = FE fora da lista). Conta, etapa e produto viram
+ * índices dos dicionários. Só agregados de venda; nenhum dado de cliente.
+ */
+export function empacotarPedidos(linhas: PedidoLinha[]): PedidosPacote {
+  const dic = { conta: [] as string[], etapa: [] as string[], produto: [] as string[] };
+  const ixs = { conta: new Map<string, number>(), etapa: new Map<string, number>(), produto: new Map<string, number>() };
+  const cod = (k: keyof typeof ixs, v: string) => {
+    let i = ixs[k].get(v);
+    if (i === undefined) { i = dic[k].length; dic[k].push(v); ixs[k].set(v, i); }
+    return i;
+  };
+  const d0 = linhas.reduce((m, l) => (l.fe_dia < m ? l.fe_dia : m), linhas[0]?.fe_dia ?? '2026-01-01');
+  const t0 = diaUtc(d0);
+  const pos = new Map(linhas.map((l, i) => [`${l.plataforma}|${l.venda_id}`, i]));
+  const col: PedidosPacote['col'] = { af: [], fe: [], em: [], et: [], pr: [], bruto: [], cpa: [], re: [], red: [], al: [], dt: [], fid: [] };
+  for (const l of linhas) {
+    col.af.push(cod('conta', l.conta));
+    col.fe.push(Math.round((diaUtc(l.fe_dia) - t0) / DIA_MS));
+    col.em.push(l.dia);
+    col.et.push(cod('etapa', l.etapa || '—'));
+    col.pr.push(cod('produto', l.produto || '—'));
+    col.bruto.push(num(l.bruto));
+    col.cpa.push(num(l.cpa));
+    col.re.push(num(l.reembolso));
+    col.red.push(l.reembolso_dia);
+    col.al.push(num(l.taxa_alerta));
+    col.dt.push(num(l.taxa_disputa));
+    // o FE de origem é da plataforma da conta (a primeira palavra dela)
+    col.fid.push(l.fe_venda_id ? pos.get(`${l.conta.split(' ', 1)[0]}|${l.fe_venda_id}`) ?? -1 : -1);
+  }
+  return { d0, dic, col };
+}

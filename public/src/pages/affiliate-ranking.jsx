@@ -1,7 +1,9 @@
 /* global React */
-// Afiliados › Ranking — nota de 0 a 100 de cada afiliado, curva ABC + S,
-// Premissas (pesos, metas, bônus e penalidades) e a página do afiliado com
-// todos os pedidos. Regras: docs/kb/ranking-afiliados.md.
+// Afiliados › Ranking, Visão Geral e Reembolso Prev. — nota de 0 a 100 de cada
+// afiliado, curva ABC + S, Premissas (pesos, metas, bônus e penalidades), a
+// página do afiliado com todos os pedidos, a base com resultado e alertas
+// (Visão Geral) e a curva de reembolso prevista (Reembolso Prev.).
+// Regras: docs/kb/ranking-afiliados.md. pagina = ranking | lista | reemb.
 //
 // A tela em si é o motor do painel de afiliados do time de dados
 // (affiliate-ranking-engine.js, gerado — não editar à mão): aqui só buscamos
@@ -11,7 +13,7 @@
 
 const { useState: useStateAR, useEffect: useEffectAR, useRef: useRefAR } = React;
 
-function AffiliateRankingPage({ user }) {
+function AffiliateRankingPage({ user, pagina = 'ranking' }) {
   const boxRef = useRefAR(null);
   const [estado, setEstado] = useStateAR({ carregando: true, erro: null });
 
@@ -32,11 +34,14 @@ function AffiliateRankingPage({ user }) {
           podeEditar: user?.role === 'ADMIN',
           salvarPremissas: (premissas) => window.NSApi.saveAffiliateScoreConfig(premissas),
           buscarPedidos: (q) => window.NSApi.fetchAffiliateRankingOrders(q),
+          // todas as vendas de uma vez (Visão Geral e Reembolso Prev.); no Ranking vêm em segundo plano
+          buscarTodosPedidos: () => window.NSApi.fetchAffiliateAllOrders(),
+          pagina,
         });
       })
       .catch((e) => { if (vivo) setEstado({ carregando: false, erro: e.message || String(e) }); });
     return () => { vivo = false; if (tela) tela.destroy(); };
-  }, []);
+  }, [pagina]);
 
   return (
     <>
@@ -49,7 +54,7 @@ function AffiliateRankingPage({ user }) {
       {estado.erro && (
         <div className="content">
           <div className="panel" style={{ padding: 20, color: 'var(--fg3)' }}>
-            Não consegui abrir o ranking: {estado.erro}
+            Não consegui abrir a tela: {estado.erro}
           </div>
         </div>
       )}

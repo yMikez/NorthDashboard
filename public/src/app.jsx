@@ -7,11 +7,13 @@ const ROUTES = {
   'vsl':            { title: 'VSLs',        em: 'por página do funil', crumbs: ['Análise', 'VSLs'] },
   'refund-cohorts': { title: 'Reembolsos',  em: 'por coorte',  crumbs: ['Análise', 'Reembolsos'] },
   'affiliate-ranking': { title: 'Ranking',  em: 'de afiliados', crumbs: ['Afiliados', 'Ranking'] },
-  'leaderboard':    { title: 'Afiliados',   em: 'resultado por afiliado', crumbs: ['Afiliados', 'Afiliados'] },
+  'affiliate-overview': { title: 'Visão Geral', em: 'dos afiliados', crumbs: ['Afiliados', 'Visão Geral'] },
+  'affiliate-refund': { title: 'Reembolso', em: 'previsto', crumbs: ['Afiliados', 'Reembolso Prev.'] },
+  'leaderboard':    { title: 'Afiliados',   em: 'resultado por afiliado (Mike)', crumbs: ['Afiliados', 'Afiliados Mike'] },
   'all-affiliates': { title: 'Diretório',   em: 'de afiliados', crumbs: ['Afiliados', 'Todos'] },
-  'affiliate-analysis': { title: 'Análise', em: 'de afiliados', crumbs: ['Afiliados', 'Análise'] },
-  'affiliate-crm':  { title: 'CRM',          em: 'de afiliados', crumbs: ['Afiliados', 'CRM'] },
-  'networks':       { title: 'Networks',     em: 'redes de afiliados', crumbs: ['Afiliados', 'Networks'] },
+  'affiliate-analysis': { title: 'Análise', em: 'de afiliados (Mike)', crumbs: ['Afiliados', 'Análise Mike'] },
+  'affiliate-crm':  { title: 'CRM',          em: 'de afiliados (Mike)', crumbs: ['Afiliados', 'CRM Mike'] },
+  'networks':       { title: 'Networks',     em: 'redes de afiliados (Mike)', crumbs: ['Afiliados', 'Networks Mike'] },
   'recovery':       { title: 'Recuperação', em: 'de vendas',   crumbs: ['Captação', 'Recuperação'] },
   'tauk':           { title: 'Call Center', em: 'Tauk + Logicall', crumbs: ['Captação', 'Call Center'] },
   'leads':          { title: 'Leads',       em: 'e LTV',       crumbs: ['Clientes', 'Leads'] },
@@ -304,6 +306,8 @@ function App({ user }) {
           {hashState.route === 'vsl'            && <VslPage filters={filters} user={user}/>}
           {hashState.route === 'refund-cohorts' && <RefundCohortsPage filters={filters}/>}
           {hashState.route === 'affiliate-ranking' && <AffiliateRankingPage user={user}/>}
+          {hashState.route === 'affiliate-overview' && <AffiliateRankingPage user={user} pagina="lista"/>}
+          {hashState.route === 'affiliate-refund' && <AffiliateRankingPage user={user} pagina="reemb"/>}
           {hashState.route === 'leaderboard'    &&<LeaderboardPage filters={filters} onOpenAffiliate={setDrawerAff} user={user}/>}
           {/* Fundida com o Ranking (modelo planilha CPA) — rota antiga rende a mesma página. */}
           {hashState.route === 'all-affiliates' && <LeaderboardPage filters={filters} onOpenAffiliate={setDrawerAff} user={user}/>}

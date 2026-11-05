@@ -41,23 +41,33 @@ export const NAV_GROUPS: NavGroup[] = [
         "icon": "trophy"
       },
       {
+        "id": "affiliate-overview",
+        "label": "Visão Geral",
+        "icon": "layout-dashboard"
+      },
+      {
+        "id": "affiliate-refund",
+        "label": "Reembolso Prev.",
+        "icon": "percent"
+      },
+      {
         "id": "leaderboard",
-        "label": "Afiliados",
+        "label": "Afiliados Mike",
         "icon": "ns-ranking"
       },
       {
         "id": "affiliate-analysis",
-        "label": "Análise",
+        "label": "Análise Mike",
         "icon": "trending-up"
       },
       {
         "id": "affiliate-crm",
-        "label": "CRM",
+        "label": "CRM Mike",
         "icon": "message-square"
       },
       {
         "id": "networks",
-        "label": "Networks",
+        "label": "Networks Mike",
         "icon": "link"
       }
     ]

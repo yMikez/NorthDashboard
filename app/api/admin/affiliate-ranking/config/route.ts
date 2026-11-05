@@ -1,11 +1,12 @@
 // /api/admin/affiliate-ranking/config — premissas do Ranking de afiliados
 // (pesos, metas, bônus e penalidades), compartilhadas por todos.
 //
-//   GET → quem tem a aba affiliate-ranking (a página precisa delas para a nota)
+//   GET → quem tem Ranking, Visão Geral ou Reembolso Prev. (as telas precisam delas para a nota)
 //   PUT → só admin; grava e guarda o histórico (AffiliateScoreConfigLog)
 
 import { NextResponse } from 'next/server';
-import { requireAdmin, requireTab } from '@/lib/auth/guard';
+import { requireAdmin, requireAnyTab } from '@/lib/auth/guard';
+import { AFFILIATE_SCORE_TABS } from '@/lib/auth/tabs';
 import { getAffiliateScoreConfig, saveAffiliateScoreConfig } from '@/lib/services/affiliateRanking';
 import { logger } from '@/lib/logger';
 
@@ -13,7 +14,7 @@ export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
 export async function GET() {
-  const auth = await requireTab('affiliate-ranking');
+  const auth = await requireAnyTab(AFFILIATE_SCORE_TABS);
   if (!auth.ok) return auth.response;
   try {
     return NextResponse.json(await getAffiliateScoreConfig());

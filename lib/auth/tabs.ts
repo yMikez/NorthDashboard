@@ -11,6 +11,8 @@ export type TabId =
   | 'vsl'
   | 'refund-cohorts'
   | 'affiliate-ranking'
+  | 'affiliate-overview'
+  | 'affiliate-refund'
   | 'leaderboard'
   | 'all-affiliates'
   | 'affiliate-analysis'
@@ -41,15 +43,20 @@ export const AVAILABLE_TABS: TabSpec[] = [
   // Ranking: nota de 0 a 100 por afiliado + Premissas + pedidos do afiliado
   // (receita, CPA, reembolso e lucro por afiliado). Premissas: só admin muda.
   { id: 'affiliate-ranking', label: 'Ranking',          group: 'Afiliados' },
-  { id: 'leaderboard',    label: 'Afiliados',           group: 'Afiliados' },
+  // Visão Geral e Reembolso Prev.: mesmo modelo do Ranking (time de dados) — base de
+  // afiliados com resultado e alertas; reembolso previsto por safra, produto e funil.
+  { id: 'affiliate-overview', label: 'Visão Geral',     group: 'Afiliados' },
+  { id: 'affiliate-refund', label: 'Reembolso Prev.',   group: 'Afiliados' },
+  // Telas do Mike: rodam em paralelo às do time de dados até a validação.
+  { id: 'leaderboard',    label: 'Afiliados Mike',      group: 'Afiliados' },
   { id: 'all-affiliates', label: 'Todos os afiliados',  group: 'Afiliados' },
-  { id: 'affiliate-analysis', label: 'Análise',         group: 'Afiliados' },
+  { id: 'affiliate-analysis', label: 'Análise Mike',    group: 'Afiliados' },
   // CRM: aba própria de propósito — quem opera o WhatsApp recebe só ela,
   // sem ver receita, margem nem CPA da operação inteira.
-  { id: 'affiliate-crm',  label: 'CRM',                 group: 'Afiliados' },
+  { id: 'affiliate-crm',  label: 'CRM Mike',            group: 'Afiliados' },
   // Networks: vendas das REDES de afiliados (NorthAffiliates) — rede e
   // integrante, CPA devido, repasse e margem. Fora das abas dos individuais.
-  { id: 'networks',       label: 'Networks',            group: 'Afiliados' },
+  { id: 'networks',       label: 'Networks Mike',       group: 'Afiliados' },
   // Captação: fontes de receita fora do funil (recuperação, call center).
   { id: 'recovery',       label: 'Recuperação',         group: 'Captação' },
   // id 'tauk' preservado (permissões) — a aba virou Call Center (Tauk + Logicall).
@@ -70,6 +77,9 @@ export const AVAILABLE_TABS: TabSpec[] = [
 ];
 
 const TAB_IDS = new Set<string>(AVAILABLE_TABS.map((t) => t.id));
+
+/** Telas do modelo de pontuação (time de dados): qualquer uma delas libera os dados e as premissas. */
+export const AFFILIATE_SCORE_TABS: TabId[] = ['affiliate-ranking', 'affiliate-overview', 'affiliate-refund'];
 
 export function isValidTab(id: string): id is TabId {
   return TAB_IDS.has(id);
