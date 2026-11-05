@@ -798,6 +798,10 @@ body.pd-cheia{overflow:hidden}
 .af table.dt-t thead .th-l{line-height:1.15}
 .af table.dt-t th{padding:0 5px}
 .af table.dt-t td{padding-left:6px;padding-right:6px}
+/* Premissas: campos de meta dentro do texto. O CSS geral do dash dá 36 px de altura e fonte 14 px a todo input (e vence
+   a regra .af .mt-in); aqui eles voltam ao tamanho do texto, como no painel original */
+.af input.mt-in.mt-in.mt-in{min-height:0;height:auto;font-size:inherit;font-weight:700;line-height:1.3;padding:1px 4px;width:5.2ch;
+  border-radius:6px;border:1px solid var(--border);background:var(--bg-raised);vertical-align:baseline}
 .af .ls-bigs{grid-template-columns:repeat(6,minmax(0,1fr))}
 .af .ls-als{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin:0 0 14px}
 .af .ls-al{display:grid;grid-template-columns:auto 1fr;grid-template-rows:auto auto;column-gap:10px;align-items:center;text-align:left;
