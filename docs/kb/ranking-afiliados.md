@@ -25,9 +25,8 @@ Três abas usam o mesmo motor e o mesmo modelo (permissões `affiliate-overview`
 - **Reembolso Prev.**: quando o lucro da safra vira zero, as curvas de reembolso
   por safra e por quebra, quem puxa a curva e a tabela afiliado × safra.
 
-As telas do Mike seguem no menu enquanto as duas versões são validadas em
-paralelo: Afiliados e Análise com o nome de sempre, CRM e Networks com o
-sufixo "Mike".
+As telas do Mike (Afiliados, Análise, CRM, Networks) seguem no menu, com o nome
+de sempre, enquanto as duas versões são validadas em paralelo.
 
 ## De onde vêm os dados
 

@@ -62,12 +62,12 @@ export const NAV_GROUPS: NavGroup[] = [
       },
       {
         "id": "affiliate-crm",
-        "label": "CRM Mike",
+        "label": "CRM",
         "icon": "message-square"
       },
       {
         "id": "networks",
-        "label": "Networks Mike",
+        "label": "Networks",
         "icon": "link"
       }
     ]

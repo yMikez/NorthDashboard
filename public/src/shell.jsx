@@ -28,9 +28,9 @@ function Sidebar({ active, onNav, user, open, onClose }) {
         // 'all-affiliates' continua rota válida (redireciona pra mesma página).
         { id: 'leaderboard', label: 'Afiliados', icon: 'ns-ranking' },
         { id: 'affiliate-analysis', label: 'Análise', icon: 'trending-up' },
-        { id: 'affiliate-crm', label: 'CRM Mike', icon: 'message-square' },
+        { id: 'affiliate-crm', label: 'CRM', icon: 'message-square' },
         // Redes de afiliados (NorthAffiliates) — separadas dos individuais.
-        { id: 'networks', label: 'Networks Mike', icon: 'link' },
+        { id: 'networks', label: 'Networks', icon: 'link' },
       ]
     },
     {

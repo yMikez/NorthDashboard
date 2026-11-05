@@ -52,10 +52,10 @@ export const AVAILABLE_TABS: TabSpec[] = [
   { id: 'affiliate-analysis', label: 'Análise',         group: 'Afiliados' },
   // CRM: aba própria de propósito — quem opera o WhatsApp recebe só ela,
   // sem ver receita, margem nem CPA da operação inteira.
-  { id: 'affiliate-crm',  label: 'CRM Mike',            group: 'Afiliados' },
+  { id: 'affiliate-crm',  label: 'CRM',                 group: 'Afiliados' },
   // Networks: vendas das REDES de afiliados (NorthAffiliates) — rede e
   // integrante, CPA devido, repasse e margem. Fora das abas dos individuais.
-  { id: 'networks',       label: 'Networks Mike',       group: 'Afiliados' },
+  { id: 'networks',       label: 'Networks',            group: 'Afiliados' },
   // Captação: fontes de receita fora do funil (recuperação, call center).
   { id: 'recovery',       label: 'Recuperação',         group: 'Captação' },
   // id 'tauk' preservado (permissões) — a aba virou Call Center (Tauk + Logicall).
