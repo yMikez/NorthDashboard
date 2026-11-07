@@ -443,8 +443,9 @@ function render(){
       <p><b>${n(rkc.length)}</b> no ranking de ${n(g.length)} afiliados · <b>${T?pct(rec/T,0):'—'}</b> da receita · média <b>${num(rkc.length?rkc.reduce((s,a)=>s+a.pts,0)/rkc.length:null,0)}</b> pts</p></div>
       ${rkc.length?`<div class="rw"><table class="tr" data-c="${c}"><thead><tr>${COLS.map(([k,l])=>`<th data-k="${k}"${k===sk?` aria-sort="${sd>0?'ascending':'descending'}"`:''}>${l}</th>`).join('')}</tr></thead>
       <tbody>${ord.map(a=>`<tr data-tip="${regTip(tipAf(a,fechada))}" data-delay="1" data-af="${afId(a)}" tabindex="0">${COLS.map(([k])=>cel(a,k,pos.get(a))).join('')}</tr>`).join('')}</tbody></table></div>`:'<div class="vazio">Nenhum afiliado com o mínimo de FEs nesta curva.</div>'}</section>`}).join('');
-  document.querySelectorAll('.tr th').forEach(th=>th.onclick=()=>{const c=th.closest('table').dataset.c,k=th.dataset.k,[sk,sd]=st.sort[c];
-    st.sort[c]=[k,sk===k?-sd:(k==='nome'||k==='pos'||k==='re60'?1:-1)];render()});
+  // o ranking não ordena por nome (ficava confuso: a posição # embaralhava); as outras colunas ordenam
+  document.querySelectorAll('.tr th').forEach(th=>{if(th.dataset.k==='nome')return;th.onclick=()=>{const c=th.closest('table').dataset.c,k=th.dataset.k,[sk,sd]=st.sort[c];
+    st.sort[c]=[k,sk===k?-sd:(k==='pos'||k==='re60'?1:-1)];render()}});
 
   renderAfiliado(R);
   document.getElementById('rodape').innerHTML=
