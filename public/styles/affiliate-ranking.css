@@ -868,6 +868,10 @@ body.pd-cheia{overflow:hidden}
 .af .af-flt-pop .af-filtros{margin:0;border:0;padding:0;background:transparent;position:static;box-shadow:none}
 @keyframes afFltIn{from{opacity:0;translate:0 6px}to{opacity:1;translate:0 0}}
 @media (prefers-reduced-motion:reduce){.af .af-flt,.af .af-flt-pop{animation:none}}
+/* Ranking: no computador só a coluna do nome gruda (na lateral); sem isto ela herdava o recuo do topo do dash e descia
+   sobre a 2ª linha. O título do nome não ordena (cursor normal) */
+@media (min-width:901px){.af .tr thead th[data-k="nome"]{top:auto}}
+.af .tr th[data-k="nome"]{cursor:default}.af .tr th[data-k="nome"]:hover{color:var(--muted)}
 
 /* ---- tela Reembolso Prev. (tokens do dash do Mike; cores das séries validadas p/ daltonismo, claro e escuro) ----
    --rp-*: gráfico principal e Curva Afiliado. --rk0…5: cor pelo resultado (0 = menor reembolso, cor forte; 5 = maior, cor fria). */
