@@ -1132,6 +1132,8 @@ body.pd-cheia{overflow:hidden}
 .af .rp-fb{opacity:.45}
 /* telas até ~1500 px (ex.: notebook 1366): tabela afiliado × safra mais justa para caber sem rolagem lateral */
 @media (max-width:1500px){.af .rp-t th,.af .rp-t td{padding:0 3px}.af .rp-t td.hc,.af .rp-t th.ord{padding:0 2px}.af .rp-t{font-size:11px}.af .rp-t td.rp-nm{max-width:140px}.af .rp-t .ls-nm{max-width:110px}}
+/* CPA × L0: a cor vence o negrito/cor da linha do afiliado (tr.rp-pai td) */
+.af .rp-t td.rp-cpa.neg{color:var(--danger)}.af .rp-t td.rp-cpa.pos{color:var(--success)}
 
 /* ---- dash: cabeçalho interno e avisos ---- */
 .af .af-crumb{display:none;color:var(--fg5);font-size:11.5px;margin-bottom:4px}
