@@ -1292,7 +1292,7 @@ const RP_DIM={cv:{l:'Curva Afiliado',op:RP_CV.map(([k,l])=>({k,l:k,s:l}))},fx:{l
 const RP_TAB=[1,3,5,7,10,14,21,30,45];   // colunas da tabela (o dia 60 é o total)
 // ordenação da tabela: valor de cada coluna (nulo vai para o fim); sem ordem escolhida = receita (afiliados) / mês mais novo (safras)
 const RP_ORD={nome:l=>l.srt??l.rot,cv:l=>l.na?{S:0,A:1,B:2,C:3}[l.na.S?'S':l.na.curva]:null,nota:l=>l.na?l.na.pts:null,fes:l=>l.c.fes,funil:l=>l.c.funil,
-  cpa:l=>l.c.cpa==null?null:l.c.cpa/l.c.funil,ideal:l=>l.c.cpa==null?null:l.c.cpa/l.c.funil+l.c.luc,custo:l=>l.c.custo/l.c.funil,fim:l=>l.c.fim,luc:l=>l.c.luc};
+  cpa:l=>l.c.cpa==null?null:l.c.cpa/l.c.funil,ideal:l=>l.c.cpa==null?null:l.c.cpa/l.c.funil+l.c.luc,custo:l=>l.c.custo/l.c.funil,fim:l=>l.c.fim,rus:l=>l.c.fim*l.c.funil,luc:l=>l.c.luc};
 RP_TAB.forEach(d=>RP_ORD['d'+d]=l=>rpVal(l.c.pts,d));
 const RP_TXT=new Set(['nome','cv']);
 const rpSemIni=d=>{const w=new Date(D0.getTime()+d*864e5).getUTCDay();return d-((w+6)%7)};
@@ -1755,7 +1755,7 @@ function rpTabela(IDS,meses){
     return `<td class="tl rp-nm">${filho?'':`<button type="button" class="rp-tg" aria-label="Abrir">›</button>`}${nm}</td><td class="rp-cc">${cvH}</td><td class="rp-cc">${ntH}</td><td>${n(c.fes)}</td><td>${usdC(c.funil)}</td>
       ${rpCpaTds(c)}<td>${rpPct(c.custo/c.funil)}</td>
       ${RP_TAB.map(d=>{const v=rpVal(c.pts,d),pv=d>c.dl;return `<td class="hc ${cor(v,d)}${pv?' pv':''}" title="${pv?'previsto':'real'}">${rpPct(v)}</td>`}).join('')}
-      <td class="hc ${cor(c.fim,60)}${c.dl<60?' pv':''}" title="${c.dl<60?'previsto':'real'}"><b>${rpPct(c.fim)}</b></td><td class="rp-lq ${c.luc<0?'neg':'pos'}">${rpBarra(c.luc)}<b>${rpPct(c.luc)}</b></td>`};
+      <td class="hc ${cor(c.fim,60)}${c.dl<60?' pv':''}" title="${c.dl<60?'previsto':'real'}"><b>${rpPct(c.fim)}</b></td><td class="rp-rus" title="${c.dl<60?`Já caiu ${usd(c.d60)} · previsto até o dia 60 ${usd(Math.max(0,c.fim*c.funil-c.d60))}`:'Real (60+ dias)'}"><b>${usdC(c.fim*c.funil)}</b></td><td class="rp-lq ${c.luc<0?'neg':'pos'}">${rpBarra(c.luc)}<b>${rpPct(c.luc)}</b></td>`};
   const corpo=grupos.map(g=>{const ab=rpSt.abertos.has(g.k)||!!q&&!af;
     return `<tr class="rp-pai${ab?' ab':''}" data-k="${g.k}">${cel(g.p,false)}</tr>`+g.f.map(l=>`<tr class="rp-fi" data-p="${g.k}"${ab?'':' hidden'}>${cel(l,true)}</tr>`).join('')}).join('');
   return `<div class="pd-head"><div><h3><span class="rp-n">4</span>Reembolso por ${af?'afiliado e safra':'safra e afiliado'} <span class="pd-cnt">${n(grupos.length)}</span></h3>
@@ -1765,8 +1765,8 @@ function rpTabela(IDS,meses){
       <input class="pd-busca" id="rpBusca" type="search" placeholder="Buscar afiliado" aria-label="Buscar afiliado" value="${esc(rpSt.busca)}">
       <button type="button" class="dt-btn-excel" id="rpXls" title="Exportar para Excel (CSV)" aria-label="Exportar">${ICO.xls}</button></div></div>
     <div class="rp-tw"><table class="rp-t"><thead><tr>${th('nome',af?'Afiliado / safra':'Safra / afiliado','tl')}${th('cv','Curva','rp-cc','Curva Afiliado (A/B/C/S)')}${th('nota','Nota','rp-cc','Pontuação do Ranking')}${th('fes','FEs')}${th('funil','Receita')}${th('cpa','CPA','','CPA pago ÷ receita do funil. Vermelho: acima do CPA L0; verde: abaixo. Passe o mouse para ver a diferença.')}${th('ideal','CPA L0','',esc(CPA_IDEAL_INFO)+' Aqui, em % da receita do funil.')}${th('custo','Custo','','Custo do produto (Full Stack) ÷ receita')}
-      ${RP_TAB.map(d=>th('d'+d,'D'+d)).join('')}${th('fim','60d','','Reembolso total de 60 dias (real ou previsto)')}${th('luc','Lucro líquido','rp-lqh','Lucro líquido previsto em % da receita: (líquido − custo − reembolso que ainda vai cair) ÷ receita. A barra vai para a direita (verde) quando sobra lucro e para a esquerda (vermelho) quando dá prejuízo; meia barra = 20% da receita (acima disso, cheia).')}</tr></thead>
-      <tbody>${corpo||`<tr><td class="tl" colspan="${RP_TAB.length+10}">Nenhum afiliado com esses filtros.</td></tr>`}</tbody></table></div>`;
+      ${RP_TAB.map(d=>th('d'+d,'D'+d)).join('')}${th('fim','60d','','Reembolso total de 60 dias (real ou previsto)')}${th('rus','Reemb. US$','','Reembolso de 60 dias em US$ (valor devolvido + taxas de alerta e disputa): o que já caiu + o previsto até o dia 60. Clique para ordenar do maior para o menor; passe o mouse para ver quanto já caiu.')}${th('luc','Lucro líquido','rp-lqh','Lucro líquido previsto em % da receita: (líquido − custo − reembolso que ainda vai cair) ÷ receita. A barra vai para a direita (verde) quando sobra lucro e para a esquerda (vermelho) quando dá prejuízo; meia barra = 20% da receita (acima disso, cheia).')}</tr></thead>
+      <tbody>${corpo||`<tr><td class="tl" colspan="${RP_TAB.length+11}">Nenhum afiliado com esses filtros.</td></tr>`}</tbody></table></div>`;
 }
 function rpLigaTabela(el,R){
   const s=el.querySelector('#rpTabS');if(!s)return;const meses=MESES.filter(m=>RPA.has('m:'+m));
@@ -1780,8 +1780,8 @@ function rpLigaTabela(el,R){
   s.querySelectorAll('[data-ficha]').forEach(x=>x.onclick=e=>{e.stopPropagation();rpAbreFicha(x.dataset.ficha)});
   s.querySelectorAll('tr.rp-pai').forEach(tr=>tr.onclick=e=>{if(e.target.closest('[data-af],[data-ficha]'))return;const k=tr.dataset.k,ab=!rpSt.abertos.has(k);
     ab?rpSt.abertos.add(k):rpSt.abertos.delete(k);tr.classList.toggle('ab',ab);s.querySelectorAll(`tr.rp-fi[data-p="${k}"]`).forEach(x=>x.hidden=!ab)});
-  s.querySelector('#rpXls').onclick=()=>{const L=[[rpSt.modo==='af'?'Afiliado':'Safra',rpSt.modo==='af'?'Safra':'Afiliado','Curva Afiliado','Nota','FEs','Receita US$','CPA %','CPA L0 %','Custo %',...RP_TAB.map(d=>'Reemb. D'+d+' %'),'Reemb. 60d %','Real ou previsto','Lucro líquido %']];
-    const f=v=>v==null||!isFinite(v)?'':(v*100).toFixed(2).replace('.',','),row=(a,b,l)=>{const c=l.c,na=l.na;return [a,b,na?(na.S?'S':na.curva):'',na&&na.pts!=null?na.pts.toFixed(1).replace('.',','):'',c.fes,c.funil.toFixed(2).replace('.',','),c.cpa==null?'':f(c.cpa/c.funil),c.cpa==null?'':f(c.cpa/c.funil+c.luc),f(c.custo/c.funil),...RP_TAB.map(d=>f(rpVal(c.pts,d))),f(c.fim),c.dl>=60?'real':'previsto',f(c.luc)]};
+  s.querySelector('#rpXls').onclick=()=>{const L=[[rpSt.modo==='af'?'Afiliado':'Safra',rpSt.modo==='af'?'Safra':'Afiliado','Curva Afiliado','Nota','FEs','Receita US$','CPA %','CPA L0 %','Custo %',...RP_TAB.map(d=>'Reemb. D'+d+' %'),'Reemb. 60d %','Reemb. 60d US$','Já caiu US$','Real ou previsto','Lucro líquido %']];
+    const f=v=>v==null||!isFinite(v)?'':(v*100).toFixed(2).replace('.',','),row=(a,b,l)=>{const c=l.c,na=l.na;return [a,b,na?(na.S?'S':na.curva):'',na&&na.pts!=null?na.pts.toFixed(1).replace('.',','):'',c.fes,c.funil.toFixed(2).replace('.',','),c.cpa==null?'':f(c.cpa/c.funil),c.cpa==null?'':f(c.cpa/c.funil+c.luc),f(c.custo/c.funil),...RP_TAB.map(d=>f(rpVal(c.pts,d))),f(c.fim),(c.fim*c.funil).toFixed(2).replace('.',','),c.d60.toFixed(2).replace('.',','),c.dl>=60?'real':'previsto',f(c.luc)]};
     (rpTabela.ult||[]).forEach(g=>{L.push(row(g.p.rot,'Total',g.p));g.f.forEach(l=>L.push(row(g.p.rot,l.rot,l)))});
     download('reembolso_por_'+(rpSt.modo==='af'?'afiliado_safra':'safra_afiliado')+'.csv',L)};
 }

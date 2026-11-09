@@ -1134,6 +1134,7 @@ body.pd-cheia{overflow:hidden}
 @media (max-width:1500px){.af .rp-t th,.af .rp-t td{padding:0 3px}.af .rp-t td.hc,.af .rp-t th.ord{padding:0 2px}.af .rp-t{font-size:11px}.af .rp-t td.rp-nm{max-width:140px}.af .rp-t .ls-nm{max-width:110px}}
 /* CPA × L0: a cor vence o negrito/cor da linha do afiliado (tr.rp-pai td) */
 .af .rp-t td.rp-cpa.neg{color:var(--danger)}.af .rp-t td.rp-cpa.pos{color:var(--success)}
+.af .rp-t td.rp-rus{padding-left:10px}
 
 /* ---- dash: cabeçalho interno e avisos ---- */
 .af .af-crumb{display:none;color:var(--fg5);font-size:11.5px;margin-bottom:4px}
