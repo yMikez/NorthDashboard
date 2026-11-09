@@ -1137,7 +1137,7 @@ const pctTx=(v,c=1)=>v==null?'—':pct(v,c);
 // A tabela da Visão Geral mostra os valores em 3 modos: % da receita do funil, por cliente (FE) ou valor total da safra.
 const LS_MODOS=[['pct','Percentual'],['cli','Por cliente'],['tot','Valor total']];
 let lsModo='pct';try{const v=LS.getItem('ns-af-lsmodo');if(LS_MODOS.some(m=>m[0]===v))lsModo=v}catch(e){}
-const CPA_IDEAL_INFO='CPA L0 (lucro zero): o maior CPA que ainda deixa lucro zero no funil inteiro (FE + upsells + downsells), já com o custo do produto e o reembolso previsto de 60 dias. = CPA pago + lucro previsto (sem call center, como a nota). Acima dele, cada cliente dá prejuízo. Passe o mouse no CPA para ver a diferença.';
+const CPA_IDEAL_INFO='CPA L0 (lucro zero): o maior CPA que ainda deixa lucro zero. Conta o funil inteiro do cliente (FE + upsells + downsells): a receita, o líquido da plataforma, o custo do produto e frete e o reembolso previsto de 60 dias entram todos com os upsells. CPA L0 = CPA pago + lucro previsto. O call center fica de fora (como na nota e no Status CPA). Acima do L0, cada cliente dá prejuízo. Passe o mouse no CPA para ver a diferença.';
 // valor de um montante (US$ da safra) no modo da vez
 const lsVal=(amt,r,m=lsModo)=>amt==null||!isFinite(amt)?null:m==='pct'?(r.funil?amt/r.funil:null):m==='cli'?(r.fes?amt/r.fes:null):amt;
 const lsFmt=(v,m=lsModo)=>v==null?'—':m==='pct'?pct(v,1):usd(v);
@@ -1149,7 +1149,7 @@ function lsDifTip(r,m=lsModo){const c=lsVal(r.cpa,r,m),i=lsVal(r.ideal,r,m);if(c
     :`<b class="${acima?'neg':'pos'}">${dTx} ${acima?'acima':'abaixo'} do L0${rel}</b><br>${acima?'Cada cliente dá prejuízo: renegociar o CPA.':'Sobra margem: o CPA está saudável.'}`;
   return `<div class="t1"><b>CPA × L0</b><span>${m==='pct'?'% da receita':m==='cli'?'por cliente':'total da safra'}</span></div>
     <div class="ls-dif"><div>CPA pago <b>${lsFmt(c,m)}</b>${un}</div><div>CPA L0 (lucro zero) <b>${lsFmt(i,m)}</b></div><div>${msg}</div></div>
-    <div class="nt">L0 = CPA pago + lucro previsto do funil (FE + upsells), sem call center.${m!=='cli'&&r.fes?` Por cliente: ${usd(r.cpa/r.fes)} × ${usd(r.ideal/r.fes)}.`:''}</div>`}
+    <div class="nt">L0 = CPA pago + lucro previsto do funil inteiro (FE + upsells: receita, líquido, custo e reembolso). Sem call center.${m!=='cli'&&r.fes?` Por cliente: ${usd(r.cpa/r.fes)} × ${usd(r.ideal/r.fes)}.`:''}</div>`}
 // as células com dica própria (data-tip) não ganham o title nativo do dtCriar (senão aparecem as duas dicas)
 const _dtCorpoOrig=dtCorpo;
 dtCorpo=function(dt){_dtCorpoOrig(dt);dt.host.querySelectorAll('td [data-tip]').forEach(s=>{const td=s.closest('td');if(td)td.removeAttribute('title')})};
