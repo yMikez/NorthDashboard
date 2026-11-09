@@ -1133,23 +1133,23 @@ const spark=v=>{const W=84,H=22,m=Math.max(1,...v),p=v.map((x,i)=>[i*(W-4)/(v.le
 const diasTx=d=>d==null?'—':d<=0?'hoje':d===1?'ontem':`há ${d} d`;
 const pctTx=(v,c=1)=>v==null?'—':pct(v,c);
 
-// CPA ideal (de equilíbrio) = o CPA que deixa o lucro previsto em zero: CPA pago + lucro previsto (sem call center, como a nota).
+// CPA L0 (lucro zero, de equilíbrio) = o CPA que deixa o lucro previsto em zero: CPA pago + lucro previsto (sem call center, como a nota).
 // A tabela da Visão Geral mostra os valores em 3 modos: % da receita do funil, por cliente (FE) ou valor total da safra.
 const LS_MODOS=[['pct','Percentual'],['cli','Por cliente'],['tot','Valor total']];
 let lsModo='pct';try{const v=LS.getItem('ns-af-lsmodo');if(LS_MODOS.some(m=>m[0]===v))lsModo=v}catch(e){}
-const CPA_IDEAL_INFO='CPA ideal (de equilíbrio): o maior CPA que ainda deixa lucro zero no funil, já com o custo do produto e o reembolso previsto de 60 dias. = CPA pago + lucro previsto por cliente (sem call center, como a nota). Acima dele, cada cliente dá prejuízo. Passe o mouse no CPA para ver a diferença.';
+const CPA_IDEAL_INFO='CPA L0 (lucro zero): o maior CPA que ainda deixa lucro zero no funil inteiro (FE + upsells + downsells), já com o custo do produto e o reembolso previsto de 60 dias. = CPA pago + lucro previsto (sem call center, como a nota). Acima dele, cada cliente dá prejuízo. Passe o mouse no CPA para ver a diferença.';
 // valor de um montante (US$ da safra) no modo da vez
 const lsVal=(amt,r,m=lsModo)=>amt==null||!isFinite(amt)?null:m==='pct'?(r.funil?amt/r.funil:null):m==='cli'?(r.fes?amt/r.fes:null):amt;
 const lsFmt=(v,m=lsModo)=>v==null?'—':m==='pct'?pct(v,1):usd(v);
-// dica do CPA × ideal (no modo da vez)
+// dica do CPA × L0 (no modo da vez)
 function lsDifTip(r,m=lsModo){const c=lsVal(r.cpa,r,m),i=lsVal(r.ideal,r,m);if(c==null||i==null)return '';
   const d=c-i,acima=d>0,dTx=m==='pct'?num(Math.abs(d)*100,1)+' pp':usd(Math.abs(d)),un=m==='pct'?' da receita':m==='cli'?' por cliente':' na safra';
   const rel=i>0?` (${acima?'+':'−'}${num(Math.abs(c/i-1)*100,0)}%)`:'';
   const msg=i<=0?`<span class="neg">Mesmo com CPA zero o funil fica no prejuízo: o problema é o reembolso ou o custo.</span>`
-    :`<b class="${acima?'neg':'pos'}">${dTx} ${acima?'acima':'abaixo'} do ideal${rel}</b><br>${acima?'Cada cliente dá prejuízo: renegociar o CPA.':'Sobra margem: o CPA está saudável.'}`;
-  return `<div class="t1"><b>CPA × ideal</b><span>${m==='pct'?'% da receita':m==='cli'?'por cliente':'total da safra'}</span></div>
-    <div class="ls-dif"><div>CPA pago <b>${lsFmt(c,m)}</b>${un}</div><div>CPA ideal <b>${lsFmt(i,m)}</b></div><div>${msg}</div></div>
-    <div class="nt">Ideal = CPA pago + lucro previsto (sem call center).${m!=='cli'&&r.fes?` Por cliente: ${usd(r.cpa/r.fes)} × ${usd(r.ideal/r.fes)}.`:''}</div>`}
+    :`<b class="${acima?'neg':'pos'}">${dTx} ${acima?'acima':'abaixo'} do L0${rel}</b><br>${acima?'Cada cliente dá prejuízo: renegociar o CPA.':'Sobra margem: o CPA está saudável.'}`;
+  return `<div class="t1"><b>CPA × L0</b><span>${m==='pct'?'% da receita':m==='cli'?'por cliente':'total da safra'}</span></div>
+    <div class="ls-dif"><div>CPA pago <b>${lsFmt(c,m)}</b>${un}</div><div>CPA L0 (lucro zero) <b>${lsFmt(i,m)}</b></div><div>${msg}</div></div>
+    <div class="nt">L0 = CPA pago + lucro previsto do funil (FE + upsells), sem call center.${m!=='cli'&&r.fes?` Por cliente: ${usd(r.cpa/r.fes)} × ${usd(r.ideal/r.fes)}.`:''}</div>`}
 // as células com dica própria (data-tip) não ganham o title nativo do dtCriar (senão aparecem as duas dicas)
 const _dtCorpoOrig=dtCorpo;
 dtCorpo=function(dt){_dtCorpoOrig(dt);dt.host.querySelectorAll('td [data-tip]').forEach(s=>{const td=s.closest('td');if(td)td.removeAttribute('title')})};
@@ -1172,7 +1172,7 @@ function renderLista(R){
   const kpi=(l,v,var_,m,cls='')=>`<article class="kpi${cls}"><span class="k">${l}</span><b class="v">${v}</b>${var_}<span class="m">${m}</span></article>`;
   const bigs=kpi('Afiliados ativos',n(ativos.length),vr(ativos.length,A&&A.L.filter(a=>a.fes>0).length,'n',1),`${n(novos.length)} novos · ${n(parados.length)} parados`,' total')+
     kpi('Receita do funil',usdC(t.funil),vr(t.funil,A&&A.t.funil,'%',1),`${n(t.fes)} FEs · AOV ${usd(t.aov)}`)+
-    kpi('CPA pago',temCpa?usdC(cpaTot):'…','<span class="var">&nbsp;</span>',temCpa&&t.fes?`${usd(cpaTot/t.fes)} por FE · ideal ${usd((cpaTot+t.liq-t.custo-t.fut)/t.fes)} · ${pct(cpaTot/t.funil,0)} da receita`:'carregando pedidos')+
+    kpi('CPA pago',temCpa?usdC(cpaTot):'…','<span class="var">&nbsp;</span>',temCpa&&t.fes?`${usd(cpaTot/t.fes)} por FE · L0 ${usd((cpaTot+t.liq-t.custo-t.fut)/t.fes)} · ${pct(cpaTot/t.funil,0)} da receita`:'carregando pedidos')+
     kpi(`Reembolso 60d <i>${sx}</i>`,pct(t.re60),vr(t.re60,A&&A.t.re60,'pp',-1),`já caiu ${pct(t.agora)} · meta ≤ ${P$(MT.re9)}`)+
     kpi(`Lucro/cliente <i>${sx}</i>`,usd(t.lpf),vr(t.lpf,A&&A.t.lpf,'usd',1),`com call center ${usd(t.fes?t.liqTot/t.fes:null)}`)+
     kpi('Concentração top 5',pctTx(conc,0),vr(conc,concA,'pp',-1),`da receita em 5 de ${n(ativos.length)} afiliados`);
@@ -1208,8 +1208,8 @@ function renderLista(R){
   const un=pc?'em % da receita do funil':M==='cli'?'por cliente (÷ FEs)':'total da safra';
   const COLS_MODO=[
     ...(M==='cli'?[{l:'AOV',v:r=>r.aov,num:true,fmt:'moeda',t:r=>usd(r.aov),info:'Receita do funil ÷ FEs.'}]:[]),
-    vl('cpa',`CPA pago na safra, ${un}. Vermelho: acima do CPA ideal; verde: abaixo. Passe o mouse para ver a diferença.`,{l:'CPA',h:cpaH('cpa'),cls:cpaCls}),
-    vl('ideal',CPA_IDEAL_INFO,{l:'CPA ideal',h:cpaH('ideal')}),
+    vl('cpa',`CPA pago na safra, ${un}. Vermelho: acima do CPA L0; verde: abaixo. Passe o mouse para ver a diferença.`,{l:'CPA',h:cpaH('cpa'),cls:cpaCls}),
+    vl('ideal',CPA_IDEAL_INFO,{l:'CPA L0',h:cpaH('ideal')}),
     vl('re',`Reembolso de 60 dias ${fechadaTx} (valor devolvido + taxas de alerta e disputa), ${un}. Mesma conta do Ranking.`,
       {l:`Reembolso 60d ${fechada?'':'prev.'}`,h:r=>fechada?lsFmt(lsVal(r.re,r)):`<span title="Já caiu ${lsFmt(lsVal(r.d60,r))}; o resto é previsto">${lsFmt(lsVal(r.re,r))}</span>`,
        cls:r=>r.re60==null?'':r.re60*100<=MT.re9?'pos':r.re60*100>MT.re7?'neg':''}),
@@ -1218,7 +1218,7 @@ function renderLista(R){
     vl('custo',`Custo do produto e frete (Full Stack real ou a média real onde não há pedido no armazém), ${un}.`,{l:pc?'Custo':M==='cli'?'Custo médio':'Custo produto'}),
     vl('luc',`Líquido ${fechadaTx}: receita − CPA − taxas − custo − reembolso de 60 dias, sem call center, ${un}. É o que define o Status CPA.`,
       {l:`Líquido ${fechada?'':'prev.'}`,cls:r=>r.luc==null?'':r.luc<0?'neg':'pos'}),
-    vl('call',`Líquido do call center ligado aos clientes da safra, ${un}. Não entra na nota nem no CPA ideal.`,{l:pc?'% Call center':'Call center',cls:r=>r.call?'pos':''}),
+    vl('call',`Líquido do call center ligado aos clientes da safra, ${un}. Não entra na nota nem no CPA L0.`,{l:pc?'% Call center':'Call center',cls:r=>r.call?'pos':''}),
   ];
   const COLS=[
     {l:'Afiliado',v:r=>r.nome,texto:true,max:190,h:r=>{const a=r.a;return `<span class="ls-nm" data-af="${afId(a)}" data-tip="${regTip(tipAf(a,fechada))}" data-delay="1" tabindex="0">${a.S?SB:''}<span class="nmt">${esc(r.nome)}</span>${PLB(a)}</span>`}},
@@ -1721,10 +1721,10 @@ function rpLigaFiltros(el,R){
 // ---- tabela: afiliado › mês da safra (ou mês › afiliado), com Curva Afiliado, nota e reembolso acumulado por dia ----
 // barra do lucro líquido: a partir do meio, verde para a direita (lucro), vermelha para a esquerda (prejuízo); meia barra = 20% (acima disso, cheia)
 const rpBarra=v=>{if(v==null||!isFinite(v))return '';const w=Math.min(50,50*Math.abs(v)/0.2);return `<span class="rp-bar" aria-hidden="true"><i class="${v<0?'n':'p'}" style="width:${w.toFixed(1)}%"></i></span>`};
-// CPA e CPA ideal (% da receita) com a dica da diferença; o ideal = CPA + lucro líquido previsto (zera o lucro)
+// CPA e CPA L0 (% da receita) com a dica da diferença; o ideal = CPA + lucro líquido previsto (zera o lucro)
 function rpCpaTds(c){if(c.cpa==null)return '<td>…</td><td>…</td>';const r={cpa:c.cpa,ideal:c.cpa+c.lucUsd,funil:c.funil,fes:c.fes},k=regTip(lsDifTip(r,'pct'));
   const span=v=>`<span class="ls-cpa" data-tip="${k}">${rpPct(v/c.funil)}</span>`;
-  return `<td class="${r.cpa>r.ideal?'neg':'pos'}">${span(r.cpa)}</td><td>${span(r.ideal)}</td>`}
+  return `<td class="rp-cpa ${r.cpa>r.ideal?'neg':'pos'}">${span(r.cpa)}</td><td>${span(r.ideal)}</td>`}
 function rpTabela(IDS,meses){
   const T=rpCalc('t'),P=rpCalc('p'),[p0,p1]=periodo(),af=rpSt.modo==='af',q=rpSt.busca.trim().toLowerCase();
   const lin=(c,rot,extra)=>c&&{c,rot,...extra};
@@ -1764,7 +1764,7 @@ function rpTabela(IDS,meses){
       <button type="button" class="ls-chip" id="rpAbre">${grupos.length&&grupos.every(g=>rpSt.abertos.has(g.k))?'Fechar todos':'Abrir todos'}</button>
       <input class="pd-busca" id="rpBusca" type="search" placeholder="Buscar afiliado" aria-label="Buscar afiliado" value="${esc(rpSt.busca)}">
       <button type="button" class="dt-btn-excel" id="rpXls" title="Exportar para Excel (CSV)" aria-label="Exportar">${ICO.xls}</button></div></div>
-    <div class="rp-tw"><table class="rp-t"><thead><tr>${th('nome',af?'Afiliado / safra':'Safra / afiliado','tl')}${th('cv','Curva','rp-cc','Curva Afiliado (A/B/C/S)')}${th('nota','Nota','rp-cc','Pontuação do Ranking')}${th('fes','FEs')}${th('funil','Receita')}${th('cpa','CPA','','CPA pago ÷ receita do funil. Vermelho: acima do CPA ideal; verde: abaixo. Passe o mouse para ver a diferença.')}${th('ideal','CPA ideal','',esc(CPA_IDEAL_INFO)+' Aqui, em % da receita do funil.')}${th('custo','Custo','','Custo do produto (Full Stack) ÷ receita')}
+    <div class="rp-tw"><table class="rp-t"><thead><tr>${th('nome',af?'Afiliado / safra':'Safra / afiliado','tl')}${th('cv','Curva','rp-cc','Curva Afiliado (A/B/C/S)')}${th('nota','Nota','rp-cc','Pontuação do Ranking')}${th('fes','FEs')}${th('funil','Receita')}${th('cpa','CPA','','CPA pago ÷ receita do funil. Vermelho: acima do CPA L0; verde: abaixo. Passe o mouse para ver a diferença.')}${th('ideal','CPA L0','',esc(CPA_IDEAL_INFO)+' Aqui, em % da receita do funil.')}${th('custo','Custo','','Custo do produto (Full Stack) ÷ receita')}
       ${RP_TAB.map(d=>th('d'+d,'D'+d)).join('')}${th('fim','60d','','Reembolso total de 60 dias (real ou previsto)')}${th('luc','Lucro líquido','rp-lqh','Lucro líquido previsto em % da receita: (líquido − custo − reembolso que ainda vai cair) ÷ receita. A barra vai para a direita (verde) quando sobra lucro e para a esquerda (vermelho) quando dá prejuízo; meia barra = 20% da receita (acima disso, cheia).')}</tr></thead>
       <tbody>${corpo||`<tr><td class="tl" colspan="${RP_TAB.length+10}">Nenhum afiliado com esses filtros.</td></tr>`}</tbody></table></div>`;
 }
@@ -1780,7 +1780,7 @@ function rpLigaTabela(el,R){
   s.querySelectorAll('[data-ficha]').forEach(x=>x.onclick=e=>{e.stopPropagation();rpAbreFicha(x.dataset.ficha)});
   s.querySelectorAll('tr.rp-pai').forEach(tr=>tr.onclick=e=>{if(e.target.closest('[data-af],[data-ficha]'))return;const k=tr.dataset.k,ab=!rpSt.abertos.has(k);
     ab?rpSt.abertos.add(k):rpSt.abertos.delete(k);tr.classList.toggle('ab',ab);s.querySelectorAll(`tr.rp-fi[data-p="${k}"]`).forEach(x=>x.hidden=!ab)});
-  s.querySelector('#rpXls').onclick=()=>{const L=[[rpSt.modo==='af'?'Afiliado':'Safra',rpSt.modo==='af'?'Safra':'Afiliado','Curva Afiliado','Nota','FEs','Receita US$','CPA %','CPA ideal %','Custo %',...RP_TAB.map(d=>'Reemb. D'+d+' %'),'Reemb. 60d %','Real ou previsto','Lucro líquido %']];
+  s.querySelector('#rpXls').onclick=()=>{const L=[[rpSt.modo==='af'?'Afiliado':'Safra',rpSt.modo==='af'?'Safra':'Afiliado','Curva Afiliado','Nota','FEs','Receita US$','CPA %','CPA L0 %','Custo %',...RP_TAB.map(d=>'Reemb. D'+d+' %'),'Reemb. 60d %','Real ou previsto','Lucro líquido %']];
     const f=v=>v==null||!isFinite(v)?'':(v*100).toFixed(2).replace('.',','),row=(a,b,l)=>{const c=l.c,na=l.na;return [a,b,na?(na.S?'S':na.curva):'',na&&na.pts!=null?na.pts.toFixed(1).replace('.',','):'',c.fes,c.funil.toFixed(2).replace('.',','),c.cpa==null?'':f(c.cpa/c.funil),c.cpa==null?'':f(c.cpa/c.funil+c.luc),f(c.custo/c.funil),...RP_TAB.map(d=>f(rpVal(c.pts,d))),f(c.fim),c.dl>=60?'real':'previsto',f(c.luc)]};
     (rpTabela.ult||[]).forEach(g=>{L.push(row(g.p.rot,'Total',g.p));g.f.forEach(l=>L.push(row(g.p.rot,l.rot,l)))});
     download('reembolso_por_'+(rpSt.modo==='af'?'afiliado_safra':'safra_afiliado')+'.csv',L)};

@@ -16,7 +16,7 @@ Três abas usam o mesmo motor e o mesmo modelo (permissões `affiliate-overview`
 `affiliate-ranking`, `affiliate-refund`; qualquer uma libera os dados):
 
 - **Visão Geral** (primeira do grupo Afiliados), com duas subabas:
-  - **Afiliados**: a base de afiliados com resultado (receita, CPA, CPA ideal,
+  - **Afiliados**: a base de afiliados com resultado (receita, CPA, CPA L0,
     reembolso, chargeback, custo, líquido, call center, Status CPA, tendência) e
     alertas. Um alternador mostra os valores em **Percentual** (% da receita do
     funil), **Por cliente** (÷ FEs) ou **Valor total** da safra. No modo
@@ -32,12 +32,16 @@ Três abas usam o mesmo motor e o mesmo modelo (permissões `affiliate-overview`
 As telas do Mike (Afiliados, Análise, CRM, Networks) seguem no menu, com o nome
 de sempre, enquanto as duas versões são validadas em paralelo.
 
-**CPA ideal (de equilíbrio)** = o maior CPA que ainda deixa lucro zero no funil,
-já com o custo do produto e o reembolso previsto de 60 dias:
-CPA ideal = CPA pago + lucro previsto (sem call center, como a nota e o Status
-CPA). Aparece ao lado do CPA na Visão Geral e na tabela afiliado × safra do
-Reembolso Prev.; o CPA fica vermelho acima do ideal e verde abaixo, e a dica
-(ao passar o mouse) mostra a diferença em valor e em %.
+**CPA L0 (lucro zero)** = o maior CPA que ainda deixa lucro zero no funil
+inteiro do cliente (FE + upsells + downsells + bumps da mesma sessão), já com o
+custo do produto e o reembolso previsto de 60 dias (cliente + alerta + disputa):
+CPA L0 = CPA pago + lucro previsto (sem call center, como a nota e o Status
+CPA). O CPA é pago praticamente só no FE (99,8% dos pedidos com CPA), então o
+CPA L0 por cliente é o teto do CPA do FE que o funil inteiro paga. Aparece ao
+lado do CPA na Visão Geral e na tabela afiliado × safra do Reembolso Prev.; o
+CPA fica vermelho acima do L0 e verde abaixo, e a dica (ao passar o mouse)
+mostra a diferença em valor e em %. Nomes com entidades HTML da JVZoo
+("Andr&eacute;") são convertidos em acentos no servidor (`textoDeHtml`).
 
 ## De onde vêm os dados
 

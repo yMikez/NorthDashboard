@@ -42,6 +42,18 @@ describe('mapearContas', () => {
     expect(nomes).toEqual({ 'JVZoo 3565681': 'Fares Kellou', 'JVZoo 2': 'Bia', 'JVZoo 9': 'Só no oficial' });
     expect(parceiros).toEqual({ 'JVZoo 2': ['p2', 'Bia'] });
   });
+  it('converte entidades HTML dos nomes em acentos', () => {
+    const { nomes, parceiros } = mapearContas(
+      [{ slug: 'jvzoo', externalId: '5', nickname: null, partnerId: 'p5', partnerName: 'Jo&atilde;o &amp; Cia' }],
+      [
+        { slug: 'jvzoo', externalId: '4', nickname: 'Andr&eacute; Pupo' },
+        { slug: 'jvzoo', externalId: '5', nickname: 'Lu&iacute;s M&#252;ller &amp;eacute;' },
+        { slug: 'jvzoo', externalId: '6', nickname: 'Fran&ccedil;a &foo; R&D' },
+      ],
+    );
+    expect(nomes).toEqual({ 'JVZoo 4': 'André Pupo', 'JVZoo 5': 'Luís Müller é', 'JVZoo 6': 'França &foo; R&D' });
+    expect(parceiros).toEqual({ 'JVZoo 5': ['p5', 'João & Cia'] });
+  });
 });
 
 describe('montarPayload', () => {

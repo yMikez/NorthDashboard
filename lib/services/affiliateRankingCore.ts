@@ -65,10 +65,39 @@ export interface NomeOficial {
   nickname: string | null;
 }
 
+const ENT_NOMEADAS: Record<string, string> = {
+  amp: '&', quot: '"', apos: "'", lt: '<', gt: '>', nbsp: ' ',
+  szlig: 'ß', aelig: 'æ', AElig: 'Æ', oslash: 'ø', Oslash: 'Ø',
+};
+const ENT_ACENTO: Record<string, string> = {
+  acute: '́', grave: '̀', circ: '̂', tilde: '̃', uml: '̈', cedil: '̧', ring: '̊',
+};
+
+/**
+ * A JVZoo devolve alguns nomes com entidades HTML ("Andr&eacute;", "Jo&atilde;o",
+ * às vezes "&amp;eacute;"). Converte para o texto (acentos, &, aspas, &#233;).
+ */
+export function textoDeHtml(s: string): string {
+  let r = s;
+  for (let i = 0; i < 2 && r.includes('&'); i++) {
+    r = r.replace(/&(#[xX][0-9a-fA-F]+|#\d+|[A-Za-z]+);/g, (m, e: string) => {
+      if (e[0] === '#') {
+        const cp = e[1] === 'x' || e[1] === 'X' ? parseInt(e.slice(2), 16) : parseInt(e.slice(1), 10);
+        return cp > 0 && cp < 0x110000 ? String.fromCodePoint(cp) : m;
+      }
+      if (ENT_NOMEADAS[e] != null) return ENT_NOMEADAS[e];
+      const a = /^([A-Za-z])(acute|grave|circ|tilde|uml|cedil|ring)$/.exec(e);
+      return a ? (a[1] + ENT_ACENTO[a[2]]).normalize('NFC') : m;
+    });
+  }
+  return r;
+}
+
 /**
  * Nomes e parceiros por conta. O nome real da plataforma (dados_oficiais) vence
  * o apelido do cadastro do dash, que às vezes guarda um nome provisório
  * (ex.: "xxxxxxUS"); sem nome real, fica o apelido. Parceiros vêm do cadastro.
+ * Entidades HTML dos nomes viram texto (textoDeHtml).
  */
 export function mapearContas(contas: ContaCadastro[], oficiais: NomeOficial[] = []): {
   nomes: Record<string, string>;
@@ -79,13 +108,13 @@ export function mapearContas(contas: ContaCadastro[], oficiais: NomeOficial[] = 
   for (const o of oficiais) {
     const k = contaDe(o.slug, o.externalId);
     const n = o.nickname?.trim();
-    if (k && n && !nomes[k]) nomes[k] = n;
+    if (k && n && !nomes[k]) nomes[k] = textoDeHtml(n);
   }
   for (const c of contas) {
     const k = contaDe(c.slug, c.externalId);
     if (!k) continue;
-    if (c.nickname && !nomes[k]) nomes[k] = c.nickname;
-    if (c.partnerId) parceiros[k] = [c.partnerId, c.partnerName || nomes[k] || k];
+    if (c.nickname && !nomes[k]) nomes[k] = textoDeHtml(c.nickname);
+    if (c.partnerId) parceiros[k] = [c.partnerId, c.partnerName ? textoDeHtml(c.partnerName) : nomes[k] || k];
   }
   return { nomes, parceiros };
 }
