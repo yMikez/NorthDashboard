@@ -1099,8 +1099,10 @@ const statusCpa=v=>v==null?null:v>=STATUS_CPA.ok?['Saudável','ok']:v>=STATUS_CP
 
 // extras por linha do ranking: FEs por semana (8 semanas até o último dia), primeira e última venda, CPA da safra
 function lsExtras(R){
-  const X=new Map(),g=i=>{let o=X.get(i);if(!o)X.set(i,o={sem:Array(8).fill(0),pri:null,ult:null,f7:0,f28:0,cpa:null});return o};
-  for(const r of DADOS.rows){if(st.plat&&r[RPL]!==st.plat)continue;const f=r[C.fes];if(!f)continue;const o=g(r[0]),d=r[1];
+  const X=new Map(),g=i=>{let o=X.get(i);if(!o)X.set(i,o={sem:Array(8).fill(0),pri:null,ult:null,f7:0,f28:0,cpa:null,tx:0});return o};
+  for(const r of DADOS.rows){if(st.plat&&r[RPL]!==st.plat)continue;
+    if(r[1]>=R.p0&&r[1]<=R.p1&&r[C.tx60])g(r[0]).tx+=r[C.tx60];   // taxas de alerta e disputa (chargeback) já cobradas
+    const f=r[C.fes];if(!f)continue;const o=g(r[0]),d=r[1];
     if(o.pri==null||d<o.pri)o.pri=d;if(d<=FIM&&(o.ult==null||d>o.ult))o.ult=d;
     const k=Math.floor((FIM-d)/7);if(k>=0&&k<8)o.sem[7-k]+=f;
     if(d>FIM-7&&d<=FIM)o.f7+=f;else if(d>FIM-35&&d<=FIM-7)o.f28+=f}
@@ -1131,6 +1133,27 @@ const spark=v=>{const W=84,H=22,m=Math.max(1,...v),p=v.map((x,i)=>[i*(W-4)/(v.le
 const diasTx=d=>d==null?'—':d<=0?'hoje':d===1?'ontem':`há ${d} d`;
 const pctTx=(v,c=1)=>v==null?'—':pct(v,c);
 
+// CPA ideal (de equilíbrio) = o CPA que deixa o lucro previsto em zero: CPA pago + lucro previsto (sem call center, como a nota).
+// A tabela da Visão Geral mostra os valores em 3 modos: % da receita do funil, por cliente (FE) ou valor total da safra.
+const LS_MODOS=[['pct','Percentual'],['cli','Por cliente'],['tot','Valor total']];
+let lsModo='pct';try{const v=LS.getItem('ns-af-lsmodo');if(LS_MODOS.some(m=>m[0]===v))lsModo=v}catch(e){}
+const CPA_IDEAL_INFO='CPA ideal (de equilíbrio): o maior CPA que ainda deixa lucro zero no funil, já com o custo do produto e o reembolso previsto de 60 dias. = CPA pago + lucro previsto por cliente (sem call center, como a nota). Acima dele, cada cliente dá prejuízo. Passe o mouse no CPA para ver a diferença.';
+// valor de um montante (US$ da safra) no modo da vez
+const lsVal=(amt,r,m=lsModo)=>amt==null||!isFinite(amt)?null:m==='pct'?(r.funil?amt/r.funil:null):m==='cli'?(r.fes?amt/r.fes:null):amt;
+const lsFmt=(v,m=lsModo)=>v==null?'—':m==='pct'?pct(v,1):usd(v);
+// dica do CPA × ideal (no modo da vez)
+function lsDifTip(r,m=lsModo){const c=lsVal(r.cpa,r,m),i=lsVal(r.ideal,r,m);if(c==null||i==null)return '';
+  const d=c-i,acima=d>0,dTx=m==='pct'?num(Math.abs(d)*100,1)+' pp':usd(Math.abs(d)),un=m==='pct'?' da receita':m==='cli'?' por cliente':' na safra';
+  const rel=i>0?` (${acima?'+':'−'}${num(Math.abs(c/i-1)*100,0)}%)`:'';
+  const msg=i<=0?`<span class="neg">Mesmo com CPA zero o funil fica no prejuízo: o problema é o reembolso ou o custo.</span>`
+    :`<b class="${acima?'neg':'pos'}">${dTx} ${acima?'acima':'abaixo'} do ideal${rel}</b><br>${acima?'Cada cliente dá prejuízo: renegociar o CPA.':'Sobra margem: o CPA está saudável.'}`;
+  return `<div class="t1"><b>CPA × ideal</b><span>${m==='pct'?'% da receita':m==='cli'?'por cliente':'total da safra'}</span></div>
+    <div class="ls-dif"><div>CPA pago <b>${lsFmt(c,m)}</b>${un}</div><div>CPA ideal <b>${lsFmt(i,m)}</b></div><div>${msg}</div></div>
+    <div class="nt">Ideal = CPA pago + lucro previsto (sem call center).${m!=='cli'&&r.fes?` Por cliente: ${usd(r.cpa/r.fes)} × ${usd(r.ideal/r.fes)}.`:''}</div>`}
+// as células com dica própria (data-tip) não ganham o title nativo do dtCriar (senão aparecem as duas dicas)
+const _dtCorpoOrig=dtCorpo;
+dtCorpo=function(dt){_dtCorpoOrig(dt);dt.host.querySelectorAll('td [data-tip]').forEach(s=>{const td=s.closest('td');if(td)td.removeAttribute('title')})};
+
 function renderLista(R){
   const el=document.getElementById('lista');if(!el||st.pg!=='lista')return;
   const {L,t,p0,p1,dias,fechada}=R,A=calcAnt(R),X=lsExtras(R);
@@ -1149,7 +1172,7 @@ function renderLista(R){
   const kpi=(l,v,var_,m,cls='')=>`<article class="kpi${cls}"><span class="k">${l}</span><b class="v">${v}</b>${var_}<span class="m">${m}</span></article>`;
   const bigs=kpi('Afiliados ativos',n(ativos.length),vr(ativos.length,A&&A.L.filter(a=>a.fes>0).length,'n',1),`${n(novos.length)} novos · ${n(parados.length)} parados`,' total')+
     kpi('Receita do funil',usdC(t.funil),vr(t.funil,A&&A.t.funil,'%',1),`${n(t.fes)} FEs · AOV ${usd(t.aov)}`)+
-    kpi('CPA pago',temCpa?usdC(cpaTot):'…','<span class="var">&nbsp;</span>',temCpa&&t.fes?`${usd(cpaTot/t.fes)} por FE · ${pct(cpaTot/t.funil,0)} da receita`:'carregando pedidos')+
+    kpi('CPA pago',temCpa?usdC(cpaTot):'…','<span class="var">&nbsp;</span>',temCpa&&t.fes?`${usd(cpaTot/t.fes)} por FE · ideal ${usd((cpaTot+t.liq-t.custo-t.fut)/t.fes)} · ${pct(cpaTot/t.funil,0)} da receita`:'carregando pedidos')+
     kpi(`Reembolso 60d <i>${sx}</i>`,pct(t.re60),vr(t.re60,A&&A.t.re60,'pp',-1),`já caiu ${pct(t.agora)} · meta ≤ ${P$(MT.re9)}`)+
     kpi(`Lucro/cliente <i>${sx}</i>`,usd(t.lpf),vr(t.lpf,A&&A.t.lpf,'usd',1),`com call center ${usd(t.fes?t.liqTot/t.fes:null)}`)+
     kpi('Concentração top 5',pctTx(conc,0),vr(conc,concA,'pp',-1),`da receita em 5 de ${n(ativos.length)} afiliados`);
@@ -1172,44 +1195,62 @@ function renderLista(R){
   const filtro=lsSt.filtro&&AL.find(a=>a.k===lsSt.filtro);
   const base=lsSt.filtro==='parado'?parados:ativos,rows=filtro?filtro.ids:base;
   const linha=a=>{const x=X.get(a.i)||{sem:Array(8).fill(0)},s4=x.sem.slice(4).reduce((p,q)=>p+q,0),s0=x.sem.slice(0,4).reduce((p,q)=>p+q,0);
-    return {a,nome:nomeAf(a),curva:a.S?'S':a.curva,pts:a.pts,rank:a.rank,fes:a.fes,funil:a.funil,aov:a.aov,cpaFe:x.cpa!=null&&a.fes?x.cpa/a.fes:null,cpa:x.cpa,
+    const luc=a.liq-a.custo-a.fut;
+    return {a,nome:nomeAf(a),curva:a.S?'S':a.curva,pts:a.pts,rank:a.rank,fes:a.fes,funil:a.funil,aov:a.aov,cpa:x.cpa,ideal:x.cpa==null?null:x.cpa+luc,
+      luc,re:a.d60+a.fut,d60:a.d60,tx:x.tx||0,vendas:a.vendas,disp:a.disp,
       agora:a.agora,re60:a.re60,tdisp:a.tdisp,custo:a.custo,call:a.call,lpf:a.lpf,lpc:a.lpc,st:statusCpa(a.lpf),sem:x.sem,tend:s0?(s4/k28-s0)/s0:s4?1:null,
       ult:x.ult==null?null:FIM-x.ult}};
   const RS=rows.map(linha);
-  const fechadaTx=fechada?'real':'previsto';
+  const fechadaTx=fechada?'real':'previsto',M=lsModo,pc=M==='pct',vl=(k,info,o={})=>({l:o.l,v:r=>lsVal(r[k],r),num:true,fmt:pc?null:'moeda',t:r=>lsFmt(lsVal(r[k],r)),info,...o});
+  const cpaH=k=>r=>{const v=lsVal(r[k],r);if(v==null)return r.cpa==null&&!temCpa?'…':'—';const tp=lsDifTip(r);
+    return tp?`<span class="ls-cpa" data-tip="${regTip(tp)}">${lsFmt(v)}</span>`:lsFmt(v)};
+  const cpaCls=r=>r.cpa==null||r.ideal==null?'':r.cpa>r.ideal?'neg':'pos';
+  const un=pc?'em % da receita do funil':M==='cli'?'por cliente (÷ FEs)':'total da safra';
+  const COLS_MODO=[
+    ...(M==='cli'?[{l:'AOV',v:r=>r.aov,num:true,fmt:'moeda',t:r=>usd(r.aov),info:'Receita do funil ÷ FEs.'}]:[]),
+    vl('cpa',`CPA pago na safra, ${un}. Vermelho: acima do CPA ideal; verde: abaixo. Passe o mouse para ver a diferença.`,{l:'CPA',h:cpaH('cpa'),cls:cpaCls}),
+    vl('ideal',CPA_IDEAL_INFO,{l:'CPA ideal',h:cpaH('ideal')}),
+    vl('re',`Reembolso de 60 dias ${fechadaTx} (valor devolvido + taxas de alerta e disputa), ${un}. Mesma conta do Ranking.`,
+      {l:`Reembolso 60d ${fechada?'':'prev.'}`,h:r=>fechada?lsFmt(lsVal(r.re,r)):`<span title="Já caiu ${lsFmt(lsVal(r.d60,r))}; o resto é previsto">${lsFmt(lsVal(r.re,r))}</span>`,
+       cls:r=>r.re60==null?'':r.re60*100<=MT.re9?'pos':r.re60*100>MT.re7?'neg':''}),
+    pc?{l:'Chargeback',v:r=>r.tdisp,num:true,t:r=>pctTx(r.tdisp),cls:r=>r.tdisp!=null&&r.tdisp*100>MT.cbIni?'neg':'',info:`Disputas ÷ vendas (vendas com 30+ dias, mínimo 20). Vermelho: acima de ${P$(MT.cbIni)} (penalidade da nota).`}
+      :vl('tx',`Taxas de alerta e disputa já cobradas (US$ 23 e US$ 49), ${un}. Já estão dentro do reembolso.`,{l:'Chargeback'}),
+    vl('custo',`Custo do produto e frete (Full Stack real ou a média real onde não há pedido no armazém), ${un}.`,{l:pc?'Custo':M==='cli'?'Custo médio':'Custo produto'}),
+    vl('luc',`Líquido ${fechadaTx}: receita − CPA − taxas − custo − reembolso de 60 dias, sem call center, ${un}. É o que define o Status CPA.`,
+      {l:`Líquido ${fechada?'':'prev.'}`,cls:r=>r.luc==null?'':r.luc<0?'neg':'pos'}),
+    vl('call',`Líquido do call center ligado aos clientes da safra, ${un}. Não entra na nota nem no CPA ideal.`,{l:pc?'% Call center':'Call center',cls:r=>r.call?'pos':''}),
+  ];
   const COLS=[
     {l:'Afiliado',v:r=>r.nome,texto:true,max:190,h:r=>{const a=r.a;return `<span class="ls-nm" data-af="${afId(a)}" data-tip="${regTip(tipAf(a,fechada))}" data-delay="1" tabindex="0">${a.S?SB:''}<span class="nmt">${esc(r.nome)}</span>${PLB(a)}</span>`}},
     {l:'Curva Afiliado',v:r=>r.curva,texto:true,h:r=>`<span class="tag ${r.curva}">${r.curva}</span>`},
     {l:'Nota',v:r=>r.pts,num:true,t:r=>r.pts==null?'—':num(r.pts,0),h:r=>r.pts==null?'—':`<span class="${r.rank?'':'ls-fora'}" title="${r.rank?'':'Fora do ranking: menos de '+st.min+' FEs na safra'}">${sc(r.pts)}</span>`,info:'Pontuação de 0 a 100 do Ranking (mesmas premissas). Esmaecida: fora do ranking por ter poucos FEs.'},
     {l:'FEs',v:r=>r.fes,num:true,fmt:'inteiro',soma:true},
     {l:'Receita funil',v:r=>r.funil,num:true,fmt:'moeda',soma:true,t:r=>usd(r.funil)},
-    {l:'AOV',v:r=>r.aov,num:true,fmt:'moeda',t:r=>usd(r.aov)},
-    {l:'CPA/FE',v:r=>r.cpaFe,num:true,fmt:'moeda',t:r=>r.cpaFe==null?(temCpa?'—':'…'):usd(r.cpaFe),info:'CPA pago na safra ÷ FEs.'},
-    {l:'Reemb. já caiu',v:r=>r.agora,num:true,t:r=>pctTx(r.agora),info:'Reembolso + taxas que já caíram nas vendas da safra, em % da receita do funil.'},
-    {l:`Reemb. 60d ${fechada?'':'prev.'}`,v:r=>r.re60,num:true,t:r=>pctTx(r.re60),cls:r=>r.re60==null?'':r.re60*100<=MT.re9?'pos':r.re60*100>MT.re7?'neg':'',info:`Reembolso de 60 dias ${fechadaTx} (mesma conta do Ranking). Verde: até ${P$(MT.re9)}; vermelho: acima de ${P$(MT.re7)}.`},
-    {l:'Chargeback',v:r=>r.tdisp,num:true,t:r=>pctTx(r.tdisp),cls:r=>r.tdisp!=null&&r.tdisp*100>MT.cbIni?'neg':'',info:'Disputas ÷ vendas (vendas com 30+ dias, mínimo 20).'},
-    {l:'Custo produto',v:r=>r.custo,num:true,fmt:'moeda',soma:true,t:r=>usd(r.custo),info:'Full Stack real (produto + frete) ou a média real onde não há pedido no armazém.'},
-    {l:'Call center',v:r=>r.call,num:true,fmt:'moeda',soma:true,t:r=>r.call?usd(r.call):'—',cls:r=>r.call?'pos':''},
-    {l:`Lucro/cliente ${fechada?'':'prev.'}`,v:r=>r.lpf,num:true,fmt:'moeda',t:r=>usd(r.lpf),cls:r=>r.lpf==null?'':r.lpf<0?'neg':'pos',info:'(Líquido do funil − custo − reembolso que ainda vai cair) ÷ FEs, sem call center.'},
-    {l:'Com call center',v:r=>r.lpc,num:true,fmt:'moeda',t:r=>usd(r.lpc),cls:r=>r.lpc==null?'':r.lpc<0?'neg':'pos'},
+    ...COLS_MODO,
     {l:'Status CPA',v:r=>r.st&&r.st[0],texto:true,h:r=>r.st?`<span class="ls-st ${r.st[1]}">${r.st[0]}</span>`:'—',info:`Régua do dash (Lucro real): lucro/cliente previsto ≥ US$ ${STATUS_CPA.ok} saudável, ≥ US$ ${STATUS_CPA.at} atenção, abaixo renegociar.`},
     {l:'Tendência 8 sem.',v:r=>r.tend,num:true,h:r=>`<span class="ls-tend">${spark(r.sem)}<small class="${r.tend==null?'':r.tend<-0.15?'neg':r.tend>0.15?'pos':''}">${r.tend==null?'':(r.tend>0?'+':'')+num(r.tend*100,0)+'%'}</small></span>`,info:'FEs por semana nas últimas 8 semanas (até o último dia com dados). %: últimas 4 contra as 4 anteriores.'},
     {l:'Última venda',v:r=>r.ult,num:true,t:r=>diasTx(r.ult),cls:r=>r.ult!=null&&r.ult>=7?'neg':''},
   ];
-  const T={nome:null,curva:null,pts:t.pts,fes:RS.reduce((s,r)=>s+r.fes,0),funil:RS.reduce((s,r)=>s+r.funil,0),custo:RS.reduce((s,r)=>s+r.custo,0),call:RS.reduce((s,r)=>s+r.call,0)};
-  if(!filtro){Object.assign(T,{aov:t.aov,agora:t.agora,re60:t.re60,lpf:t.lpf,lpc:t.fes?t.liqTot/t.fes:null,cpaFe:temCpa&&t.fes?cpaTot/t.fes:null})}
+  // total: soma dos montantes das linhas (vale com e sem alerta); os % e "por cliente" saem das somas
+  const sm=k=>RS.reduce((s,r)=>s+(r[k]||0),0),T={nome:null,curva:null,pts:filtro?null:t.pts};
+  ['fes','funil','custo','call','luc','re','d60','tx','vendas','disp'].forEach(k=>T[k]=sm(k));
+  T.cpa=temCpa?sm('cpa'):null;T.ideal=T.cpa==null?null:T.cpa+T.luc;T.aov=T.fes?T.funil/T.fes:null;
+  T.re60=T.funil?T.re/T.funil:null;T.tdisp=T.vendas>=20?T.disp/T.vendas:null;
 
   el.innerHTML=`<section class="bigs ls-bigs">${bigs}</section>
     <section class="ls-als" aria-label="Alertas">${alertas}</section>
     <section class="pd-sec ls-sec" id="lsSec"><div class="pd-head"><div><h3>Afiliados <span class="pd-cnt">${n(RS.length)}</span>${filtro?`<button type="button" class="ls-chip" id="lsLimpa">${esc(filtro.l)} ×</button>`:''}</h3>
       <p>Safra ${dTx(p0)} a ${dTx(p1)} (${dias} dias)${st.plat?' · só '+st.plat:''}. Mesma conta do Ranking; clique no nome para abrir a página do afiliado. A nota esmaecida está fora do ranking (menos de ${n(st.min)} FEs).</p></div>
-      <div class="pd-tools"><input class="pd-busca" id="lsBusca" type="search" placeholder="Buscar afiliado" aria-label="Buscar afiliado">
+      <div class="pd-tools"><div class="fgrp" id="lsModo" role="group" aria-label="Mostrar valores">${LS_MODOS.map(([k,l])=>`<button type="button" data-v="${k}" aria-pressed="${k===M}">${l}</button>`).join('')}</div>
+      <input class="pd-busca" id="lsBusca" type="search" placeholder="Buscar afiliado" aria-label="Buscar afiliado">
       <button type="button" class="dt-btn-excel" id="lsXls" title="Exportar para Excel" aria-label="Exportar para Excel">${ICO.xls}</button></div></div>
       <div id="lsTab"></div></section>`;
   const dt=dtCriar(el.querySelector('#lsTab'),{cols:COLS,rows:RS,total:T,ordem:4,totalLabel:filtro?`Total (${n(RS.length)})`:`Total da base (${n(RS.length)})`,vazio:'Nenhum afiliado com esses filtros.',
     exportar:{titulo:'Visão geral dos afiliados',arquivo:'afiliados',filtros:[['Safra',`${dTx(p0)} a ${dTx(p1)}`],['Plataforma',st.plat||'Todas'],['Alerta',filtro?filtro.l:'—']]}});
   const b=el.querySelector('#lsBusca');b.oninput=()=>{const q=b.value.trim().toLowerCase();dtLinhas(dt,q?RS.filter(r=>r.nome.toLowerCase().includes(q)||String(r.a.af).toLowerCase().includes(q)):RS,T)};
   el.querySelector('#lsXls').onclick=e=>dtExcel(dt,e.currentTarget);
+  el.querySelectorAll('#lsModo button').forEach(x=>x.onclick=()=>{if(x.dataset.v===lsModo)return;lsModo=x.dataset.v;
+    try{LS.setItem('ns-af-lsmodo',lsModo)}catch(e){}const y=scrollY;renderLista(R);scrollTo(0,y)});
   el.querySelectorAll('[data-al]').forEach(x=>x.onclick=()=>{lsSt.filtro=lsSt.filtro===x.dataset.al?null:x.dataset.al;renderLista(R)});
   const lp=el.querySelector('#lsLimpa');if(lp)lp.onclick=()=>{lsSt.filtro=null;renderLista(R)};
 }
@@ -1251,7 +1292,7 @@ const RP_DIM={cv:{l:'Curva Afiliado',op:RP_CV.map(([k,l])=>({k,l:k,s:l}))},fx:{l
 const RP_TAB=[1,3,5,7,10,14,21,30,45];   // colunas da tabela (o dia 60 é o total)
 // ordenação da tabela: valor de cada coluna (nulo vai para o fim); sem ordem escolhida = receita (afiliados) / mês mais novo (safras)
 const RP_ORD={nome:l=>l.srt??l.rot,cv:l=>l.na?{S:0,A:1,B:2,C:3}[l.na.S?'S':l.na.curva]:null,nota:l=>l.na?l.na.pts:null,fes:l=>l.c.fes,funil:l=>l.c.funil,
-  cpa:l=>l.c.cpa==null?null:l.c.cpa/l.c.funil,custo:l=>l.c.custo/l.c.funil,fim:l=>l.c.fim,luc:l=>l.c.luc};
+  cpa:l=>l.c.cpa==null?null:l.c.cpa/l.c.funil,ideal:l=>l.c.cpa==null?null:l.c.cpa/l.c.funil+l.c.luc,custo:l=>l.c.custo/l.c.funil,fim:l=>l.c.fim,luc:l=>l.c.luc};
 RP_TAB.forEach(d=>RP_ORD['d'+d]=l=>rpVal(l.c.pts,d));
 const RP_TXT=new Set(['nome','cv']);
 const rpSemIni=d=>{const w=new Date(D0.getTime()+d*864e5).getUTCDay();return d-((w+6)%7)};
@@ -1680,6 +1721,10 @@ function rpLigaFiltros(el,R){
 // ---- tabela: afiliado › mês da safra (ou mês › afiliado), com Curva Afiliado, nota e reembolso acumulado por dia ----
 // barra do lucro líquido: a partir do meio, verde para a direita (lucro), vermelha para a esquerda (prejuízo); meia barra = 20% (acima disso, cheia)
 const rpBarra=v=>{if(v==null||!isFinite(v))return '';const w=Math.min(50,50*Math.abs(v)/0.2);return `<span class="rp-bar" aria-hidden="true"><i class="${v<0?'n':'p'}" style="width:${w.toFixed(1)}%"></i></span>`};
+// CPA e CPA ideal (% da receita) com a dica da diferença; o ideal = CPA + lucro líquido previsto (zera o lucro)
+function rpCpaTds(c){if(c.cpa==null)return '<td>…</td><td>…</td>';const r={cpa:c.cpa,ideal:c.cpa+c.lucUsd,funil:c.funil,fes:c.fes},k=regTip(lsDifTip(r,'pct'));
+  const span=v=>`<span class="ls-cpa" data-tip="${k}">${rpPct(v/c.funil)}</span>`;
+  return `<td class="${r.cpa>r.ideal?'neg':'pos'}">${span(r.cpa)}</td><td>${span(r.ideal)}</td>`}
 function rpTabela(IDS,meses){
   const T=rpCalc('t'),P=rpCalc('p'),[p0,p1]=periodo(),af=rpSt.modo==='af',q=rpSt.busca.trim().toLowerCase();
   const lin=(c,rot,extra)=>c&&{c,rot,...extra};
@@ -1708,7 +1753,7 @@ function rpTabela(IDS,meses){
     let cvH='',ntH='';if(l.na){const cvv=l.na.S?'S':l.na.curva,fb=l.fb?' rp-fb':'';cvH=`<span class="tag ${cvv}${fb}" title="${l.fb?esc(l.ctx).replace('nota','Curva'):'Curva Afiliado '+cvv}">${cvv}</span>`;
       if(l.na.pts!=null){const k='f'+(++nk);RP_FICHA.set(k,{a:l.na,fechada:l.fech,ctx:l.ctx});ntH=`<button type="button" class="rp-nt${fb}" data-ficha="${k}" title="${esc(l.ctx)} · clique para ver a conta da nota">${sc(l.na.pts)}</button>`}}
     return `<td class="tl rp-nm">${filho?'':`<button type="button" class="rp-tg" aria-label="Abrir">›</button>`}${nm}</td><td class="rp-cc">${cvH}</td><td class="rp-cc">${ntH}</td><td>${n(c.fes)}</td><td>${usdC(c.funil)}</td>
-      <td>${c.cpa==null?'…':rpPct(c.cpa/c.funil)}</td><td>${rpPct(c.custo/c.funil)}</td>
+      ${rpCpaTds(c)}<td>${rpPct(c.custo/c.funil)}</td>
       ${RP_TAB.map(d=>{const v=rpVal(c.pts,d),pv=d>c.dl;return `<td class="hc ${cor(v,d)}${pv?' pv':''}" title="${pv?'previsto':'real'}">${rpPct(v)}</td>`}).join('')}
       <td class="hc ${cor(c.fim,60)}${c.dl<60?' pv':''}" title="${c.dl<60?'previsto':'real'}"><b>${rpPct(c.fim)}</b></td><td class="rp-lq ${c.luc<0?'neg':'pos'}">${rpBarra(c.luc)}<b>${rpPct(c.luc)}</b></td>`};
   const corpo=grupos.map(g=>{const ab=rpSt.abertos.has(g.k)||!!q&&!af;
@@ -1719,9 +1764,9 @@ function rpTabela(IDS,meses){
       <button type="button" class="ls-chip" id="rpAbre">${grupos.length&&grupos.every(g=>rpSt.abertos.has(g.k))?'Fechar todos':'Abrir todos'}</button>
       <input class="pd-busca" id="rpBusca" type="search" placeholder="Buscar afiliado" aria-label="Buscar afiliado" value="${esc(rpSt.busca)}">
       <button type="button" class="dt-btn-excel" id="rpXls" title="Exportar para Excel (CSV)" aria-label="Exportar">${ICO.xls}</button></div></div>
-    <div class="rp-tw"><table class="rp-t"><thead><tr>${th('nome',af?'Afiliado / safra':'Safra / afiliado','tl')}${th('cv','Curva','rp-cc','Curva Afiliado (A/B/C/S)')}${th('nota','Nota','rp-cc','Pontuação do Ranking')}${th('fes','FEs')}${th('funil','Receita')}${th('cpa','CPA','','CPA pago ÷ receita do funil')}${th('custo','Custo','','Custo do produto (Full Stack) ÷ receita')}
+    <div class="rp-tw"><table class="rp-t"><thead><tr>${th('nome',af?'Afiliado / safra':'Safra / afiliado','tl')}${th('cv','Curva','rp-cc','Curva Afiliado (A/B/C/S)')}${th('nota','Nota','rp-cc','Pontuação do Ranking')}${th('fes','FEs')}${th('funil','Receita')}${th('cpa','CPA','','CPA pago ÷ receita do funil. Vermelho: acima do CPA ideal; verde: abaixo. Passe o mouse para ver a diferença.')}${th('ideal','CPA ideal','',esc(CPA_IDEAL_INFO)+' Aqui, em % da receita do funil.')}${th('custo','Custo','','Custo do produto (Full Stack) ÷ receita')}
       ${RP_TAB.map(d=>th('d'+d,'D'+d)).join('')}${th('fim','60d','','Reembolso total de 60 dias (real ou previsto)')}${th('luc','Lucro líquido','rp-lqh','Lucro líquido previsto em % da receita: (líquido − custo − reembolso que ainda vai cair) ÷ receita. A barra vai para a direita (verde) quando sobra lucro e para a esquerda (vermelho) quando dá prejuízo; meia barra = 20% da receita (acima disso, cheia).')}</tr></thead>
-      <tbody>${corpo||`<tr><td class="tl" colspan="${RP_TAB.length+9}">Nenhum afiliado com esses filtros.</td></tr>`}</tbody></table></div>`;
+      <tbody>${corpo||`<tr><td class="tl" colspan="${RP_TAB.length+10}">Nenhum afiliado com esses filtros.</td></tr>`}</tbody></table></div>`;
 }
 function rpLigaTabela(el,R){
   const s=el.querySelector('#rpTabS');if(!s)return;const meses=MESES.filter(m=>RPA.has('m:'+m));
@@ -1735,8 +1780,8 @@ function rpLigaTabela(el,R){
   s.querySelectorAll('[data-ficha]').forEach(x=>x.onclick=e=>{e.stopPropagation();rpAbreFicha(x.dataset.ficha)});
   s.querySelectorAll('tr.rp-pai').forEach(tr=>tr.onclick=e=>{if(e.target.closest('[data-af],[data-ficha]'))return;const k=tr.dataset.k,ab=!rpSt.abertos.has(k);
     ab?rpSt.abertos.add(k):rpSt.abertos.delete(k);tr.classList.toggle('ab',ab);s.querySelectorAll(`tr.rp-fi[data-p="${k}"]`).forEach(x=>x.hidden=!ab)});
-  s.querySelector('#rpXls').onclick=()=>{const L=[[rpSt.modo==='af'?'Afiliado':'Safra',rpSt.modo==='af'?'Safra':'Afiliado','Curva Afiliado','Nota','FEs','Receita US$','CPA %','Custo %',...RP_TAB.map(d=>'Reemb. D'+d+' %'),'Reemb. 60d %','Real ou previsto','Lucro líquido %']];
-    const f=v=>v==null||!isFinite(v)?'':(v*100).toFixed(2).replace('.',','),row=(a,b,l)=>{const c=l.c,na=l.na;return [a,b,na?(na.S?'S':na.curva):'',na&&na.pts!=null?na.pts.toFixed(1).replace('.',','):'',c.fes,c.funil.toFixed(2).replace('.',','),c.cpa==null?'':f(c.cpa/c.funil),f(c.custo/c.funil),...RP_TAB.map(d=>f(rpVal(c.pts,d))),f(c.fim),c.dl>=60?'real':'previsto',f(c.luc)]};
+  s.querySelector('#rpXls').onclick=()=>{const L=[[rpSt.modo==='af'?'Afiliado':'Safra',rpSt.modo==='af'?'Safra':'Afiliado','Curva Afiliado','Nota','FEs','Receita US$','CPA %','CPA ideal %','Custo %',...RP_TAB.map(d=>'Reemb. D'+d+' %'),'Reemb. 60d %','Real ou previsto','Lucro líquido %']];
+    const f=v=>v==null||!isFinite(v)?'':(v*100).toFixed(2).replace('.',','),row=(a,b,l)=>{const c=l.c,na=l.na;return [a,b,na?(na.S?'S':na.curva):'',na&&na.pts!=null?na.pts.toFixed(1).replace('.',','):'',c.fes,c.funil.toFixed(2).replace('.',','),c.cpa==null?'':f(c.cpa/c.funil),c.cpa==null?'':f(c.cpa/c.funil+c.luc),f(c.custo/c.funil),...RP_TAB.map(d=>f(rpVal(c.pts,d))),f(c.fim),c.dl>=60?'real':'previsto',f(c.luc)]};
     (rpTabela.ult||[]).forEach(g=>{L.push(row(g.p.rot,'Total',g.p));g.f.forEach(l=>L.push(row(g.p.rot,l.rot,l)))});
     download('reembolso_por_'+(rpSt.modo==='af'?'afiliado_safra':'safra_afiliado')+'.csv',L)};
 }

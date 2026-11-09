@@ -872,6 +872,12 @@ body.pd-cheia{overflow:hidden}
    sobre a 2ª linha. O título do nome não ordena (cursor normal) */
 @media (min-width:901px){.af .tr thead th[data-k="nome"]{top:auto}}
 .af .tr th[data-k="nome"]{cursor:default}.af .tr th[data-k="nome"]:hover{color:var(--muted)}
+/* CPA × ideal: dica ao passar o mouse; alternador Percentual / Por cliente / Valor total */
+.af .ls-cpa{cursor:help;border-bottom:1px dotted currentColor}
+.af #tip .ls-dif{display:grid;gap:3px;margin:6px 0 4px;font-size:12px}
+.af #tip .ls-dif .neg{color:var(--neg)}.af #tip .ls-dif .pos{color:var(--pos)}
+.af #lsModo{--ctl-h:34px}
+@media (max-width:700px){.af #lsModo{width:100%}.af #lsModo button{flex:1}}
 
 /* ---- tela Reembolso Prev. (tokens do dash do Mike; cores das séries validadas p/ daltonismo, claro e escuro) ----
    --rp-*: gráfico principal e Curva Afiliado. --rk0…5: cor pelo resultado (0 = menor reembolso, cor forte; 5 = maior, cor fria). */

@@ -16,8 +16,12 @@ Três abas usam o mesmo motor e o mesmo modelo (permissões `affiliate-overview`
 `affiliate-ranking`, `affiliate-refund`; qualquer uma libera os dados):
 
 - **Visão Geral** (primeira do grupo Afiliados), com duas subabas:
-  - **Afiliados**: a base de afiliados com resultado (receita, CPA, reembolso,
-    lucro, Status CPA, tendência) e alertas;
+  - **Afiliados**: a base de afiliados com resultado (receita, CPA, CPA ideal,
+    reembolso, chargeback, custo, líquido, call center, Status CPA, tendência) e
+    alertas. Um alternador mostra os valores em **Percentual** (% da receita do
+    funil), **Por cliente** (÷ FEs) ou **Valor total** da safra. No modo
+    Percentual, Chargeback = disputas ÷ vendas; nos outros, as taxas de alerta e
+    disputa já cobradas (que já estão dentro do reembolso);
   - **Pontuação por curva**: os big numbers dos critérios e um bloco por curva
     A, B e C (radar das notas, tabela de critérios com bons/médios/ruins,
     bônus e penalidades, top 3 e piores 3), como no painel de afiliados.
@@ -27,6 +31,13 @@ Três abas usam o mesmo motor e o mesmo modelo (permissões `affiliate-overview`
 
 As telas do Mike (Afiliados, Análise, CRM, Networks) seguem no menu, com o nome
 de sempre, enquanto as duas versões são validadas em paralelo.
+
+**CPA ideal (de equilíbrio)** = o maior CPA que ainda deixa lucro zero no funil,
+já com o custo do produto e o reembolso previsto de 60 dias:
+CPA ideal = CPA pago + lucro previsto (sem call center, como a nota e o Status
+CPA). Aparece ao lado do CPA na Visão Geral e na tabela afiliado × safra do
+Reembolso Prev.; o CPA fica vermelho acima do ideal e verde abaixo, e a dica
+(ao passar o mouse) mostra a diferença em valor e em %.
 
 ## De onde vêm os dados
 
