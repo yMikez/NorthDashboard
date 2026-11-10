@@ -1142,3 +1142,32 @@ body.pd-cheia{overflow:hidden}
 .af.em-af .af-crumb,.af.em-af .af-titulo{display:block}
 .af .pq-aviso{margin:0 0 12px;padding:9px 12px;border-radius:6px;border:1px solid var(--border);background:var(--bg-subtle);font-size:12px;color:var(--fg3)}
 .af-filtros .fgrp button,.af-filtros .fsel{height:32px}
+/* seletor de datas da safra (padrão dpCriar: atalhos à esquerda, calendário à direita) */
+.af-dp{position:relative;display:inline-block}
+.af-dp-btn{height:32px;min-width:210px;display:inline-flex;align-items:center;justify-content:space-between;gap:10px;padding:0 10px;border:1px solid var(--border);border-radius:6px;background:var(--bg-raised);color:var(--fg2);font:500 12px var(--f-body);cursor:pointer;white-space:pre}
+.af-dp-btn:hover{border-color:var(--border-strong)}
+.af-dp-btn.on,.af-dp-btn.open{border-color:color-mix(in oklab,var(--accent) 55%,transparent);color:var(--glow-cyan);font-weight:600}
+.af-dp-btn svg{width:15px;height:15px;flex:none;fill:none;stroke:currentColor;stroke-width:1.7}
+.af-dp-box{position:absolute;top:calc(100% + 6px);left:0;z-index:45;display:flex;gap:10px;padding:10px;background:var(--bg-raised);border:1px solid var(--border);border-radius:10px;box-shadow:0 10px 30px rgba(0,0,0,.16)}
+.af-dp-box[hidden]{display:none}
+.af-dp-pre{display:flex;flex-direction:column;gap:2px;min-width:170px;max-height:300px;overflow:auto;padding-right:8px;border-right:1px solid var(--border)}
+.af-dp-pre button{text-align:left;padding:7px 9px;border:0;border-radius:6px;background:transparent;color:var(--fg2);font:500 12px var(--f-body);cursor:pointer;white-space:nowrap}
+.af-dp-pre button:hover{background:color-mix(in oklab,var(--accent) 7%,transparent)}
+.af-dp-pre button.on{background:color-mix(in oklab,var(--accent) 14%,transparent);color:var(--glow-cyan);font-weight:600}
+.af-dp-pre button.sep{margin-top:6px;border-top:1px solid var(--border);border-radius:0 0 6px 6px;padding-top:10px}
+.af-dp-cal{width:238px}
+.af-dp-hd{display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;font:600 12.5px var(--f-body);color:var(--fg1)}
+.af-dp-hd button{width:28px;height:28px;border:1px solid var(--border);border-radius:7px;background:var(--bg-raised);color:var(--fg2);font-size:15px;cursor:pointer}
+.af-dp-hd button:hover:not(:disabled){border-color:color-mix(in oklab,var(--accent) 55%,transparent);color:var(--glow-cyan)}
+.af-dp-hd button:disabled{opacity:.35;cursor:default}
+.af-dp-g{display:grid;grid-template-columns:repeat(7,1fr);gap:2px;text-align:center}
+.af-dp-g>span{font:600 10.5px var(--f-body);color:var(--fg4);padding:3px 0}
+.af-dp-d{height:30px;border:0;border-radius:6px;background:transparent;color:var(--fg2);font:500 12px var(--f-body);cursor:pointer}
+.af-dp-d:hover:not(:disabled){background:color-mix(in oklab,var(--accent) 10%,transparent)}
+.af-dp-d.out{visibility:hidden}
+.af-dp-d.off{opacity:.3;cursor:default}
+.af-dp-d.in{background:color-mix(in oklab,var(--accent) 12%,transparent);border-radius:0}
+.af-dp-d.edge{background:var(--accent);color:#fff;font-weight:700}
+.af-dp-d.hoje:not(.edge){box-shadow:inset 0 0 0 1px color-mix(in oklab,var(--accent) 60%,transparent)}
+.af-dp-hint{margin-top:8px;font:500 11px var(--f-body);color:var(--fg4)}
+@media (max-width:640px){.af-dp-box{flex-direction:column;left:0;right:auto;max-width:calc(100vw - 32px)}.af-dp-pre{flex-direction:row;flex-wrap:wrap;max-height:none;border-right:0;border-bottom:1px solid var(--border);padding:0 0 8px}.af-dp-pre button.sep{margin-top:0;border-top:0;padding-top:7px}.af-dp-cal{width:100%}}
