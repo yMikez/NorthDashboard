@@ -30,7 +30,7 @@ root.innerHTML=`<div class="filters af-filtros" aria-label="Filtros do ranking">
     <div class="fgrp" id="fPer">
       <button type="button" data-v="30d" aria-pressed="true">Últimos 30 dias</button><button type="button" data-v="passado">Mês passado</button><button type="button" data-v="atual">Este mês</button><button type="button" data-v="3m">Últimos 3 meses</button><button type="button" data-v="tudo">Tudo</button>
     </div>
-    <select class="fsel" id="fMes" aria-label="Escolher a safra (mês)"></select></div>
+    <div class="af-dp" id="fDp"></div></div>
   <div class="af-fg"><span class="f-label">Agrupar</span>
     <div class="fgrp" id="fAgr" aria-label="Agrupar afiliados">
       <button type="button" data-v="parceiro" title="Soma as contas do mesmo parceiro (cadastro de parceiros)">Por parceiro</button><button type="button" data-v="conta" title="Cada conta de plataforma separada">Por conta</button>
@@ -182,12 +182,14 @@ function periodo(){
   if(st.per==='passado'){const k=fech[fech.length-1];return [dIdx(k+'-01'),fimMes(k)]}
   if(st.per==='3m'){const ks=fech.slice(-3);return [dIdx(ks[0]+'-01'),fimMes(ks[ks.length-1])]}
   if(st.per==='mes')return [Math.max(0,dIdx(st.mes+'-01')),Math.min(FIM,fimMes(st.mes))];
+  if(st.per==='custom')return [Math.max(0,st.ini),Math.min(FIM,st.fim)];
   return [0,FIM]}
 // comparação: o mesmo tamanho logo antes (30 dias antes; mês anterior; 3 meses anteriores)
 function anterior(){
   const [p0,p1]=periodo(),mes=k=>{const [y,m]=k.split('-').map(Number);return new Date(Date.UTC(y,m-2,1)).toISOString().slice(0,7)};
   let r=null;
   if(st.per==='30d')r=[p0-30,p1-30];
+  else if(st.per==='custom')r=[p0-(p1-p0+1),p0-1];     // período exato: os mesmos dias logo antes
   else if(st.per==='3m'){const k=mes(mes(mes(dIso(p0).slice(0,7))));r=[dIdx(k+'-01'),p0-1]}
   else if(st.per!=='tudo'){const k=mes(dIso(p0).slice(0,7)),f=fimMes(k);r=[dIdx(k+'-01'),Math.min(f,dIdx(k+'-01')+(p1-p0))]}
   return r&&r[0]>=0?r:null}
@@ -845,11 +847,51 @@ function pagina(pg){const af=/^af-[A-Za-z0-9-]+$/.test(pg||'');if(af&&st.pg!=='a
   if(st.pg==='af'){if(st.R)renderAfiliado(st.R);scrollTo(0,0)}}
 root.querySelectorAll('[data-pg]').forEach(b=>b.onclick=()=>pagina(b.dataset.pg));
 
-const sel=document.getElementById('fMes');
-sel.innerHTML='<option value="">Safra: escolher mês…</option>'+[...MESES].reverse().map(k=>`<option value="${k}">Safra ${mesTx(k)}${k===dIso(FIM).slice(0,7)?' (aberta)':fimMes(k)<=FIM-60?' (fechada)':''}</option>`).join('');
 function marca(v){document.querySelectorAll('#fPer button').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.v===v)))}
-document.getElementById('fPer').onclick=e=>{const b=e.target.closest('button');if(!b)return;st.per=b.dataset.v;marca(st.per);sel.value='';render()};
-sel.onchange=()=>{if(!sel.value)return;st.per='mes';st.mes=sel.value;marca('');render()};
+/* seletor de datas da safra (padrão dos painéis, dpCriar): botão com o período + atalhos à esquerda e calendário à direita
+   (1º clique = início, 2º = fim). Atalho = o mesmo dos botões ou uma safra de mês; datas soltas = st.per 'custom'.
+   Só onde a barra tem o #fDp (dash do Mike); sem ele, segue a lista de meses (#fMes) do site de afiliados. */
+const DP_MES=['janeiro','fevereiro','março','abril','maio','junho','julho','agosto','setembro','outubro','novembro','dezembro'];
+const DP_ICO='<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="5" width="18" height="16" rx="3"/><path d="M3 10h18M8 3v4M16 3v4"/></svg>';
+const dpBR=i=>{const s=dIso(i);return s.slice(8,10)+'/'+s.slice(5,7)+'/'+s.slice(0,4)};
+function dpAtalhos(){const atual=dIso(FIM).slice(0,7),fech=MESES.filter(m=>m<atual),ant=fech[fech.length-1],nm=k=>DP_MES[+k.slice(5,7)-1];
+  const L=[{t:'Últimos 30 dias',per:'30d'}];
+  if(ant)L.push({t:`Mês passado · ${nm(ant)}`,per:'passado'});
+  L.push({t:`${nm(atual)[0].toUpperCase()+nm(atual).slice(1)} até hoje`,per:'atual'});
+  if(fech.length)L.push({t:'Últimos 3 meses',per:'3m'});
+  L.push({t:'Tudo',per:'tudo'});
+  [...MESES].reverse().forEach((k,i)=>L.push({t:`Safra ${mesTx(k)}${k===atual?' (aberta)':fimMes(k)<=FIM-60?' (fechada)':''}`,per:'mes',mes:k,sep:i===0}));
+  return L}
+const DP=(()=>{const host=document.getElementById('fDp');if(!host)return null;
+  host.innerHTML=`<button type="button" class="af-dp-btn" aria-haspopup="dialog" title="Escolher a safra: atalhos ou datas exatas"><span class="af-dp-txt"></span>${DP_ICO}</button><div class="af-dp-box" role="dialog" aria-label="Escolher a safra" hidden></div>`;
+  const btn=host.querySelector('.af-dp-btn'),box=host.querySelector('.af-dp-box'),s={mes:null,a:null,b:null};
+  const o={texto(){const [a,b]=periodo();host.querySelector('.af-dp-txt').textContent=`${dpBR(a)}  –  ${dpBR(b)}`;btn.classList.toggle('on',st.per==='custom'||st.per==='mes')},
+    fechar(){box.hidden=true;btn.classList.remove('open')},
+    abrir(){const [a,b]=periodo();s.a=a;s.b=b;s.mes=dIso(b).slice(0,7);o.render();box.hidden=false;btn.classList.add('open');
+      box.style.left='0px';box.style.right='auto';const r=box.getBoundingClientRect();if(r.right>innerWidth-12){box.style.left='auto';box.style.right='0px'}},
+    escolher(per,ext){Object.assign(st,{per},ext||{});marca(per);o.fechar();o.texto();render()},
+    render(){const [y,m]=s.mes.split('-').map(Number),first=new Date(Date.UTC(y,m-1,1)),ini=(first.getUTCDay()+6)%7,dias=new Date(Date.UTC(y,m,0)).getUTCDate();
+      const L=dpAtalhos(),podeAnt=dIdx(s.mes+'-01')>0,podeProx=fimMes(s.mes)<FIM;
+      let cel='';for(let i=0;i<ini;i++)cel+='<span class="af-dp-d out"></span>';
+      for(let d=1;d<=dias;d++){const iso=`${y}-${String(m).padStart(2,'0')}-${String(d).padStart(2,'0')}`,i=dIdx(iso),off=i<0||i>FIM,b=s.b==null?s.a:s.b;
+        const cls=['af-dp-d',off?'off':'',i>s.a&&i<b?'in':'',i===s.a||i===s.b?'edge':'',i===FIM?'hoje':''].join(' ');
+        cel+=`<button type="button" class="${cls}" data-d="${i}"${off?' disabled':''} aria-label="${dpBR(i)}">${d}</button>`}
+      box.innerHTML=`<div class="af-dp-pre">${L.map((x,i)=>`<button type="button" data-p="${i}" class="${x.sep?'sep ':''}${st.per===x.per&&(x.per!=='mes'||st.mes===x.mes)?'on':''}">${x.t}</button>`).join('')}</div>
+        <div class="af-dp-cal"><div class="af-dp-hd"><button type="button" data-nav="-1" aria-label="Mês anterior"${podeAnt?'':' disabled'}>‹</button><span>${DP_MES[m-1]} de ${y}</span><button type="button" data-nav="1" aria-label="Próximo mês"${podeProx?'':' disabled'}>›</button></div>
+        <div class="af-dp-g">${['S','T','Q','Q','S','S','D'].map(x=>`<span>${x}</span>`).join('')}${cel}</div>
+        <div class="af-dp-hint">${s.b==null?`Início ${dpBR(s.a)}: agora escolha a data final.`:'Clique numa data para começar outro período.'}</div></div>`;
+      box.querySelectorAll('[data-p]').forEach(b=>b.onclick=e=>{e.stopPropagation();const x=L[+b.dataset.p];o.escolher(x.per,x.mes?{mes:x.mes}:null)});
+      box.querySelectorAll('[data-nav]').forEach(b=>b.onclick=e=>{e.stopPropagation();const d=new Date(s.mes+'-15T12:00:00Z');d.setUTCMonth(d.getUTCMonth()+ +b.dataset.nav);s.mes=d.toISOString().slice(0,7);o.render()});
+      box.querySelectorAll('[data-d]').forEach(b=>b.onclick=e=>{e.stopPropagation();const d=+b.dataset.d;
+        if(s.b!=null){s.a=d;s.b=null;o.render()}else{const [x,z]=d<s.a?[d,s.a]:[s.a,d];o.escolher('custom',{ini:x,fim:z})}})}};
+  btn.onclick=e=>{e.stopPropagation();box.hidden?o.abrir():o.fechar()};
+  _on(document,'click',e=>{if(!box.hidden&&!e.composedPath().includes(host))o.fechar()});
+  _on(document,'keydown',e=>{if(e.key==='Escape'&&!box.hidden)o.fechar()});
+  o.texto();return o})();
+const sel=document.getElementById('fMes');
+if(sel){sel.innerHTML='<option value="">Safra: escolher mês…</option>'+[...MESES].reverse().map(k=>`<option value="${k}">Safra ${mesTx(k)}${k===dIso(FIM).slice(0,7)?' (aberta)':fimMes(k)<=FIM-60?' (fechada)':''}</option>`).join('');
+  sel.onchange=()=>{if(!sel.value)return;st.per='mes';st.mes=sel.value;marca('');render()}}
+document.getElementById('fPer').onclick=e=>{const b=e.target.closest('button');if(!b)return;st.per=b.dataset.v;marca(st.per);if(sel)sel.value='';if(DP)DP.texto();render()};
 document.getElementById('fMin').onchange=e=>{st.min=+e.target.value;render()};
 document.getElementById('fPlat').onclick=e=>{const b=e.target.closest('button');if(!b)return;st.plat=b.dataset.v;
   document.querySelectorAll('#fPlat button').forEach(x=>x.setAttribute('aria-pressed',String(x===b)));render()};
@@ -1816,7 +1858,7 @@ render=function(){_renderRp.apply(this,arguments);if(st.pg==='reemb'&&st.R)rende
   const fora=()=>{const r=(aberto?ph:bar).getBoundingClientRect();return r.bottom<topo()+2};
   const apertado=s=>{const b=bar.querySelector(s+' button[aria-pressed="true"]');return b?b.textContent.trim():''};
   function chips(){const C=[];
-    C.push({t:st.per==='mes'&&st.mes?'Safra '+mesTx(st.mes):apertado('#fPer')||'Período',nd:st.per!==PAD.per});
+    C.push({t:st.per==='mes'&&st.mes?'Safra '+mesTx(st.mes):st.per==='custom'?`Safra ${dTx(periodo()[0])} a ${dTx(periodo()[1])}`:apertado('#fPer')||'Período',nd:st.per!==PAD.per});
     if(typeof AGRUPA!=='undefined')C.push({t:AGRUPA==='conta'?'Por conta':'Por parceiro',nd:AGRUPA!==PAD.agr});
     C.push({t:st.plat||'Todas as plataformas',nd:st.plat!==PAD.plat});
     C.push({t:`Ranking ${st.min}+ FEs`,nd:+st.min!==PAD.min});
