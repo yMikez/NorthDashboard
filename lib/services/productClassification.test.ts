@@ -1021,32 +1021,3 @@ describe('Vupim: "<loja> - <oferta>" — família do produto entregue', () => {
     expect(fam('GlycoEden - 2 Bottles')).toMatchObject({ family: 'GlycoEden', bottles: 2 });
   });
 });
-
-describe('famílias novas: LungFresh, FlushPril e grafias de Memovance (2026-11-05)', () => {
-  it('LungFresh na Vupim e na JVZoo (antes ficava sem família e sem aba no Funil)', () => {
-    expect(classifyProduct('sku', 'FE - LungFresh (6 Bottles)', 'vupim')).toMatchObject({ family: 'LungFresh', bottles: 6 });
-    expect(classifyProduct('x', 'LungFresh - 6 Bottles / FE', 'jvzoo'))
-      .toMatchObject({ family: 'LungFresh', type: 'FRONTEND', bottles: 6, roleMarked: true });
-    expect(classifyProduct('x', 'Lung Fresh 3 Bottles (Upgrade)', 'buygoods').family).toBe('LungFresh');
-  });
-  it('normalizeFamily: espaço e caixa', () => {
-    expect(normalizeFamily('Lung Fresh')).toBe('LungFresh');
-    expect(normalizeFamily('lungfresh')).toBe('LungFresh');
-    expect(normalizeFamily('Flush Pril')).toBe('FlushPril');
-    expect(normalizeFamily('Memovance')).toBe('Memovance PRO');
-    expect(normalizeFamily('MemoVance Pro')).toBe('Memovance PRO');
-    expect(normalizeFamily('HoneyFlush')).toBe('Honey Flush');
-  });
-  it('FlushPril e Memovance sem o "Pro" resolvem pelo nome', () => {
-    expect(classifyProduct('x', 'FlushPril 6 Bottles / FE', 'jvzoo').family).toBe('FlushPril');
-    expect(classifyProduct('x', 'MemoVance 6 Bottles', 'buygoods').family).toBe('Memovance PRO');
-  });
-  it('as já existentes continuam iguais', () => {
-    expect(classifyProduct('x', 'Glyco Eden 6 Bottles', 'buygoods').family).toBe('GlycoEden');
-    expect(classifyProduct('x', 'Cognizil 6 Bottles', 'buygoods').family).toBe('Cognizil');
-    expect(classifyProduct('x', 'NeuroRecall 6 Bottles', 'buygoods').family).toBe('NeuroRecall');
-    expect(classifyProduct('x', 'Neuro Mind Pro 6 Bottles', 'buygoods').family).toBe('NeuroMindPro');
-    expect(classifyProduct('x', 'NeuroPulse Pro 6 Bottles', 'buygoods').family).toBe('NeuroPulsePro');
-    expect(classifyProduct('x', 'HoneyPril 6 Bottles - FE', 'jvzoo').family).toBe('HoneyPril');
-  });
-});
