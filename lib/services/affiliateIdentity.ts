@@ -223,6 +223,23 @@ export async function linkAffiliates(input: {
     if (others.length && merge) {
       // Fusão: contas dos OUTROS parceiros migram junto e eles somem.
       await tx.affiliate.updateMany({ where: { partnerId: { in: others } }, data: { partnerId } });
+      // Carteira: a pessoa que sobra herda o dono de uma absorvida quando não
+      // tem o seu (o dono dela vence). Pedidos de reivindicação vão junto.
+      const survivor = await tx.affiliatePartner.findUnique({ where: { id: partnerId! }, select: { ownerUserId: true } });
+      if (!survivor?.ownerUserId) {
+        const owned = await tx.affiliatePartner.findMany({
+          where: { id: { in: others }, ownerUserId: { not: null } },
+          select: { id: true, ownerUserId: true, ownerSince: true },
+        });
+        const heir = others.map((id) => owned.find((o) => o.id === id)).find(Boolean);
+        if (heir) {
+          await tx.affiliatePartner.update({ where: { id: partnerId! }, data: { ownerUserId: heir.ownerUserId, ownerSince: heir.ownerSince ?? new Date() } });
+          await tx.affiliateOwnershipEvent.create({
+            data: { partnerId: partnerId!, fromUserId: null, toUserId: heir.ownerUserId, kind: 'merge', note: 'herdado na unificação de contas' },
+          });
+        }
+      }
+      await tx.affiliateClaim.updateMany({ where: { partnerId: { in: others } }, data: { partnerId: partnerId! } });
       await tx.affiliatePartner.deleteMany({ where: { id: { in: others } } });
     } else if (others.length) {
       // Mover conta: só apaga parceiro de origem que ficou vazio.

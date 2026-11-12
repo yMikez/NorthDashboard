@@ -12,7 +12,7 @@
 
 import type Anthropic from '@anthropic-ai/sdk';
 import { db } from '@/lib/db';
-import { requireAuth } from '@/lib/auth/guard';
+import { requireFullAccess } from '@/lib/auth/guard';
 import {
   getAnthropicClient,
   ANTHROPIC_MODEL,
@@ -67,7 +67,7 @@ const KEEPALIVE_MS = 15_000;
 export async function POST(req: Request) {
   // Aberto a QUALQUER usuário logado (2026-08-03) — conversas são
   // escopadas por userId em todas as queries.
-  const auth = await requireAuth();
+  const auth = await requireFullAccess();
   if (!auth.ok) return auth.response;
   const user = auth.user;
 

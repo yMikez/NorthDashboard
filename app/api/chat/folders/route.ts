@@ -6,7 +6,7 @@
 
 import { NextResponse } from 'next/server';
 import { db } from '@/lib/db';
-import { requireAuth } from '@/lib/auth/guard';
+import { requireFullAccess } from '@/lib/auth/guard';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -15,7 +15,7 @@ const MAX_FOLDERS = 50;
 const MAX_NAME = 60;
 
 export async function GET() {
-  const auth = await requireAuth();
+  const auth = await requireFullAccess();
   if (!auth.ok) return auth.response;
 
   const folders = await db.chatFolder.findMany({
@@ -35,7 +35,7 @@ export async function GET() {
 }
 
 export async function POST(req: Request) {
-  const auth = await requireAuth();
+  const auth = await requireFullAccess();
   if (!auth.ok) return auth.response;
 
   let body: { name?: string };

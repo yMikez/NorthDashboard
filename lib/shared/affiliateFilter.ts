@@ -10,14 +10,20 @@
 // Query param: `aff` (CSV). Escolha que não resolve pra nenhuma conta vira
 // NO_AFFILIATE — filtra tudo fora, nunca "sem filtro" (nada finge estar
 // filtrado com o total).
+//
+// Carteira (2026-11-12): `c:<User.id>` = a carteira de um captador e da
+// equipe abaixo dele (Squad Leader escolhe um Hunter; Gerente, um squad). E
+// quem tem função na carteira só enxerga a própria: resolveAffiliateFilter
+// recebe o usuário e intersecta (lib/portfolio/scope.ts).
 
 import { Prisma } from '@prisma/client';
 import { db } from '../db';
+import { accountsOfOwners, applyPortfolioScope, loadTeam, NO_AFFILIATE, type ScopeUser } from '../portfolio/scope';
+import { descendants } from '../portfolio/core';
 
-/** Id que não casa com nenhuma conta: "filtro ativo, nada selecionado". */
-export const NO_AFFILIATE = '__none__';
+export { NO_AFFILIATE };
 
-const KEY_RE = /^[ap]:[A-Za-z0-9_-]{1,64}$/;
+const KEY_RE = /^[apc]:[A-Za-z0-9_-]{1,64}$/;
 const NONE_TOKEN = '__NONE__';
 const MAX_KEYS = 200;
 
@@ -46,6 +52,15 @@ export async function resolveAffiliateAccounts(raw: string | null | undefined): 
   if (keys[0] === NONE_TOKEN) return [];
   const accountIds = keys.filter((k) => k.startsWith('a:')).map((k) => k.slice(2));
   const partnerIds = keys.filter((k) => k.startsWith('p:')).map((k) => k.slice(2));
+  const captadorIds = keys.filter((k) => k.startsWith('c:')).map((k) => k.slice(2));
+  if (captadorIds.length) {
+    // Carteira do captador = as pessoas dele e da equipe abaixo.
+    const team = await loadTeam();
+    const owners = new Set<string>();
+    for (const id of captadorIds) for (const o of descendants(team, id)) owners.add(o);
+    accountIds.push(...(await accountsOfOwners(owners)));
+  }
+  if (!accountIds.length && !partnerIds.length) return [];
   const rows = await db.affiliate.findMany({
     where: {
       OR: [
@@ -60,12 +75,18 @@ export async function resolveAffiliateAccounts(raw: string | null | undefined): 
 
 /**
  * `aff` → Affiliate.id[] pro filtro dos serviços. undefined = sem filtro;
- * escolha sem conta → [NO_AFFILIATE] (zera, não ignora).
+ * escolha sem conta → [NO_AFFILIATE] (zera, não ignora). `user` = quem pede:
+ * com função na carteira, o resultado fica dentro da carteira dele (sem
+ * escolha = a carteira toda). Obrigatório de propósito — rota nova não
+ * esquece o recorte.
  */
-export async function resolveAffiliateFilter(raw: string | null | undefined): Promise<string[] | undefined> {
+export async function resolveAffiliateFilter(
+  raw: string | null | undefined,
+  user: ScopeUser | null,
+): Promise<string[] | undefined> {
   const accounts = await resolveAffiliateAccounts(raw);
-  if (accounts === undefined) return undefined;
-  return accounts.length ? accounts.map((a) => a.id) : [NO_AFFILIATE];
+  const requested = accounts === undefined ? undefined : accounts.length ? accounts.map((a) => a.id) : [NO_AFFILIATE];
+  return applyPortfolioScope(user, requested);
 }
 
 /** Acrescenta o filtro (AND) num where do Prisma sem pisar num affiliateId já presente. */

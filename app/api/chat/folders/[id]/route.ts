@@ -4,7 +4,7 @@
 
 import { NextResponse } from 'next/server';
 import { db } from '@/lib/db';
-import { requireAuth } from '@/lib/auth/guard';
+import { requireFullAccess } from '@/lib/auth/guard';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -23,7 +23,7 @@ export async function PATCH(
   req: Request,
   { params }: { params: Promise<{ id: string }> },
 ) {
-  const auth = await requireAuth();
+  const auth = await requireFullAccess();
   if (!auth.ok) return auth.response;
   const { id } = await params;
 
@@ -48,7 +48,7 @@ export async function DELETE(
   _req: Request,
   { params }: { params: Promise<{ id: string }> },
 ) {
-  const auth = await requireAuth();
+  const auth = await requireFullAccess();
   if (!auth.ok) return auth.response;
   const { id } = await params;
 

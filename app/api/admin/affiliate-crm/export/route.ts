@@ -25,7 +25,7 @@ export async function GET(req: Request) {
   if (!auth.ok) return auth.response;
   const { searchParams } = new URL(req.url);
   const opts = crmOptionsFromQuery(searchParams);
-  opts.affiliateIds = await resolveAffiliateFilter(searchParams.get('aff'));
+  opts.affiliateIds = await resolveAffiliateFilter(searchParams.get('aff'), auth.user);
   // Sem parâmetro explícito, o export é a fila de pendentes.
   if (!searchParams.has('pending')) opts.pendingOnly = true;
   try {

@@ -17,6 +17,7 @@ export type TabId =
   | 'all-affiliates'
   | 'affiliate-analysis'
   | 'affiliate-crm'
+  | 'portfolio'
   | 'networks'
   | 'recovery'
   | 'tauk'
@@ -53,6 +54,9 @@ export const AVAILABLE_TABS: TabSpec[] = [
   // CRM: aba própria de propósito — quem opera o WhatsApp recebe só ela,
   // sem ver receita, margem nem CPA da operação inteira.
   { id: 'affiliate-crm',  label: 'CRM',                 group: 'Afiliados' },
+  // Carteira: equipe de captação (Gerente > Squad Leader > Hunter), dono de
+  // cada afiliado, pedidos de reivindicação e desempenho por captador.
+  { id: 'portfolio',      label: 'Carteira',            group: 'Afiliados' },
   // Networks: vendas das REDES de afiliados (NorthAffiliates) — rede e
   // integrante, CPA devido, repasse e margem. Fora das abas dos individuais.
   { id: 'networks',       label: 'Networks',            group: 'Afiliados' },
@@ -79,6 +83,22 @@ const TAB_IDS = new Set<string>(AVAILABLE_TABS.map((t) => t.id));
 
 /** Telas do modelo de pontuação (time de dados): qualquer uma delas libera os dados e as premissas. */
 export const AFFILIATE_SCORE_TABS: TabId[] = ['affiliate-ranking', 'affiliate-overview', 'affiliate-refund'];
+/**
+ * Abas que quem tem função na carteira (Gerente, Squad Leader, Hunter) pode
+ * abrir — todas recortadas pela carteira (decisão de 2026-11-12: vendas, sem
+ * dado de cliente). As outras ficam fechadas mesmo se marcadas no usuário:
+ * não filtram por afiliado (Call Center, Lucro real, Saúde…) ou mostram
+ * cliente (Transações, Leads, Pesquisas, Recorrências).
+ */
+export const PORTFOLIO_TABS: readonly TabId[] = [
+  'overview', 'funnel', 'refund-cohorts',
+  'leaderboard', 'all-affiliates', 'affiliate-analysis', 'affiliate-crm', 'portfolio',
+  'products',
+];
+
+export function isPortfolioTab(id: string): boolean {
+  return (PORTFOLIO_TABS as readonly string[]).includes(id);
+}
 
 export function isValidTab(id: string): id is TabId {
   return TAB_IDS.has(id);

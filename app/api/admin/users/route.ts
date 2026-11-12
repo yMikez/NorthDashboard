@@ -8,7 +8,9 @@ import { Prisma, type UserRole } from '@prisma/client';
 import { db } from '@/lib/db';
 import { requireAdmin } from '@/lib/auth/guard';
 import { hashPassword, validatePasswordStrength } from '@/lib/auth/password';
-import { sanitizeTabs, AVAILABLE_TABS } from '@/lib/auth/tabs';
+import { sanitizeTabs, AVAILABLE_TABS, PORTFOLIO_TABS } from '@/lib/auth/tabs';
+import { parsePortfolioFields } from '@/lib/portfolio/admin';
+import { invalidatePortfolioCache, loadTeam } from '@/lib/portfolio/scope';
 import { parsePagination, paginatedResponse } from '@/lib/pagination';
 import { logger } from '@/lib/logger';
 
@@ -46,6 +48,9 @@ export async function GET(req: Request) {
         lastLoginAt: true,
         createdAt: true,
         createdById: true,
+        portfolioRole: true,
+        portfolioParentId: true,
+        region: true,
       },
       orderBy: [{ active: 'desc' }, { createdAt: 'asc' }],
     }),
@@ -66,6 +71,13 @@ export async function GET(req: Request) {
   return NextResponse.json({
     users: paged.items,
     availableTabs: AVAILABLE_TABS,
+    // Carteira: abas que quem tem função abre (o resto fica fechado pra ele)
+    // e a equipe inteira (o "responde a" do formulário não pode depender da
+    // página da lista).
+    portfolioTabs: PORTFOLIO_TABS,
+    portfolioTeam: (await loadTeam())
+      .filter((u) => u.portfolioRole)
+      .map((u) => ({ id: u.id, name: u.name, email: u.email, portfolioRole: u.portfolioRole, portfolioParentId: u.portfolioParentId, region: u.region, active: u.active })),
     pagination: { page: paged.page, pageSize: paged.pageSize, total: paged.total, hasMore: paged.hasMore },
   });
 }
@@ -76,6 +88,9 @@ interface CreateBody {
   password?: unknown;
   role?: unknown;
   allowedTabs?: unknown;
+  portfolioRole?: unknown;
+  portfolioParentId?: unknown;
+  region?: unknown;
 }
 
 function parseRole(v: unknown): UserRole {
@@ -109,6 +124,9 @@ export async function POST(req: Request) {
   if (pwErr) {
     return NextResponse.json({ error: pwErr }, { status: 400 });
   }
+  // Carteira de afiliados (função, a quem responde, região).
+  const portfolio = await parsePortfolioFields(body, null, role);
+  if ('error' in portfolio) return NextResponse.json({ error: portfolio.error }, { status: 400 });
   const passwordHash = await hashPassword(password);
   try {
     const created = await db.user.create({
@@ -118,14 +136,17 @@ export async function POST(req: Request) {
         passwordHash,
         role,
         allowedTabs,
+        ...portfolio.data,
         createdById: auth.user.id,
         active: true,
       },
       select: {
         id: true, email: true, name: true, role: true, allowedTabs: true,
         active: true, lastLoginAt: true, createdAt: true, createdById: true,
+        portfolioRole: true, portfolioParentId: true, region: true,
       },
     });
+    invalidatePortfolioCache();
     logger.info({ actorId: auth.user.id, userId: created.id, email, role }, 'admin.users.create');
 
     return NextResponse.json({

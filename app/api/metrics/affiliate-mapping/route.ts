@@ -4,7 +4,7 @@
 // (sync/backfill) ficam em /api/admin/affiliate-mapping.
 
 import { NextResponse } from 'next/server';
-import { requireAnyTab } from '@/lib/auth/guard';
+import { requireAnyTab, denyPortfolio } from '@/lib/auth/guard';
 import { getAffiliateSyncStatus } from '@/lib/services/affiliateMappingSync';
 import { listUnmappedAffiliates, listMappedAffiliates, mappingCounts } from '@/lib/services/affiliateMapping';
 import { getAffiliatesInboundKey } from '@/lib/services/integrationSettings';
@@ -16,6 +16,9 @@ export const dynamic = 'force-dynamic';
 export async function GET() {
   const auth = await requireAnyTab(['leaderboard', 'all-affiliates', 'affiliate-analysis', 'platforms', 'transactions']);
   if (!auth.ok) return auth.response;
+  // Visão da operação inteira: fora do alcance de quem tem carteira.
+  const denied = denyPortfolio(auth.user);
+  if (denied) return denied;
   try {
     const inbound = Boolean(await getAffiliatesInboundKey());
     const [status, counts, unmapped, mapped] = await Promise.all([

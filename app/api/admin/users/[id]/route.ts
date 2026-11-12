@@ -11,6 +11,8 @@ import { db } from '@/lib/db';
 import { requireAdmin } from '@/lib/auth/guard';
 import { invalidateSessionCache } from '@/lib/auth/session';
 import { sanitizeTabs } from '@/lib/auth/tabs';
+import { parsePortfolioFields } from '@/lib/portfolio/admin';
+import { invalidatePortfolioCache } from '@/lib/portfolio/scope';
 import { logger } from '@/lib/logger';
 
 export const runtime = 'nodejs';
@@ -21,6 +23,9 @@ interface PatchBody {
   role?: unknown;
   allowedTabs?: unknown;
   active?: unknown;
+  portfolioRole?: unknown;
+  portfolioParentId?: unknown;
+  region?: unknown;
 }
 
 function parseRole(v: unknown): UserRole {
@@ -45,7 +50,7 @@ export async function PATCH(
 
   const target = await db.user.findUnique({
     where: { id },
-    select: { id: true, role: true, active: true, networkId: true },
+    select: { id: true, role: true, active: true, networkId: true, portfolioRole: true, portfolioParentId: true, region: true },
   });
   if (!target) return NextResponse.json({ error: 'not found' }, { status: 404 });
 
@@ -57,6 +62,9 @@ export async function PATCH(
     allowedTabs?: string[];
     active?: boolean;
     networkId?: string | null;
+    portfolioRole?: 'AFF_MANAGER' | 'SQUAD_LEADER' | 'HUNTER' | null;
+    portfolioParentId?: string | null;
+    region?: string | null;
   } = {};
 
   if ('name' in body) {
@@ -92,6 +100,12 @@ export async function PATCH(
     data.active = next;
   }
 
+  if ('portfolioRole' in body || 'portfolioParentId' in body || 'region' in body) {
+    const portfolio = await parsePortfolioFields(body, target, data.role ?? target.role);
+    if ('error' in portfolio) return NextResponse.json({ error: portfolio.error }, { status: 400 });
+    Object.assign(data, portfolio.data);
+  }
+
   if (Object.keys(data).length === 0) {
     return NextResponse.json({ error: 'nada pra atualizar' }, { status: 400 });
   }
@@ -113,7 +127,7 @@ export async function PATCH(
     select: {
       id: true, email: true, name: true, role: true, allowedTabs: true,
       active: true, lastLoginAt: true, createdAt: true, createdById: true,
-      networkId: true,
+      networkId: true, portfolioRole: true, portfolioParentId: true, region: true,
     },
   });
 
@@ -124,6 +138,7 @@ export async function PATCH(
   // Role/tabs/active mudaram → derruba o cache de sessão pra propagar já
   // (sem isso a mudança levaria até 30s pra valer em requests autenticados).
   invalidateSessionCache();
+  invalidatePortfolioCache();
 
   logger.info({ actorId: auth.user.id, userId: id, changes: Object.keys(data) }, 'admin.users.patch');
 

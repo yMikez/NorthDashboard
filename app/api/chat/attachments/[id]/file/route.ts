@@ -5,7 +5,7 @@
 // sessão do usuário. nosniff + CSP sandbox cobrem navegador que insista.
 
 import { NextResponse } from 'next/server';
-import { requireAuth } from '@/lib/auth/guard';
+import { requireFullAccess } from '@/lib/auth/guard';
 import { getOwnedAttachmentFile } from '@/lib/rag/attachments';
 
 export const runtime = 'nodejs';
@@ -18,7 +18,7 @@ function contentDisposition(fileName: string): string {
 }
 
 export async function GET(_req: Request, { params }: { params: Promise<{ id: string }> }) {
-  const auth = await requireAuth();
+  const auth = await requireFullAccess();
   if (!auth.ok) return auth.response;
   const { id } = await params;
   const file = await getOwnedAttachmentFile(auth.user.id, id);

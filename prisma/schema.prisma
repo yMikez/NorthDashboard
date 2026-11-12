@@ -193,12 +193,65 @@ model AffiliatePartner {
   notes       String?
   originType  AffiliateOrigin?
   originRef   String?
+  // Carteira (2026-11-12): o captador DONO da pessoa (Hunter, Squad Leader
+  // ou Gerente). Todas as contas da pessoa entram na carteira dele, inclusive
+  // as unificadas depois. Histórico em AffiliateOwnershipEvent.
+  ownerUserId String?
+  owner       User?            @relation("PartnerOwner", fields: [ownerUserId], references: [id], onDelete: SetNull)
+  ownerSince  DateTime?
   createdAt   DateTime         @default(now())
   updatedAt   DateTime         @updatedAt
 
-  affiliates Affiliate[]
+  affiliates      Affiliate[]
+  ownershipEvents AffiliateOwnershipEvent[]
+  claims          AffiliateClaim[]
 
   @@index([email])
+  @@index([ownerUserId])
+}
+
+// Carteira: cada troca de dono de uma pessoa afiliada (atribuição,
+// transferência, reivindicação aprovada, liberação). from/to null = sem dono.
+model AffiliateOwnershipEvent {
+  id         String           @id @default(cuid())
+  partnerId  String
+  partner    AffiliatePartner @relation(fields: [partnerId], references: [id], onDelete: Cascade)
+  fromUserId String?
+  toUserId   String?
+  byUserId   String?
+  // assign | transfer | claim | release
+  kind       String
+  note       String?
+  at         DateTime         @default(now())
+
+  @@index([partnerId, at])
+  @@index([toUserId])
+}
+
+enum AffiliateClaimStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  CANCELED
+}
+
+// Carteira: o captador pede um afiliado sem dono; quem está acima dele (SL ou
+// Gerente) ou o admin aprova. Só um pedido aberto por pessoa afiliada.
+model AffiliateClaim {
+  id           String               @id @default(cuid())
+  partnerId    String
+  partner      AffiliatePartner     @relation(fields: [partnerId], references: [id], onDelete: Cascade)
+  userId       String
+  note         String?
+  status       AffiliateClaimStatus @default(PENDING)
+  createdAt    DateTime             @default(now())
+  decidedAt    DateTime?
+  decidedById  String?
+  decisionNote String?
+
+  @@index([status])
+  @@index([partnerId])
+  @@index([userId])
 }
 
 // Par de contas que o admin decidiu NÃO unificar ("Ignorar" na tela de
@@ -547,6 +600,15 @@ enum UserRole {
   NETWORK_PARTNER
 }
 
+// Carteira de afiliados: função do usuário na equipe de captação. Quem tem
+// função (e não é ADMIN) só vê os afiliados da própria carteira e da equipe
+// abaixo dele (lib/portfolio/scope.ts).
+enum PortfolioRole {
+  AFF_MANAGER  // Gerente de afiliados (por região)
+  SQUAD_LEADER // responde ao Gerente
+  HUNTER       // responde ao Squad Leader
+}
+
 // Dashboard users. ADMIN sees everything and can manage other users.
 // MEMBER sees only the tabs listed in allowedTabs (validated against
 // AVAILABLE_TABS in lib/auth/tabs.ts at write time, not at the DB level).
@@ -565,6 +627,14 @@ model User {
   // Pra role=NETWORK_PARTNER esse campo é obrigatório (FK pro Network
   // que ele representa). Pra ADMIN/MEMBER fica null.
   networkId    String?
+  // Carteira: função, a quem responde (Hunter → Squad Leader → Gerente) e
+  // região (Brasil, USA, Europa… rótulo livre).
+  portfolioRole     PortfolioRole?
+  portfolioParentId String?
+  portfolioParent   User?              @relation("PortfolioTree", fields: [portfolioParentId], references: [id], onDelete: SetNull)
+  portfolioChildren User[]             @relation("PortfolioTree")
+  region            String?
+  ownedPartners     AffiliatePartner[] @relation("PartnerOwner")
   sessions     Session[]
 
   network         Network?          @relation(fields: [networkId], references: [id])

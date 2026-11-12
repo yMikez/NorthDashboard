@@ -21,6 +21,7 @@ import {
 import { TIERS, type Tier } from '@/lib/services/affiliateCrmCore';
 import { logger } from '@/lib/logger';
 import { resolveAffiliateFilter } from '@/lib/shared/affiliateFilter';
+import { entityKeyAllowed, isPortfolioScoped } from '@/lib/portfolio/scope';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -39,7 +40,7 @@ export async function GET(req: Request) {
   const { searchParams } = new URL(req.url);
   try {
     const opts = crmOptionsFromQuery(searchParams);
-    opts.affiliateIds = await resolveAffiliateFilter(searchParams.get('aff'));
+    opts.affiliateIds = await resolveAffiliateFilter(searchParams.get('aff'), auth.user);
     return NextResponse.json(await listAffiliateCrm(opts));
   } catch (err) {
     logger.error({ err }, 'admin/affiliate-crm GET failed');
@@ -82,6 +83,18 @@ export async function POST(req: Request) {
   let body: Body;
   try { body = (await req.json()) as Body; } catch { return NextResponse.json({ error: 'invalid body' }, { status: 400 }); }
   const who = auth.user.email ?? auth.user.id ?? null;
+
+  // Carteira: quem tem função só registra contato/perfil de quem é dele.
+  if (isPortfolioScoped(auth.user)) {
+    const keys = body.action === 'touch_batch' && Array.isArray(body.items)
+      ? body.items.map((i) => (i && typeof i === 'object' ? str((i as Record<string, unknown>).crmKey) : undefined))
+      : [str(body.crmKey)];
+    for (const k of keys) {
+      if (k && !(await entityKeyAllowed(auth.user, k))) {
+        return NextResponse.json({ error: 'afiliado fora da sua carteira' }, { status: 403 });
+      }
+    }
+  }
 
   try {
     switch (body.action) {

@@ -438,6 +438,8 @@ function AffiliateAnalysisPage({ filters, user }) {
                               <div style={{ fontSize: 10, color: 'var(--fg5)', fontFamily: 'var(--f-mono)' }}>
                                 {r.accounts.length > 1 ? `${r.accounts.length} contas` : r.accounts[0]?.externalId}
                                 {r.contact?.email ? ` · ${r.contact.email}` : ''}
+                                {/* Carteira: o captador dono da pessoa. */}
+                                {r.owner && <span title="Captador (aba Carteira)" style={{ color: 'var(--fg3)' }}> · {r.owner.name}</span>}
                               </div>
                             </td>
                             <td style={{ whiteSpace: 'nowrap' }}>{r.platforms.map((p) => <span key={p} style={{ marginRight: 3 }}><AaPlat slug={p}/></span>)}</td>

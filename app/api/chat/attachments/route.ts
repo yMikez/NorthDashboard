@@ -13,7 +13,7 @@
 // dono. O tipo é decidido pelos bytes, nunca pela extensão/MIME do browser.
 
 import { NextResponse, after } from 'next/server';
-import { requireAuth } from '@/lib/auth/guard';
+import { requireFullAccess } from '@/lib/auth/guard';
 import {
   ATTACHMENT_LIMITS,
   acceptUpload,
@@ -38,7 +38,7 @@ function fail(status: number, error: string, message: string) {
 const tooLarge = () => fail(413, 'too_large', `Arquivo maior que ${Math.round(ATTACHMENT_LIMITS.maxFileBytes / (1024 * 1024))} MB.`);
 
 export async function POST(req: Request) {
-  const auth = await requireAuth();
+  const auth = await requireFullAccess();
   if (!auth.ok) return auth.response;
 
   // Recusa antes de ler o corpo quando o próprio cabeçalho já passa do teto.

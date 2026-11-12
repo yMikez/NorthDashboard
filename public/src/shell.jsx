@@ -29,6 +29,8 @@ function Sidebar({ active, onNav, user, open, onClose }) {
         { id: 'leaderboard', label: 'Afiliados', icon: 'ns-ranking' },
         { id: 'affiliate-analysis', label: 'Análise', icon: 'trending-up' },
         { id: 'affiliate-crm', label: 'CRM', icon: 'message-square' },
+        // Carteira: equipe de captação (Gerente > Squad Leader > Hunter) e dono de cada afiliado.
+        { id: 'portfolio', label: 'Carteira', icon: 'target' },
         // Redes de afiliados (NorthAffiliates) — separadas dos individuais.
         { id: 'networks', label: 'Networks', icon: 'link' },
       ]
@@ -84,13 +86,15 @@ function Sidebar({ active, onNav, user, open, onClose }) {
       { id: 'net-profit', label: 'Lucro real', icon: 'dollar' },
     ],
   };
+  // Carteira de afiliados: quem tem função (Gerente/SL/Hunter) não usa o chat
+  // IA — ele lê a operação inteira, sem o recorte da carteira.
   const groups = isAdmin
     ? [...allGroups, iaGroup, adminOnly]
     : [
         ...allGroups
           .map((g) => ({ ...g, items: g.items.filter((it) => allowed.has(it.id)) }))
           .filter((g) => g.items.length > 0),
-        iaGroup,
+        ...(user?.portfolioScoped ? [] : [iaGroup]),
       ];
   // Colapso persistido — modo trilho de ícones (64px) com tooltip no title.
   const [collapsed, setCollapsed] = useStateS(() => {

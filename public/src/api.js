@@ -866,6 +866,11 @@ function affiliateCrmExportUrl(params = {}) {
   return `/api/admin/affiliate-crm/export${qs ? `?${qs}` : ''}`;
 }
 
+// ---------- Carteira de afiliados (aba Carteira) ----------
+// Sem cache: cada um vê a própria equipe e a resposta muda a cada ação.
+function fetchPortfolio() { return coGet('/api/metrics/portfolio'); }
+function portfolioAction(body) { return coSend('/api/metrics/portfolio', 'POST', body); }
+
 // ---------- VSLs (aba VSLs) ----------
 // Estado sem cache (depois de salvar, a tela precisa ver o dado novo);
 // desempenho usa o filtro global (período, plataformas, famílias).
@@ -997,6 +1002,8 @@ window.NSApi = _wrapMutations({
   aiDeleteConversation,
   aiSendMessage,
   fetchAffiliateCrm,
+  fetchPortfolio,
+  portfolioAction,
   adminAffiliateCrm,
   fetchDataCoverage,
   affiliateCrmExportUrl,

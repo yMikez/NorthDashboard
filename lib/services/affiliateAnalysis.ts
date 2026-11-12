@@ -14,6 +14,7 @@ import { Prisma } from '@prisma/client';
 import { dbRead as db } from '../db';
 import { getProfitModelInputs, ZERO_PLATFORM_PCTS, type ProfitModelInputs } from './profitModel';
 import { effectiveInternal, suggestLinks, type IdentityAffiliate } from './affiliateIdentityCore';
+import { loadTeam } from '../portfolio/scope';
 import {
   COVERAGE_DAYS, WINDOWS, windowRanges, sumRange, latestCpaInRange, metricsFor, mergeMetrics,
   pctDelta, trendTag, explainChange, ZERO_BUCKET, round2, round4,
@@ -82,6 +83,8 @@ export interface AnalysisRow {
   accounts: AccountRef[];
   contact: { email: string | null; phone: string | null } | null;
   origin: { type: string; ref: string | null } | null;
+  /** Carteira: o captador dono da pessoa (null = sem dono). */
+  owner: { id: string; name: string } | null;
   internal: boolean;
   cur: WindowMetrics;
   prev: WindowMetrics;
@@ -149,7 +152,7 @@ export interface AffMeta {
   lastOrderAt: Date | null;
   mappedAffiliateId: string | null;
   refundCbPctOverride: number | null;
-  partner: { id: string; displayName: string; email: string | null; phone: string | null; notes: string | null; originType: string | null; originRef: string | null } | null;
+  partner: { id: string; displayName: string; email: string | null; phone: string | null; notes: string | null; originType: string | null; originRef: string | null; ownerUserId: string | null } | null;
 }
 
 function originOf(p: AffMeta['partner']): { type: string; ref: string | null } | null {
@@ -267,7 +270,7 @@ export async function loadRaw(opts: AnalysisOptions, affiliateIds?: string[], co
         id: true, externalId: true, nickname: true, email: true, partnerId: true, isInternal: true,
         firstSeenAt: true, lastOrderAt: true, mappedAffiliateId: true,
         refundCbPctOverride: true, platform: { select: { slug: true } },
-        partner: { select: { id: true, displayName: true, email: true, phone: true, notes: true, originType: true, originRef: true } },
+        partner: { select: { id: true, displayName: true, email: true, phone: true, notes: true, originType: true, originRef: true, ownerUserId: true } },
       },
     }),
     getProfitModelInputs(),
@@ -460,6 +463,9 @@ export async function getAffiliateAnalysis(opts: AnalysisOptions): Promise<Affil
   const days = opts.window;
   const { cur: curRange, prev: prevRange } = windowRanges(days, raw.lastIdx);
 
+  const ownerName = new Map((await loadTeam()).map((u) => [u.id, u.name?.trim() || u.email]));
+  const ownerOf = (p: AffMeta['partner']) =>
+    (p?.ownerUserId ? { id: p.ownerUserId, name: ownerName.get(p.ownerUserId) ?? 'captador' } : null);
   const rows: AnalysisRow[] = [];
   for (const e of entities) {
     const w = entityWindow(raw, e, days);
@@ -475,6 +481,7 @@ export async function getAffiliateAnalysis(opts: AnalysisOptions): Promise<Affil
       accounts,
       contact: opts.includeContact ? { email: e.partner?.email ?? accounts.find((a) => a.email)?.email ?? null, phone: e.partner?.phone ?? null } : null,
       origin: originOf(e.partner),
+      owner: ownerOf(e.partner),
       internal: accounts.every((a) => a.internal),
       cur: w.cur, prev: w.prev,
       delta: {
@@ -728,6 +735,11 @@ async function loadNewAffiliates(
   const platCond = opts.platformSlugs?.length
     ? Prisma.sql`AND pl."slug" IN (${Prisma.join(opts.platformSlugs)})`
     : Prisma.empty;
+  // Filtro de afiliado (e a carteira de quem só vê a própria): sem ele o
+  // quadro listava os novos da base inteira.
+  const affCond = opts.affiliateIds?.length
+    ? Prisma.sql`AND a."id" IN (${Prisma.join(opts.affiliateIds)})`
+    : Prisma.empty;
   const firsts = await db.$queryRaw<Array<{
     id: string; externalId: string; nickname: string | null; partnerId: string | null;
     isInternal: boolean | null; platform: string; first_sale: Date;
@@ -737,7 +749,7 @@ async function loadNewAffiliates(
     FROM "Order" o
     JOIN "Affiliate" a ON a."id" = o."affiliateId"
     JOIN "Platform" pl ON pl."id" = a."platformId"
-    WHERE o."status" = 'APPROVED' AND o."productType" = 'FRONTEND' AND o."networkId" IS NULL ${platCond}
+    WHERE o."status" = 'APPROVED' AND o."productType" = 'FRONTEND' AND o."networkId" IS NULL ${platCond} ${affCond}
     GROUP BY a."id", a."externalId", a."nickname", a."partnerId", a."isInternal", pl."slug"
     HAVING MIN(o."orderedAt") >= ${start} AND MIN(o."orderedAt") < ${end}
   `);

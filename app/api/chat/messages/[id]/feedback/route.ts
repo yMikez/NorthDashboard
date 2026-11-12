@@ -11,7 +11,7 @@
 
 import { NextResponse } from 'next/server';
 import { db } from '@/lib/db';
-import { requireAuth } from '@/lib/auth/guard';
+import { requireFullAccess } from '@/lib/auth/guard';
 import { logger } from '@/lib/logger';
 import { parseFeedbackInput } from '@/lib/services/chatTelemetry';
 
@@ -30,7 +30,7 @@ async function ownedAssistantMessage(messageId: string, userId: string): Promise
 }
 
 export async function POST(req: Request, { params }: { params: Promise<{ id: string }> }) {
-  const auth = await requireAuth();
+  const auth = await requireFullAccess();
   if (!auth.ok) return auth.response;
   const { id } = await params;
   if (!ID_RE.test(id)) return NextResponse.json({ error: 'mensagem não encontrada' }, { status: 404 });
@@ -71,7 +71,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
 }
 
 export async function DELETE(_req: Request, { params }: { params: Promise<{ id: string }> }) {
-  const auth = await requireAuth();
+  const auth = await requireFullAccess();
   if (!auth.ok) return auth.response;
   const { id } = await params;
   if (!ID_RE.test(id)) return NextResponse.json({ error: 'mensagem não encontrada' }, { status: 404 });

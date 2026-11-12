@@ -8,6 +8,7 @@ import { requireTab } from '@/lib/auth/guard';
 import { respondCached } from '@/lib/shared/metricsResponse';
 import { parseAnalysisParams } from '@/lib/shared/affiliateAnalysisParams';
 import { getAffiliateExplain } from '@/lib/services/affiliateAnalysis';
+import { entityKeyAllowed } from '@/lib/portfolio/scope';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -22,6 +23,8 @@ export async function GET(req: Request) {
   }
   const p = parseAnalysisParams(searchParams);
   if (!p.window) return NextResponse.json({ error: 'window deve ser um inteiro de 1 a 90' }, { status: 400 });
+  // Carteira: pessoa/conta fora da carteira de quem pede = não existe.
+  if (!(await entityKeyAllowed(auth.user, key))) return NextResponse.json({ error: 'not_found' });
   // Contato visível pra quem tem a aba (mesma regra de quem pode unificar).
   const includeContact = !!auth.user;
   const cacheParams = new URLSearchParams(searchParams);

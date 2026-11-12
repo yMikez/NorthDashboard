@@ -7,7 +7,7 @@
 // existência do id vaza.
 
 import { NextResponse } from 'next/server';
-import { requireAuth } from '@/lib/auth/guard';
+import { requireFullAccess } from '@/lib/auth/guard';
 import { getOwnedAttachment, removeAttachment } from '@/lib/rag/attachments';
 import { toAttachmentDTO } from '@/lib/chat/attachmentDto';
 
@@ -17,7 +17,7 @@ export const dynamic = 'force-dynamic';
 const notFound = () => NextResponse.json({ error: 'not_found', message: 'Anexo não encontrado.' }, { status: 404 });
 
 export async function GET(_req: Request, { params }: { params: Promise<{ id: string }> }) {
-  const auth = await requireAuth();
+  const auth = await requireFullAccess();
   if (!auth.ok) return auth.response;
   const { id } = await params;
   const row = await getOwnedAttachment(auth.user.id, id);
@@ -26,7 +26,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
 }
 
 export async function DELETE(_req: Request, { params }: { params: Promise<{ id: string }> }) {
-  const auth = await requireAuth();
+  const auth = await requireFullAccess();
   if (!auth.ok) return auth.response;
   const { id } = await params;
   const result = await removeAttachment(auth.user.id, id);

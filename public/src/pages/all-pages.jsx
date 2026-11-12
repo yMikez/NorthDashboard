@@ -555,9 +555,12 @@ function LeaderboardPage({ filters, onOpenAffiliate, user }) {
               <Icon name="link" size={12}/> Identidades
             </button>
           )}
-          <button className="btn btn-ghost" title="Espelho do NorthScale Afiliados: quem está mapeado e a fila de IDs sem mapeamento" onClick={() => setMappingOpen(true)}>
-            <Icon name="plug" size={12}/> Mapeamento
-          </button>
+          {/* Mapeamento = base inteira de afiliados: fora do alcance de quem tem carteira. */}
+          {!user?.portfolioScoped && (
+            <button className="btn btn-ghost" title="Espelho do NorthScale Afiliados: quem está mapeado e a fila de IDs sem mapeamento" onClick={() => setMappingOpen(true)}>
+              <Icon name="plug" size={12}/> Mapeamento
+            </button>
+          )}
           <button className="btn btn-ghost" onClick={() => downloadCsv(
             `ranking-afiliados_${isoDateOnly(filters.dateRange.start)}_${isoDateOnly(filters.dateRange.end)}.csv`,
             ['#', 'Afiliado', 'Afiliado ID', 'Afiliado (sistema)', 'affiliate_id', 'Plataforma', 'Vendas pagas', 'Vendas aprovadas', 'Receita aprovada USD', 'Receita cobrada USD', 'Estornado USD', 'FEs pagos',
@@ -1840,7 +1843,7 @@ function AllAffiliatesPage({ filters, onOpenAffiliate }) {
 //   Level 1: FamilyGrid — cards per ProductFamily (NeuroMindPro, GlycoPulse, ...)
 //   Level 2: FamilyDrillDown — variants grouped by type (FE/UP/DW/RC) for one family
 //   Level 3: VariantDetailDrawer — single SKU detail with assets/links
-function ProductsPage({ filters }) {
+function ProductsPage({ filters, user }) {
   // Drill-down state. Selecting a family transitions to L2; selecting a variant
   // (sku externalId) opens the L3 drawer.
   const [selectedFamily, setSelectedFamily] = useState(null);
@@ -1851,7 +1854,8 @@ function ProductsPage({ filters }) {
   // for the grid view since FamilyGrid uses /families aggregates.
   const productsState = useProductsData(filters, selectedFamily !== null);
   const pageStates = usePageStates();
-  const callCenter = useCallCenter();
+  // Monitor de call center = volume da operação inteira: fora pra quem tem carteira.
+  const callCenter = useCallCenter(!user?.portfolioScoped);
   const cur = filters.currency || 'USD';
 
   if (selectedFamily) {
@@ -1875,7 +1879,7 @@ function ProductsPage({ filters }) {
       cur={cur}
       onPick={setSelectedFamily}
       pageStates={pageStates}
-      callCenter={callCenter}
+      callCenter={user?.portfolioScoped ? null : callCenter}
     />
   );
 }
@@ -1887,10 +1891,11 @@ function ProductsPage({ filters }) {
 // remover da lista.
 // ─────────────────────────────────────────────────────────────────────────────
 
-function useCallCenter() {
+function useCallCenter(enabled = true) {
   const [state, setState] = useState({ status: 'loading', data: null });
   const [refresh, setRefresh] = useState(0);
   useEffect(() => {
+    if (!enabled) return undefined;
     let cancelled = false;
     window.NSApi.fetchCallCenter()
       .then((d) => { if (!cancelled) setState({ status: 'ready', data: d }); })
@@ -4105,6 +4110,15 @@ const TAB_CATALOG = [
 // for de uma versão antiga), vale a cópia local acima.
 let SERVER_TAB_CATALOG = null;
 function tabCatalog() { return SERVER_TAB_CATALOG && SERVER_TAB_CATALOG.length ? SERVER_TAB_CATALOG : TAB_CATALOG; }
+// Carteira de afiliados: abas que quem tem função abre e a equipe (pro
+// "responde a"). Vêm do GET /api/admin/users.
+let SERVER_PORTFOLIO_TABS = [];
+let SERVER_PORTFOLIO_TEAM = [];
+const UF_PORTFOLIO_ROLES = [
+  ['', 'Nenhuma'], ['AFF_MANAGER', 'Gerente de afiliados'], ['SQUAD_LEADER', 'Squad Leader'], ['HUNTER', 'Hunter'],
+];
+const UF_PARENT_ROLE = { SQUAD_LEADER: 'AFF_MANAGER', HUNTER: 'SQUAD_LEADER' };
+const UF_ROLE_SHORT = { AFF_MANAGER: 'Gerente', SQUAD_LEADER: 'Squad Leader', HUNTER: 'Hunter' };
 function tabGroups() {
   const out = [];
   for (const t of tabCatalog()) if (!out.includes(t.group)) out.push(t.group);
@@ -4126,6 +4140,8 @@ function UsersPage({ currentUser }) {
       .then((data) => {
         if (cancelled) return;
         if (Array.isArray(data.availableTabs) && data.availableTabs.length) SERVER_TAB_CATALOG = data.availableTabs;
+        if (Array.isArray(data.portfolioTabs)) SERVER_PORTFOLIO_TABS = data.portfolioTabs;
+        if (Array.isArray(data.portfolioTeam)) SERVER_PORTFOLIO_TEAM = data.portfolioTeam;
         setState({ status: 'ready', users: data.users, pagination: data.pagination || null, error: null });
       })
       .catch((err) => {
@@ -4205,6 +4221,11 @@ function UsersPage({ currentUser }) {
                       }}>
                         {u.role}
                       </span>
+                      {u.portfolioRole && (
+                        <span className="badge" title="Função na carteira de afiliados" style={{ marginLeft: 4, color: 'var(--fg2)', borderColor: 'var(--border)' }}>
+                          {UF_ROLE_SHORT[u.portfolioRole]}{u.region ? ` · ${u.region}` : ''}
+                        </span>
+                      )}
                     </td>
                     <td>
                       {u.role === 'ADMIN' ? (
@@ -4291,6 +4312,17 @@ function UserFormDrawer({ mode, initial, isSelf, onClose, onSaved }) {
   const [role, setRole] = useState(initial?.role || 'MEMBER');
   const [allowedTabs, setAllowedTabs] = useState(new Set(initial?.allowedTabs || []));
   const [active, setActive] = useState(initial?.active ?? true);
+  // Carteira de afiliados.
+  const [pfRole, setPfRole] = useState(initial?.portfolioRole || '');
+  const [pfParent, setPfParent] = useState(initial?.portfolioParentId || '');
+  const [pfRegion, setPfRegion] = useState(initial?.region || '');
+  const scopedForm = role === 'MEMBER' && !!pfRole;
+  const pfTabs = new Set(SERVER_PORTFOLIO_TABS);
+  const parentRole = UF_PARENT_ROLE[pfRole] || null;
+  const parentOptions = parentRole
+    ? SERVER_PORTFOLIO_TEAM.filter((u) => u.portfolioRole === parentRole && u.id !== initial?.id)
+    : [];
+  const regionOptions = Array.from(new Set(['Brasil', 'USA', 'Europa', ...SERVER_PORTFOLIO_TEAM.map((u) => u.region).filter(Boolean)]));
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(null);
   const [showResetField, setShowResetField] = useState(false);
@@ -4328,6 +4360,9 @@ function UserFormDrawer({ mode, initial, isSelf, onClose, onSaved }) {
         name: name || (isCreate ? undefined : null),
         role,
         allowedTabs: role === 'MEMBER' ? Array.from(allowedTabs) : [],
+        portfolioRole: pfRole || null,
+        portfolioParentId: parentRole ? (pfParent || null) : null,
+        region: pfRegion.trim() || null,
       };
       if (isCreate) {
         await window.NSApi.adminCreateUser({
@@ -4438,6 +4473,38 @@ function UserFormDrawer({ mode, initial, isSelf, onClose, onSaved }) {
             </div>
           </div>
 
+          <div style={{ display: 'grid', gap: 6 }}>
+            <span style={{ fontFamily: 'var(--f-mono)', fontSize: 10, color: 'var(--fg4)' }}>Carteira de afiliados</span>
+            <div className="seg" style={{ width: 'fit-content', flexWrap: 'wrap' }}>
+              {UF_PORTFOLIO_ROLES.map(([k, l]) => (
+                <button key={k || 'none'} className={pfRole === k ? 'is-active' : ''} onClick={() => { setPfRole(k); setPfParent(''); }}>{l}</button>
+              ))}
+            </div>
+            {pfRole && (
+              <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+                {parentRole && (
+                  <label style={{ display: 'grid', gap: 4, fontSize: 11, color: 'var(--fg3)' }}>
+                    <span>Responde a ({UF_ROLE_SHORT[parentRole]})</span>
+                    <select value={pfParent} onChange={(e) => setPfParent(e.target.value)} style={UF_SELECT}>
+                      <option value="">— ainda sem líder —</option>
+                      {parentOptions.map((u) => <option key={u.id} value={u.id}>{u.name || u.email}{u.region ? ` · ${u.region}` : ''}</option>)}
+                    </select>
+                  </label>
+                )}
+                <label style={{ display: 'grid', gap: 4, fontSize: 11, color: 'var(--fg3)' }}>
+                  <span>Região</span>
+                  <input value={pfRegion} onChange={(e) => setPfRegion(e.target.value)} list="uf-regions" placeholder="Brasil" style={{ ...UF_SELECT, minWidth: 0, width: 140 }}/>
+                  <datalist id="uf-regions">{regionOptions.map((r) => <option key={r} value={r}/>)}</datalist>
+                </label>
+              </div>
+            )}
+            <div style={{ fontSize: 11, color: 'var(--fg5)', fontFamily: 'var(--f-mono)' }}>
+              {!pfRole && 'Sem função: vê as abas marcadas sem recorte de afiliado.'}
+              {pfRole && role === 'ADMIN' && 'Admin com função aparece na equipe, mas segue vendo tudo.'}
+              {scopedForm && 'Só vê os afiliados da própria carteira e da equipe abaixo dele, e só nas abas de vendas abaixo.'}
+            </div>
+          </div>
+
           {role === 'MEMBER' && (
             <div style={{ display: 'grid', gap: 8 }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -4476,17 +4543,22 @@ function UserFormDrawer({ mode, initial, isSelf, onClose, onSaved }) {
                       </span>
                     </div>
                     <div style={{ display: 'grid', gap: 4 }}>
-                      {tabs.map((t) => (
-                        <label key={t.id} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, color: 'var(--fg1)', cursor: 'pointer' }}>
-                          <input
-                            type="checkbox"
-                            checked={allowedTabs.has(t.id)}
-                            onChange={() => toggleTab(t.id)}
-                            style={{ accentColor: 'var(--glow-cyan)' }}
-                          />
-                          {t.label}
-                        </label>
-                      ))}
+                      {tabs.map((t) => {
+                        // Com função na carteira, aba fora das de vendas não abre (o servidor barra).
+                        const closed = scopedForm && !pfTabs.has(t.id);
+                        return (
+                          <label key={t.id} title={closed ? 'Fechada pra quem tem função na carteira' : undefined}
+                            style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, color: closed ? 'var(--fg5)' : 'var(--fg1)', cursor: 'pointer' }}>
+                            <input
+                              type="checkbox"
+                              checked={allowedTabs.has(t.id)}
+                              onChange={() => toggleTab(t.id)}
+                              style={{ accentColor: 'var(--glow-cyan)' }}
+                            />
+                            {t.label}{closed ? ' · fechada pra carteira' : ''}
+                          </label>
+                        );
+                      })}
                     </div>
                   </div>
                 );
@@ -4590,6 +4662,11 @@ function UserFormDrawer({ mode, initial, isSelf, onClose, onSaved }) {
     </div>
   ), document.body);
 }
+
+const UF_SELECT = {
+  padding: '7px 9px', background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: 6,
+  color: 'var(--fg1)', fontSize: 12, minWidth: 200,
+};
 
 function UserField({ label, value, onChange, type, required }) {
   return (
@@ -4973,8 +5050,9 @@ function ChatWidget({ user }) {
   const [open, setOpen] = useState(false);
   const [conversationId, setConversationId] = useState(null);
 
-  // Chat IA é pra qualquer usuário logado (admin E member) — sem gate de role.
-  if (!user) return null;
+  // Chat IA é pra qualquer usuário logado (admin E member) — menos quem tem
+  // função na carteira de afiliados (o chat lê a operação inteira).
+  if (!user || user.portfolioScoped) return null;
 
   return (
     <>

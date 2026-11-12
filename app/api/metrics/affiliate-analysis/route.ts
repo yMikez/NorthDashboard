@@ -26,7 +26,7 @@ export async function GET(req: Request) {
   // Contato/e-mail só pra admin → a chave de cache precisa distinguir.
   const cacheParams = new URLSearchParams(searchParams);
   cacheParams.set('_contact', includeContact ? '1' : '0');
-  const affiliateIds = await resolveAffiliateFilter(searchParams.get('aff'));
+  const affiliateIds = await resolveAffiliateFilter(searchParams.get('aff'), auth.user);
   return respondCached('affiliate-analysis', cacheParams, () =>
     getAffiliateAnalysis({ ...p, window: p.window!, includeContact, affiliateIds }),
   );

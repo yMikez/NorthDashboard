@@ -37,7 +37,7 @@ export async function GET(req: Request) {
 
   const horizon = Number.parseInt(searchParams.get('horizon') ?? '30', 10) || 30;
 
-  const affiliateIds = await resolveAffiliateFilter(searchParams.get('aff'));
+  const affiliateIds = await resolveAffiliateFilter(searchParams.get('aff'), auth.user);
   try {
     return await respondCached('refund-cohorts', searchParams, () =>
       getRefundCohorts(

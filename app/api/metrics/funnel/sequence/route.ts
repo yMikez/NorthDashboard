@@ -21,7 +21,7 @@ export async function GET(req: Request) {
   const { searchParams } = new URL(req.url);
   const p = parseAnalysisParams(searchParams);
   if (!p.window) return NextResponse.json({ error: 'window deve ser um inteiro de 1 a 90' }, { status: 400 });
-  const affiliateIds = await resolveAffiliateFilter(searchParams.get('aff'));
+  const affiliateIds = await resolveAffiliateFilter(searchParams.get('aff'), auth.user);
   return respondCached('funnel/sequence', searchParams, () =>
     getFunnelSequence({
       window: p.window!, count: p.count, anchor: p.anchor, includeToday: p.includeToday,

@@ -5,6 +5,9 @@ import { getCachedResponse, setCachedResponse } from '@/lib/cache/responseCache'
 import { logger } from '@/lib/logger';
 import { affiliateIdsParam, csvParam, stagesParam } from '@/lib/shared/queryParams';
 import { resolveAffiliateFilter } from '@/lib/shared/affiliateFilter';
+import { cacheScopePrefix } from '@/lib/shared/metricsResponse';
+import { isPortfolioScoped, portfolioAffiliateIds } from '@/lib/portfolio/scope';
+import { db } from '@/lib/db';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -41,15 +44,27 @@ export async function GET(
   const productFamilies = csvParam(searchParams.get('families'));
   const mappedAffiliateIds = affiliateIdsParam(searchParams.get('affiliate_id'));
   // Filtro "Afiliado" da barra (contas de plataforma / pessoa unificada).
-  const affiliateIds = await resolveAffiliateFilter(searchParams.get('aff'));
+  const affiliateIds = await resolveAffiliateFilter(searchParams.get('aff'), auth.user);
   const productTypes = stagesParam(searchParams.get('stages'));
   const platformHint = searchParams.get('platform') ?? undefined;
   const affiliateRefundSource = searchParams.get('refund') === 'lucro_real' ? 'lucro_real' as const : 'observado' as const;
 
   try {
+    // Carteira: conta fora da carteira de quem pede = "não existe" (404),
+    // sem nome, contato nem números.
+    if (isPortfolioScoped(auth.user)) {
+      const accounts = await db.affiliate.findMany({
+        where: { externalId: decodeURIComponent(externalId), ...(platformHint ? { platform: { slug: platformHint } } : {}) },
+        select: { id: true },
+      });
+      const allowed = new Set(await portfolioAffiliateIds(auth.user));
+      if (!accounts.some((a) => allowed.has(a.id))) {
+        return NextResponse.json({ error: 'affiliate not found' }, { status: 404 });
+      }
+    }
     // Cache manual (não usa respondCached): o caminho 404 não pode ser
     // cacheado nem virar erro — só respostas 200 entram no cache.
-    const cacheKey = `affiliates/${externalId}?${searchParams.toString()}`;
+    const cacheKey = `${await cacheScopePrefix()}affiliates/${externalId}?${searchParams.toString()}`;
     const cached = getCachedResponse(cacheKey);
     if (cached !== undefined) return NextResponse.json(cached);
 

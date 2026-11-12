@@ -53,7 +53,7 @@ export async function GET(req: Request) {
     productFamilies: csvParam(searchParams.get('families')),
     productTypes: stagesParam(searchParams.get('stages')),
     mappedAffiliateIds: affiliateIdsParam(searchParams.get('affiliate_id')),
-    affiliateIds: await resolveAffiliateFilter(searchParams.get('aff')),
+    affiliateIds: await resolveAffiliateFilter(searchParams.get('aff'), auth.user),
   };
   const options = {
     status: searchParams.get('status') ?? undefined,

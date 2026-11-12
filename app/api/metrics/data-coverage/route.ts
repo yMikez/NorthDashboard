@@ -8,7 +8,7 @@
 // Saúde. Só devolve contagens agregadas por plataforma.
 
 import { NextResponse } from 'next/server';
-import { requireAuth } from '@/lib/auth/guard';
+import { requireAuth, denyPortfolio } from '@/lib/auth/guard';
 import { getRefundCoverage } from '@/lib/services/refundCoverage';
 import { respondCached } from '@/lib/shared/metricsResponse';
 import { logger } from '@/lib/logger';
@@ -19,6 +19,9 @@ export const dynamic = 'force-dynamic';
 export async function GET(req: Request) {
   const auth = await requireAuth();
   if (!auth.ok) return auth.response;
+  // Visão da operação inteira: fora do alcance de quem tem carteira.
+  const denied = denyPortfolio(auth.user);
+  if (denied) return denied;
   try {
     return await respondCached('data-coverage', new URL(req.url).searchParams, () => getRefundCoverage());
   } catch (err) {

@@ -28,7 +28,7 @@ export async function GET(req: Request) {
   }
 
   try {
-    const affiliateIds = await resolveAffiliateFilter(searchParams.get('aff'));
+    const affiliateIds = await resolveAffiliateFilter(searchParams.get('aff'), auth.user);
     return await respondCached('recovery', searchParams, () => getRecovery({ startDate, endDate, affiliateIds }));
   } catch (err) {
     logger.error({ err }, 'metrics/recovery failed');

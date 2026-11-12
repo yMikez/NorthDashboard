@@ -6,7 +6,7 @@
 
 import { NextResponse } from 'next/server';
 import { getOficialResultado, type OficialChave } from '@/lib/services/oficial';
-import { requireTab } from '@/lib/auth/guard';
+import { requireTab, denyPortfolio } from '@/lib/auth/guard';
 import { logger } from '@/lib/logger';
 import { csvParam } from '@/lib/shared/queryParams';
 import { respondCached } from '@/lib/shared/metricsResponse';
@@ -19,6 +19,9 @@ const PLATAFORMA_OFICIAL = new Set<OficialChave>(['jvzoo']);
 export async function GET(req: Request) {
   const auth = await requireTab('overview');
   if (!auth.ok) return auth.response;
+  // Visão da operação inteira: fora do alcance de quem tem carteira.
+  const denied = denyPortfolio(auth.user);
+  if (denied) return denied;
   const { searchParams } = new URL(req.url);
 
   const startDate = new Date(searchParams.get('start_date') ?? '');

@@ -13,6 +13,7 @@ const ROUTES = {
   'all-affiliates': { title: 'Diretório',   em: 'de afiliados', crumbs: ['Afiliados', 'Todos'] },
   'affiliate-analysis': { title: 'Análise', em: 'de afiliados', crumbs: ['Afiliados', 'Análise'] },
   'affiliate-crm':  { title: 'CRM',          em: 'de afiliados', crumbs: ['Afiliados', 'CRM'] },
+  'portfolio':      { title: 'Carteira',     em: 'de afiliados', crumbs: ['Afiliados', 'Carteira'] },
   'networks':       { title: 'Networks',     em: 'redes de afiliados', crumbs: ['Afiliados', 'Networks'] },
   'recovery':       { title: 'Recuperação', em: 'de vendas',   crumbs: ['Captação', 'Recuperação'] },
   'tauk':           { title: 'Call Center', em: 'Tauk + Logicall', crumbs: ['Captação', 'Call Center'] },
@@ -151,7 +152,7 @@ function App({ user }) {
     // param `affiliate_id` nos endpoints que aceitam (Order.mappedAffiliateId).
     // Afiliado: a:<conta> / p:<pessoa>. Link antigo (id do NorthScale
     // Afiliados, filtro anterior) não tem prefixo e cai fora.
-    affiliates: new Set(Array.from(decodeSet(params.get('aff'))).filter((k) => /^[ap]:[A-Za-z0-9_-]{1,64}$/.test(k) || k === '__NONE__')),
+    affiliates: new Set(Array.from(decodeSet(params.get('aff'))).filter((k) => /^[apc]:[A-Za-z0-9_-]{1,64}$/.test(k) || k === '__NONE__')),
     // Retained for backward-compat with pages still reading filters.trafficSources / filters.currency.
     // Both removed from FilterBar UI + URL persistence in Fase 2A cleanup.
     trafficSources: new Set(),
@@ -313,13 +314,14 @@ function App({ user }) {
           {hashState.route === 'all-affiliates' && <LeaderboardPage filters={filters} onOpenAffiliate={setDrawerAff} user={user}/>}
           {hashState.route === 'affiliate-analysis' && <AffiliateAnalysisPage filters={filters} user={user}/>}
           {hashState.route === 'affiliate-crm' && <AffiliateCrmPage user={user} filters={filters}/>}
+          {hashState.route === 'portfolio' && <PortfolioPage/>}
           {hashState.route === 'networks'       && <NetworksPage filters={filters} user={user}/>}
           {hashState.route === 'recovery'       && <RecoveryPage filters={filters}/>}
           {hashState.route === 'tauk'           && <CallCenterPage filters={filters} user={user}/>}
           {hashState.route === 'leads'          && <LeadsPage filters={filters}/>}
           {hashState.route === 'surveys'        && <SurveysPage filters={filters} user={user}/>}
           {hashState.route === 'recurrences'    && <RecurrencesPage filters={filters} user={user}/>}
-          {hashState.route === 'products'       && <ProductsPage filters={filters}/>}
+          {hashState.route === 'products'       && <ProductsPage filters={filters} user={user}/>}
           {hashState.route === 'transactions'   && <TransactionsPage filters={filters}/>}
           {hashState.route === 'platforms'      && <IntegrationsPage filters={filters}/>}
           {hashState.route === 'health'         && <HealthPage/>}

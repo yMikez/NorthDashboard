@@ -15,8 +15,10 @@ import { NextResponse } from 'next/server';
 import { requireAnyTab } from '@/lib/auth/guard';
 import {
   listAffiliateIdentity, linkAffiliates, unlinkAffiliate, updatePartner, setAffiliateInternal, backfillAffiliateEmails,
-  dismissSuggestion, restoreDismissed,
+  dismissSuggestion, restoreDismissed, type AffiliateIdentityList,
 } from '@/lib/services/affiliateIdentity';
+import { isPortfolioScoped, portfolioAffiliateIds } from '@/lib/portfolio/scope';
+import { db } from '@/lib/db';
 import { logger } from '@/lib/logger';
 
 export const runtime = 'nodejs';
@@ -27,10 +29,35 @@ export const maxDuration = 120;
 // preencher contato/origem (decisão do usuário, 2026-08-25).
 const TABS = ['affiliate-analysis', 'leaderboard', 'all-affiliates'] as const;
 
+/**
+ * Carteira de afiliados: quem tem função vê só as pessoas da carteira dele
+ * (com contato) e não recebe sugestões de vínculo — elas cruzam contas de
+ * fora. Unificar/desvincular/marcar interno segue com a operação.
+ */
+function scopeIdentityList(list: AffiliateIdentityList, allowed: Set<string>): AffiliateIdentityList {
+  const partners = list.partners.filter((p) => p.accounts.some((a) => allowed.has(a.id)));
+  const unlinked = list.unlinked.filter((a) => allowed.has(a.id));
+  return {
+    partners,
+    unlinked,
+    suggestions: [],
+    dismissedCount: 0,
+    stats: {
+      partners: partners.length,
+      linkedAccounts: partners.reduce((n, p) => n + p.accounts.length, 0),
+      unlinkedAccounts: unlinked.length,
+      withEmail: partners.reduce((n, p) => n + p.accounts.filter((a) => a.email).length, 0),
+      internal: 0,
+    },
+  };
+}
+
 export async function GET() {
   const auth = await requireAnyTab([...TABS]);
   if (!auth.ok) return auth.response;
-  return NextResponse.json(await listAffiliateIdentity());
+  const list = await listAffiliateIdentity();
+  if (!isPortfolioScoped(auth.user)) return NextResponse.json(list);
+  return NextResponse.json(scopeIdentityList(list, new Set(await portfolioAffiliateIds(auth.user))));
 }
 
 interface Body {
@@ -55,6 +82,18 @@ export async function POST(req: Request) {
   if (!auth.ok) return auth.response;
   let body: Body;
   try { body = (await req.json()) as Body; } catch { return NextResponse.json({ error: 'invalid body' }, { status: 400 }); }
+  // Carteira: quem tem função só atualiza contato/origem de quem é dele.
+  if (isPortfolioScoped(auth.user)) {
+    const pid = str(body.partnerId);
+    if (body.action !== 'update' || !pid) {
+      return NextResponse.json({ error: 'unificar contas fica com a operação' }, { status: 403 });
+    }
+    const allowed = new Set(await portfolioAffiliateIds(auth.user));
+    const accounts = await db.affiliate.findMany({ where: { partnerId: pid }, select: { id: true } });
+    if (!accounts.some((a) => allowed.has(a.id))) {
+      return NextResponse.json({ error: 'afiliado fora da sua carteira' }, { status: 403 });
+    }
+  }
   try {
     switch (body.action) {
       case 'link': {

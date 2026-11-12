@@ -1,4 +1,6 @@
 import { db } from '../db';
+import { loadTeam } from '../portfolio/scope';
+import { PORTFOLIO_ROLE_LABEL, type PortfolioRole } from '../portfolio/core';
 
 export interface FilterOptionsResponse {
   platforms: Array<{
@@ -39,9 +41,9 @@ export interface FilterOptionsResponse {
   // e filtra Order.affiliateId (lib/shared/affiliateFilter). Ordem: receita
   // aprovada dos últimos 30 dias, depois a venda mais recente.
   affiliates: Array<{
-    id: string;          // 'p:<partnerId>' | 'a:<affiliateId>'
+    id: string;          // 'p:<partnerId>' | 'a:<affiliateId>' | 'c:<userId>' (carteira de um captador)
     label: string;       // nome
-    kind: 'partner' | 'account';
+    kind: 'partner' | 'account' | 'captador';
     platforms: string[]; // slugs
     /** "JVZoo 3552295" (conta) · "JVZoo + BuyGoods · 3 contas" (pessoa) */
     meta: string;
@@ -110,6 +112,52 @@ async function affiliateFilterOptions(
       };
     });
 }
+
+/**
+ * Carteira de afiliados: os captadores viram opções do filtro "Afiliado"
+ * (c:<userId> = a carteira dele + a da equipe abaixo), antes das pessoas.
+ * `ownerIds` limita aos captadores visíveis (quem tem função só vê a equipe
+ * abaixo dele); `allowedAccounts` limita as pessoas/contas à carteira e
+ * zera as contagens globais de pedidos (funis, países).
+ */
+export async function scopeFilterOptions(
+  base: FilterOptionsResponse,
+  scope: { ownerIds?: Set<string>; allowedAccounts?: Set<string> },
+): Promise<FilterOptionsResponse> {
+  const team = await loadTeam();
+  const visible = team.filter((u) => u.portfolioRole && (!scope.ownerIds || scope.ownerIds.has(u.id)));
+  const nameOf = new Map(team.map((u) => [u.id, u.name?.trim() || u.email]));
+  const captadores: FilterOptionsResponse['affiliates'] = visible
+    .sort((a, b) => ROLE_ORDER[a.portfolioRole!] - ROLE_ORDER[b.portfolioRole!] || (a.name ?? a.email).localeCompare(b.name ?? b.email))
+    .map((u) => ({
+      id: `c:${u.id}`,
+      label: u.name?.trim() || u.email,
+      kind: 'captador' as const,
+      platforms: [],
+      meta: [
+        `Carteira · ${PORTFOLIO_ROLE_LABEL[u.portfolioRole!]}`,
+        u.region,
+        u.portfolioParentId && nameOf.get(u.portfolioParentId) ? `com ${nameOf.get(u.portfolioParentId)}` : null,
+      ].filter(Boolean).join(' · '),
+      revenue30d: 0,
+      internal: false,
+    }));
+  if (!scope.allowedAccounts) return { ...base, affiliates: [...captadores, ...base.affiliates] };
+
+  const allowed = scope.allowedAccounts;
+  const rows = allowed.size
+    ? await db.affiliate.findMany({ where: { id: { in: [...allowed] } }, select: { id: true, partnerId: true } })
+    : [];
+  const keys = new Set(rows.map((r) => (r.partnerId ? `p:${r.partnerId}` : `a:${r.id}`)));
+  return {
+    ...base,
+    affiliates: [...captadores, ...base.affiliates.filter((a) => keys.has(a.id))],
+    funnels: base.funnels.map((f) => ({ ...f, orderCount: 0 })),
+    countries: base.countries.map((c) => ({ ...c, orderCount: 0 })),
+  };
+}
+
+const ROLE_ORDER: Record<PortfolioRole, number> = { AFF_MANAGER: 0, SQUAD_LEADER: 1, HUNTER: 2 };
 
 export async function getFilterOptions(): Promise<FilterOptionsResponse> {
   const platforms = await db.platform.findMany({

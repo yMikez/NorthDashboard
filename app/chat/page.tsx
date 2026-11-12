@@ -14,6 +14,7 @@
 import { cookies } from 'next/headers';
 import { redirect } from 'next/navigation';
 import { getSessionUser } from '@/lib/auth/session';
+import { isPortfolioScoped } from '@/lib/portfolio/core';
 import { ChatShell } from '@/components/chat/ChatShell';
 import { csvList, rangeFromQuery } from '@/lib/shared/datePresets';
 import type { FilterState } from '@/types/chat';
@@ -33,6 +34,9 @@ export default async function ChatPageRoute({ searchParams }: { searchParams: Pr
     ).toString();
     redirect('/login?next=' + encodeURIComponent('/chat' + (qs ? '?' + qs : '')));
   }
+  // Carteira de afiliados: o chat lê a operação inteira — quem tem função
+  // (Gerente/SL/Hunter) volta pro dashboard.
+  if (isPortfolioScoped(user)) redirect('/');
 
   const range = rangeFromQuery({ range: one(sp.range), from: one(sp.from), to: one(sp.to) });
   const initialFilters: FilterState = {

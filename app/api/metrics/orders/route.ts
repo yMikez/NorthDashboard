@@ -34,7 +34,7 @@ export async function GET(req: Request) {
   const productFamilies = csvParam(searchParams.get('families'));
   const mappedAffiliateIds = affiliateIdsParam(searchParams.get('affiliate_id'));
   // Filtro "Afiliado" da barra (contas de plataforma / pessoa unificada).
-  const affiliateIds = await resolveAffiliateFilter(searchParams.get('aff'));
+  const affiliateIds = await resolveAffiliateFilter(searchParams.get('aff'), auth.user);
   const productTypes = stagesParam(searchParams.get('stages'));
   const status = searchParams.get('status') ?? undefined;
   const productType = searchParams.get('product_type') ?? undefined;

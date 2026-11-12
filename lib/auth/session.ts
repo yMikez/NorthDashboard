@@ -9,7 +9,7 @@
 
 import { randomBytes } from 'node:crypto';
 import { cookies } from 'next/headers';
-import type { UserRole } from '@prisma/client';
+import type { PortfolioRole, UserRole } from '@prisma/client';
 import { db } from '../db';
 import type { TabId } from './tabs';
 
@@ -26,6 +26,9 @@ export interface SessionUser {
   // Apenas pra role=NETWORK_PARTNER. Identifica qual Network esse user
   // representa — usado no auth guard pra escopar /api/network/me.
   networkId: string | null;
+  // Carteira de afiliados: com função (e sem ser ADMIN) o usuário só vê os
+  // afiliados da própria carteira e da equipe abaixo (lib/portfolio/scope.ts).
+  portfolioRole: PortfolioRole | null;
 }
 
 export function newSessionId(): string {
@@ -87,7 +90,7 @@ export async function getSessionUserById(sessionId: string): Promise<SessionUser
       id: true,
       expiresAt: true,
       user: {
-        select: { id: true, email: true, name: true, role: true, allowedTabs: true, active: true, networkId: true },
+        select: { id: true, email: true, name: true, role: true, allowedTabs: true, active: true, networkId: true, portfolioRole: true },
       },
     },
   });
@@ -114,6 +117,7 @@ export async function getSessionUserById(sessionId: string): Promise<SessionUser
     role: session.user.role,
     allowedTabs: session.user.allowedTabs as TabId[],
     networkId: session.user.networkId,
+    portfolioRole: session.user.portfolioRole,
   };
   if (sessionCache.size >= SESSION_CACHE_MAX) sessionCache.clear();
   sessionCache.set(sessionId, { user, cachedAt: Date.now() });

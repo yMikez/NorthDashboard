@@ -37,7 +37,7 @@ export async function GET(req: Request) {
   // Filtro "Afiliado (sistema)" — affiliate_id do NorthScale Afiliados.
   const mappedAffiliateIds = affiliateIdsParam(searchParams.get('affiliate_id'));
   // Filtro "Afiliado" da barra (contas de plataforma / pessoa unificada).
-  const affiliateIds = await resolveAffiliateFilter(searchParams.get('aff'));
+  const affiliateIds = await resolveAffiliateFilter(searchParams.get('aff'), auth.user);
   // Etapa é parseada mas NÃO aplicada aqui de propósito (a aba não filtra
   // por etapa — o chat e a Análise seguem a mesma convenção).
   stagesParam(searchParams.get('stages'));
