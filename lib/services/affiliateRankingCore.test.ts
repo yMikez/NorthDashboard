@@ -27,7 +27,7 @@ describe('mapearContas', () => {
     expect(nomes).toEqual({ 'JVZoo 1': 'Ana', 'JVZoo 2': 'Bia' });
     expect(parceiros).toEqual({ 'JVZoo 1': ['p1', 'Ana Souza'], ['Vupim ' + 'x'.repeat(32)]: ['p1', 'Ana Souza'] });
   });
-  it('o nome real da plataforma vence o apelido provisório do cadastro', () => {
+  it('apelido do cadastro vence (igual à tela Afiliados); sem apelido, o nome real da plataforma', () => {
     const { nomes, parceiros } = mapearContas(
       [
         { slug: 'jvzoo', externalId: '3565681', nickname: 'xxxxxxUS', partnerId: null, partnerName: null },
@@ -39,7 +39,7 @@ describe('mapearContas', () => {
         { slug: 'jvzoo', externalId: '9', nickname: 'Só no oficial' },
       ],
     );
-    expect(nomes).toEqual({ 'JVZoo 3565681': 'Fares Kellou', 'JVZoo 2': 'Bia', 'JVZoo 9': 'Só no oficial' });
+    expect(nomes).toEqual({ 'JVZoo 3565681': 'xxxxxxUS', 'JVZoo 2': 'Bia', 'JVZoo 9': 'Só no oficial' });
     expect(parceiros).toEqual({ 'JVZoo 2': ['p2', 'Bia'] });
   });
   it('converte entidades HTML dos nomes em acentos', () => {
@@ -53,6 +53,14 @@ describe('mapearContas', () => {
     );
     expect(nomes).toEqual({ 'JVZoo 4': 'André Pupo', 'JVZoo 5': 'Luís Müller é', 'JVZoo 6': 'França &foo; R&D' });
     expect(parceiros).toEqual({ 'JVZoo 5': ['p5', 'João & Cia'] });
+  });
+  it('sistema: affiliate_id do Mapeamento com o nome de lá (sem nome, o da conta)', () => {
+    const { sistema } = mapearContas([
+      { slug: 'jvzoo', externalId: '3628307', nickname: 'Grupo Ether LLP', partnerId: null, partnerName: null, mappedAffiliateId: 'af7', mappedName: 'Luiz Gustavo Penna Fernandes' },
+      { slug: 'jvzoo', externalId: '8', nickname: 'Oito', partnerId: null, partnerName: null, mappedAffiliateId: 'af8', mappedName: null },
+      { slug: 'jvzoo', externalId: '9', nickname: 'Nove', partnerId: null, partnerName: null },
+    ]);
+    expect(sistema).toEqual({ 'JVZoo 3628307': ['af7', 'Luiz Gustavo Penna Fernandes'], 'JVZoo 8': ['af8', 'Oito'] });
   });
 });
 

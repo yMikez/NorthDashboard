@@ -52,12 +52,14 @@ export async function getAffiliateRankingData(): Promise<RankingPayload> {
       FROM dados_oficiais._publicacao x
       WHERE x.publicacao_id = (SELECT max(publicacao_id) FROM dados_oficiais.afiliados_pedidos)`),
     db.$queryRaw<ContaCadastro[]>(Prisma.sql`
-      SELECT pl.slug, a."externalId", a.nickname, a."partnerId", ap."displayName" AS "partnerName"
+      SELECT pl.slug, a."externalId", a.nickname, a."partnerId", ap."displayName" AS "partnerName",
+             a."mappedAffiliateId", ms.name AS "mappedName"
       FROM "Affiliate" a
       JOIN "Platform" pl ON pl.id = a."platformId"
       LEFT JOIN "AffiliatePartner" ap ON ap.id = a."partnerId"
+      LEFT JOIN affiliate_mapping_state ms ON ms.affiliate_id = a."mappedAffiliateId"
       WHERE pl.slug IN ('jvzoo', 'vupim')`),
-    // nome real da conta na plataforma (affiliate_name da JVZoo), publicado pelo time de dados: vence o apelido do cadastro
+    // nome real da conta na plataforma (affiliate_name da JVZoo), publicado pelo time de dados: só quando o cadastro não tem apelido
     db.$queryRaw<NomeOficial[]>(Prisma.sql`
       SELECT pl.slug, o."externalId", o.nickname
       FROM dados_oficiais."Affiliate" o
@@ -65,9 +67,9 @@ export async function getAffiliateRankingData(): Promise<RankingPayload> {
       WHERE pl.slug IN ('jvzoo', 'vupim') AND nullif(btrim(o.nickname), '') IS NOT NULL`)
       .catch(() => [] as NomeOficial[]),   // sem a tabela (ou sem permissão): fica o apelido do cadastro, a tela não cai
   ]);
-  const { nomes, parceiros } = mapearContas(cadastro, oficiais);
+  const { nomes, parceiros, sistema } = mapearContas(cadastro, oficiais);
   const gerado = (pub[0]?.publicado_em ?? new Date()).toISOString();
-  return montarPayload(linhas, nomes, parceiros, gerado, pub[0]?.publicacao_id ?? null);
+  return montarPayload(linhas, nomes, parceiros, gerado, pub[0]?.publicacao_id ?? null, sistema);
 }
 
 /** Uma venda na lista de pedidos da página do afiliado (positivos = o que sai). */

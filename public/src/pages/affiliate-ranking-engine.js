@@ -33,7 +33,7 @@ root.innerHTML=`<div class="filters af-filtros" aria-label="Filtros do ranking">
     <div class="af-dp" id="fDp"></div></div>
   <div class="af-fg"><span class="f-label">Agrupar</span>
     <div class="fgrp" id="fAgr" aria-label="Agrupar afiliados">
-      <button type="button" data-v="parceiro" title="Soma as contas do mesmo parceiro (cadastro de parceiros)">Por parceiro</button><button type="button" data-v="conta" title="Cada conta de plataforma separada">Por conta</button>
+      <button type="button" data-v="parceiro" title="Soma as contas do mesmo parceiro (cadastro de parceiros)">Por parceiro</button><button type="button" data-v="conta" title="Cada conta de plataforma separada">Por conta</button><button type="button" data-v="sistema" title="Soma as contas do mesmo afiliado do NorthScale Afiliados (affiliate_id do Mapeamento)">Sistema</button>
     </div></div>
   <div class="af-fg"><span class="f-label">Plataforma</span>
     <div class="fgrp" id="fPlat" aria-label="Plataforma">
@@ -75,14 +75,16 @@ root.innerHTML=`<div class="filters af-filtros" aria-label="Filtros do ranking">
 
 /* dados: af_dia.sql (BigQuery northscale-dados), um afiliado JVZoo × dia do FE (Nova York). Atribuição da view
    report_data_quality.afiliados_coorte: upsell/downsell/bump herdam o FE; call center fica com o FE mais recente do cliente. */
-const DADOS_CONTA=opts.dados, PARC=opts.dados.parceiros||{};
-let AGRUPA='parceiro';try{const v=LS.getItem('ns-af-agrupar');if(v==='conta'||v==='parceiro')AGRUPA=v}catch(e){}
+const DADOS_CONTA=opts.dados, PARC=opts.dados.parceiros||{}, SIST=opts.dados.sistema||{};
+let AGRUPA='parceiro';try{const v=LS.getItem('ns-af-agrupar');if(v==='conta'||v==='parceiro'||v==='sistema')AGRUPA=v}catch(e){}
 const RPL=DADOS_CONTA.campos.length+2;   // posição da plataforma da conta em cada linha
 function agrupar(modo){const d=DADOS_CONTA,plOf=a=>a[2]||'JVZoo';
   if(modo==='conta')return {afs:d.afs.map(a=>[a[0],a[1],a[2],1]),rows:d.rows.map(r=>[...r,plOf(d.afs[r[0]])]),mapa:d.afs.map((_,i)=>i)};
   const gi=new Map(),gs=[];
-  const mapa=d.afs.map(a=>{const p=PARC[a[0]],k=p?'p:'+p[0]:'c:'+a[0];
-    if(!gi.has(k)){gi.set(k,gs.length);gs.push({id:p?'Parceiro '+p[0]:a[0],nome:p?p[1]:a[1],pls:[],n:0})}
+  // 'sistema' = affiliate_id do NorthScale Afiliados (Mapeamento), como na tela Afiliados
+  const P=modo==='sistema'?(typeof SIST==='undefined'?{}:SIST):PARC,pre=modo==='sistema'?'Sistema ':'Parceiro ';
+  const mapa=d.afs.map(a=>{const p=P[a[0]],k=p?'p:'+p[0]:'c:'+a[0];
+    if(!gi.has(k)){gi.set(k,gs.length);gs.push({id:p?pre+p[0]:a[0],nome:p?p[1]:a[1],pls:[],n:0})}
     const g=gs[gi.get(k)];if(!g.pls.includes(plOf(a)))g.pls.push(plOf(a));g.n++;return gi.get(k)});
   const M=new Map();
   d.rows.forEach(r=>{const pl=plOf(d.afs[r[0]]),g=mapa[r[0]],k=g+'|'+r[1]+'|'+pl;let o=M.get(k);
@@ -283,7 +285,7 @@ function tipAf(a,fechada){
   const cr=contaNota(a).map(c=>`<tr><td>${c.e.r||c.e.l}</td><td>${c.e.f(c.v)}</td><td class="${fx(c.x)}">${num(c.x,1)}</td><td>${num(c.pts,1)}</td></tr>`).join('');
   const aj=ajustesAf(a).map(j=>`<tr><td>${j.nome}</td><td colspan="2" class="mo">${j.motivo}</td><td class="${j.pts>=0.05?'mais':j.pts<=-0.05?'menos':'zero'}">${ptsTx(j.pts)}</td></tr>`).join('');
   return `<div class="tipaf${a.S?' ouro':''}">
-    <div class="t1"><b>${a.S?SB+' ':''}${esc(nomeAf(a))} ${PLB(a)}</b><span>Curva Afiliado ${a.S?'S':a.curva} · ${String(a.af).startsWith('Parceiro ')?'parceiro · '+a.contas+(a.contas>1?' contas':' conta'):esc(a.af)}</span></div>${a.pl==='Vupim'?`<div class="t2 vu-nt">${NOTA_VU}</div>`:''}
+    <div class="t1"><b>${a.S?SB+' ':''}${esc(nomeAf(a))} ${PLB(a)}</b><span>Curva Afiliado ${a.S?'S':a.curva} · ${/^(Parceiro|Sistema) /.test(String(a.af))?(String(a.af).startsWith('Sistema ')?'sistema · ':'parceiro · ')+a.contas+(a.contas>1?' contas':' conta'):esc(a.af)}</span></div>${a.pl==='Vupim'?`<div class="t2 vu-nt">${NOTA_VU}</div>`:''}
     <div class="tx">
       <div class="trd" style="--c:${corAf(a)}">${radar(EIXOS.map(e=>a.n[e.k]),REF_N)}<div class="tx-pt">${sc(a.pts)}<small>pontos · tracejado = média do ranking</small></div></div>
       <div class="tx-t"><table class="tpt"><thead><tr><th>Critério</th><th>Resultado ${sx}</th><th>Nota</th><th>Pontos</th></tr></thead><tbody>${cr}
@@ -1859,7 +1861,7 @@ render=function(){_renderRp.apply(this,arguments);if(st.pg==='reemb'&&st.R)rende
   const apertado=s=>{const b=bar.querySelector(s+' button[aria-pressed="true"]');return b?b.textContent.trim():''};
   function chips(){const C=[];
     C.push({t:st.per==='mes'&&st.mes?'Safra '+mesTx(st.mes):st.per==='custom'?`Safra ${dTx(periodo()[0])} a ${dTx(periodo()[1])}`:apertado('#fPer')||'Período',nd:st.per!==PAD.per});
-    if(typeof AGRUPA!=='undefined')C.push({t:AGRUPA==='conta'?'Por conta':'Por parceiro',nd:AGRUPA!==PAD.agr});
+    if(typeof AGRUPA!=='undefined')C.push({t:AGRUPA==='conta'?'Por conta':AGRUPA==='sistema'?'Sistema':'Por parceiro',nd:AGRUPA!==PAD.agr});
     C.push({t:st.plat||'Todas as plataformas',nd:st.plat!==PAD.plat});
     C.push({t:`Ranking ${st.min}+ FEs`,nd:+st.min!==PAD.min});
     if(st.pg==='lista'&&lsSt.filtro){const b=RT.querySelector(`[data-al="${lsSt.filtro}"] .t`);C.push({t:'Alerta: '+(b?b.textContent.trim():lsSt.filtro),nd:true,x:'ls'})}

@@ -55,8 +55,15 @@ mostra a diferença em valor e em %. Nomes com entidades HTML da JVZoo
 - Custo do produto: custo real da Full Stack (produto + separação + frete da fatura
   semanal) quando o pedido do FE foi achado no armazém; no resto, a média real
   (~9% da receita).
-- Afiliados que rodam em mais de uma plataforma são somados pelo cadastro de
-  parceiros (`AffiliatePartner`). A tela também mostra cada conta separada.
+- **Agrupar** (igual à tela Afiliados, desde 16/11/2026): **Por parceiro** (padrão)
+  soma as contas do mesmo parceiro (`AffiliatePartner`, botão Identidades); **Por
+  conta** mostra cada conta separada; **Sistema** soma as contas do mesmo afiliado
+  do NorthScale Afiliados (`Affiliate.mappedAffiliateId`, nome de
+  `affiliate_mapping_state`). Nome de cada conta = apelido do cadastro do dash
+  (`Affiliate.nickname`); sem apelido, o nome real da plataforma
+  (`dados_oficiais."Affiliate"`). Ex.: a conta JVZoo 3628307 aparece como "Grupo
+  Ether LLP" por conta e por parceiro, e como "Luiz Gustavo Penna Fernandes" em
+  Sistema.
 
 ## Safra e período
 

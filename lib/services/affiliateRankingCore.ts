@@ -28,6 +28,9 @@ export interface ContaCadastro {
   nickname: string | null;
   partnerId: string | null;
   partnerName: string | null;
+  /** affiliate_id do NorthScale Afiliados (Mapeamento) e o nome de lá. */
+  mappedAffiliateId?: string | null;
+  mappedName?: string | null;
 }
 
 export interface RankingPayload {
@@ -42,6 +45,8 @@ export interface RankingPayload {
   rows: number[][];
   /** conta → [partnerId, nome do parceiro]: a página junta as contas do mesmo parceiro. */
   parceiros: Record<string, [string, string]>;
+  /** conta → [affiliate_id, nome no NorthScale Afiliados]: o agrupamento "Sistema". */
+  sistema: Record<string, [string, string]>;
 }
 
 const PLATAFORMA: Record<string, string> = { jvzoo: 'JVZoo', vupim: 'Vupim' };
@@ -94,17 +99,26 @@ export function textoDeHtml(s: string): string {
 }
 
 /**
- * Nomes e parceiros por conta. O nome real da plataforma (dados_oficiais) vence
- * o apelido do cadastro do dash, que às vezes guarda um nome provisório
- * (ex.: "xxxxxxUS"); sem nome real, fica o apelido. Parceiros vêm do cadastro.
+ * Nomes, parceiros e afiliados do sistema por conta, iguais aos da tela Afiliados
+ * (pedido do Douglas, 16/11/2026: "por conta, por parceiros e sistema, assim como
+ * a tela Afiliados"). Nome da conta = apelido do cadastro do dash; sem apelido,
+ * o nome real da plataforma (dados_oficiais). Parceiro = AffiliatePartner;
+ * sistema = affiliate_id do NorthScale Afiliados (Mapeamento), com o nome de lá.
  * Entidades HTML dos nomes viram texto (textoDeHtml).
  */
 export function mapearContas(contas: ContaCadastro[], oficiais: NomeOficial[] = []): {
   nomes: Record<string, string>;
   parceiros: Record<string, [string, string]>;
+  sistema: Record<string, [string, string]>;
 } {
   const nomes: Record<string, string> = {};
   const parceiros: Record<string, [string, string]> = {};
+  const sistema: Record<string, [string, string]> = {};
+  for (const c of contas) {
+    const k = contaDe(c.slug, c.externalId);
+    const n = c.nickname?.trim();
+    if (k && n && !nomes[k]) nomes[k] = textoDeHtml(n);
+  }
   for (const o of oficiais) {
     const k = contaDe(o.slug, o.externalId);
     const n = o.nickname?.trim();
@@ -113,10 +127,10 @@ export function mapearContas(contas: ContaCadastro[], oficiais: NomeOficial[] = 
   for (const c of contas) {
     const k = contaDe(c.slug, c.externalId);
     if (!k) continue;
-    if (c.nickname && !nomes[k]) nomes[k] = textoDeHtml(c.nickname);
     if (c.partnerId) parceiros[k] = [c.partnerId, c.partnerName ? textoDeHtml(c.partnerName) : nomes[k] || k];
+    if (c.mappedAffiliateId) sistema[k] = [c.mappedAffiliateId, c.mappedName?.trim() ? textoDeHtml(c.mappedName.trim()) : nomes[k] || c.mappedAffiliateId];
   }
-  return { nomes, parceiros };
+  return { nomes, parceiros, sistema };
 }
 
 const DIA_MS = 86_400_000;
@@ -133,6 +147,7 @@ export function montarPayload(
   parceiros: Record<string, [string, string]>,
   gerado: string,
   publicacaoId: number | null,
+  sistema: Record<string, [string, string]> = {},
 ): RankingPayload {
   const contas = [...new Set(linhas.map((l) => l.afiliado))].sort();
   const ix = new Map(contas.map((a, i) => [a, i]));
@@ -142,6 +157,8 @@ export function montarPayload(
   const t0 = diaUtc(d0);
   const usadas: Record<string, [string, string]> = {};
   for (const a of contas) if (parceiros[a]) usadas[a] = parceiros[a];
+  const sist: Record<string, [string, string]> = {};
+  for (const a of contas) if (sistema[a]) sist[a] = sistema[a];
   return {
     gerado,
     publicacaoId,
@@ -155,6 +172,7 @@ export function montarPayload(
       ...CAMPOS.map((k) => num(l[k])),
     ]),
     parceiros: usadas,
+    sistema: sist,
   };
 }
 
