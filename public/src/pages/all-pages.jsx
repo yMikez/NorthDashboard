@@ -501,6 +501,51 @@ function LeaderboardPage({ filters, onOpenAffiliate, user }) {
     return { sum, count: withCpa.length, avg: withCpa.length ? sum / withCpa.length : 0, excluded: excluded.length };
   })();
 
+  // Devolução D60 (dados_oficiais.afiliados_pedidos): em cada célula, o REAL
+  // (o que já aconteceu, até 60 dias da venda) e, embaixo, a PREVISÃO do
+  // modelo do time de dados para o dia 60.
+  // Vocabulário de 16/11/2026: Reembolso (cliente) · Chargeback (disputas) ·
+  // Alertas · Taxas (US$ 23 do alerta + US$ 49 da disputa) · Devol. Total.
+  // Previsão por pedido é valor esperado: soma primeiro, % = ÷ vendido dos pedidos com previsão.
+  const dSrc = state.data?.refundD60Source || null;
+  const dTot = dSrc?.totals || null;
+  const fcPct = (d) => (d?.forecast && d.forecast.soldUsd > 0 ? d.forecast.totalUsd / d.forecast.soldUsd : null);
+  const realPct = (d) => (d && d.soldUsd > 0 ? d.real.totalUsd / d.soldUsd : null);
+  const fcDia = (x) => (x ? `${x.slice(8, 10)}/${x.slice(5, 7)}` : '—');
+  const fcNote = !dSrc ? null : dSrc.status === 'indisponivel'
+    ? `Devolução D60: ${dSrc.reason || 'indisponível'}.`
+    : 'Devolução D60 por afiliado de entrada do funil, dia da venda (JVZoo dia de Nova York, Vupim BRT), só JVZoo e Vupim. '
+      + 'Em cima, o real (o que já aconteceu até 60 dias da venda); embaixo, a previsão para o dia 60 '
+      + (dSrc.status === 'ok'
+        ? `(modelo de reembolso do time de dados, publicação ${dSrc.publicacaoId ?? '—'}, dados até ${fcDia(dSrc.cutoffDay)}, vendas desde ${fcDia(dSrc.since)}/${dSrc.since.slice(0, 4)}; % = ÷ vendido com previsão). Venda com 60+ dias: previsto = real.`
+        : `(${dSrc.reason || 'ainda não publicada'}).`)
+      + (dSrc.ignoredFilters?.length ? ` Não aplica o filtro de ${dSrc.ignoredFilters.join(', ')}.` : '');
+  const fcClass = (p) => (p == null ? '' : p <= 0.16 ? 'val-ok' : p <= 0.23 ? 'val-warn' : 'val-bad');
+  // k = refundUsd | chargebackUsd | alertsUsd | feesUsd | totalUsd
+  const d60Cell = (d, k) => {
+    if (!d) return <span style={{ color: 'var(--fg5)' }}>—</span>;
+    const f = d.forecast;
+    return <>
+      {fmtCurrency(d.real[k], cur, 0)}
+      <span style={{ display: 'block', fontSize: 10, color: 'var(--fg5)', fontWeight: 400, marginTop: 1 }}>
+        {f ? `prev. ${fmtCurrency(f[k], cur, 0)}${f.soldUsd > 0 ? ` · ${((f[k] / f.soldUsd) * 100).toFixed(1)}%` : ''}` : 'prev. —'}
+      </span>
+    </>;
+  };
+  const d60Tip = (d) => {
+    if (!d) return 'Sem devolução D60 para este afiliado no período (só JVZoo e Vupim).';
+    const r = d.real, f = d.forecast;
+    return `Real até hoje (até 60 dias da venda): Reembolso ${fmtCurrency(r.refundUsd, cur, 0)} + Chargeback ${fmtCurrency(r.chargebackUsd, cur, 0)} + Alertas ${fmtCurrency(r.alertsUsd, cur, 0)} + Taxas ${fmtCurrency(r.feesUsd, cur, 0)} = ${fmtCurrency(r.totalUsd, cur, 0)}`
+      + ` (${realPct(d) != null ? (realPct(d) * 100).toFixed(1) : '—'}% de ${fmtCurrency(d.soldUsd, cur, 0)} vendidos em ${fmtInt(d.orders)} pedidos).\n`
+      + (f
+        ? `Previsto no D60: Reembolso ${fmtCurrency(f.refundUsd, cur, 0)} + Chargeback ${fmtCurrency(f.chargebackUsd, cur, 0)} + Alertas ${fmtCurrency(f.alertsUsd, cur, 0)} + Taxas ${fmtCurrency(f.feesUsd, cur, 0)}; `
+          + `Devol. Total ${fmtCurrency(f.totalUsd, cur, 0)} (número oficial do modelo; com venda recente pode diferir um pouco da soma das partes).\n`
+          + `Base da previsão: ${fmtCurrency(f.soldUsd, cur, 0)} vendidos em ${fmtInt(f.orders)} pedidos`
+          + (d.orders > f.orders ? ` (${fmtInt(d.orders - f.orders)} sem previsão: venda antes de 01/08/2026 ou mais nova que a rodada do modelo)` : '')
+          + `. Já fechado (60+ dias): ${fmtCurrency(f.closedTotalUsd, cur, 0)}.`
+        : 'Sem previsão D60 (venda antes de 01/08/2026, ou previsão ainda não publicada).');
+  };
+
   // Busca por nome OU id. Quando há termo, o mínimo de pedidos é ignorado —
   // procurar um afiliado específico e não achar porque ele tem 2 vendas seria
   // o pior resultado possível.
@@ -521,6 +566,8 @@ function LeaderboardPage({ filters, onOpenAffiliate, user }) {
       case 'approvalRate': return b.approvalRate - a.approvalRate;
       case 'refundRate': return a.refundRate - b.refundRate;
       case 'chargebackRate': return a.cbRate - b.cbRate;
+      // Devol. Total D60 prevista: maior % primeiro (sem previsão no fim).
+      case 'forecastTotal': return (fcPct(b.refundD60) ?? -1) - (fcPct(a.refundD60) ?? -1);
       default: return b.revenue - a.revenue;
     }
   });
@@ -561,12 +608,18 @@ function LeaderboardPage({ filters, onOpenAffiliate, user }) {
           <button className="btn btn-ghost" onClick={() => downloadCsv(
             `ranking-afiliados_${isoDateOnly(filters.dateRange.start)}_${isoDateOnly(filters.dateRange.end)}.csv`,
             ['#', 'Afiliado', 'Afiliado ID', 'Afiliado (sistema)', 'affiliate_id', 'Plataforma', 'Vendas pagas', 'Vendas aprovadas', 'Receita aprovada USD', 'Receita cobrada USD', 'Estornado USD', 'FEs pagos',
-             'AOV USD', 'Aprovação %', refundMode === 'lucro_real' ? 'Refund&CB Lucro real %' : 'Refund&CB observado %', 'CPA pago USD', 'Custos op %',
-             'NET AOV USD', 'CPA por venda USD', 'Net after CPA USD', 'Status CPA'],
+             'AOV USD', 'Aprovação %', refundMode === 'lucro_real' ? 'Devolução Lucro real %' : 'Devolução observada %', 'CPA pago USD', 'Custos op %',
+             'NET AOV USD', 'CPA por venda USD', 'Net after CPA USD', 'Status CPA',
+             'Vendido D60 USD', 'Reembolso real USD', 'Chargeback real USD', 'Alertas real USD', 'Taxas real USD', 'Devol. Total real USD',
+             'Vendido c/ previsão USD', 'Reembolso prev D60 USD', 'Chargeback prev D60 USD', 'Alertas prev D60 USD', 'Taxas prev D60 USD', 'Devol. Total prev D60 USD', 'Devol. Total prev D60 %'],
             rows.map((r, i) => [
               i + 1, r.nickname || r.externalId, r.accounts && r.accounts.length > 1 ? r.accounts.map((c) => c.externalId).join(' | ') : r.externalId, r.mapped ? r.mapped.name : '', r.mappedAffiliateId || '', (r.platforms || [r.platformSlug]).join('+'), r.paidOrders, r.orders, r.revenue, r.grossChargedUsd, r.refundedUsd, r.fePaidCount,
               aovOf(r), r.approvalRate * 100, r.refundCbPctUsed, r.cpa, r.opexPctUsed,
               r.netAovUsd, r.cpaPerFe, r.netAfterCpaUsd, r.cpaStatus,
+              r.refundD60?.soldUsd ?? '', r.refundD60?.real.refundUsd ?? '', r.refundD60?.real.chargebackUsd ?? '', r.refundD60?.real.alertsUsd ?? '',
+              r.refundD60?.real.feesUsd ?? '', r.refundD60?.real.totalUsd ?? '',
+              r.refundD60?.forecast?.soldUsd ?? '', r.refundD60?.forecast?.refundUsd ?? '', r.refundD60?.forecast?.chargebackUsd ?? '', r.refundD60?.forecast?.alertsUsd ?? '',
+              r.refundD60?.forecast?.feesUsd ?? '', r.refundD60?.forecast?.totalUsd ?? '', fcPct(r.refundD60) != null ? fcPct(r.refundD60) * 100 : '',
             ]),
           )}><Icon name="download" size={12}/> Exportar CSV</button>
         </div>
@@ -634,12 +687,24 @@ function LeaderboardPage({ filters, onOpenAffiliate, user }) {
               : ''}
           </div>
         </div>
+        <div className="mini-kpi" title={(dTot ? `${d60Tip(dTot)}\n\n` : '') + (fcNote || '')}>
+          <div className="l">Devol. Total D60</div>
+          <div className="v">
+            {dTot ? fmtCurrency(dTot.real.totalUsd, cur, 0) : '—'}
+            <span style={{ fontSize: 12, fontWeight: 400, color: 'var(--fg5)', marginLeft: 6 }}>real</span>
+          </div>
+          <div className="s">
+            {dTot?.forecast
+              ? <>prev. D60 <b className={fcClass(fcPct(dTot))}>{fmtCurrency(dTot.forecast.totalUsd, cur, 0)} · {((fcPct(dTot) || 0) * 100).toFixed(1)}%</b> de {fmtCurrency(dTot.forecast.soldUsd, cur, 0)} vendidos · Reemb. {fmtCurrency(dTot.forecast.refundUsd, cur, 0)} · Chargeback {fmtCurrency(dTot.forecast.chargebackUsd, cur, 0)} · Alertas {fmtCurrency(dTot.forecast.alertsUsd, cur, 0)} · Taxas {fmtCurrency(dTot.forecast.feesUsd, cur, 0)}</>
+              : (dSrc?.reason || 'previsão D60 indisponível')}
+          </div>
+        </div>
       </div>
 
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '4px 0 12px', flexWrap: 'wrap' }}>
         <span className="f-label">Ordenar por</span>
         <div className="seg">
-          {[['revenue','Receita'],['aov','AOV'],['orders','Pedidos'],['approvalRate','Aprovação'],['refundRate','Reembolsos'],['chargebackRate','Chargebacks']].map(([k,l]) => (
+          {[['revenue','Receita'],['aov','AOV'],['orders','Pedidos'],['approvalRate','Aprovação'],['refundRate','Devol. obs.'],['chargebackRate','Chargeback obs.'],['forecastTotal','Devol. Total D60']].map(([k,l]) => (
             <button key={k} className={sortBy === k ? 'is-active' : ''} onClick={() => setSortBy(k)}>{l}</button>
           ))}
         </div>
@@ -654,7 +719,7 @@ function LeaderboardPage({ filters, onOpenAffiliate, user }) {
             busca ativa · {rows.length} {rows.length === 1 ? 'afiliado' : 'afiliados'} (mín. de pedidos ignorado)
           </span>
         )}
-        <span className="f-label" style={{ marginLeft: 10 }}>Reembolso no NET AOV</span>
+        <span className="f-label" style={{ marginLeft: 10 }}>Devolução no NET AOV</span>
         <div className="seg" title="Observado: estornos + chargebacks ÷ pedidos reais de cada afiliado no período (por data da venda — período recente ainda vai receber estornos). Lucro real: o % configurado na aba Lucro real, igual pra todos.">
           <button className={refundMode === 'observado' ? 'is-active' : ''} onClick={() => setRefundMode('observado')}>observado</button>
           <button className={refundMode === 'lucro_real' ? 'is-active' : ''}
@@ -665,6 +730,10 @@ function LeaderboardPage({ filters, onOpenAffiliate, user }) {
           </button>
         </div>
       </div>
+
+      {fcNote && (
+        <div className="f-label" style={{ padding: '0 0 10px', color: 'var(--fg4)', textTransform: 'none', letterSpacing: 0 }}>{fcNote}</div>
+      )}
 
       {state.status === 'error' && (
         <div className="panel" style={{ color: 'var(--danger)' }}>Erro ao carregar: {state.error}</div>
@@ -684,8 +753,13 @@ function LeaderboardPage({ filters, onOpenAffiliate, user }) {
                     <th className="num" title="Faturamento APROVADO no período — o mesmo número do Funil e da Visão geral. Embaixo: o valor cobrado (regra do extrato), que inclui as vendas estornadas depois e é a base do AOV e do NET AOV.">Receita</th>
                     <th className="num" title="AOV = valor cobrado das vendas creditadas a ESTE afiliado (FE + os upsells/downsells em que a plataforma manteve o crédito nele) ÷ FEs PAGOS. Lente direta: cross-sell creditado a outro afiliado não entra. Mesmo AOV que alimenta o NET AOV.">AOV</th>
                     <th title="Aprovadas ÷ vendas pagas do período (NOT PAID fora).">Aprovação</th>
-                    <th className="num" title={refundMode === 'lucro_real' ? 'Reembolso + chargeback usado no NET AOV: o % configurado na aba Lucro real.' : 'Reembolso + chargeback usado no NET AOV: o OBSERVADO do afiliado no período (estornos + chargebacks ÷ pedidos reais, por data da venda).'}>Reembolso</th>
-                    <th className="num" title="Chargebacks ÷ vendas pagas do período.">Chargeback</th>
+                    <th className="num" title={refundMode === 'lucro_real' ? 'Devolução (reembolso + chargeback) usada no NET AOV: o % configurado na aba Lucro real.' : 'Devolução (reembolso + chargeback) usada no NET AOV: o OBSERVADO do afiliado no período (estornos + chargebacks ÷ pedidos reais, por data da venda).'}>Devol. obs.</th>
+                    <th className="num" title="Chargebacks observados (quantidade) ÷ vendas pagas do período.">Chargeback obs.</th>
+                    <th className="num" title="Reembolso (pedido pelo cliente). Em cima, o real até hoje (até 60 dias da venda); embaixo, o previsto para o dia 60 e o % do vendido.">Reembolso<span style={{ display: 'block', fontSize: 9, fontWeight: 400, color: 'var(--fg5)' }}>real · prev. D60</span></th>
+                    <th className="num" title="Chargeback (valor das disputas). Em cima, o real até hoje; embaixo, o previsto para o dia 60 e o % do vendido.">Chargeback<span style={{ display: 'block', fontSize: 9, fontWeight: 400, color: 'var(--fg5)' }}>real · prev. D60</span></th>
+                    <th className="num" title="Alertas (valor dos alertas). Em cima, o real até hoje; embaixo, o previsto para o dia 60 e o % do vendido.">Alertas<span style={{ display: 'block', fontSize: 9, fontWeight: 400, color: 'var(--fg5)' }}>real · prev. D60</span></th>
+                    <th className="num" title="Taxas: US$ 23 por alerta + US$ 49 por disputa. Em cima, o real até hoje; embaixo, o previsto para o dia 60 e o % do vendido.">Taxas<span style={{ display: 'block', fontSize: 9, fontWeight: 400, color: 'var(--fg5)' }}>real · prev. D60</span></th>
+                    <th className="num" title="Devol. Total = Reembolso + Chargeback + Alertas + Taxas. Em cima, o real até hoje; embaixo, o previsto para o dia 60 (número oficial do modelo) e o % do vendido. Cor pelo previsto: verde até 16%, amarelo até 23%.">Devol. Total<span style={{ display: 'block', fontSize: 9, fontWeight: 400, color: 'var(--fg5)' }}>real · prev. D60</span></th>
                     <th className="num" title="CPA de todos os FEs pagos do período — a JVZoo não devolve o CPA quando o FE é reembolsado.">CPA pago</th>
                     <th className="num" title="Custos operacionais % (global, modelo CPA) — editável no painel de config acima">Custos op.</th>
                     <th className="num" title="NET AOV = AOV global × (1 − reembolso&cb% − taxa da plataforma − custos operacionais % − reserva retida %). Reembolso: observado do afiliado ou o % do Lucro real (botão acima); taxa e reserva em Plataformas; custos op. no painel de config.">NET AOV</th>
@@ -695,9 +769,9 @@ function LeaderboardPage({ filters, onOpenAffiliate, user }) {
                   </tr>
                 </thead>
                 <tbody>
-                  {state.status === 'loading' && <SkelTableRows rows={10} cols={15}/>}
+                  {state.status === 'loading' && <SkelTableRows rows={10} cols={20}/>}
                   {state.status === 'ready' && rows.length === 0 && (
-                    <tr><td colSpan={15} style={{ textAlign: 'center', padding: 24, opacity: 0.6 }}>
+                    <tr><td colSpan={20} style={{ textAlign: 'center', padding: 24, opacity: 0.6 }}>
                       Nenhum afiliado com pelo menos {minOrders} pedido{minOrders > 1 ? 's' : ''} no período
                     </td></tr>
                   )}
@@ -755,6 +829,11 @@ function LeaderboardPage({ filters, onOpenAffiliate, user }) {
                           {refundMode === 'lucro_real' && <span style={{ fontSize: 10, marginLeft: 5, color: 'var(--fg5)' }}>obs {r.grossChargedUsd > 0 ? ((r.refundedUsd / r.grossChargedUsd) * 100).toFixed(1) : '0.0'}%</span>}
                         </td>
                         <td className={`num cell-mono ${cbClass}`}>{(r.cbRate * 100).toFixed(2)}%</td>
+                        <td className="num cell-mono" title={d60Tip(r.refundD60)}>{d60Cell(r.refundD60, 'refundUsd')}</td>
+                        <td className="num cell-mono" title={d60Tip(r.refundD60)}>{d60Cell(r.refundD60, 'chargebackUsd')}</td>
+                        <td className="num cell-mono" title={d60Tip(r.refundD60)}>{d60Cell(r.refundD60, 'alertsUsd')}</td>
+                        <td className="num cell-mono" title={d60Tip(r.refundD60)}>{d60Cell(r.refundD60, 'feesUsd')}</td>
+                        <td className={`num cell-mono ${fcClass(fcPct(r.refundD60))}`} style={{ fontWeight: 700 }} title={d60Tip(r.refundD60)}>{d60Cell(r.refundD60, 'totalUsd')}</td>
                         <td className="num cell-mono">{fmtCurrency(r.cpa, cur, 0)}</td>
                         <td className="num cell-mono" style={{ color: 'var(--fg4)' }}>{r.opexPctUsed}%</td>
                         <td className="num cell-mono">{r.netAovUsd > 0 ? fmtCurrency(r.netAovUsd, cur, 0) : '—'}</td>

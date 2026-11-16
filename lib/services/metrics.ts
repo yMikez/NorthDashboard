@@ -16,6 +16,7 @@ import {
 import { DEFAULT_SUPPLIER } from './cogs';
 import { defaultParams as defaultNetProfitParams, normalizeParams } from './netProfitCore';
 import { addAffiliateWhere, affiliateSqlCond } from '../shared/affiliateFilter';
+import type { AffiliateRefundD60, RefundD60Source } from './affiliateRefundForecastCore';
 
 export interface MetricsFilters {
   startDate: Date;
@@ -550,9 +551,13 @@ export interface AffiliatesResponse {
     firstSeenAt: string | null;
     lastOrderAt: string | null;
     sparkline: number[];
+    /** Devolução D60 real + prevista (affiliateRefundForecast.ts); null = sem dado. */
+    refundD60?: AffiliateRefundD60 | null;
   }>;
   /** De onde saiu o reembolso do NET AOV (e os % do Lucro real, pro botão). */
   refundSource: AffiliateRefundCtx;
+  /** Fonte da devolução D60 (publicação, corte do modelo, filtros que ela não aplica, total geral). */
+  refundD60Source?: RefundD60Source;
 }
 
 export interface OrdersResponse {
