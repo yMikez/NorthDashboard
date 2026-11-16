@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { getAffiliates } from '@/lib/services/metrics';
 import { unifyAffiliates, unifyAffiliatesByMapping } from '@/lib/services/affiliatesUnified';
+import { attachRefundD60 } from '@/lib/services/affiliateRefundForecast';
 import { requireAnyTab } from '@/lib/auth/guard';
 import { logger } from '@/lib/logger';
 import { affiliateIdsParam, csvParam, stagesParam } from '@/lib/shared/queryParams';
@@ -56,7 +57,7 @@ export async function GET(req: Request) {
 
   try {
     return await respondCached('affiliates', cacheParams, async () => {
-      const data = await getAffiliates({
+      const base = await getAffiliates({
         startDate,
         endDate,
         platformSlugs,
@@ -67,6 +68,14 @@ export async function GET(req: Request) {
         affiliateIds,
         affiliateRefundSource,
       });
+      // Devolução D60 (real + previsão do modelo do time de dados) por conta, antes de unificar:
+      // a linha do parceiro soma as contas. Não filtra produto/país/família.
+      const ignoredFilters = [
+        ...(productExternalIds?.length ? ['produto'] : []),
+        ...(productFamilies?.length ? ['família'] : []),
+        ...(countries?.length ? ['país'] : []),
+      ];
+      const data = await attachRefundD60(base, { startDate, endDate, platformSlugs, ignoredFilters });
       if (unifyMapped) return unifyAffiliatesByMapping(data, platformSlugs);
       return unify ? unifyAffiliates(data, includeContact, platformSlugs) : data;
     });

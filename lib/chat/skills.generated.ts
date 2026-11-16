@@ -281,7 +281,5 @@ export const CANONICAL_FAMILY_NAMES = [
   "OptiCore Pro",
   "NeuroRecall",
   "NerveBox",
-  "Heart Flush",
-  "LungFresh",
-  "FlushPril"
+  "Heart Flush"
 ] as const;
