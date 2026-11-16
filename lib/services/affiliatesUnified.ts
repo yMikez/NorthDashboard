@@ -12,6 +12,7 @@
 import { db } from '../db';
 import { cpaStatus, getProfitModelInputs, type ProfitThresholds } from './profitModel';
 import type { AffiliatesResponse } from './metrics';
+import { sumD60 } from './affiliateRefundForecastCore';
 
 export type AffiliateRow = AffiliatesResponse['affiliates'][number];
 
@@ -123,6 +124,8 @@ export function mergeAffiliateRows(accounts: AffiliateRow[], partnerName: string
     firstSeenAt: firstSeen,
     lastOrderAt: lastOrder,
     sparkline,
+    // Devolução D60 (real + previsto): soma das contas; o % sai do total.
+    refundD60: sumD60(accounts.map((a) => a.refundD60)),
   };
 }
 
