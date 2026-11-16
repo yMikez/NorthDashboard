@@ -3,8 +3,8 @@
 Tela **Afiliados → Afiliados** (`LeaderboardPage`, `public/src/pages/all-pages.jsx`). Desde 16/11/2026 a tabela mostra,
 por afiliado, as colunas Reembolso, Chargeback, Alertas, Taxas e Devol. Total **em %** (pedido do Douglas: "Visto d0 /
 Previsto D60"): o **visto** em cima (o que já aconteceu, até 60 dias depois da venda, ÷ vendido do período) e a
-**previsão para o dia 60** embaixo (÷ vendido dos pedidos com previsão). Os valores em US$ ficam no tooltip da célula,
-no card "Devol. Total D60" e no CSV.
+**previsão para o dia 60** embaixo (÷ vendido dos pedidos com previsão). Tela, tooltip e card só em % (valor em US$
+depende do filtro e não diz muito); US$ só no CSV.
 
 ## Vocabulário (decisão de 16/11/2026, vale para todas as telas)
 
@@ -20,8 +20,9 @@ Real (na tela, "visto"; no código, `real`) = evento até 60 dias depois da vend
 regra do modelo: nas vendas com 60+ dias o real da tela bate ao centavo com o real do modelo (conferido em 16/11/2026,
 JVZoo de 01/08 a 15/09: US$ 2.353.357,50).
 
-As colunas antigas passaram a se chamar **Devol. obs.** (reembolso + chargeback observados, usado no NET AOV) e
-**Chargeback obs.** (quantidade de chargebacks ÷ vendas pagas).
+As colunas antigas de devolução observada e de chargeback (quantidade ÷ vendas pagas) saíram da tabela (16/11/2026):
+a Devol. Total visto/previsto substitui as duas. O % de devolução usado no NET AOV continua no tooltip do NET AOV e no
+botão "Devolução no NET AOV".
 
 ## De onde vem
 
