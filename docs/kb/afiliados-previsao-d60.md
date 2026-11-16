@@ -1,8 +1,10 @@
 # Afiliados: devolução D60 (real e prevista)
 
 Tela **Afiliados → Afiliados** (`LeaderboardPage`, `public/src/pages/all-pages.jsx`). Desde 16/11/2026 a tabela mostra,
-por afiliado, as colunas Reembolso, Chargeback, Alertas, Taxas e Devol. Total com o **real** em cima (o que já
-aconteceu, até 60 dias depois da venda) e a **previsão para o dia 60** embaixo, com o % do vendido.
+por afiliado, as colunas Reembolso, Chargeback, Alertas, Taxas e Devol. Total **em %** (pedido do Douglas: "Visto d0 /
+Previsto D60"): o **visto** em cima (o que já aconteceu, até 60 dias depois da venda, ÷ vendido do período) e a
+**previsão para o dia 60** embaixo (÷ vendido dos pedidos com previsão). Os valores em US$ ficam no tooltip da célula,
+no card "Devol. Total D60" e no CSV.
 
 ## Vocabulário (decisão de 16/11/2026, vale para todas as telas)
 
@@ -14,7 +16,7 @@ aconteceu, até 60 dias depois da venda) e a **previsão para o dia 60** embaixo
 | Taxas | US$ 23 do alerta + US$ 49 da disputa | `taxa_alerta` + `taxa_disputa` | `r60_alerta_taxa_previsto` + `r60_disputa_taxa_previsto` |
 | Devol. Total | soma de tudo | soma das quatro | `r60_total_previsto` (número oficial do modelo) |
 
-Real = evento até 60 dias depois da venda (`reembolso_dia − dia` ≤ 60; taxa de disputa por `taxas_dias` ≤ 60), a mesma
+Real (na tela, "visto"; no código, `real`) = evento até 60 dias depois da venda (`reembolso_dia − dia` ≤ 60; taxa de disputa por `taxas_dias` ≤ 60), a mesma
 regra do modelo: nas vendas com 60+ dias o real da tela bate ao centavo com o real do modelo (conferido em 16/11/2026,
 JVZoo de 01/08 a 15/09: US$ 2.353.357,50).
 
@@ -34,8 +36,9 @@ As colunas antigas passaram a se chamar **Devol. obs.** (reembolso + chargeback 
 
 ## Regras
 
-- Os valores previstos por pedido são **esperados** (ex.: 0,18 × vendido): soma primeiro, divide depois. O % embaixo
-  é ÷ vendido dos pedidos com previsão.
+- Os valores previstos por pedido são **esperados** (ex.: 0,18 × vendido): soma primeiro, divide depois. O % de cima
+  é ÷ vendido de todos os pedidos do período; o de baixo, ÷ vendido dos pedidos com previsão. Cada linha usa uma base
+  só, então as partes somam a Devol. Total também em %.
 - O real funciona com as colunas que a tabela já tem; o previsto depende das colunas `r60_*` (publicadas pelo time de
   dados). Sem elas, a tela mostra o real e "prev. —".
 - Venda com 60+ dias (`r60_fechado`): previsto = real.
