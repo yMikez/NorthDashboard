@@ -520,7 +520,14 @@ function LeaderboardPage({ filters, onOpenAffiliate, user }) {
         ? `(modelo de reembolso do time de dados, publicação ${dSrc.publicacaoId ?? '—'}, dados até ${fcDia(dSrc.cutoffDay)}, vendas desde ${fcDia(dSrc.since)}/${dSrc.since.slice(0, 4)}; ÷ vendido com previsão). Venda com 60+ dias: previsto = visto.`
         : `(${dSrc.reason || 'ainda não publicada'}).`)
       + (dSrc.ignoredFilters?.length ? ` Não aplica o filtro de ${dSrc.ignoredFilters.join(', ')}.` : '');
-  const fcClass = (p) => (p == null ? '' : p <= 0.16 ? 'val-ok' : p <= 0.23 ? 'val-warn' : 'val-bad');
+  // Régua da Devol. Total prevista no D60 (Douglas, 18/11/2026): abaixo de 22% = bom (verde), 22% a 26,9% =
+  // atenção (amarelo), 27% ou mais = ruim (vermelho). Compara o % já arredondado a 1 casa, como aparece na tela.
+  const fcTone = (p) => {
+    if (p == null) return null;
+    const v = Math.round(p * 1000) / 10;
+    return v < 22 ? 'success' : v < 27 ? 'warning' : 'danger';
+  };
+  const fcClass = (p) => ({ success: 'val-ok', warning: 'val-warn', danger: 'val-bad' })[fcTone(p)] || '';
   // k = refundUsd | chargebackUsd | alertsUsd | feesUsd | totalUsd
   // Em %, pedido do Douglas (16/11/2026): "Visto d0 / Previsto D60". Em cima o
   // visto ÷ vendido do período; embaixo o previsto ÷ vendido dos pedidos com
@@ -531,11 +538,21 @@ function LeaderboardPage({ filters, onOpenAffiliate, user }) {
   const d60Cell = (d, k) => {
     if (!d) return <span style={{ color: 'var(--fg5)' }}>—</span>;
     const f = d.forecast;
+    // Devol. Total: o previsto D60 é o número de decisão (pedido de 18/11/2026) → selo colorido pela régua.
+    const tone = k === 'totalUsd' && f ? fcTone(f.soldUsd > 0 ? f.totalUsd / f.soldUsd : null) : null;
     return <>
       {pctTxt(d.real[k], d.soldUsd)}
-      <span style={{ display: 'block', fontSize: 10, color: 'var(--fg5)', fontWeight: 400, marginTop: 1 }}>
-        {f ? `prev. ${pctTxt(f[k], f.soldUsd)}` : 'prev. —'}
-      </span>
+      {tone
+        ? <span style={{ display: 'block', marginTop: 3 }}>
+            <span style={{ display: 'inline-block', padding: '1px 7px', borderRadius: 999, fontSize: 12, fontWeight: 700,
+                           color: `var(--${tone})`, background: `var(--${tone}-bg)`,
+                           border: `1px solid color-mix(in oklab, var(--${tone}) 35%, transparent)` }}>
+              <span style={{ fontSize: 9, fontWeight: 500, opacity: 0.8 }}>prev. </span>{pctTxt(f[k], f.soldUsd)}
+            </span>
+          </span>
+        : <span style={{ display: 'block', fontSize: 10, color: 'var(--fg5)', fontWeight: 400, marginTop: 1 }}>
+            {f ? `prev. ${pctTxt(f[k], f.soldUsd)}` : 'prev. —'}
+          </span>}
     </>;
   };
   const d60Tip = (d) => {
@@ -766,7 +783,7 @@ function LeaderboardPage({ filters, onOpenAffiliate, user }) {
                     <th className="num" title="Chargeback (valor das disputas). Em %: em cima, o visto até hoje; embaixo, o previsto para o dia 60.">Chargeback<span style={{ display: 'block', fontSize: 9, fontWeight: 400, color: 'var(--fg5)' }}>visto · prev. D60</span></th>
                     <th className="num" title="Alertas (valor dos alertas). Em %: em cima, o visto até hoje; embaixo, o previsto para o dia 60.">Alertas<span style={{ display: 'block', fontSize: 9, fontWeight: 400, color: 'var(--fg5)' }}>visto · prev. D60</span></th>
                     <th className="num" title="Taxas: US$ 23 por alerta + US$ 49 por disputa. Em %: em cima, o visto até hoje; embaixo, o previsto para o dia 60.">Taxas<span style={{ display: 'block', fontSize: 9, fontWeight: 400, color: 'var(--fg5)' }}>visto · prev. D60</span></th>
-                    <th className="num" title="Devol. Total = Reembolso + Chargeback + Alertas + Taxas. Em %: em cima, o visto até hoje; embaixo, o previsto para o dia 60 (número oficial do modelo). Cor pelo previsto: verde até 16%, amarelo até 23%.">Devol. Total<span style={{ display: 'block', fontSize: 9, fontWeight: 400, color: 'var(--fg5)' }}>visto · prev. D60</span></th>
+                    <th className="num" title="Devol. Total = Reembolso + Chargeback + Alertas + Taxas. Em %: em cima, o visto até hoje; embaixo, o previsto para o dia 60 (número oficial do modelo). Cor do previsto: verde abaixo de 22%, amarelo de 22% a 26,9%, vermelho a partir de 27%.">Devol. Total<span style={{ display: 'block', fontSize: 9, fontWeight: 400, color: 'var(--fg5)' }}>visto · prev. D60</span></th>
                     <th className="num" title="CPA de todos os FEs pagos do período — a JVZoo não devolve o CPA quando o FE é reembolsado.">CPA pago</th>
                     <th className="num" title="Custos operacionais % (global, modelo CPA) — editável no painel de config acima">Custos op.</th>
                     <th className="num" title="NET AOV = AOV global × (1 − reembolso&cb% − taxa da plataforma − custos operacionais % − reserva retida %). Reembolso: observado do afiliado ou o % do Lucro real (botão acima); taxa e reserva em Plataformas; custos op. no painel de config.">NET AOV</th>
@@ -831,7 +848,7 @@ function LeaderboardPage({ filters, onOpenAffiliate, user }) {
                         <td className="num cell-mono" title={d60Tip(r.refundD60)}>{d60Cell(r.refundD60, 'chargebackUsd')}</td>
                         <td className="num cell-mono" title={d60Tip(r.refundD60)}>{d60Cell(r.refundD60, 'alertsUsd')}</td>
                         <td className="num cell-mono" title={d60Tip(r.refundD60)}>{d60Cell(r.refundD60, 'feesUsd')}</td>
-                        <td className={`num cell-mono ${fcClass(fcPct(r.refundD60))}`} style={{ fontWeight: 700 }} title={d60Tip(r.refundD60)}>{d60Cell(r.refundD60, 'totalUsd')}</td>
+                        <td className="num cell-mono" style={{ fontWeight: 700 }} title={d60Tip(r.refundD60)}>{d60Cell(r.refundD60, 'totalUsd')}</td>
                         <td className="num cell-mono">{fmtCurrency(r.cpa, cur, 0)}</td>
                         <td className="num cell-mono" style={{ color: 'var(--fg4)' }}>{r.opexPctUsed}%</td>
                         <td className="num cell-mono" title={`Devolução usada no NET AOV: ${r.refundCbPctUsed}% (${refundMode === 'lucro_real' ? '% do Lucro real' : 'observado'}).

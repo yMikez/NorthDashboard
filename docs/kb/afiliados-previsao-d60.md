@@ -43,7 +43,10 @@ botão "Devolução no NET AOV".
 - O real funciona com as colunas que a tabela já tem; o previsto depende das colunas `r60_*` (publicadas pelo time de
   dados). Sem elas, a tela mostra o real e "prev. —".
 - Venda com 60+ dias (`r60_fechado`): previsto = real.
-- Cores da Devol. Total (pelo previsto): verde até 16%, amarelo até 23%, vermelho acima (mesma régua do ranking de afiliados).
+- Devol. Total: o previsto D60 aparece em destaque (selo colorido) e a cor vem dele (Douglas, 18/11/2026): verde
+  abaixo de 22%, amarelo de 22% a 26,9%, vermelho a partir de 27% (% arredondado a 1 casa, como na tela). Vale para a
+  coluna e para o card "Devol. Total D60". O visto (em cima) fica sem cor. A régua de pontos do Ranking
+  (`ranking-afiliados.md`, 16%/23%) é outra e não mudou.
 - A previsão **não** aplica os filtros de produto, família e país (a tela avisa).
 - O card "Devol. Total D60" soma **todas** as contas do período (`refundD60Source.totals`): o previsto bate com
   `SUM(r60_total_previsto)` do BigQuery para o mesmo período.
