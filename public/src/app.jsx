@@ -8,7 +8,7 @@ const ROUTES = {
   'refund-cohorts': { title: 'Reembolsos',  em: 'por coorte',  crumbs: ['Análise', 'Reembolsos'] },
   'affiliate-ranking': { title: 'Ranking',  em: 'de afiliados', crumbs: ['Afiliados', 'Ranking'] },
   'affiliate-overview': { title: 'Visão Geral', em: 'dos afiliados', crumbs: ['Afiliados', 'Visão Geral'] },
-  'affiliate-refund': { title: 'Reembolso', em: 'previsto', crumbs: ['Afiliados', 'Reembolso Prev.'] },
+  'affiliate-refund': { title: 'Devolução', em: 'prevista', crumbs: ['Afiliados', 'Devolução Prev.'] },
   'leaderboard':    { title: 'Afiliados',   em: 'resultado por afiliado', crumbs: ['Afiliados', 'Afiliados'] },
   'all-affiliates': { title: 'Diretório',   em: 'de afiliados', crumbs: ['Afiliados', 'Todos'] },
   'affiliate-analysis': { title: 'Análise', em: 'de afiliados', crumbs: ['Afiliados', 'Análise'] },

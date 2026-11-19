@@ -22,7 +22,7 @@ function Sidebar({ active, onNav, user, open, onClose }) {
         // de reembolso prevista): modelo do time de dados, docs/kb/ranking-afiliados.md.
         { id: 'affiliate-overview', label: 'Visão Geral', icon: 'layout-dashboard' },
         { id: 'affiliate-ranking', label: 'Ranking', icon: 'trophy' },
-        { id: 'affiliate-refund', label: 'Reembolso Prev.', icon: 'percent' },
+        { id: 'affiliate-refund', label: 'Devolução Prev.', icon: 'percent' },
         // Telas do Mike, em paralelo às do time de dados até a validação.
         // Ranking + Diretório fundidos numa aba só (modelo planilha CPA).
         // 'all-affiliates' continua rota válida (redireciona pra mesma página).

@@ -1324,7 +1324,7 @@ render=function(){_renderLs.apply(this,arguments);if(st.pg==='lista'&&st.R)rende
    Curva por dia: real = medido nas vendas da safra que já têm aquela idade (mínimo 5% da receita e US$ 1 mil); depois, projeção até o 60d previsto
    pela forma da curva (mediana geral; a do próprio afiliado quando é um afiliado só). CPA vem dos pedidos.
    Cores das séries: pelo resultado (menor reembolso 60d = cor forte; maior = cor fria), paleta validada p/ daltonismo. */
-PGS.reemb=['Reembolso Prev.','Reembolso previsto'];
+PGS.reemb=['Devolução Prev.','Devolução prevista'];
 const rpSt={f:{cv:'',fx:'',nt:''},n:5,sem:4,modo:'af',ord:null,abertos:new Set(),busca:''};
 const RP_FX=[{k:'f1',l:'< US$ 370',s:'< 370',a:-1e9,b:370},{k:'f2',l:'US$ 370–390',s:'370–390',a:370,b:390},{k:'f3',l:'US$ 390–410',s:'390–410',a:390,b:410},{k:'f4',l:'≥ US$ 410',s:'410+',a:410,b:1e9}];
 const RP_NT=[{k:'n5',l:'acima de 100',s:'100+',a:100,b:1e9},{k:'n4',l:'80–100',s:'80–100',a:80,b:100},{k:'n3',l:'60–80',s:'60–80',a:60,b:80},
@@ -1476,7 +1476,7 @@ _on(window,'keydown',e=>{if(e.key==='Escape')rpFechaFicha()});
 let rpEspera=null;
 /* ---------- 3. kit, produto e upsell (05/11): pelos pedidos, cada um ligado ao FE de origem (PED.col.fid) ----------
    Sessão = o FE + os upsells, downsells e bumps que herdaram esse FE (mesma atribuição do painel). Kit e produto = os do FE.
-   Reembolso = devolvido + alerta + disputa, pelo dia em que caiu. Curva igual à das outras quebras (real cheio, previsto
+   Devolução = devolvido + alerta + disputa, pelo dia em que caiu. Curva igual à das outras quebras (real cheio, previsto
    pontilhado); o que falta cair vem da taxa de 60 dias do próprio grupo nas vendas com 60+ dias (todas as safras), com
    credibilidade de US$ 20 mil puxando para a taxa geral. */
 const RP_PI=new Map();
@@ -1596,16 +1596,16 @@ function rpDrillAbre(s,cfg){
       const nm=x.af?`<span class="rp-dnm ls-nm" data-af="${afId(x.af)}" tabindex="0" title="Abrir a página do afiliado">${esc(x.nome)}</span>`:`<span class="rp-dnm" title="${esc(x.lg||x.nome)}">${esc(x.nome)}</span>`;
       return `<div class="rp-drow${x.resto?' rs':''}">${nm}<span class="rp-dsh" title="${rpPct(x.sh,0)} da receita da série · ${usdC(x.o.B)}"><i style="width:${Math.max(2,x.sh*100).toFixed(1)}%"></i></span><span class="rp-dpc ${cls}">${rpPct(x.tx)}</span>
         <span class="rp-dim"><span class="rp-bar rp-dbar"><i class="${x.imp>0?'n':'p'}" style="width:${w.toFixed(1)}%"></i></span><b class="${x.imp>0?'neg':'pos'}">${x.imp>=0?'+':'−'}${usdC(Math.abs(x.imp))}</b></span></div>`};
-    const cab=`<div class="rp-drow rp-dhd"><span></span><span>receita</span><span>60d</span><span>efeito no reembolso</span></div>`;
+    const cab=`<div class="rp-drow rp-dhd"><span></span><span>receita</span><span>60d</span><span>efeito na devolução</span></div>`;
     corpo=`<div class="rp-dgrid">${R.dims.map(x=>`<article class="rp-card"><h4>${x.tit}</h4>${cab}${x.it.map(y=>lin(y,x.d)).join('')}</article>`).join('')}</div>`;
     // por que: os 3 itens que mais empurram na direção do resultado
     const sinal=ruim?1:bom?-1:0,todos=R.dims.flatMap(x=>x.it.filter(y=>!y.resto&&y.imp*sinal>0).map(y=>({...y,dt:x.tx}))).sort((a,b)=>Math.abs(b.imp)-Math.abs(a.imp)).slice(0,3);
     s._pq=todos.length?`${ruim?'O que mais puxa para cima':'O que mais ajuda'}: ${todos.map(y=>`<b>${esc(y.nome)}</b> (${y.dt}, ${rpPct(y.tx)}, ${y.imp>=0?'+':'−'}${usdC(Math.abs(y.imp))})`).join(' · ')}.`:''}
   const kp=(l,v,m2,cl='')=>`<div class="rp-dk1${cl}"><span>${l}</span><b>${v}</b><small>${m2}</small></div>`;
-  const cabTx=v60==null?'':`<b>${esc(s.nome)}</b> fecha 60 dias com <b class="${ruim?'neg':bom?'pos':''}">${rpPct(v60)}</b> de reembolso${dif!=null?`, ${rpPp(dif)} ${dif>0?'acima':'abaixo'} da safra (${rpPct(ref.re60)})`:''}. ${s._pq||''}`;
+  const cabTx=v60==null?'':`<b>${esc(s.nome)}</b> fecha 60 dias com <b class="${ruim?'neg':bom?'pos':''}">${rpPct(v60)}</b> de devolução${dif!=null?`, ${rpPp(dif)} ${dif>0?'acima':'abaixo'} da safra (${rpPct(ref.re60)})`:''}. ${s._pq||''}`;
   m.innerHTML=`<div class="rp-fin rp-dfin" role="dialog" aria-modal="true" aria-label="${esc('Detalhe: '+s.nome)}"><div class="rp-fh"><div><h3><i class="rp-dsw" style="background:${s.cor}"></i>${esc(s.nome)} <small>${esc(cfg&&cfg.aria||'')}</small></h3><p>${cabTx}</p></div><button type="button" class="rp-x" aria-label="Fechar">×</button></div>
-    <div class="rp-dk">${kp('Reembolso 60d',rpPct(v60),s.c&&s.c.dl<60?'previsto':'real',ruim?' neg':bom?' pos':'')}${kp('Safra do topo',rpPct(ref.re60),'referência')}${kp('Dia 10 (real)',R&&R.d10!=null?rpPct(R.d10):'—','vendas com 10+ dias')}${kp('Receita',R?usdC(R.T.B):'—',R?n(R.T.ses)+' FEs':'')}</div>
-    ${corpo}<p class="rp-nota">Cada linha: barra cinza = parte da receita da série; 60d = reembolso previsto do item (vermelho = acima da série, verde = abaixo); efeito = quanto o item soma (+) ou tira (−) do reembolso da série em US$, pela diferença de taxa × receita. Conta pelos pedidos; pode diferir um pouco do valor do gráfico.</p></div>`;
+    <div class="rp-dk">${kp('Devolução 60d',rpPct(v60),s.c&&s.c.dl<60?'previsto':'real',ruim?' neg':bom?' pos':'')}${kp('Safra do topo',rpPct(ref.re60),'referência')}${kp('Dia 10 (real)',R&&R.d10!=null?rpPct(R.d10):'—','vendas com 10+ dias')}${kp('Receita',R?usdC(R.T.B):'—',R?n(R.T.ses)+' FEs':'')}</div>
+    ${corpo}<p class="rp-nota">Cada linha: barra cinza = parte da receita da série; 60d = devolução prevista do item (vermelho = acima da série, verde = abaixo); efeito = quanto o item soma (+) ou tira (−) da devolução da série em US$, pela diferença de taxa × receita. Conta pelos pedidos; pode diferir um pouco do valor do gráfico.</p></div>`;
   m.hidden=false;document.body.classList.add('modal-on');
   const fecha=()=>{m.hidden=true;document.body.classList.remove('modal-on');window.removeEventListener('keydown',esc_)},esc_=e=>{if(e.key==='Escape')fecha()};
   m.querySelector('.rp-x').onclick=fecha;m.onclick=e=>{if(e.target===m)fecha();else if(e.target.closest('[data-af]'))fecha()};window.addEventListener('keydown',esc_);m.querySelector('.rp-x').focus()}
@@ -1614,11 +1614,11 @@ function rpDrillAbre(s,cfg){
 let RP_REF=null;
 function rpAlertas(o,zd){
   const A=[],ref10=rpVal(o.pts,10),ttl=id=>{const c=RPG.get(id);return c?c.aria:''};
-  if(zd!=null)A.push({n:zd<=30?3:2,k:1,t:zd===0?'A safra já começa no prejuízo':`A safra fecha no prejuízo: o lucro vira zero no dia ${num(zd,0)}`,x:`Reembolso previsto de ${rpPct(o.re60)} contra o teto de ${rpPct(o.mg)} (prejuízo previsto de ${usd(-o.lucUsd)}). Depois do dia ${num(zd,0)}, cada reembolso é prejuízo.`,alvo:{id:'rpG0'}});
+  if(zd!=null)A.push({n:zd<=30?3:2,k:1,t:zd===0?'A safra já começa no prejuízo':`A safra fecha no prejuízo: o lucro vira zero no dia ${num(zd,0)}`,x:`Devolução prevista de ${rpPct(o.re60)} contra o teto de ${rpPct(o.mg)} (prejuízo previsto de ${usd(-o.lucUsd)}). Depois do dia ${num(zd,0)}, cada devolução é prejuízo.`,alvo:{id:'rpG0'}});
   // reembolso alto cedo: dia 10 real ≥ 20%, ou 5 pp acima da safra (a pior série de cada gráfico)
   RPG.forEach((cfg,id)=>{if(id==='rpG0'||id==='rpGF')return;const ss=cfg.series.filter(s=>s&&s.c&&!s.med),tot=ss.reduce((p,s)=>p+s.c.funil,0);
     let pior=null;ss.forEach(s=>{if(s.c.dl<10||s.c.funil<Math.max(10000,0.03*tot))return;const v=rpVal(s.c.pts,10);if(v>=0.2||v>=ref10+0.05){if(!pior||v>pior.v)pior={s,v}}});
-    if(pior)A.push({n:pior.v>=0.2?3:2,k:pior.v,t:`${pior.s.nome}: ${rpPct(pior.v)} de reembolso nos 10 primeiros dias`,x:`${ttl(id)}. A safra toda está em ${rpPct(ref10)} no dia 10 (${rpPp(pior.v-ref10)} a mais).`,alvo:{id,serie:pior.s.nome}})});
+    if(pior)A.push({n:pior.v>=0.2?3:2,k:pior.v,t:`${pior.s.nome}: ${rpPct(pior.v)} de devolução nos 10 primeiros dias`,x:`${ttl(id)}. A safra toda está em ${rpPct(ref10)} no dia 10 (${rpPp(pior.v-ref10)} a mais).`,alvo:{id,serie:pior.s.nome}})});
   // tendência: a semana mais recente contra as anteriores, no maior dia que ela já tem real
   const sw=(RPG.get('rpG2')||{series:[]}).series.filter(s=>s&&s.c);
   if(sw.length>=3){const u=sw[sw.length-1],ant=sw.slice(0,-1),d=[7,5,3,1].find(x=>u.c.dl>=x&&ant.every(s=>s.c.dl>=x));
@@ -1631,18 +1631,18 @@ function rpAlertas(o,zd){
   // quebras que puxam a safra: produto, caminho e Curva Afiliado com 5%+ da receita e 6 pp acima da safra
   [['rpGP','produto'],['rpGC','caminho'],['rpGV','upsell'],['rpG3','Curva Afiliado']].forEach(([id,l])=>{const ss=(RPG.get(id)||{series:[]}).series.filter(s=>s&&s.c&&s.nome!=='outros'),tot=ss.reduce((p,s)=>p+s.c.funil,0);
     const pi=ss.filter(s=>s.c.funil>=0.05*tot&&s.c.fim>=o.re60+0.06).sort((a,b)=>b.c.fim-a.c.fim)[0];
-    if(pi)A.push({n:2,k:pi.c.fim-o.re60,t:`${l==='caminho'?'Caminho ':l==='upsell'?'Upsell de US$ ':l==='produto'?'':'Curva '}${pi.nome}: ${rpPct(pi.c.fim)} de reembolso em 60 dias`,x:`${rpPp(pi.c.fim-o.re60)} acima da safra (${rpPct(o.re60)}), com ${rpPct(pi.c.funil/tot,0)} da receita${l==='caminho'&&pi.extra?' · '+pi.extra.split(' · ')[0]:''}.`,alvo:{id,serie:pi.nome}})});
+    if(pi)A.push({n:2,k:pi.c.fim-o.re60,t:`${l==='caminho'?'Caminho ':l==='upsell'?'Upsell de US$ ':l==='produto'?'':'Curva '}${pi.nome}: ${rpPct(pi.c.fim)} de devolução em 60 dias`,x:`${rpPp(pi.c.fim-o.re60)} acima da safra (${rpPct(o.re60)}), com ${rpPct(pi.c.funil/tot,0)} da receita${l==='caminho'&&pi.extra?' · '+pi.extra.split(' · ')[0]:''}.`,alvo:{id,serie:pi.nome}})});
   // afiliados que puxam: 5%+ da receita da safra e 6 pp acima da safra; e o melhor grande, como destaque bom
   const sp=(RPG.get('rpG6')||{series:[]}).series.filter(s=>s&&s.c&&!s.med);
   sp.filter(s=>s.c.funil>=0.05*o.funil&&s.c.fim>=o.re60+0.06).slice(0,2).forEach(s=>A.push({n:2,k:s.c.fim-o.re60,t:`${s.nome} puxa a safra para cima: ${rpPct(s.c.fim)}`,x:`${rpPct(s.c.funil/o.funil,0)} da receita da safra e ${rpPp(s.c.fim-o.re60)} acima dela.`,alvo:{id:'rpG6',serie:s.nome}}));
   const sb=(RPG.get('rpG5')||{series:[]}).series.filter(s=>s&&s.c&&!s.med&&s.c.funil>=0.05*o.funil&&s.c.fim<=o.re60-0.05)[0];
-  if(sb)A.push({n:1,k:o.re60-sb.c.fim,t:`${sb.nome} segura o reembolso: ${rpPct(sb.c.fim)}`,x:`${rpPct(sb.c.funil/o.funil,0)} da receita da safra e ${rpPp(o.re60-sb.c.fim)} abaixo dela.`,alvo:{id:'rpG5',serie:sb.nome},bom:true});
+  if(sb)A.push({n:1,k:o.re60-sb.c.fim,t:`${sb.nome} segura a devolução: ${rpPct(sb.c.fim)}`,x:`${rpPct(sb.c.funil/o.funil,0)} da receita da safra e ${rpPp(o.re60-sb.c.fim)} abaixo dela.`,alvo:{id:'rpG5',serie:sb.nome},bom:true});
   return A.sort((a,b)=>b.n-a.n||(b.k||0)-(a.k||0)).slice(0,8)}
 const RP_NIV={3:['alto','Alerta'],2:['medio','Atenção'],1:['bom','Destaque']};
 function rpAlertasAbre(A){
   const raiz=document.getElementById('reemb');if(!raiz)return;let m=document.getElementById('rpAl');
   if(!m){m=Object.assign(document.createElement('div'),{id:'rpAl',className:'rp-full'});raiz.appendChild(m)}
-  m.innerHTML=`<div class="rp-fin rp-alfin" role="dialog" aria-modal="true" aria-label="Alertas do reembolso"><div class="rp-fh"><div><h3>O que chama atenção nesta safra</h3><p>${A.length?`${n(A.length)} ${A.length>1?'pontos':'ponto'}, do mais urgente ao destaque bom. Clique para ir ao gráfico.`:'Nada fora do normal com esses filtros.'}</p></div><button type="button" class="rp-x" aria-label="Fechar">×</button></div>
+  m.innerHTML=`<div class="rp-fin rp-alfin" role="dialog" aria-modal="true" aria-label="Alertas da devolução"><div class="rp-fh"><div><h3>O que chama atenção nesta safra</h3><p>${A.length?`${n(A.length)} ${A.length>1?'pontos':'ponto'}, do mais urgente ao destaque bom. Clique para ir ao gráfico.`:'Nada fora do normal com esses filtros.'}</p></div><button type="button" class="rp-x" aria-label="Fechar">×</button></div>
     <div class="rp-alis">${A.map((a,i)=>{const nv=a.bom?RP_NIV[1]:RP_NIV[a.n];return `<article class="rp-ali ${nv[0]}"><span class="rp-aln">${nv[1]}</span><div><b>${esc(a.t)}</b><p>${esc(a.x)}</p></div><button type="button" class="rp-alv" data-i="${i}">Ver no gráfico →</button></article>`}).join('')}</div></div>`;
   m.hidden=false;document.body.classList.add('modal-on');
   const fecha=()=>{m.hidden=true;document.body.classList.remove('modal-on');window.removeEventListener('keydown',esc_)},esc_=e=>{if(e.key==='Escape')fecha()};
@@ -1684,18 +1684,18 @@ function renderReemb(R){
   // ---- 1. quando o lucro vira zero ----
   const c100=v=>'US$ '+num(Math.abs(v*100),0),neg=o.luc<0,zd=o.zero;
   const zTx=zd==null?'não vira zero em 60 dias':zd===0?'prejuízo desde a venda':'vira zero no dia '+num(zd,0);
-  const hero=`<p class="rp-hist">Na safra de <b>${dTx(p0)} a ${dTx(p1)}</b>${filtroTx?' ('+filtroTx+')':''}, de cada <b>US$ 100</b> vendidos no funil sobram <b>${c100(o.mg)}</b> depois do CPA, das taxas e do custo do produto. O reembolso previsto em 60 dias leva <b class="${o.re60>o.mg?'neg':''}">${c100(o.re60)}</b>.
+  const hero=`<p class="rp-hist">Na safra de <b>${dTx(p0)} a ${dTx(p1)}</b>${filtroTx?' ('+filtroTx+')':''}, de cada <b>US$ 100</b> vendidos no funil sobram <b>${c100(o.mg)}</b> depois do CPA, das taxas e do custo do produto. A devolução prevista em 60 dias leva <b class="${o.re60>o.mg?'neg':''}">${c100(o.re60)}</b>.
     ${neg?`O lucro <b class="neg">${zTx}</b> e a safra fecha com <b class="neg">prejuízo de ${usd(-o.lucUsd)}</b> (${c100(o.luc)} a cada US$ 100).`:`A safra fecha com <b class="pos">lucro de ${usd(o.lucUsd)}</b> (${c100(o.luc)} a cada US$ 100).`}
-    Para ter lucro em 60 dias, o reembolso precisa ficar <b>abaixo de ${rpPct(o.mg)}</b>${neg?`: faltam <b class="neg">${rpPp(o.re60-o.mg)}</b>`:`: há folga de <b class="pos">${rpPp(o.mg-o.re60)}</b>`}. A meta do ranking é ${P$(MT.re9)}.</p>`;
+    Para ter lucro em 60 dias, a devolução precisa ficar <b>abaixo de ${rpPct(o.mg)}</b>${neg?`: faltam <b class="neg">${rpPp(o.re60-o.mg)}</b>`:`: há folga de <b class="pos">${rpPp(o.mg-o.re60)}</b>`}. A meta do ranking é ${P$(MT.re9)}.</p>`;
   const kpi=(l,v,m,c='')=>`<article class="kpi${c}"><span class="k">${l}</span><b class="v">${v}</b><span class="m">${m}</span></article>`;
-  const bigs=kpi('Reembolso 60d previsto',rpPct(o.re60),`já caiu ${rpPct(o.agora)} · meta ≤ ${P$(MT.re9)}`,' total')+
-    kpi('Teto para lucro > 0',rpPct(o.mg),'margem antes do reembolso (já sem CPA, taxas e custo)')+
-    kpi('Lucro vira zero',zd==null?'não vira':zd===0?'dia 0':'dia '+num(zd,0),zd==null?'lucro positivo no dia 60':zd===0?'a margem já começa negativa':`depois disso, cada reembolso é prejuízo`,zd!=null?(zd<=30?' rp-bad':' rp-warn'):' rp-good')+
+  const bigs=kpi('Devolução 60d prevista',rpPct(o.re60),`já caiu ${rpPct(o.agora)} · meta ≤ ${P$(MT.re9)}`,' total')+
+    kpi('Teto para lucro > 0',rpPct(o.mg),'margem antes da devolução (já sem CPA, taxas e custo)')+
+    kpi('Lucro vira zero',zd==null?'não vira':zd===0?'dia 0':'dia '+num(zd,0),zd==null?'lucro positivo no dia 60':zd===0?'a margem já começa negativa':`depois disso, cada devolução é prejuízo`,zd!=null?(zd<=30?' rp-bad':' rp-warn'):' rp-good')+
     kpi('Lucro previsto em 60 dias',usd(o.lucUsd),`${rpPct(o.luc)} da receita · ${usd(o.fes?o.lucUsd/o.fes:null)} por cliente`,neg?' rp-bad':' rp-good')+
     kpi('Receita da safra',usdC(o.funil),`${n(o.fes)} FEs${o.cpa!=null?' · CPA '+rpPct(o.cpa/o.funil,0)+' da receita':''}`);
   const qS={p:[p0,p1],ids:IDS};RP_REF={re60:o.re60};
-  const sRe={nome:'Reembolso',cor:'var(--rp-2)',pts:o.pts,c:o,q:qS},sLu={nome:'Lucro previsto',cor:'var(--rp-1)',pts:o.pts.map(p=>[p[0],o.mg-p[1],p[2]]),c:{...o,fim:o.re60},q:qS};
-  const gPrin=rpGraf('rpG0',{h:300,lbW:170,aria:'Reembolso acumulado e lucro previsto por dia desde a venda',series:[sRe,sLu],
+  const sRe={nome:'Devolução',cor:'var(--rp-2)',pts:o.pts,c:o,q:qS},sLu={nome:'Lucro previsto',cor:'var(--rp-1)',pts:o.pts.map(p=>[p[0],o.mg-p[1],p[2]]),c:{...o,fim:o.re60},q:qS};
+  const gPrin=rpGraf('rpG0',{h:300,lbW:170,aria:'Devolução acumulada e lucro previsto por dia desde a venda',series:[sRe,sLu],
     refs:[{v:MT.re9/100,rot:'meta do ranking '+P$(MT.re9)}],marks:[{d:zd,rot:zd===0?'prejuízo desde a venda':zd==null?null:'lucro 0 · dia '+num(zd,0)}].filter(m=>m.rot)});
 
   // ---- 2. onde o reembolso pesa mais: mês, semana, Curva Afiliado, ticket médio e nota ----
@@ -1728,8 +1728,8 @@ function renderReemb(R){
   const mf=med?med.pts[med.pts.length-1][1]:null,mm=s=>s.length?s.reduce((p,t)=>p+t.c.fim,0)/s.length:null;
   const topo=`<div class="rp-nbox"><label for="rpN">Quantos afiliados</label><input id="rpN" class="pd-busca" type="number" min="1" max="15" step="1" value="${N}" inputmode="numeric"></div>`;
   const quem=todos.length<2?`<p class="rp-vz">Poucos afiliados no ranking com esses filtros (mínimo de ${n(st.min)} FEs).</p>`:
-    `<div class="rp-duo"><article class="rp-card"><div class="rp-ch"><h4>Os ${n(mel.length)} melhores <small>menor reembolso 60d</small></h4><div class="rp-cht">${rpFsBtn('rpG5','Os '+mel.length+' melhores contra a mediana')}</div></div><p class="rp-dest">Média deles: <b class="pos">${rpPct(mm(mel))}</b> contra a mediana de ${rpPct(mf)}.</p>${rpGraf('rpG5',{h:260,series:[...mel,med].filter(Boolean),aria:'Melhores afiliados contra a mediana'})}</article>
-      <article class="rp-card"><div class="rp-ch"><h4>Os ${n(pio.length)} piores <small>maior reembolso 60d</small></h4><div class="rp-cht">${rpFsBtn('rpG6','Os '+pio.length+' piores contra a mediana')}</div></div><p class="rp-dest">Média deles: <b class="neg">${rpPct(mm(pio))}</b> contra a mediana de ${rpPct(mf)}.</p>${rpGraf('rpG6',{h:260,series:[...pio,med].filter(Boolean),aria:'Piores afiliados contra a mediana'})}</article></div>`;
+    `<div class="rp-duo"><article class="rp-card"><div class="rp-ch"><h4>Os ${n(mel.length)} melhores <small>menor devolução 60d</small></h4><div class="rp-cht">${rpFsBtn('rpG5','Os '+mel.length+' melhores contra a mediana')}</div></div><p class="rp-dest">Média deles: <b class="pos">${rpPct(mm(mel))}</b> contra a mediana de ${rpPct(mf)}.</p>${rpGraf('rpG5',{h:260,series:[...mel,med].filter(Boolean),aria:'Melhores afiliados contra a mediana'})}</article>
+      <article class="rp-card"><div class="rp-ch"><h4>Os ${n(pio.length)} piores <small>maior devolução 60d</small></h4><div class="rp-cht">${rpFsBtn('rpG6','Os '+pio.length+' piores contra a mediana')}</div></div><p class="rp-dest">Média deles: <b class="neg">${rpPct(mm(pio))}</b> contra a mediana de ${rpPct(mf)}.</p>${rpGraf('rpG6',{h:260,series:[...pio,med].filter(Boolean),aria:'Piores afiliados contra a mediana'})}</article></div>`;
 
   // ---- 4. afiliado × mês da safra (ou safra × afiliado) ----
   const tab=rpTabela(IDS,meses);
@@ -1737,14 +1737,14 @@ function renderReemb(R){
   el.innerHTML=fil+`
     <section class="pd-sec rp-s"><div class="pd-head"><div><h3><span class="rp-n">1</span>Quando o lucro vira zero</h3></div></div>
       ${hero}<section class="bigs rp-bigs">${bigs}</section>
-      <div class="rp-ch rp-g0h">${rpLeg([{l:'Reembolso acumulado (% da receita)',cor:'var(--rp-2)'},{l:'Lucro previsto (% da receita)',cor:'var(--rp-1)'},{l:'linha cheia = 50%+ da receita já real · pontilhada = previsto · ● = dia 60',cls:'tx'}])}<div class="rp-cht">${rpFsBtn('rpG0','Reembolso × lucro previsto, dia a dia')}</div></div>${gPrin}
-      <p class="rp-nota">Lucro = receita − CPA − taxas − custo do produto − reembolso (sem call center, como a nota do ranking). O lucro cai na mesma medida em que o reembolso sobe; ele vira zero quando o reembolso alcança o teto (${rpPct(o.mg)}).</p></section>
-    <section class="pd-sec rp-s"><div class="pd-head"><div><h3><span class="rp-n">2</span>Onde o reembolso pesa mais</h3><p>Curva de reembolso acumulado por safra. <b>Clique numa linha para ver o porquê</b> (por afiliado, produto, caminho no funil e valor do upsell). Linha cheia = a maior parte (50%+) da receita já tem aquela idade; pontilhada = previsto até o dia 60 (●). Na frente de cada curva, o reembolso de 60 dias. Cor forte = menor reembolso; cor fria = maior. Passe o mouse para ver cada dia.</p></div></div>
+      <div class="rp-ch rp-g0h">${rpLeg([{l:'Devolução acumulada (% da receita)',cor:'var(--rp-2)'},{l:'Lucro previsto (% da receita)',cor:'var(--rp-1)'},{l:'linha cheia = 50%+ da receita já real · pontilhada = previsto · ● = dia 60',cls:'tx'}])}<div class="rp-cht">${rpFsBtn('rpG0','Devolução × lucro previsto, dia a dia')}</div></div>${gPrin}
+      <p class="rp-nota">Lucro = receita − CPA − taxas − custo do produto − devolução (sem call center, como a nota do ranking). O lucro cai na mesma medida em que a devolução sobe; ele vira zero quando a devolução alcança o teto (${rpPct(o.mg)}).</p></section>
+    <section class="pd-sec rp-s"><div class="pd-head"><div><h3><span class="rp-n">2</span>Onde a devolução pesa mais</h3><p>Curva de devolução acumulada por safra. <b>Clique numa linha para ver o porquê</b> (por afiliado, produto, caminho no funil e valor do upsell). Linha cheia = a maior parte (50%+) da receita já tem aquela idade; pontilhada = previsto até o dia 60 (●). Na frente de cada curva, a devolução de 60 dias. Cor forte = menor devolução; cor fria = maior. Passe o mouse para ver cada dia.</p></div></div>
       <div class="rp-quad">${quebras}</div></section>
-    <section class="pd-sec rp-s"><div class="pd-head"><div><h3><span class="rp-n">3</span>Quem puxa a curva</h3><p>Afiliados do ranking (${n(st.min)}+ FEs) na safra do topo, pelo reembolso 60d. Cada um com a própria curva; em cinza, a mediana de todos.</p></div><div class="pd-tools">${topo}</div></div>
+    <section class="pd-sec rp-s"><div class="pd-head"><div><h3><span class="rp-n">3</span>Quem puxa a curva</h3><p>Afiliados do ranking (${n(st.min)}+ FEs) na safra do topo, pela devolução 60d. Cada um com a própria curva; em cinza, a mediana de todos.</p></div><div class="pd-tools">${topo}</div></div>
       ${quem}</section>
     <section class="pd-sec rp-s" id="rpTabS">${tab}</section>
-    <p class="rp-nota rp-como"><b>Como calculamos.</b> Reembolso = valor devolvido + taxas de alerta e disputa, acumulado por dia desde a venda. A curva é da safra inteira: em cada dia, a venda que já tem aquela idade entra com o real; a que não tem, com o que já caiu + a parte da curva que falta até aquele dia (pela curva (dia/60)^${num(kEq(),2)}, ajustada à mediana) × a previsão de 10 dias (reembolso de 10 dias × fator do afiliado). É a mesma conta da nota do Ranking. Teto = (líquido − custo + reembolso já caído) ÷ receita. CPA dos pedidos. Filtros de ticket: abaixo de US$ 370, 370–390, 390–410 e US$ 410+ (a meta de AOV do ranking); de nota, de 20 em 20 pontos. Produto e caminho no funil: pelos pedidos, com o upsell na sessão do FE de origem; o que falta cair vem da taxa de 60 dias do próprio grupo nas vendas com 60+ dias.</p>`;
+    <p class="rp-nota rp-como"><b>Como calculamos.</b> Devolução = valor devolvido + taxas de alerta e disputa, acumulado por dia desde a venda. A curva é da safra inteira: em cada dia, a venda que já tem aquela idade entra com o real; a que não tem, com o que já caiu + a parte da curva que falta até aquele dia (pela curva (dia/60)^${num(kEq(),2)}, ajustada à mediana) × a previsão de 10 dias (devolução de 10 dias × fator do afiliado). É a mesma conta da nota do Ranking. Teto = (líquido − custo + devolução já caída) ÷ receita. CPA dos pedidos. Filtros de ticket: abaixo de US$ 370, 370–390, 390–410 e US$ 410+ (a meta de AOV do ranking); de nota, de 20 em 20 pontos. Produto e caminho no funil: pelos pedidos, com o upsell na sessão do FE de origem; o que falta cair vem da taxa de 60 dias do próprio grupo nas vendas com 60+ dias.</p>`;
   RPG.forEach((c,id)=>rpDesenha(id));
   rpLigaFiltros(el,R);
   {const A=rpAlertas(o,zd),slot=el.querySelector('#rpAlSlot'),nA=A.filter(a=>a.n>=2&&!a.bom).length;
@@ -1802,14 +1802,14 @@ function rpTabela(IDS,meses){
       <td class="hc ${cor(c.fim,60)}${c.dl<60?' pv':''}" title="${c.dl<60?'previsto':'real'}"><b>${rpPct(c.fim)}</b></td><td class="rp-rus" title="${c.dl<60?`Já caiu ${usd(c.d60)} · previsto até o dia 60 ${usd(Math.max(0,c.fim*c.funil-c.d60))}`:'Real (60+ dias)'}"><b>${usdC(c.fim*c.funil)}</b></td><td class="rp-lq ${c.luc<0?'neg':'pos'}">${rpBarra(c.luc)}<b>${rpPct(c.luc)}</b></td>`};
   const corpo=grupos.map(g=>{const ab=rpSt.abertos.has(g.k)||!!q&&!af;
     return `<tr class="rp-pai${ab?' ab':''}" data-k="${g.k}">${cel(g.p,false)}</tr>`+g.f.map(l=>`<tr class="rp-fi" data-p="${g.k}"${ab?'':' hidden'}>${cel(l,true)}</tr>`).join('')}).join('');
-  return `<div class="pd-head"><div><h3><span class="rp-n">4</span>Reembolso por ${af?'afiliado e safra':'safra e afiliado'} <span class="pd-cnt">${n(grupos.length)}</span></h3>
-      <p>Clique na linha para abrir ${af?'as safras do afiliado':'os afiliados da safra'}; clique na nota para ver a conta; clique no cabeçalho para ordenar (as linhas de dentro seguem a mesma ordem). % da receita do funil. Reembolso acumulado até o dia N: fundo cheio = real, <span class="rp-hach">hachurado</span> = previsto (ainda não aconteceu). Cor pela meta do ranking proporcional ao dia (verde até ${P$(MT.re9)} no dia 60, amarelo até ${P$(MT.re7)}). Nota e Curva Afiliado: ${af?'na linha do afiliado, da safra do topo; nas safras, a de cada mês':'a de cada mês'}. Lucro líquido = depois de CPA, taxas, custo e reembolso 60d, sem call center.</p></div>
+  return `<div class="pd-head"><div><h3><span class="rp-n">4</span>Devolução por ${af?'afiliado e safra':'safra e afiliado'} <span class="pd-cnt">${n(grupos.length)}</span></h3>
+      <p>Clique na linha para abrir ${af?'as safras do afiliado':'os afiliados da safra'}; clique na nota para ver a conta; clique no cabeçalho para ordenar (as linhas de dentro seguem a mesma ordem). % da receita do funil. Devolução acumulada até o dia N: fundo cheio = real, <span class="rp-hach">hachurado</span> = previsto (ainda não aconteceu). Cor pela meta do ranking proporcional ao dia (verde até ${P$(MT.re9)} no dia 60, amarelo até ${P$(MT.re7)}). Nota e Curva Afiliado: ${af?'na linha do afiliado, da safra do topo; nas safras, a de cada mês':'a de cada mês'}. Lucro líquido = depois de CPA, taxas, custo e devolução 60d, sem call center.</p></div>
     <div class="pd-tools"><div class="fgrp" id="rpModo" aria-label="Ordem da tabela"><button data-v="af" aria-pressed="${af}">Afiliado › Safra</button><button data-v="safra" aria-pressed="${!af}">Safra › Afiliado</button></div>
       <button type="button" class="ls-chip" id="rpAbre">${grupos.length&&grupos.every(g=>rpSt.abertos.has(g.k))?'Fechar todos':'Abrir todos'}</button>
       <input class="pd-busca" id="rpBusca" type="search" placeholder="Buscar afiliado" aria-label="Buscar afiliado" value="${esc(rpSt.busca)}">
       <button type="button" class="dt-btn-excel" id="rpXls" title="Exportar para Excel (CSV)" aria-label="Exportar">${ICO.xls}</button></div></div>
     <div class="rp-tw"><table class="rp-t"><thead><tr>${th('nome',af?'Afiliado / safra':'Safra / afiliado','tl')}${th('cv','Curva','rp-cc','Curva Afiliado (A/B/C/S)')}${th('nota','Nota','rp-cc','Pontuação do Ranking')}${th('fes','FEs')}${th('funil','Receita')}${th('cpa','CPA','','CPA pago ÷ receita do funil. Vermelho: acima do CPA L0; verde: abaixo. Passe o mouse para ver a diferença.')}${th('ideal','CPA L0','',esc(CPA_IDEAL_INFO)+' Aqui, em % da receita do funil.')}${th('custo','Custo','','Custo do produto (Full Stack) ÷ receita')}
-      ${RP_TAB.map(d=>th('d'+d,'D'+d)).join('')}${th('fim','60d','','Reembolso total de 60 dias (real ou previsto)')}${th('rus','Reemb. US$','','Reembolso de 60 dias em US$ (valor devolvido + taxas de alerta e disputa): o que já caiu + o previsto até o dia 60. Clique para ordenar do maior para o menor; passe o mouse para ver quanto já caiu.')}${th('luc','Lucro líquido','rp-lqh','Lucro líquido previsto em % da receita: (líquido − custo − reembolso que ainda vai cair) ÷ receita. A barra vai para a direita (verde) quando sobra lucro e para a esquerda (vermelho) quando dá prejuízo; meia barra = 20% da receita (acima disso, cheia).')}</tr></thead>
+      ${RP_TAB.map(d=>th('d'+d,'D'+d)).join('')}${th('fim','60d','','Devolução total de 60 dias (real ou previsto)')}${th('rus','Devol. US$','','Devolução de 60 dias em US$ (valor devolvido + taxas de alerta e disputa): o que já caiu + o previsto até o dia 60. Clique para ordenar do maior para o menor; passe o mouse para ver quanto já caiu.')}${th('luc','Lucro líquido','rp-lqh','Lucro líquido previsto em % da receita: (líquido − custo − devolução que ainda vai cair) ÷ receita. A barra vai para a direita (verde) quando sobra lucro e para a esquerda (vermelho) quando dá prejuízo; meia barra = 20% da receita (acima disso, cheia).')}</tr></thead>
       <tbody>${corpo||`<tr><td class="tl" colspan="${RP_TAB.length+11}">Nenhum afiliado com esses filtros.</td></tr>`}</tbody></table></div>`;
 }
 function rpLigaTabela(el,R){
@@ -1827,7 +1827,7 @@ function rpLigaTabela(el,R){
   s.querySelector('#rpXls').onclick=()=>{const L=[[rpSt.modo==='af'?'Afiliado':'Safra',rpSt.modo==='af'?'Safra':'Afiliado','Curva Afiliado','Nota','FEs','Receita US$','CPA %','CPA L0 %','Custo %',...RP_TAB.map(d=>'Reemb. D'+d+' %'),'Reemb. 60d %','Reemb. 60d US$','Já caiu US$','Real ou previsto','Lucro líquido %']];
     const f=v=>v==null||!isFinite(v)?'':(v*100).toFixed(2).replace('.',','),row=(a,b,l)=>{const c=l.c,na=l.na;return [a,b,na?(na.S?'S':na.curva):'',na&&na.pts!=null?na.pts.toFixed(1).replace('.',','):'',c.fes,c.funil.toFixed(2).replace('.',','),c.cpa==null?'':f(c.cpa/c.funil),c.cpa==null?'':f(c.cpa/c.funil+c.luc),f(c.custo/c.funil),...RP_TAB.map(d=>f(rpVal(c.pts,d))),f(c.fim),(c.fim*c.funil).toFixed(2).replace('.',','),c.d60.toFixed(2).replace('.',','),c.dl>=60?'real':'previsto',f(c.luc)]};
     (rpTabela.ult||[]).forEach(g=>{L.push(row(g.p.rot,'Total',g.p));g.f.forEach(l=>L.push(row(g.p.rot,l.rot,l)))});
-    download('reembolso_por_'+(rpSt.modo==='af'?'afiliado_safra':'safra_afiliado')+'.csv',L)};
+    download('devolucao_por_'+(rpSt.modo==='af'?'afiliado_safra':'safra_afiliado')+'.csv',L)};
 }
 
 // navegação: a tela esconde as abas Ranking/Premissas e os big numbers do ranking; o menu marca o item da vez

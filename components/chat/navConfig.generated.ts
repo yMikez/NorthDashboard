@@ -47,7 +47,7 @@ export const NAV_GROUPS: NavGroup[] = [
       },
       {
         "id": "affiliate-refund",
-        "label": "Reembolso Prev.",
+        "label": "Devolução Prev.",
         "icon": "percent"
       },
       {

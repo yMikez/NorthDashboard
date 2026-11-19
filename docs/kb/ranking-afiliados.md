@@ -1,7 +1,7 @@
 ---
 title: Ranking de afiliados — nota de 0 a 100, Curva Afiliado + S, premissas e reembolso previsto
 kind: policy
-description: Ranking, Visão Geral e Reembolso Prev. de afiliados: nota de 0 a 100, Curva Afiliado A/B/C/S, bônus e penalidades, previsão do reembolso 60d, quebras e alertas do reembolso e de onde vêm os dados
+description: Ranking, Visão Geral e Devolução Prev. de afiliados: nota de 0 a 100, Curva Afiliado A/B/C/S, bônus e penalidades, previsão do reembolso 60d, quebras e alertas do reembolso e de onde vêm os dados
 effectiveDate: 2026-11-05
 ---
 
@@ -26,7 +26,7 @@ Três abas usam o mesmo motor e o mesmo modelo (permissões `affiliate-overview`
     A, B e C (radar das notas, tabela de critérios com bons/médios/ruins,
     bônus e penalidades, top 3 e piores 3), como no painel de afiliados.
 - **Ranking**: a nota de cada afiliado, Premissas e a página do afiliado.
-- **Reembolso Prev.**: quando o lucro da safra vira zero, as curvas de reembolso
+- **Devolução Prev.**: quando o lucro da safra vira zero, as curvas de reembolso
   por safra e por quebra, quem puxa a curva e a tabela afiliado × safra.
 
 As telas do Mike (Afiliados, Análise, CRM, Networks) seguem no menu, com o nome
@@ -38,7 +38,7 @@ custo do produto e o reembolso previsto de 60 dias (cliente + alerta + disputa):
 CPA L0 = CPA pago + lucro previsto (sem call center, como a nota e o Status
 CPA). O CPA é pago praticamente só no FE (99,8% dos pedidos com CPA), então o
 CPA L0 por cliente é o teto do CPA do FE que o funil inteiro paga. Aparece ao
-lado do CPA na Visão Geral e na tabela afiliado × safra do Reembolso Prev.; o
+lado do CPA na Visão Geral e na tabela afiliado × safra do Devolução Prev.; o
 CPA fica vermelho acima do L0 e verde abaixo, e a dica (ao passar o mouse)
 mostra a diferença em valor e em %. Nomes com entidades HTML da JVZoo
 ("Andr&eacute;") são convertidos em acentos no servidor (`textoDeHtml`).
@@ -126,10 +126,15 @@ Pontuação = base + bônus + penalidades (pode passar de 100). Selo: 80+ forte,
 - A curva por dia da safra mistura o real de cada venda que já tem aquela idade
   com o previsto das que ainda não têm; no dia 60 bate com o reembolso previsto.
 
-## Reembolso Prev. (aba)
+## Devolução Prev. (aba)
 
-- **Teto para lucro > 0** = (líquido − custo + reembolso já caído) ÷ receita: o
-  reembolso acima disso dá prejuízo em 60 dias. A tela mostra o dia em que o lucro
+- **Nome (18/11/2026):** a aba se chamava "Reembolso Prev.". Mudou para
+  "Devolução Prev." porque o número dela é a **Devol. Total** (valor devolvido ao
+  cliente + alertas + disputas + taxas de alerta e disputa), no vocabulário das
+  outras telas. Os textos da aba dizem "devolução"; o id da rota segue
+  `affiliate-refund`.
+- **Teto para lucro > 0** = (líquido − custo + devolução já caída) ÷ receita: a
+  devolução acima disso dá prejuízo em 60 dias. A tela mostra o dia em que o lucro
   vira zero.
 - Quebras em curvas: mês e semana da safra, Curva Afiliado, produto do FE,
   **caminho no funil** (potes do FE + o que levou depois, ex.: `6p+12p` = FE de 6
@@ -155,7 +160,7 @@ Pontuação = base + bônus + penalidades (pode passar de 100). Selo: 80+ forte,
 
 ## Pedidos
 
-- Visão Geral e Reembolso Prev. leem todas as vendas de uma vez
+- Visão Geral e Devolução Prev. leem todas as vendas de uma vez
   (`GET /api/metrics/affiliate-ranking/all-orders`, colunar, sem dado de cliente).
 
 - A página do afiliado lista todas as vendas cujo FE caiu na safra: valor, CPA,

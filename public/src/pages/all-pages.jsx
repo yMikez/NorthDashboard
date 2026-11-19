@@ -4184,7 +4184,7 @@ const TAB_CATALOG = [
   { group: 'Análise',   id: 'refund-cohorts', label: 'Reembolsos' },
   { group: 'Afiliados', id: 'affiliate-overview', label: 'Visão Geral' },
   { group: 'Afiliados', id: 'affiliate-ranking', label: 'Ranking' },
-  { group: 'Afiliados', id: 'affiliate-refund', label: 'Reembolso Prev.' },
+  { group: 'Afiliados', id: 'affiliate-refund', label: 'Devolução Prev.' },
   { group: 'Afiliados', id: 'leaderboard',    label: 'Afiliados' },
   { group: 'Afiliados', id: 'all-affiliates', label: 'Todos os afiliados' },
   { group: 'Afiliados', id: 'affiliate-analysis', label: 'Análise' },

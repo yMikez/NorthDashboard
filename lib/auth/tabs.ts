@@ -46,7 +46,7 @@ export const AVAILABLE_TABS: TabSpec[] = [
   // afiliado (Premissas: só admin muda); reembolso previsto por safra, produto e funil.
   { id: 'affiliate-overview', label: 'Visão Geral',     group: 'Afiliados' },
   { id: 'affiliate-ranking', label: 'Ranking',          group: 'Afiliados' },
-  { id: 'affiliate-refund', label: 'Reembolso Prev.',   group: 'Afiliados' },
+  { id: 'affiliate-refund', label: 'Devolução Prev.',   group: 'Afiliados' },
   // Telas do Mike: rodam em paralelo às do time de dados até a validação.
   { id: 'leaderboard',    label: 'Afiliados',           group: 'Afiliados' },
   { id: 'all-affiliates', label: 'Todos os afiliados',  group: 'Afiliados' },
