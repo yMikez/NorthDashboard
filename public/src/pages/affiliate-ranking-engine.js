@@ -111,8 +111,12 @@ const fimMes=k=>{const [y,m]=k.split('-').map(Number);return dIdx(new Date(Date.
 const FS=DADOS.rows.reduce((o,r)=>{o.c+=r[C.custo_fs];o.f+=r[C.funil_coberto];return o},{c:0,f:0}), PCT_FS=FS.f?FS.c/FS.f:0.10;
 // reembolso = valor devolvido + taxas de alerta e disputa. Curva pelas vendas que já têm 60 dias: fator 10d → 60d geral e de cada afiliado
 const D10=r=>r[C.dev10]+r[C.tx10],D60=r=>r[C.dev60]+r[C.tx60];
-// previsão oficial M7 (23/11/2026): o que ainda vai cair nas vendas com previsão e a receita sem previsão (payload antigo = tudo sem)
-const m7Fut=r=>C.m7fut!=null?r[C.m7fut]||0:0,m7Sem=r=>C.m7nb!=null?r[C.m7nb]??r[C.funil]:r[C.funil];
+// previsão oficial M7 (23/11/2026), mesma regra da base: Devol. Total prevista = soma do previsto ÷ receita com previsão.
+// m7Prev = soma do previsto 60d (abertas e fechadas); m7Sem = receita sem previsão (payload antigo = tudo sem)
+const TEM_M7=C.m7prev!=null,m7Prev=r=>TEM_M7?r[C.m7prev]||0:0,m7Sem=r=>TEM_M7&&C.m7nb!=null?r[C.m7nb]??r[C.funil]:r[C.funil];
+// total previsto de um grupo: previsto das vendas com previsão + as sem previsão na mesma taxa (o % = o da base).
+// Sem previsão nenhuma no grupo, usa a taxa g (a do período); g nulo = conta antiga (devolve null)
+const m7Total=(pv,fu,nb,g)=>{const fp=fu-nb;if(!TEM_M7)return null;const rm=fp>0?pv/fp:g;return rm==null?null:pv+rm*nb};
 const prevTx=()=>DADOS_CONTA.previsao?.corte?`M7 oficial · corte ${DADOS_CONTA.previsao.corte.slice(8,10)}/${DADOS_CONTA.previsao.corte.slice(5,7)}`:`10d × fator ${num(FATOR,2)}`;
 const M60=FIM-60,GR=DADOS.rows.reduce((o,r)=>{if(r[1]<=M60){o.d10+=D10(r);o.d60+=D60(r);o.b+=r[C.funil]}return o},{d10:0,d60:0,b:0});
 const FATOR=GR.d10?GR.d60/GR.d10:2.36, R10G=GR.b?GR.d10/GR.b:0.097;
@@ -199,15 +203,16 @@ function anterior(){
   else if(st.per!=='tudo'){const k=mes(dIso(p0).slice(0,7)),f=fimMes(k);r=[dIdx(k+'-01'),Math.min(f,dIdx(k+'-01')+(p1-p0))]}
   return r&&r[0]>=0?r:null}
 
-/* safra = as vendas do período, com tudo o que renderam até hoje. Reembolso 60d = o que já caiu em até 60 dias + o que
-   ainda vai cair pela previsão oficial M7 (23/11/2026: o M7 é o número oficial em todas as telas; o mesmo do BI e da
-   coluna "prev." da tela Afiliados). Vendas sem previsão (entraram depois da última execução do modelo, ~06:50) e banco
-   sem a coluna usam a conta antiga: 10d × fator do afiliado. Safra fechada (60+ dias): tudo real. */
+/* safra = as vendas do período, com tudo o que renderam até hoje. Reembolso 60d = previsão oficial M7, pela mesma regra
+   da base (datamart.business_reembolso_previsao; Douglas, 23/11/2026): soma de r60_total_previsto ÷ receita das vendas
+   com previsão (venda fechada já vem com o real). Vendas sem previsão (entraram depois da última execução do modelo,
+   ~06:50) entram na mesma taxa, para o % não mudar. "Ainda vai cair" = previsto − já caiu (negativo se já caiu mais que
+   o previsto). Banco sem a coluna: conta antiga, 10d × fator do afiliado. */
 function calcular(pp=periodo(),off=0){
   const [p0,p1]=pp,dias=p1-p0+1,de=diasEf(p0,p1),b1=p1+off,fechada=p1<=FIM-60;
   const jan=k=>{let j1=Math.min(b1,FIM-k)-off,j0=p0;if(j1<j0)j0=Math.max(0,j1-Math.max(p1-p0,29));return [j0,j1,j1>=j0]};
   const [r0,r1,temRe]=jan(10),[q0,q1,temQ]=jan(30);
-  const Z=()=>({fes:0,funil:0,liq:0,custo:0,fcob:0,call:0,dev:0,base:0,vendas:0,disp:0,imFu:0,imD:0,imR:0,d60:0,idS:0,fut:0,m7f:0,imRu:0});
+  const Z=()=>({fes:0,funil:0,liq:0,custo:0,fcob:0,call:0,dev:0,base:0,vendas:0,disp:0,imFu:0,imD:0,imR:0,d60:0,idS:0,fut:0,pv:0,nb:0});
   const M=new Map();
   for(const r of DADOS.rows){
     if(st.plat&&r[RPL]!==st.plat)continue;
@@ -215,17 +220,21 @@ function calcular(pp=periodo(),off=0){
     let a=M.get(r[0]);if(!a)M.set(r[0],a={i:r[0],af:AFS[r[0]][0],nome:AFS[r[0]][1],pl:st.plat||AFS[r[0]][2]||'JVZoo',contas:AFS[r[0]][3]||1,...Z()});
     if(noP){const fu=r[C.funil];a.fes+=r[C.fes];a.funil+=fu;a.liq+=r[C.liq_funil];a.fcob+=r[C.funil_coberto];
       a.custo+=r[C.custo_fs]+PCT_FS*Math.max(0,fu-r[C.funil_coberto]);a.call+=r[C.liq_call];
-      a.d60+=D60(r);a.idS+=fu*Math.min(60,FIM-d);if(d>M60){a.imFu+=fu;a.imD+=D60(r);a.imR+=fu*(1-FRAC(FIM-d));a.m7f+=m7Fut(r);a.imRu+=m7Sem(r)*(1-FRAC(FIM-d))}}
+      a.d60+=D60(r);a.idS+=fu*Math.min(60,FIM-d);if(d>M60){a.imFu+=fu;a.imD+=D60(r);a.imR+=fu*(1-FRAC(FIM-d))}
+      a.pv+=m7Prev(r);a.nb+=m7Sem(r)}
     if(noR){a.dev+=D10(r);a.base+=r[C.funil]}
     if(noQ){a.vendas+=r[C.vendas];a.disp+=r[C.disputas]}}
   const L=[...M.values()].filter(a=>a.fes>0||a.funil>0);
   const T=L.reduce((s,a)=>s+Math.max(0,a.funil),0);let acc=0;
   const CVJ=curvaJanela(p1);L.forEach(a=>{a.curva=CVJ.cv.get(a.i)||'C'});
+  // taxa prevista do período inteiro: vale para afiliado sem nenhuma venda com previsão (só vendas de hoje)
+  const gP=L.reduce((s,a)=>s+a.pv,0),gF=L.reduce((s,a)=>s+a.funil-a.nb,0),gM=gF>0?gP/gF:null;
   for(const a of L){
     const fa=fatorAf(a.i);a.fator=fa.f;a.fw=fa.w;a.fo=fa.fo;
     a.r10=a.base>0?a.dev/a.base:null;a.p60f=(a.base>0?(a.dev+K_R10*R10G)/(a.base+K_R10):R10G)*a.fator;
-    // M7 onde há previsão; conta antiga (p60f) só na receita sem previsão. p60 = a taxa equivalente (desenha a curva até o D60)
-    a.fut=a.m7f+a.p60f*a.imRu;a.p60=a.imR>0?a.fut/a.imR:a.p60f;
+    // M7 pela regra da base; sem previsão (banco antigo) a conta antiga. p60 = taxa equivalente (desenha a curva até o D60)
+    const tot=m7Total(a.pv,a.funil,a.nb,gM);a.ml=tot!=null;
+    a.fut=a.ml?tot-a.d60:a.p60f*a.imR;a.p60=a.imR>0?Math.max(0,a.fut)/a.imR:a.p60f;
     a.agora=a.funil?a.d60/a.funil:null;a.idade=a.funil?a.idS/a.funil:null;
     a.re60=a.funil?(a.d60+a.fut)/a.funil:null;
     a.lpf=a.fes?(a.liq-a.custo-a.fut)/a.fes:null;a.lpfHoje=a.fes?(a.liq-a.custo)/a.fes:null;
@@ -537,7 +546,7 @@ function pqRegras(){
       <tr><td>Reembolso baixo</td><td>reembolso 60d: ${P$(MT.reBIni)} = 0, ${P$(reMid())} = +${fP(AJ.re*0.6)}, ${P$(MT.reBMax)} ou menos = +${fP(AJ.re)}</td><td class="fb">+${fP(AJ.re)}</td></tr>
       <tr><td>Risco de chargeback</td><td>disputas: ${P$(MT.cbIni)} das vendas = 0, ${P$(MT.cbMax)} ou mais = −${fP(AJ.cb)}</td><td class="fr">−${fP(AJ.cb)}</td></tr>
       <tr><td>Prejuízo por cliente</td><td>com call center, 60 dias: −US$ ${n(MT.prejIni)} = 0, −US$ ${n(MT.prejMax)} ou pior = −${fP(AJ.prej)}</td><td class="fr">−${fP(AJ.prej)}</td></tr></tbody></table></div></div>
-    <div class="pq-mr"><h3>Como prevemos o reembolso</h3><p>O que já caiu + o que a previsão oficial do time de dados (modelo M7, a mesma do BI e da coluna “prev.” da tela Afiliados) ainda espera até o dia 60, venda a venda${DADOS_CONTA.previsao?.corte?` (${prevTx()})`:''}. Vendas que entraram depois da última execução do modelo (todo dia, ~06:50) usam a conta antiga até a próxima: reembolso dos primeiros 10 dias × fator do afiliado (o geral é × ${num(FATOR,2)}). Os dias entre hoje e o dia 60 seguem a forma da curva de cada afiliado. Safra com 60+ dias usa o real. Custo do produto: real da Full Stack, ou a média real de ${pct(PCT_FS)} da receita onde ainda não há pedido no armazém.</p></div>`}
+    <div class="pq-mr"><h3>Como prevemos o reembolso</h3><p>A previsão oficial do time de dados (modelo M7, a mesma do BI e da coluna “prev.” da tela Afiliados), pela mesma regra da base: soma do previsto para o dia 60 de cada venda ÷ receita das vendas com previsão${DADOS_CONTA.previsao?.corte?` (${prevTx()})`:''}. Vendas que entraram depois da última execução do modelo (todo dia, ~06:50) entram na mesma taxa prevista do afiliado, para o % não mudar. Os dias entre hoje e o dia 60 seguem a forma da curva de cada afiliado. Safra com 60+ dias usa o real. Custo do produto: real da Full Stack, ou a média real de ${pct(PCT_FS)} da receita onde ainda não há pedido no armazém.</p></div>`}
 const fP=v=>num(v,Number.isInteger(v)?0:1);
 // campo pequeno para editar uma meta no meio do texto
 const mi=(k,rot,st=1)=>`<input type="number" class="mt-in" data-m="${k}" value="${MT[k]}" step="${st}" inputmode="decimal" aria-label="${rot}" title="${rot}">`;
@@ -722,14 +731,16 @@ function semanas(i,a){
   // por semana de venda (segunda a domingo): FEs, AOV, reembolso real até hoje, reembolso 60d previsto e lucro/cliente previsto
   const W=new Map();
   for(const r of DADOS.rows){if(r[0]!==i||r[1]>FIM)continue;const dt=new Date(D0.getTime()+r[1]*864e5),dw=(dt.getUTCDay()+6)%7,s=r[1]-dw;
-    let w=W.get(s);if(!w)W.set(s,w={s,fes:0,fu:0,liq:0,custo:0,d60:0,d10:0,b10:0,idS:0,m7f:0,imRu:0});
+    let w=W.get(s);if(!w)W.set(s,w={s,fes:0,fu:0,liq:0,custo:0,d60:0,d10:0,b10:0,idS:0,pv:0,nb:0});
     const fu=r[C.funil];w.fes+=r[C.fes];w.fu+=fu;w.liq+=r[C.liq_funil];w.custo+=r[C.custo_fs]+PCT_FS*Math.max(0,fu-r[C.funil_coberto]);
     w.d60+=D60(r);w.idS+=fu*Math.min(60,FIM-r[1]);if(r[1]<=FIM-10){w.d10+=D10(r);w.b10+=fu}
-    if(r[1]>M60){w.m7f+=m7Fut(r);w.imRu+=m7Sem(r)*(1-FRAC(FIM-r[1]))}}
+    w.pv+=m7Prev(r);w.nb+=m7Sem(r)}
+  // semana só com vendas sem previsão: taxa prevista do afiliado no período da tela
+  const gA=a&&a.funil-a.nb>0?a.pv/(a.funil-a.nb):null;
   return [...W.values()].sort((x,y)=>x.s-y.s).map(w=>{const id=w.fu?w.idS/w.fu:60,maduro=w.s+6<=FIM-60;
-    // previsto = já caiu + M7 (vendas com previsão) + conta antiga (10d × fator) só na receita sem previsão
-    const pOld=(w.b10>0?(w.d10+K_R10*R10G)/(w.b10+K_R10):(a.r10??R10G))*a.fator;
-    const real=w.fu?w.d60/w.fu:null,fut=maduro?0:w.m7f+pOld*w.imRu,re=maduro?real:(w.fu?(w.d60+fut)/w.fu:null);
+    // previsto = M7 pela regra da base (soma do previsto ÷ receita com previsão); banco sem a coluna = conta antiga (10d × fator)
+    const tot=m7Total(w.pv,w.fu,w.nb,gA),pOld=(w.b10>0?(w.d10+K_R10*R10G)/(w.b10+K_R10):(a.r10??R10G))*a.fator;
+    const real=w.fu?w.d60/w.fu:null,re=tot!=null?(w.fu?tot/w.fu:null):maduro?real:Math.max(real??0,pOld),fut=w.fu&&re!=null?re*w.fu-w.d60:0;
     return {s:w.s,fes:w.fes,aov:w.fes?w.fu/w.fes:null,real,re,maduro,lpf:w.fes?(w.liq-w.custo-fut)/w.fes:null,idade:id}})}
 function grafSem(ws,k,tipo,fmt,p0,p1){
   const W=520,H=150,L=46,R=10,T=12,B=24,vs=ws.map(w=>w[k]).filter(v=>v!=null);if(!vs.length)return '<div class="vazio">Sem dado.</div>';
@@ -1362,7 +1373,7 @@ const ICO_FIL='<svg width="14" height="14" viewBox="0 0 24 24" fill="none" strok
 
 // ---- acumulados por coorte (mês, semana, safra do topo, tudo) × afiliado ----
 /* Curva da safra inteira, dia a dia (04/11): em cada dia d, cada venda entra com o real se já tem d dias; senão com o que
-   já caiu + a previsão (M7; p60 = taxa equivalente do afiliado) × a parte da curva entre a idade dela e o dia d
+   já caiu + o que falta para o previsto (M7 pela regra da base; p60 = taxa equivalente do afiliado) × a parte da curva entre a idade dela e o dia d
    (FRAC(d) − FRAC(idade)). No dia 60 bate exatamente com o reembolso 60d do Ranking (= M7). Cheia = 50%+ da receita da safra já tem aquela idade. */
 const RP_EV=[1,3,5,7,10,14,17,21,25,30,35,40,45,50,55,60];
 const rpRowAt=(r,d)=>{if(DCH.includes(d))return RTH(r,d);let a=0,va=0;for(const x of DCH){if(x>d)return va+(RTH(r,x)-va)*(d-a)/(x-a);a=x;va=RTH(r,x)}return va};
@@ -1525,8 +1536,8 @@ function rpPedidos(IDS){
   // os 6 caminhos com mais receita na safra (o resto vira "outros")
   const rc=new Map();for(let i=0;i<N;i++){const fe=c.fe[i];if(fe<p0||fe>p1||fe>FIM||!ok(i))continue;rc.set(CK.cam[i],(rc.get(CK.cam[i])||0)+(c.bruto[i]||0))}
   RP_CAMTOP=new Set([...rc].sort((a,b)=>b[1]-a[1]).slice(0,6).map(x=>x[0]));
-  const D={fam:new Map(),cam:new Map(),val:new Map()},tot={hb:0,hr:0};
-  const novo=()=>({fu:0,n:0,ses:0,mf:Array(NE).fill(0),mr:Array(NE).fill(0),yD:Array(NE).fill(0),yF:Array(NE).fill(0),yM:Array(NE).fill(0),hb:0,hr:0});
+  const D={fam:new Map(),cam:new Map(),val:new Map()},tot={hb:0,hr:0,pv:0,fp:0};
+  const novo=()=>({fu:0,n:0,ses:0,mf:Array(NE).fill(0),mr:Array(NE).fill(0),yD:Array(NE).fill(0),yF:Array(NE).fill(0),yM:Array(NE).fill(0),hb:0,hr:0,pv:0,fp:0});
   for(let i=0;i<N;i++){const fe=c.fe[i];if(fe<0||fe>FIM||!ok(i))continue;
     const age=FIM-d0[i];if(age<0)continue;
     const b=c.bruto[i]||0,r=(c.re[i]||0)+(c.al[i]||0)+(c.dt[i]||0),of=r?(OFF[i]>=0?OFF[i]:Math.min(age,30)):0,eFE=ET[c.et[i]]==='FE';
@@ -1534,11 +1545,15 @@ function rpPedidos(IDS){
     for(const dim in D){const k=rpChave(dim,i,CK);let o=D[dim].get(k);if(!o)D[dim].set(k,o=novo());
       if(mad){o.hb+=b;o.hr+=r60}
       if(!naSafra)continue;o.fu+=b;o.n++;if(eFE)o.ses++;
-      // previsão oficial M7 da venda (o que falta cair, espalhado pela forma da curva); sem previsão: taxa de 60d do grupo
-      const m7=c.m7?c.m7[i]:null,fa=FRAC(age),fM=m7==null||mad?null:Math.max(0,m7-r)/Math.max(1e-9,1-fa);
+      // previsão oficial M7 da venda, regra da base: previsto − já caiu (espalhado pela forma da curva; negativo se já
+      // caiu mais que o previsto); sem previsão (vendas de hoje): a taxa prevista do grupo (soma do previsto ÷ receita)
+      const m7=c.m7?c.m7[i]:null,fa=FRAC(age),fM=m7==null||mad?null:(m7-r)/Math.max(1e-9,1-fa);
+      if(m7!=null){o.pv+=m7;o.fp+=b;if(dim==='fam'){tot.pv+=m7;tot.fp+=b}}
       for(let j=0;j<NE;j++){const d=RP_EV[j];if(age>=d){o.mf[j]+=b;if(of<=d)o.mr[j]+=r}else{o.yD[j]+=r;if(fM==null)o.yF[j]+=b*(FEv[j]-fa);else o.yM[j]+=fM*(FEv[j]-fa)}}}}
   const pT=tot.hb?tot.hr/tot.hb:0;RP_PT=pT||RP_PT;
-  for(const dim in D)D[dim].forEach(o=>{if(!o.fu){o.c=null;return}const pg=(o.hr+K*pT)/(o.hb+K);
+  // vendas sem previsão: taxa M7 do grupo; grupo sem previsão nenhuma, a da safra; sem M7 (banco antigo), a histórica do grupo
+  const pM=tot.fp>0?tot.pv/tot.fp:null;
+  for(const dim in D)D[dim].forEach(o=>{if(!o.fu){o.c=null;return}const pg=o.fp>0?o.pv/o.fp:pM??(o.hr+K*pT)/(o.hb+K);
     let dl=0,okk=true,v=0;const pts=[[0,0,true]];
     for(let j=0;j<NE;j++){const real=okk&&o.mf[j]>=Math.max(0.5*o.fu,1000);if(!real)okk=false;else dl=RP_EV[j];
       v=Math.max(v,(o.mr[j]+o.yD[j]+o.yM[j]+pg*o.yF[j])/o.fu);pts.push([RP_EV[j],v,real])}

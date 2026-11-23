@@ -116,14 +116,21 @@ Pontuação = base + bônus + penalidades (pode passar de 100). Selo: 80+ forte,
 - **Desde 23/11/2026 o número oficial é o modelo M7** do time de dados (job
   `ml-reembolso`, todo dia ~06:50), o mesmo do BI e da coluna "prev." da tela
   Afiliados. Decisão do Douglas: o M7 vale para todas as telas.
-- **Reembolso 60d previsto = o que já caiu + o que o M7 ainda espera até o dia
-  60** em cada venda aberta: `max(0, r60_total_previsto − (reembolso + taxas))`
-  de `dados_oficiais.afiliados_pedidos` (campos `m7fut` e `m7nb` do agregado
-  afiliado × dia; nos pedidos, `m7` por venda, para produto e caminho no funil).
-- Vendas **sem previsão** (entraram depois da última execução do modelo) e
-  banco sem a coluna `r60_total_previsto` usam a conta antiga abaixo até a
-  próxima execução. Os dias entre hoje e o dia 60 seguem a forma da curva de
-  cada afiliado (a taxa equivalente `p60` faz a curva fechar no M7).
+- **Mesma regra da base de dados** (`datamart.business_reembolso_previsao`;
+  Douglas, 23/11/2026): **Reembolso 60d previsto = soma de
+  `r60_total_previsto` ÷ receita das vendas com previsão** (venda fechada, com
+  60+ dias, já vem com o real). Campos `m7prev` (soma do previsto) e `m7nb`
+  (receita sem previsão) do agregado afiliado × dia; nos pedidos, `m7` por
+  venda, para produto e caminho no funil.
+- "Ainda vai cair" = previsto − já caiu. Pode ser negativo quando já caiu mais
+  que o previsto: o total segue o M7, como na base.
+- Vendas **sem previsão** (entraram depois da última execução do modelo, ~06:50)
+  entram na mesma taxa prevista do afiliado (ou da safra, se ele não tem
+  nenhuma), para o % não mudar. Só o banco sem a coluna `r60_total_previsto`
+  usa a conta antiga abaixo. Os dias entre hoje e o dia 60 seguem a forma da
+  curva de cada afiliado (a taxa equivalente `p60` faz a curva fechar no M7).
+- O recorte continua o da tela: safra = dia do FE, só vendas com FE de origem e
+  afiliado. Com o mesmo recorte, o % é o mesmo da base.
 - Antes de 23/11 (conta antiga, ainda usada só como reserva):
 - **Previsão de 10 dias** do afiliado: reembolso dos primeiros 10 dias (puxado
   para a média quando ele vende pouco) × fator 10d→60d do próprio afiliado (com

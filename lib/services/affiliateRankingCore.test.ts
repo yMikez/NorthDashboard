@@ -157,12 +157,12 @@ describe('empacotarPedidos', () => {
 });
 
 describe('montarPayload: previsão M7', () => {
-  it('põe a data de corte do modelo e os campos m7fut/m7nb no fim', () => {
-    const p = montarPayload([{ afiliado: 'JVZoo 1', dia: '2026-11-16', fes: 1, funil: 300, m7fut: '45.5', m7nb: 0 }], {}, {},
+  it('põe a data de corte do modelo e os campos m7prev/m7nb no fim', () => {
+    const p = montarPayload([{ afiliado: 'JVZoo 1', dia: '2026-11-16', fes: 1, funil: 300, m7prev: '75.5', m7nb: 0 }], {}, {},
       '2026-11-23T08:10:00Z', 534, {}, { corte: '2026-11-22', versao: 7 });
     expect(p.previsao).toEqual({ corte: '2026-11-22', versao: 7 });
-    expect(CAMPOS.slice(-2)).toEqual(['m7fut', 'm7nb']);
-    expect(p.rows[0][2 + CAMPOS.indexOf('m7fut')]).toBe(45.5);
+    expect(CAMPOS.slice(-2)).toEqual(['m7prev', 'm7nb']);
+    expect(p.rows[0][2 + CAMPOS.indexOf('m7prev')]).toBe(75.5);
   });
   it('sem a coluna no banco a previsão fica nula', () => {
     expect(montarPayload([], {}, {}, '2026-11-23T08:10:00Z', null).previsao).toBeNull();

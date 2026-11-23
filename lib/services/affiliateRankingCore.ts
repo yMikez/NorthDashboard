@@ -15,8 +15,8 @@ export const CAMPOS = [
   'fes', 'funil', 'liq_funil', 'dev30', 'dev10', 'dev60', 'tx10', 'tx60',
   'rt1', 'rt3', 'rt5', 'rt7', 'rt14', 'rt21', 'rt30', 'rt45',
   'vendas', 'disputas', 'custo_fs', 'funil_coberto', 'liq_call', 'bruto_call',
-  // previsão oficial M7 (23/11/2026): o que ainda vai cair nas vendas abertas com previsão; receita sem previsão
-  'm7fut', 'm7nb',
+  // previsão oficial M7 (23/11/2026): soma do previsto 60d (r60_total_previsto); receita sem previsão
+  'm7prev', 'm7nb',
 ] as const;
 export type Campo = (typeof CAMPOS)[number];
 

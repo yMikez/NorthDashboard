@@ -92,17 +92,16 @@ async function temPrevisaoM7(): Promise<boolean> {
   return !!col?.n;
 }
 
-/** Já caiu na venda (reembolso + taxas de alerta e disputa): a mesma soma do D60 da tela. */
-const JA_CAIU = Prisma.raw('(coalesce(p.reembolso, 0) + coalesce(p.taxa_alerta, 0) + coalesce(p.taxa_disputa, 0))');
 /**
- * m7fut = o que o M7 ainda prevê que vai cair (previsto 60d − já caiu) nas vendas abertas com previsão;
- * m7nb = receita das vendas sem previsão (entraram depois da última execução do modelo): nelas a tela usa a conta antiga.
+ * Mesma regra da base (datamart.business_reembolso_previsao; Douglas, 23/11/2026): Devol. Total prevista =
+ * soma de r60_total_previsto ÷ receita das vendas com previsão. Venda fechada (60+ dias) já vem com o real.
+ * m7prev = soma do previsto (abertas e fechadas); m7nb = receita das vendas sem previsão (entraram depois da última
+ * execução do modelo, ~06:50): a tela aplica nelas a mesma taxa prevista, para o % não mudar.
  */
 const M7_DIA = Prisma.sql`
-  coalesce(sum(greatest(p.r60_total_previsto - ${JA_CAIU}, 0))
-           FILTER (WHERE p.r60_total_previsto IS NOT NULL AND NOT coalesce(p.r60_fechado, false)), 0)::float8 AS m7fut,
+  coalesce(sum(p.r60_total_previsto), 0)::float8 AS m7prev,
   coalesce(sum(p.bruto) FILTER (WHERE p.r60_total_previsto IS NULL), 0)::float8 AS m7nb`;
-const SEM_M7_DIA = Prisma.sql`0::float8 AS m7fut, coalesce(sum(p.bruto), 0)::float8 AS m7nb`;
+const SEM_M7_DIA = Prisma.sql`0::float8 AS m7prev, coalesce(sum(p.bruto), 0)::float8 AS m7nb`;
 
 /** Uma venda na lista de pedidos da página do afiliado (positivos = o que sai). */
 export interface PedidoAfiliado {
