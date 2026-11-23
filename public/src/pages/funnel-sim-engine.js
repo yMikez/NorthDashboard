@@ -287,7 +287,7 @@
         el('fk_' + e.id).innerHTML = `<span class="v-neg">${usd(-(l.cpa + l.ff))}</span>`;
         el('ff_' + e.id).innerHTML = `<span>CPA ${l.cpa ? usd(l.cpa) : '0'}</span><span>FF ${usd(l.ff)}</span>`;
         el('ft_' + e.id).innerHTML = `<span class="${l.total >= 0 ? '' : 'v-neg'}">${usd(l.total)}</span>`;
-        el('ct_' + e.id).hidden = !(u.cpa > 0);
+        el('ct_' + e.id).hidden = !(u.cpa >= 1); // centavos de CPA em upsell não marcam a etapa
         const rb = box.querySelector(`[data-re="${e.id}"]`); if (rb) rb.hidden = !(e.precoSim != null || e.convSim != null || e.cpaSim != null);
       }
       const T = R_SIM; const res = T.rb - T.cpa - T.ff;

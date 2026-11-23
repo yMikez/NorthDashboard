@@ -63,7 +63,8 @@
 .fsim .fs-day:disabled{color:var(--fg5);opacity:.45;cursor:default}
 .fsim .fs-dp-hint{font-size:11px;color:var(--fg4);margin-top:6px}
 /* corpo */
-.fsim .fs-body{display:grid;grid-template-columns:minmax(0,1fr) 330px;gap:14px;padding:18px 28px 40px;align-items:start;max-width:1720px}
+.fsim .fs-body{display:grid;grid-template-columns:minmax(0,1fr) 330px;gap:14px;padding:18px 28px 40px;align-items:start}
+@media (min-width:1900px){.fsim .fs-body{grid-template-columns:minmax(0,1fr) 380px}}
 .fsim .fs-blocks{display:flex;flex-direction:column;gap:14px;min-width:0}
 .fsim .fs-head{display:flex;justify-content:space-between;align-items:flex-end;gap:12px;flex-wrap:wrap}
 .fsim .fs-eyebrow{font-size:12px;font-weight:500;color:var(--fg4)}
