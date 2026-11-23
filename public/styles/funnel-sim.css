@@ -1,0 +1,227 @@
+/* Análise › Simulador de Funil (public/src/pages/funnel-sim-engine.js).
+   Tudo escopado em .fsim e com os tokens do colors_and_type.css (tema claro e escuro do painel).
+   Layout: barra de filtros própria; à esquerda 1 Parâmetros (cartões) e 2 Funil (tabela);
+   à direita 3 Resultado fixo, como um carrinho que recalcula a cada número. */
+.fsim{--fs-top:69px;font-variant-numeric:tabular-nums}
+.fsim [hidden]{display:none!important}
+.fsim input{scroll-margin-top:140px;scroll-margin-bottom:90px}
+.fsim button{touch-action:manipulation}
+.fsim :focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+/* barra de filtros */
+.fsim .fs-filters{position:sticky;top:var(--fs-top);z-index:15;background:var(--bg);border-bottom:1px solid var(--border);padding:9px 28px;display:flex;align-items:center;gap:8px;flex-wrap:wrap;min-height:50px}
+.fsim .f-label{font-size:12px;font-weight:500;color:var(--fg4)}
+.fsim .fs-filters svg{width:14px;height:14px}
+.fsim .select-btn{height:30px;display:inline-flex;align-items:center;gap:6px;padding:0 10px;background:var(--bg-raised);border:1px solid var(--border);border-radius:6px;font-size:12px;font-weight:500;color:var(--fg2);max-width:240px;cursor:pointer}
+.fsim .select-btn span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.fsim .select-btn:hover{background:var(--bg-hover);border-color:var(--fg5)}
+.fsim .select-btn.on{border-color:var(--accent);color:var(--accent);background:var(--bg-hover)}
+.fsim .select-btn:disabled{opacity:.5;cursor:not-allowed}
+.fsim .date-chip{font-size:12px;color:var(--fg4)}
+.fsim .fs-sep{width:1px;height:20px;background:var(--border);margin:0 4px}
+.fsim .fs-spacer{flex:1}
+.fsim .fs-info{font-size:12px;color:var(--fg4);display:inline-flex;align-items:center;gap:6px}
+.fsim .fs-dot{width:7px;height:7px;border-radius:50%;background:var(--success)}
+.fsim .fs-count{font-size:11px;font-weight:600;color:var(--accent);background:var(--accent-soft);border-radius:999px;padding:0 7px;line-height:18px}
+/* botões */
+.fsim .fs-btn{height:32px;display:inline-flex;align-items:center;justify-content:center;gap:6px;padding:0 12px;border-radius:6px;border:1px solid var(--border);background:var(--bg-raised);font-size:13px;font-weight:500;color:var(--fg2);white-space:nowrap;cursor:pointer;transition:background-color .15s,color .15s,border-color .15s}
+.fsim .fs-btn:hover{background:var(--bg-hover);color:var(--fg1);border-color:var(--fg5)}
+.fsim .fs-btn:active{transform:translateY(1px)}
+.fsim .fs-btn svg{width:14px;height:14px}
+.fsim .fs-btn.cta{background:var(--cta);border-color:var(--cta);color:var(--on-cta)}
+.fsim .fs-btn.cta:hover{background:var(--cta-hover);border-color:var(--cta-hover)}
+.fsim .fs-btn.sm{height:28px;padding:0 10px;font-size:12px}
+.fsim .fs-btn.ghost{background:transparent;border-color:transparent}
+.fsim .fs-btn.ghost:hover{background:var(--bg-hover)}
+.fsim .fs-btn.block{width:100%;height:38px;font-size:14px}
+.fsim .fs-btn:disabled{opacity:.5;cursor:not-allowed}
+.fsim .fs-ico{width:24px;height:24px;display:inline-grid;place-items:center;border:0;background:transparent;border-radius:6px;color:var(--fg4);vertical-align:middle;cursor:pointer}
+.fsim .fs-ico:hover{background:var(--bg-hover);color:var(--fg1)}
+.fsim .fs-ico svg{width:13px;height:13px}
+/* popovers */
+.fsim .fs-popw{position:relative}
+.fsim .fs-pop{position:absolute;top:calc(100% + 6px);left:0;z-index:40;background:var(--bg-elev);border:1px solid var(--border);border-radius:8px;box-shadow:var(--shadow-lg);padding:4px;min-width:260px;max-height:70vh;overflow-y:auto;overscroll-behavior:contain}
+.fsim .fs-pop.right{left:auto;right:0}
+.fsim .fs-opt{display:flex;align-items:center;gap:8px;width:100%;text-align:left;padding:8px 12px;border:0;background:transparent;border-radius:6px;font-size:12px;color:var(--fg2);cursor:pointer}
+.fsim .fs-opt:hover{background:var(--bg-hover)}
+.fsim .fs-opt.sel{color:var(--accent);background:var(--accent-soft);font-weight:600}
+.fsim .fs-opt .fs-meta{margin-left:auto;color:var(--fg4);font-weight:400;white-space:nowrap}
+.fsim .fs-opt.dim{color:var(--fg5)}
+.fsim .fs-popsep{height:1px;background:var(--border);margin:4px 6px}
+.fsim .fs-poph{font-size:11px;font-weight:600;color:var(--fg5);padding:8px 12px 4px}
+.fsim .fs-dp{display:flex;gap:4px}
+.fsim .fs-dp-at{display:flex;flex-direction:column;min-width:210px;border-right:1px solid var(--border);padding-right:4px}
+.fsim .fs-dp-cal{padding:8px 10px;width:250px}
+.fsim .fs-dp-h{display:flex;align-items:center;justify-content:space-between;font-size:12px;font-weight:600;color:var(--fg1);margin-bottom:6px}
+.fsim .fs-dp-h button{border:0;background:transparent;width:26px;height:26px;border-radius:6px;color:var(--fg3);cursor:pointer}
+.fsim .fs-dp-h button:hover{background:var(--bg-hover)}
+.fsim .fs-dp-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:2px}
+.fsim .fs-dp-grid .wd{font-size:10px;color:var(--fg5);text-align:center;padding:2px 0}
+.fsim .fs-day{height:28px;border:0;background:transparent;border-radius:5px;font-size:12px;color:var(--fg2);cursor:pointer}
+.fsim .fs-day:hover:not(:disabled){background:var(--bg-hover)}
+.fsim .fs-day.in{background:var(--accent-soft);color:var(--accent)}
+.fsim .fs-day.edge{background:var(--cta);color:var(--on-cta);font-weight:600}
+.fsim .fs-day:disabled{color:var(--fg5);opacity:.45;cursor:default}
+.fsim .fs-dp-hint{font-size:11px;color:var(--fg4);margin-top:6px}
+/* corpo */
+.fsim .fs-body{display:grid;grid-template-columns:minmax(0,1fr) 330px;gap:14px;padding:18px 28px 40px;align-items:start;max-width:1720px}
+.fsim .fs-blocks{display:flex;flex-direction:column;gap:14px;min-width:0}
+.fsim .fs-head{display:flex;justify-content:space-between;align-items:flex-end;gap:12px;flex-wrap:wrap}
+.fsim .fs-eyebrow{font-size:12px;font-weight:500;color:var(--fg4)}
+.fsim .fs-head h2{margin:2px 0;font-size:22px;line-height:30px;font-weight:700;color:var(--fg1);letter-spacing:-.015em;text-wrap:balance}
+.fsim .fs-head h2 em{font-style:normal;color:var(--fg4)}
+.fsim .fs-lead{font-size:13px;line-height:20px;color:var(--fg4);margin:0;max-width:80ch;text-wrap:pretty}
+.fsim .fs-loaded{display:inline-flex;align-items:center;gap:8px;font-size:12px;color:var(--fg3);background:var(--bg-raised);border:1px solid var(--border);border-radius:999px;padding:4px 6px 4px 12px;max-width:100%}
+.fsim .fs-loaded svg{width:14px;height:14px}
+.fsim .fs-loaded b{color:var(--fg1);font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:260px}
+.fsim .fs-loaded .st{color:var(--warning);font-weight:500;white-space:nowrap}
+.fsim .fs-panel{padding:14px 16px;background:var(--bg-raised);border:1px solid var(--border);border-radius:8px;min-width:0}
+.fsim .fs-ph{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-bottom:12px;flex-wrap:wrap}
+.fsim .fs-step{display:inline-grid;place-items:center;width:20px;height:20px;border-radius:50%;background:var(--accent-soft);color:var(--accent);font-size:11px;font-weight:700;margin-right:8px;flex:none}
+.fsim .fs-pt{font-size:15px;font-weight:600;color:var(--fg1);display:flex;align-items:center;margin:0}
+.fsim .fs-psub{font-size:12px;line-height:18px;color:var(--fg4);margin-top:2px;max-width:80ch}
+.fsim .fs-small{font-size:11px;color:var(--fg4);line-height:1.25}
+.fsim .v-pos{color:var(--success)} .fsim .v-neg{color:var(--danger)}
+.fsim .up-good{color:var(--success)} .fsim .up-bad{color:var(--danger)}
+/* campo de simulação */
+.fsim .fs-inp{position:relative;display:flex;align-items:center;width:100%}
+.fsim .fs-inp input{width:100%;height:32px;border:1px solid var(--border);border-radius:6px;background:var(--bg);padding:0 26px 0 8px;text-align:right;font:inherit;font-size:14px;color:var(--fg1);font-variant-numeric:tabular-nums;transition:border-color .15s,background-color .15s,box-shadow .15s}
+.fsim .fs-inp input::placeholder{color:var(--fg5)}
+.fsim .fs-inp input:hover{border-color:var(--fg5)}
+.fsim .fs-inp input:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-soft)}
+.fsim .fs-inp .u{position:absolute;right:8px;font-size:11px;color:var(--fg5);pointer-events:none}
+.fsim .fs-inp.pre input{padding-left:20px;padding-right:8px}
+.fsim .fs-inp.pre .u{right:auto;left:8px}
+.fsim .fs-inp.on input{border-color:var(--accent);background:var(--accent-soft);color:var(--accent);font-weight:600}
+.fsim .fs-cap{display:flex;flex-wrap:wrap;gap:0 6px;justify-content:flex-end;align-items:center;font-size:11px;color:var(--fg4);margin-top:3px;min-height:15px;line-height:1.35}
+.fsim .fs-cap>span{white-space:nowrap}
+.fsim .fs-cap.col{flex-direction:column;align-items:flex-end}
+.fsim .fs-cap .dl{font-weight:600}
+/* bloco 1 */
+.fsim .fs-pgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(148px,1fr));gap:8px}
+.fsim .fs-pcard{border:1px solid var(--border-soft);background:var(--bg);border-radius:8px;padding:8px 10px 6px;min-width:0;position:relative;transition:border-color .15s}
+.fsim .fs-pcard.on{border-color:color-mix(in oklab,var(--accent) 55%,transparent)}
+.fsim .fs-pcard label,.fsim .fs-pcard .pl{display:flex;align-items:center;gap:6px;font-size:12px;font-weight:600;color:var(--fg2);margin-bottom:6px;white-space:nowrap}
+.fsim .fs-pcard .fs-tagx{font-size:10px;font-weight:500;color:var(--fg5)}
+.fsim .fs-pcard .fs-inp input{background:var(--bg-raised)}
+.fsim .fs-pcard.on .fs-inp input{background:var(--accent-soft)}
+.fsim .fs-pcard .rst{position:absolute;top:5px;right:5px}
+.fsim .fs-pcard.calc{background:color-mix(in oklab,var(--accent) 4%,var(--bg))}
+.fsim .fs-pcard.calc .big{height:32px;display:flex;align-items:center;justify-content:flex-end;font-size:16px;font-weight:700;color:var(--fg1)}
+.fsim .fs-note{font-size:12px;color:var(--fg4);margin:10px 0 0;line-height:1.45}
+/* bloco 2 */
+.fsim .fs-tw{overflow-x:auto;border:1px solid var(--border);border-radius:8px;background:var(--bg-raised)}
+.fsim table.fs-tbl{width:100%;border-collapse:collapse;font-size:13px}
+.fsim .fs-tbl th{font-size:12px;font-weight:600;color:var(--fg3);text-align:left;padding:8px;background:color-mix(in oklab,var(--accent) 6%,var(--bg-raised));border-bottom:1px solid var(--border);white-space:nowrap}
+.fsim .fs-tbl th .fs-small{display:block;font-weight:500}
+.fsim .fs-tbl td{padding:7px 8px;border-bottom:1px solid var(--border-soft);color:var(--fg2);vertical-align:top;background:var(--bg-raised)}
+.fsim .fs-tbl th:first-child,.fsim .fs-tbl td:first-child{position:sticky;left:0;z-index:1;box-shadow:inset -1px 0 0 var(--border-soft)}
+.fsim .fs-tbl tbody tr:hover td{background:color-mix(in oklab,var(--accent) 4%,var(--bg-raised))}
+.fsim .fs-tbl tbody tr:last-child td{border-bottom:0}
+.fsim .fs-tbl .num{text-align:right;white-space:nowrap}
+.fsim .fs-tbl th.num{text-align:right}
+.fsim .fs-tbl .bl{border-left:1px solid var(--border-soft)}
+.fsim .fs-tbl td.inc{width:94px;min-width:90px}
+.fsim .fs-tbl td.inc .fs-inp input{font-size:13px}
+.fsim .fs-tbl tfoot td{font-weight:600;color:var(--fg1);background:color-mix(in oklab,var(--accent) 4%,var(--bg-raised));border-top:1px solid var(--border);vertical-align:middle}
+.fsim .fs-tbl .rv{line-height:32px}
+.fsim .fs-name{font-weight:500;color:var(--fg1);display:flex;align-items:center;gap:8px;white-space:nowrap;min-height:32px}
+.fsim .fs-typ{font-size:10px;font-weight:600;border-radius:4px;padding:1px 6px;letter-spacing:.02em}
+.fsim .fs-typ.fe{color:var(--accent);background:var(--accent-soft)}
+.fsim .fs-typ.up{color:var(--success);background:var(--success-bg)}
+.fsim .fs-typ.ds{color:var(--warning);background:var(--warning-bg)}
+.fsim .fs-typ.ob,.fsim .fs-typ.info{color:var(--fg3);background:var(--bg-hover)}
+.fsim .fs-cpatag{font-size:10px;font-weight:600;color:var(--danger);background:var(--danger-bg);border-radius:4px;padding:1px 6px}
+.fsim .fs-nminp{width:150px}
+.fsim .fs-nminp input{text-align:left;padding-right:8px;font-weight:500}
+.fsim .fs-share{display:inline-block;width:44px;height:4px;border-radius:2px;background:color-mix(in oklab,var(--fg5) 15%,transparent);overflow:hidden;vertical-align:middle}
+.fsim .fs-share i{display:block;height:100%;background:var(--chart-1);border-radius:2px;transition:width .2s}
+.fsim .fs-acts{white-space:nowrap;text-align:right;vertical-align:middle!important}
+.fsim .fs-tools{display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-top:10px}
+.fsim .fs-kbd{font-size:11px;color:var(--fg5);margin-left:auto}
+.fsim .fs-kbd kbd{font-family:inherit;font-size:10px;border:1px solid var(--border);border-bottom-width:2px;border-radius:4px;padding:0 4px;color:var(--fg3);background:var(--bg)}
+.fsim .fs-removed{display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-top:8px;font-size:12px;color:var(--fg4)}
+.fsim .fs-rmchip{display:inline-flex;align-items:center;gap:4px;border:1px dashed var(--border);border-radius:999px;padding:2px 4px 2px 10px;font-size:12px;color:var(--fg3)}
+.fsim .fs-rmchip button{border:0;background:transparent;color:var(--accent);font-size:12px;font-weight:600;padding:2px 6px;border-radius:999px;cursor:pointer}
+.fsim .fs-rmchip button:hover{background:var(--accent-soft)}
+.fsim .fs-src{font-size:11px;color:var(--fg5);line-height:1.5;margin:0;max-width:110ch}
+/* bloco 3: carrinho */
+.fsim .fs-cart{position:sticky;top:calc(var(--fs-top) + 62px);background:var(--bg-raised);border:1px solid var(--border);border-radius:10px;display:flex;flex-direction:column;max-height:calc(100vh - var(--fs-top) - 76px);min-width:0;overflow-y:auto;overscroll-behavior:contain}
+.fsim .fs-cart-h{padding:12px 14px 10px;border-bottom:1px solid var(--border);display:flex;flex-direction:column;gap:8px}
+.fsim .fs-cart-h .row1{display:flex;align-items:center;justify-content:space-between;gap:8px}
+.fsim .fs-seg{display:grid;grid-template-columns:repeat(3,1fr);height:28px;border:1px solid var(--border);border-radius:6px;background:var(--bg);overflow:hidden}
+.fsim .fs-seg button{border:0;background:transparent;padding:0 6px;font-size:12px;color:var(--fg3);cursor:pointer}
+.fsim .fs-seg button+button{border-left:1px solid var(--border-soft)}
+.fsim .fs-seg button.on{background:var(--accent-soft);color:var(--accent);font-weight:600}
+.fsim .fs-seg button:disabled{opacity:.45;cursor:not-allowed}
+.fsim .fs-cart-tot{padding:12px 14px;border-bottom:1px solid var(--border);background:color-mix(in oklab,var(--accent) 5%,var(--bg-raised));display:flex;flex-direction:column;gap:8px}
+.fsim .fs-total{display:flex;align-items:baseline;justify-content:space-between;gap:8px}
+.fsim .fs-total .n{font-size:13px;font-weight:600;color:var(--fg2)}
+.fsim .fs-total .v{font-size:28px;font-weight:700;letter-spacing:-.02em;white-space:nowrap}
+.fsim .fs-cmp{font-size:12px;color:var(--fg4);display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap}
+.fsim .fs-cmp b{font-weight:600}
+.fsim .fs-verdict{font-size:12px;line-height:1.45;padding:8px 10px;border-radius:6px;display:flex;gap:8px;align-items:flex-start}
+.fsim .fs-verdict svg{width:14px;height:14px;flex:none;margin-top:2px}
+.fsim .fs-verdict.pos{background:var(--success-bg);color:var(--success)}
+.fsim .fs-verdict.neg{background:var(--danger-bg);color:var(--danger)}
+.fsim .fs-lines{padding:4px 14px 8px}
+.fsim .fs-cl{display:grid;grid-template-columns:minmax(0,1fr) auto 50px;gap:8px;align-items:baseline;padding:5px 0;font-size:13px;border-bottom:1px dashed var(--border-soft)}
+.fsim .fs-cl .n{color:var(--fg3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.fsim .fs-cl .v{text-align:right;color:var(--fg2);white-space:nowrap}
+.fsim .fs-cl .p{text-align:right;font-size:11px;color:var(--fg4);white-space:nowrap}
+.fsim .fs-cl.ind .n{padding-left:12px}
+.fsim .fs-cl.sub{border-bottom:1px solid var(--border);padding:7px 0}
+.fsim .fs-cl.sub .n,.fsim .fs-cl.sub .v{font-weight:600;color:var(--fg1)}
+.fsim .fs-cl.flash .v{animation:fsFlash .7s ease}
+@keyframes fsFlash{0%{color:var(--accent)}}
+.fsim .fs-cart-x{padding:10px 14px 12px;display:flex;flex-direction:column;gap:10px;border-top:1px solid var(--border)}
+.fsim .fs-facts{display:grid;grid-template-columns:1fr 1fr;gap:6px}
+.fsim .fs-fact{background:var(--bg-raised);border:1px solid var(--border-soft);border-radius:6px;padding:6px 8px;min-width:0}
+.fsim .fs-fact .l{font-size:11px;color:var(--fg4);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.fsim .fs-fact .v{font-size:14px;font-weight:600;color:var(--fg1);white-space:nowrap}
+.fsim .fs-levh{font-size:12px;font-weight:600;color:var(--fg2);display:flex;justify-content:space-between;align-items:baseline;margin-top:2px}
+.fsim .fs-levh span{font-size:11px;font-weight:400;color:var(--fg4)}
+.fsim .fs-lev{display:flex;flex-direction:column;gap:2px}
+.fsim .fs-lev button{display:flex;justify-content:space-between;align-items:baseline;gap:8px;width:100%;border:0;background:transparent;border-radius:6px;padding:5px 6px;font-size:12px;color:var(--fg2);text-align:left;cursor:pointer}
+.fsim .fs-lev button:hover{background:var(--bg-hover)}
+.fsim .fs-lev button b{color:var(--success);font-weight:600;white-space:nowrap}
+.fsim .fs-lev button span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.fsim .fs-cart-save{position:sticky;bottom:0;padding:10px 14px 12px;background:var(--bg-raised);border-top:1px solid var(--border);border-radius:0 0 10px 10px;z-index:2}
+/* salvar e lista */
+.fsim .fs-savepop{padding:12px}
+.fsim .fs-savepop label{display:block;font-size:12px;font-weight:500;color:var(--fg3);margin-bottom:6px}
+.fsim .fs-savepop input{width:100%;height:34px;border:1px solid var(--border);border-radius:6px;background:var(--bg);padding:0 10px;font:inherit;font-size:13px;color:var(--fg1)}
+.fsim .fs-savepop input:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-soft)}
+.fsim .fs-savepop .row{display:flex;gap:6px;justify-content:flex-end;margin-top:10px;flex-wrap:wrap}
+.fsim .fs-savepop .msg{font-size:12px;color:var(--danger);margin-top:8px}
+.fsim .fs-listpop{width:min(400px,calc(100vw - 32px));padding:6px}
+.fsim .fs-sv{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:2px 8px;padding:8px 10px;border-radius:6px;cursor:pointer;width:100%;text-align:left}
+.fsim .fs-sv:hover{background:var(--bg-hover)}
+.fsim .fs-sv.sel{background:var(--accent-soft)}
+.fsim .fs-sv .st{font-size:13px;font-weight:600;color:var(--fg1);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.fsim .fs-sv .sm{font-size:11px;color:var(--fg4);grid-column:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.fsim .fs-sv .sr{grid-row:1/3;grid-column:2;display:flex;align-items:center;gap:6px}
+.fsim .fs-sv .lf{font-size:12px;font-weight:600}
+.fsim .fs-confirm{display:flex;align-items:center;gap:6px;font-size:12px;color:var(--danger)}
+.fsim .fs-empty{padding:18px 12px;text-align:center;font-size:12px;color:var(--fg4)}
+.fsim .fs-toast{position:fixed;bottom:calc(20px + env(safe-area-inset-bottom,0px));left:50%;transform:translateX(-50%);background:var(--fg1);color:var(--bg);padding:8px 8px 8px 16px;border-radius:8px;font-size:13px;font-weight:500;z-index:200;box-shadow:var(--shadow-lg);display:flex;align-items:center;gap:12px;max-width:calc(100vw - 32px)}
+.fsim .fs-toast button{border:0;background:transparent;color:var(--bg);font-weight:700;text-decoration:underline;padding:4px 8px;border-radius:6px;cursor:pointer}
+.fsim .fs-mob{display:none}
+@media (max-width:1440px){.fsim .fs-body{grid-template-columns:minmax(0,1fr) 300px;padding-left:20px;padding-right:20px}}
+@media (max-width:1080px){
+  .fsim .fs-body{grid-template-columns:minmax(0,1fr);padding-bottom:96px}
+  .fsim .fs-cart{position:static;max-height:none}
+  .fsim .fs-mob{display:flex;position:fixed;left:0;right:0;bottom:0;z-index:30;align-items:center;justify-content:space-between;gap:10px;background:var(--bg-elev);border-top:1px solid var(--border);padding:10px 16px calc(10px + env(safe-area-inset-bottom,0px));box-shadow:var(--shadow-lg)}
+  .fsim .fs-mob .l{font-size:12px;color:var(--fg4)}
+  .fsim .fs-mob .v{font-size:18px;font-weight:700}
+  .fsim .fs-toast{bottom:calc(76px + env(safe-area-inset-bottom,0px))}
+  .fsim .fs-kbd{display:none}
+}
+@media (max-width:900px){
+  .fsim .fs-filters{position:static;padding:10px 16px}
+  .fsim .fs-body{padding:16px 16px 96px}
+  .fsim .fs-spacer,.fsim .fs-sep{display:none}
+  .fsim .fs-pgrid{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .fsim .fs-dp{flex-direction:column}.fsim .fs-dp-at{border-right:0;border-bottom:1px solid var(--border);padding:0 0 4px}
+  .fsim input{scroll-margin-top:16px}
+}
+@media (prefers-reduced-motion:reduce){.fsim *{transition:none!important;animation:none!important}}

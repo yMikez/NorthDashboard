@@ -6,6 +6,7 @@ const ROUTES = {
   'funnel':         { title: 'Funil',       em: 'completo',    crumbs: ['Análise', 'Funil'] },
   'vsl':            { title: 'VSLs',        em: 'por página do funil', crumbs: ['Análise', 'VSLs'] },
   'refund-cohorts': { title: 'Reembolsos',  em: 'por coorte',  crumbs: ['Análise', 'Reembolsos'] },
+  'funnel-sim':     { title: 'Simulador de Funil', em: 'por oferta', crumbs: ['Análise', 'Simulador de Funil'] },
   'affiliate-ranking': { title: 'Ranking',  em: 'de afiliados', crumbs: ['Afiliados', 'Ranking'] },
   'affiliate-overview': { title: 'Visão Geral', em: 'dos afiliados', crumbs: ['Afiliados', 'Visão Geral'] },
   'affiliate-refund': { title: 'Devolução', em: 'prevista', crumbs: ['Afiliados', 'Devolução Prev.'] },
@@ -306,6 +307,7 @@ function App({ user }) {
           {hashState.route === 'funnel'         && <FunnelPage filters={filters}/>}
           {hashState.route === 'vsl'            && <VslPage filters={filters} user={user}/>}
           {hashState.route === 'refund-cohorts' && <RefundCohortsPage filters={filters}/>}
+          {hashState.route === 'funnel-sim'     && <FunnelSimPage user={user}/>}
           {hashState.route === 'affiliate-ranking' && <AffiliateRankingPage user={user}/>}
           {hashState.route === 'affiliate-overview' && <AffiliateRankingPage user={user} pagina="lista"/>}
           {hashState.route === 'affiliate-refund' && <AffiliateRankingPage user={user} pagina="reemb"/>}

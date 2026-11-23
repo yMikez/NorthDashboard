@@ -10,6 +10,7 @@ export type TabId =
   | 'funnel'
   | 'vsl'
   | 'refund-cohorts'
+  | 'funnel-sim'
   | 'affiliate-ranking'
   | 'affiliate-overview'
   | 'affiliate-refund'
@@ -41,6 +42,9 @@ export const AVAILABLE_TABS: TabSpec[] = [
   // VSLs: quem tem a aba vê e edita (troca VSL de página no ar, roda teste A/B).
   { id: 'vsl',            label: 'VSLs',                group: 'Análise' },
   { id: 'refund-cohorts', label: 'Reembolsos',          group: 'Análise' },
+  // Simulador de Funil: metas (conversão, CPA, devolução, custos, call center)
+  // sobre o real de um produto; análises salvas com nome (docs/kb/simulador-funil.md).
+  { id: 'funnel-sim',     label: 'Simulador de Funil',  group: 'Análise' },
   // Visão Geral, Ranking e Reembolso Prev.: modelo do time de dados — base de
   // afiliados com resultado e alertas; nota de 0 a 100 + Premissas + pedidos do
   // afiliado (Premissas: só admin muda); reembolso previsto por safra, produto e funil.

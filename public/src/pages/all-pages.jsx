@@ -4182,6 +4182,7 @@ const TAB_CATALOG = [
   { group: 'Análise',   id: 'overview',       label: 'Visão geral' },
   { group: 'Análise',   id: 'funnel',         label: 'Funil' },
   { group: 'Análise',   id: 'refund-cohorts', label: 'Reembolsos' },
+  { group: 'Análise',   id: 'funnel-sim',     label: 'Simulador de Funil' },
   { group: 'Afiliados', id: 'affiliate-overview', label: 'Visão Geral' },
   { group: 'Afiliados', id: 'affiliate-ranking', label: 'Ranking' },
   { group: 'Afiliados', id: 'affiliate-refund', label: 'Devolução Prev.' },

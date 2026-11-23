@@ -1640,6 +1640,24 @@ model NetProfitScenario {
   @@index([createdAt])
 }
 
+// Simulador de Funil (aba Análise › Simulador de Funil): análise salva com
+// nome. params = estado da tela (base, plataforma, período, metas e etapas);
+// summary = resultado no momento de salvar (lucro final, receita bruta, real).
+// Compartilhada com quem tem a aba; quem salvou ou admin apaga.
+model FunnelSimulation {
+  id          String   @id @default(cuid())
+  name        String
+  product     String?
+  params      Json
+  summary     Json
+  createdById String?
+  updatedById String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([updatedAt])
+}
+
 // Histórico das premissas do Lucro real — cada "Salvar como padrão" grava o
 // snapshot e o diff (caminho → antes/depois). Regra do cálculo de margem:
 // taxa não muda sem registro de data (docs/specs/calculo-margem.md §10.5).

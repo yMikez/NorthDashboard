@@ -768,6 +768,12 @@ function fetchAffiliateRankingOrders({ contas, de, ate }) {
 function fetchAffiliateAllOrders() { return fetchJSON('/api/metrics/affiliate-ranking/all-orders', {}); }
 function fetchAffiliateScoreConfig() { return coGet('/api/admin/affiliate-ranking/config'); }
 function saveAffiliateScoreConfig(premissas) { return coSend('/api/admin/affiliate-ranking/config', 'PUT', { premissas }); }
+// Simulador de Funil: base diária (real) e análises salvas.
+function fetchFunnelSimBase() { return coGet('/api/metrics/funnel-sim'); }
+function fetchFunnelSimulations() { return coGet('/api/funnel-sim/simulations'); }
+function createFunnelSimulation(body) { return coSend('/api/funnel-sim/simulations', 'POST', body); }
+function updateFunnelSimulation(id, body) { return coSend('/api/funnel-sim/simulations?id=' + encodeURIComponent(id), 'PUT', body); }
+function deleteFunnelSimulation(id) { return coSend('/api/funnel-sim/simulations?id=' + encodeURIComponent(id), 'DELETE', {}); }
 
 // Config do modelo de lucro CPA (opex% + régua do status). Admin.
 function fetchProfitConfig() { return coGet('/api/admin/profit-config'); }
@@ -954,6 +960,11 @@ window.NSApi = _wrapMutations({
   fetchAffiliateAllOrders,
   fetchAffiliateScoreConfig,
   saveAffiliateScoreConfig,
+  fetchFunnelSimBase,
+  fetchFunnelSimulations,
+  createFunnelSimulation,
+  updateFunnelSimulation,
+  deleteFunnelSimulation,
   patchProfitConfig,
   fetchProfitSplit,
   patchAffiliateRefundOverride,
