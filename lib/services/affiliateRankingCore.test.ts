@@ -146,4 +146,25 @@ describe('empacotarPedidos', () => {
   it('lista vazia não quebra', () => {
     expect(empacotarPedidos([]).col.af).toEqual([]);
   });
+  it('leva a previsão oficial M7 de cada venda (vazio = sem previsão)', () => {
+    const p = empacotarPedidos([
+      { ...base, venda_id: 'WP-1', fe_venda_id: 'WP-1', etapa: 'FE', m7: '70.567' },
+      { ...base, venda_id: 'WP-2', fe_venda_id: 'WP-1', etapa: 'Upsell', m7: null },
+      { ...base, venda_id: 'WP-3', fe_venda_id: 'WP-3', etapa: 'FE' },
+    ]);
+    expect(p.col.m7).toEqual([70.57, null, null]);
+  });
+});
+
+describe('montarPayload: previsão M7', () => {
+  it('põe a data de corte do modelo e os campos m7fut/m7nb no fim', () => {
+    const p = montarPayload([{ afiliado: 'JVZoo 1', dia: '2026-11-16', fes: 1, funil: 300, m7fut: '45.5', m7nb: 0 }], {}, {},
+      '2026-11-23T08:10:00Z', 534, {}, { corte: '2026-11-22', versao: 7 });
+    expect(p.previsao).toEqual({ corte: '2026-11-22', versao: 7 });
+    expect(CAMPOS.slice(-2)).toEqual(['m7fut', 'm7nb']);
+    expect(p.rows[0][2 + CAMPOS.indexOf('m7fut')]).toBe(45.5);
+  });
+  it('sem a coluna no banco a previsão fica nula', () => {
+    expect(montarPayload([], {}, {}, '2026-11-23T08:10:00Z', null).previsao).toBeNull();
+  });
 });

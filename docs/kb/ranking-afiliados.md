@@ -113,6 +113,18 @@ Pontuação = base + bônus + penalidades (pode passar de 100). Selo: 80+ forte,
 
 ## Previsão do reembolso de 60 dias
 
+- **Desde 23/11/2026 o número oficial é o modelo M7** do time de dados (job
+  `ml-reembolso`, todo dia ~06:50), o mesmo do BI e da coluna "prev." da tela
+  Afiliados. Decisão do Douglas: o M7 vale para todas as telas.
+- **Reembolso 60d previsto = o que já caiu + o que o M7 ainda espera até o dia
+  60** em cada venda aberta: `max(0, r60_total_previsto − (reembolso + taxas))`
+  de `dados_oficiais.afiliados_pedidos` (campos `m7fut` e `m7nb` do agregado
+  afiliado × dia; nos pedidos, `m7` por venda, para produto e caminho no funil).
+- Vendas **sem previsão** (entraram depois da última execução do modelo) e
+  banco sem a coluna `r60_total_previsto` usam a conta antiga abaixo até a
+  próxima execução. Os dias entre hoje e o dia 60 seguem a forma da curva de
+  cada afiliado (a taxa equivalente `p60` faz a curva fechar no M7).
+- Antes de 23/11 (conta antiga, ainda usada só como reserva):
 - **Previsão de 10 dias** do afiliado: reembolso dos primeiros 10 dias (puxado
   para a média quando ele vende pouco) × fator 10d→60d do próprio afiliado (com
   peso pelo volume de venda madura; o resto vem do fator geral, ~2,4).

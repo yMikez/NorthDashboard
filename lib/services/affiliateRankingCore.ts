@@ -15,6 +15,8 @@ export const CAMPOS = [
   'fes', 'funil', 'liq_funil', 'dev30', 'dev10', 'dev60', 'tx10', 'tx60',
   'rt1', 'rt3', 'rt5', 'rt7', 'rt14', 'rt21', 'rt30', 'rt45',
   'vendas', 'disputas', 'custo_fs', 'funil_coberto', 'liq_call', 'bruto_call',
+  // previsão oficial M7 (23/11/2026): o que ainda vai cair nas vendas abertas com previsão; receita sem previsão
+  'm7fut', 'm7nb',
 ] as const;
 export type Campo = (typeof CAMPOS)[number];
 
@@ -47,6 +49,8 @@ export interface RankingPayload {
   parceiros: Record<string, [string, string]>;
   /** conta → [affiliate_id, nome no NorthScale Afiliados]: o agrupamento "Sistema". */
   sistema: Record<string, [string, string]>;
+  /** Previsão oficial de devolução 60d (M7): data de corte e versão do modelo; null = sem a coluna (conta própria). */
+  previsao?: { corte: string; versao: number | null } | null;
 }
 
 const PLATAFORMA: Record<string, string> = { jvzoo: 'JVZoo', vupim: 'Vupim' };
@@ -148,6 +152,7 @@ export function montarPayload(
   gerado: string,
   publicacaoId: number | null,
   sistema: Record<string, [string, string]> = {},
+  previsao: { corte: string; versao: number | null } | null = null,
 ): RankingPayload {
   const contas = [...new Set(linhas.map((l) => l.afiliado))].sort();
   const ix = new Map(contas.map((a, i) => [a, i]));
@@ -173,6 +178,7 @@ export function montarPayload(
     ]),
     parceiros: usadas,
     sistema: sist,
+    previsao,
   };
 }
 
@@ -249,6 +255,8 @@ export interface PedidoLinha {
   reembolso_dia: string | null;
   taxa_alerta: number | string | null;
   taxa_disputa: number | string | null;
+  /** Previsão oficial M7 de devolução 60d da venda (r60_total_previsto); null = sem previsão. */
+  m7?: number | string | null;
 }
 
 /** Pacote colunar (o mesmo formato do pedidos.json da prévia): dicionários + uma lista por campo. */
@@ -258,6 +266,8 @@ export interface PedidosPacote {
   col: {
     af: number[]; fe: number[]; em: string[]; et: number[]; pr: number[]; bruto: number[]; cpa: number[];
     re: number[]; red: (string | null)[]; al: number[]; dt: number[]; fid: number[];
+    /** previsão M7 de devolução 60d por venda (null = sem previsão) */
+    m7: (number | null)[];
   };
 }
 
@@ -277,7 +287,7 @@ export function empacotarPedidos(linhas: PedidoLinha[]): PedidosPacote {
   const d0 = linhas.reduce((m, l) => (l.fe_dia < m ? l.fe_dia : m), linhas[0]?.fe_dia ?? '2026-01-01');
   const t0 = diaUtc(d0);
   const pos = new Map(linhas.map((l, i) => [`${l.plataforma}|${l.venda_id}`, i]));
-  const col: PedidosPacote['col'] = { af: [], fe: [], em: [], et: [], pr: [], bruto: [], cpa: [], re: [], red: [], al: [], dt: [], fid: [] };
+  const col: PedidosPacote['col'] = { af: [], fe: [], em: [], et: [], pr: [], bruto: [], cpa: [], re: [], red: [], al: [], dt: [], fid: [], m7: [] };
   for (const l of linhas) {
     col.af.push(cod('conta', l.conta));
     col.fe.push(Math.round((diaUtc(l.fe_dia) - t0) / DIA_MS));
@@ -290,6 +300,7 @@ export function empacotarPedidos(linhas: PedidoLinha[]): PedidosPacote {
     col.red.push(l.reembolso_dia);
     col.al.push(num(l.taxa_alerta));
     col.dt.push(num(l.taxa_disputa));
+    col.m7.push(l.m7 == null || l.m7 === '' ? null : num(l.m7));
     // o FE de origem é da plataforma da conta (a primeira palavra dela)
     col.fid.push(l.fe_venda_id ? pos.get(`${l.conta.split(' ', 1)[0]}|${l.fe_venda_id}`) ?? -1 : -1);
   }

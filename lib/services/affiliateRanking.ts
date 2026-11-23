@@ -25,7 +25,8 @@ const rt = (n: number) => Prisma.raw(
  * do FE (a soma não duplica).
  */
 export async function getAffiliateRankingData(): Promise<RankingPayload> {
-  const [linhas, pub, cadastro, oficiais] = await Promise.all([
+  const temM7 = await temPrevisaoM7();
+  const [linhas, pub, cadastro, oficiais, prev] = await Promise.all([
     db.$queryRaw<LinhaDia[]>(Prisma.sql`
       SELECT p.fe_plataforma || ' ' || p.fe_afiliado_id AS afiliado,
              to_char(p.fe_dia, 'YYYY-MM-DD') AS dia,
@@ -43,7 +44,8 @@ export async function getAffiliateRankingData(): Promise<RankingPayload> {
              coalesce(sum(p.custo_fs), 0)::float8 AS custo_fs,
              coalesce(sum(p.bruto) FILTER (WHERE p.armazem_achado), 0)::float8 AS funil_coberto,
              coalesce(sum(p.call_liquido), 0)::float8 AS liq_call,
-             coalesce(sum(p.call_bruto), 0)::float8 AS bruto_call
+             coalesce(sum(p.call_bruto), 0)::float8 AS bruto_call,
+             ${temM7 ? M7_DIA : SEM_M7_DIA}
       FROM dados_oficiais.afiliados_pedidos p
       WHERE p.fe_venda_id IS NOT NULL AND p.fe_afiliado_id IS NOT NULL
       GROUP BY 1, 2`),
@@ -66,11 +68,41 @@ export async function getAffiliateRankingData(): Promise<RankingPayload> {
       JOIN dados_oficiais."Platform" pl ON pl.id = o."platformId"
       WHERE pl.slug IN ('jvzoo', 'vupim') AND nullif(btrim(o.nickname), '') IS NOT NULL`)
       .catch(() => [] as NomeOficial[]),   // sem a tabela (ou sem permissão): fica o apelido do cadastro, a tela não cai
+    temM7
+      ? db.$queryRaw<{ corte: string | null; versao: number | null }[]>(Prisma.sql`
+          SELECT to_char(max(p.previsao_data_corte), 'YYYY-MM-DD') AS corte, max(p.previsao_versao)::int AS versao
+          FROM dados_oficiais.afiliados_pedidos p`).catch(() => [])
+      : Promise.resolve([] as { corte: string | null; versao: number | null }[]),
   ]);
   const { nomes, parceiros, sistema } = mapearContas(cadastro, oficiais);
   const gerado = (pub[0]?.publicado_em ?? new Date()).toISOString();
-  return montarPayload(linhas, nomes, parceiros, gerado, pub[0]?.publicacao_id ?? null, sistema);
+  const previsao = temM7 && prev[0]?.corte ? { corte: prev[0].corte, versao: prev[0].versao ?? null } : null;
+  return montarPayload(linhas, nomes, parceiros, gerado, pub[0]?.publicacao_id ?? null, sistema, previsao);
 }
+
+/**
+ * Previsão oficial de devolução 60d (modelo M7 do time de dados, job ml-reembolso; decisão do Douglas em 23/11/2026:
+ * o M7 é o número oficial em todas as telas). A publicação leva r60_total_previsto a cada venda de
+ * dados_oficiais.afiliados_pedidos. Sem a coluna (banco antigo), a tela volta à conta própria (10 dias × fator).
+ */
+async function temPrevisaoM7(): Promise<boolean> {
+  const [col] = await db.$queryRaw<{ n: number }[]>(Prisma.sql`
+    SELECT count(*)::int AS n FROM information_schema.columns
+    WHERE table_schema = 'dados_oficiais' AND table_name = 'afiliados_pedidos' AND column_name = 'r60_total_previsto'`);
+  return !!col?.n;
+}
+
+/** Já caiu na venda (reembolso + taxas de alerta e disputa): a mesma soma do D60 da tela. */
+const JA_CAIU = Prisma.raw('(coalesce(p.reembolso, 0) + coalesce(p.taxa_alerta, 0) + coalesce(p.taxa_disputa, 0))');
+/**
+ * m7fut = o que o M7 ainda prevê que vai cair (previsto 60d − já caiu) nas vendas abertas com previsão;
+ * m7nb = receita das vendas sem previsão (entraram depois da última execução do modelo): nelas a tela usa a conta antiga.
+ */
+const M7_DIA = Prisma.sql`
+  coalesce(sum(greatest(p.r60_total_previsto - ${JA_CAIU}, 0))
+           FILTER (WHERE p.r60_total_previsto IS NOT NULL AND NOT coalesce(p.r60_fechado, false)), 0)::float8 AS m7fut,
+  coalesce(sum(p.bruto) FILTER (WHERE p.r60_total_previsto IS NULL), 0)::float8 AS m7nb`;
+const SEM_M7_DIA = Prisma.sql`0::float8 AS m7fut, coalesce(sum(p.bruto), 0)::float8 AS m7nb`;
 
 /** Uma venda na lista de pedidos da página do afiliado (positivos = o que sai). */
 export interface PedidoAfiliado {
@@ -132,6 +164,8 @@ export async function getAffiliateOrders(contas: string[], de: string, ate: stri
  * CPA da safra, curva por produto, caminho no funil e o detalhe de cada série). Mesmas junções de getAffiliateOrders.
  */
 export async function getAffiliateAllOrders(): Promise<PedidosPacote> {
+  const temM7 = await temPrevisaoM7();
+  const m7 = temM7 ? Prisma.sql`p.r60_total_previsto::float8 AS m7` : Prisma.sql`NULL::float8 AS m7`;
   const linhas = await db.$queryRaw<PedidoLinha[]>(Prisma.sql`
     SELECT p.fe_plataforma || ' ' || p.fe_afiliado_id AS conta, p.plataforma, p.venda_id, p.fe_venda_id,
            to_char(p.fe_dia, 'YYYY-MM-DD') AS fe_dia,
@@ -144,7 +178,8 @@ export async function getAffiliateAllOrders(): Promise<PedidosPacote> {
            coalesce(p.reembolso, 0)::float8 AS reembolso,
            to_char(p.reembolso_dia, 'YYYY-MM-DD') AS reembolso_dia,
            coalesce(p.taxa_alerta, 0)::float8 AS taxa_alerta,
-           coalesce(p.taxa_disputa, 0)::float8 AS taxa_disputa
+           coalesce(p.taxa_disputa, 0)::float8 AS taxa_disputa,
+           ${m7}
     FROM dados_oficiais.afiliados_pedidos p
     LEFT JOIN dados_oficiais."Order" oj ON p.plataforma = 'JVZoo' AND oj."rawMetadata"->>'paykey' = p.venda_id
     LEFT JOIN dados_oficiais."Product" pj ON pj.id = oj."productId"
