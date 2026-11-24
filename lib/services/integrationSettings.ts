@@ -56,6 +56,10 @@ export const SETTING_KEYS = {
   // Pesquisas pra puxar imagem de produto. Base padrão em getNetworkCatalogUrl.
   northAffiliatesNetworkApiUrl: 'northaffiliates.network.apiUrl',
   northAffiliatesNetworkApiKey: 'northaffiliates.network.apiKey',
+  // ClickUp (chat → decisões): token pessoal (pk_…) de quem participa dos
+  // canais e o workspace (descoberto pelo token quando só há um).
+  clickupApiToken: 'clickup.apiToken',
+  clickupWorkspaceId: 'clickup.workspaceId',
 } as const;
 
 // Chaves INTERNAS (não editáveis pela UI): marcador incremental do mapping.
@@ -66,6 +70,9 @@ export const INTERNAL_SETTING_KEYS = {
   // rodada (JSON) e o dia BRT da última leitura de 45 dias.
   networksSyncStatus: 'networks.sync.status',
   networksSyncFullDay: 'networks.sync.fullDay',
+  // ClickUp: resumo da última leitura (JSON) e nomes dos membros (id → nome).
+  clickupSyncStatus: 'clickup.sync.status',
+  clickupMembers: 'clickup.members',
 } as const;
 export type InternalSettingKey = (typeof INTERNAL_SETTING_KEYS)[keyof typeof INTERNAL_SETTING_KEYS];
 

@@ -34,6 +34,11 @@ export const NAV_GROUPS: NavGroup[] = [
         "id": "funnel-sim",
         "label": "Simulador de Funil",
         "icon": "sliders"
+      },
+      {
+        "id": "decisions",
+        "label": "Decisões",
+        "icon": "ns-insights"
       }
     ]
   },
@@ -185,6 +190,7 @@ export const NS_ICON_SVG = {
   "monitor-play": "<path d=\"M15.033 9.44a.647.647 0 0 1 0 1.12l-4.065 2.352a.645.645 0 0 1-.968-.56V7.648a.645.645 0 0 1 .967-.56z\"/><path d=\"M12 17v4\"/><path d=\"M8 21h8\"/><path d=\"M4 3h16a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2Z\"/>",
   "percent": "<path d=\"m19 5-14 14\"/><path d=\"M6.5 8.5a1.5 1.5 0 1 0 0-3 1.5 1.5 0 0 0 0 3Z\"/><path d=\"M17.5 18.5a1.5 1.5 0 1 0 0-3 1.5 1.5 0 0 0 0 3Z\"/>",
   "sliders": "<path d=\"M4 21v-7\"/><path d=\"M4 10V3\"/><path d=\"M12 21v-9\"/><path d=\"M12 8V3\"/><path d=\"M20 21v-5\"/><path d=\"M20 12V3\"/><path d=\"M1 14h6\"/><path d=\"M9 8h6\"/><path d=\"M17 16h6\"/>",
+  "ns-insights": "<path d=\"M12 3.5l1.8 4.6 4.7 1.9-4.7 1.9L12 16.5l-1.8-4.6-4.7-1.9 4.7-1.9z\"/><path d=\"M18.5 15.5l.9 2.1 2.1.9-2.1.9-.9 2.1-.9-2.1-2.1-.9 2.1-.9z\"/>",
   "trophy": "<path d=\"M6 9H4.5a2.5 2.5 0 0 1 0-5H6\"/><path d=\"M18 9h1.5a2.5 2.5 0 0 0 0-5H18\"/><path d=\"M4 22h16\"/><path d=\"M10 14.66V17c0 .55-.47.98-.97 1.21C7.85 18.75 7 20.24 7 22\"/><path d=\"M14 14.66V17c0 .55.47.98.97 1.21C16.15 18.75 17 20.24 17 22\"/><path d=\"M18 2H6v7a6 6 0 0 0 12 0V2Z\"/>",
   "ns-ranking": "<path d=\"M9 20.5V10h6v10.5M3.5 20.5v-6H9M15 20.5v-8h5.5v8M3 20.5h18\"/><path d=\"M12 3.5l.9 1.8 2 .3-1.4 1.4.3 2-1.8-1-1.8 1 .3-2-1.4-1.4 2-.3z\" fill=\"currentColor\" stroke=\"none\"/>",
   "trending-up": "<path d=\"M3.5 20.5 9 12l4 4 7.5-10\"/><path d=\"M20.5 6v4.5M20.5 6H16\"/>",
@@ -198,7 +204,6 @@ export const NS_ICON_SVG = {
   "receipt": "<path d=\"M4 8h13M14 4.5 17.5 8 14 11.5\"/><path d=\"M20 16H7M10 12.5 6.5 16l3.5 3.5\"/>",
   "ns-networks": "<circle cx=\"5.5\" cy=\"12\" r=\"2.5\"/><circle cx=\"18.5\" cy=\"5.5\" r=\"2.5\"/><circle cx=\"18.5\" cy=\"18.5\" r=\"2.5\"/><path d=\"M7.8 10.8l8.4-4.2M7.8 13.2l8.4 4.2\"/>",
   "alert-triangle": "<path d=\"M12 4 2.8 19.5h18.4z\"/><path d=\"M12 10v4.2M12 16.8v.2\"/>",
-  "ns-insights": "<path d=\"M12 3.5l1.8 4.6 4.7 1.9-4.7 1.9L12 16.5l-1.8-4.6-4.7-1.9 4.7-1.9z\"/><path d=\"M18.5 15.5l.9 2.1 2.1.9-2.1.9-.9 2.1-.9-2.1-2.1-.9 2.1-.9z\"/>",
   "user-plus": "<path d=\"M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2\"/><path d=\"M8.5 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8\"/><path d=\"M20 8v6\"/><path d=\"M23 11h-6\"/>",
   "dollar": "<path d=\"M12 1v22\"/><path d=\"M17 5H9.5a3.5 3.5 0 1 0 0 7h5a3.5 3.5 0 1 1 0 7H6\"/>",
   "chevron-right": "<path d=\"m9 18 6-6-6-6\"/>",

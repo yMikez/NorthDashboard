@@ -7,6 +7,7 @@ const ROUTES = {
   'vsl':            { title: 'VSLs',        em: 'por página do funil', crumbs: ['Análise', 'VSLs'] },
   'refund-cohorts': { title: 'Reembolsos',  em: 'por coorte',  crumbs: ['Análise', 'Reembolsos'] },
   'funnel-sim':     { title: 'Simulador de Funil', em: 'por oferta', crumbs: ['Análise', 'Simulador de Funil'] },
+  'decisions':      { title: 'Decisões',     em: 'e o que veio depois', crumbs: ['Análise', 'Decisões'] },
   'affiliate-ranking': { title: 'Ranking',  em: 'de afiliados', crumbs: ['Afiliados', 'Ranking'] },
   'affiliate-overview': { title: 'Visão Geral', em: 'dos afiliados', crumbs: ['Afiliados', 'Visão Geral'] },
   'affiliate-refund': { title: 'Devolução', em: 'prevista', crumbs: ['Afiliados', 'Devolução Prev.'] },
@@ -303,11 +304,12 @@ function App({ user }) {
         />
         <FilterBar filters={filters} setFilters={setFilters} options={filterOptions} route={hashState.route}/>
         <div className="page" id="conteudo" role="main" tabIndex={-1} aria-label={r.title + (r.em ? ' ' + r.em : '')}>
-          {hashState.route === 'overview'       && <OverviewPage filters={filters} setFilters={setFilters}/>}
+          {hashState.route === 'overview'       && <OverviewPage filters={filters} setFilters={setFilters} user={user}/>}
           {hashState.route === 'funnel'         && <FunnelPage filters={filters}/>}
           {hashState.route === 'vsl'            && <VslPage filters={filters} user={user}/>}
           {hashState.route === 'refund-cohorts' && <RefundCohortsPage filters={filters}/>}
           {hashState.route === 'funnel-sim'     && <FunnelSimPage user={user}/>}
+          {hashState.route === 'decisions'      && <DecisionsPage user={user}/>}
           {hashState.route === 'affiliate-ranking' && <AffiliateRankingPage user={user}/>}
           {hashState.route === 'affiliate-overview' && <AffiliateRankingPage user={user} pagina="lista"/>}
           {hashState.route === 'affiliate-refund' && <AffiliateRankingPage user={user} pagina="reemb"/>}

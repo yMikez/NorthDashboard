@@ -19,6 +19,10 @@ export async function registerNode(): Promise<void> {
   // eles. No-op enquanto URL/chave não estiverem configuradas.
   const { startRetentionScheduler } = await import('./lib/services/retentionScheduler');
   startRetentionScheduler();
+  // ClickUp → decisões (aba Decisões): leitura do chat, IA e correlação a
+  // cada 30 min. No-op enquanto não houver token.
+  const { startClickUpScheduler } = await import('./lib/clickup/pipeline');
+  startClickUpScheduler();
   // Base de conhecimento da IA: seed de docs/kb 20s após o boot, em segundo
   // plano (idempotente por sha256 — boot sem mudança não reindexa nada).
   const { scheduleKnowledgeSeed } = await import('./lib/rag/seed');

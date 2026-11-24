@@ -56,6 +56,10 @@ export const ANTHROPIC_FAST_MODEL = FAST_MODEL;
 // precisa do Opus nem do thinking. Fica no modelo que sempre usou.
 export const ANTHROPIC_CLASSIFY_MODEL = process.env.CLASSIFY_MODEL?.trim() || 'claude-sonnet-5';
 export const ANTHROPIC_EFFORT: ChatEffort = parseEffort(process.env.CHAT_EFFORT);
+// Leituras da operação fora do chat (briefing da Visão geral, decisões do
+// ClickUp): JSON estruturado a partir de números/textos que o dash entrega.
+// Override: INSIGHTS_MODEL=claude-sonnet-5-5.
+export const ANTHROPIC_INSIGHTS_MODEL = process.env.INSIGHTS_MODEL?.trim() || 'claude-opus-5-5';
 
 // ── Calendário do turno (BRT) ────────────────────────────────────────────
 

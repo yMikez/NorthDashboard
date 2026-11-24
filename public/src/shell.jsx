@@ -14,6 +14,8 @@ function Sidebar({ active, onNav, user, open, onClose }) {
         { id: 'refund-cohorts', label: 'Reembolsos', icon: 'percent' },
         // Simulador de Funil: metas sobre o real do produto (docs/kb/simulador-funil.md).
         { id: 'funnel-sim', label: 'Simulador de Funil', icon: 'sliders' },
+        // Decisões: o que a liderança decidiu no ClickUp × as métricas (correlação).
+        { id: 'decisions', label: 'Decisões', icon: 'ns-insights' },
       ]
     },
     {
@@ -431,7 +433,7 @@ const ROUTES_WITHOUT_STAGE = new Set(['leads']);
 const ROUTES_PERIOD_ONLY = new Set(['networks', 'surveys', 'recurrences']);
 // Ranking de afiliados: a tela tem a barra de filtros própria (safra, mínimo
 // de FEs, plataforma, agrupar) — a barra global some nela.
-const ROUTES_OWN_FILTERS = new Set(['affiliate-ranking', 'affiliate-overview', 'affiliate-refund', 'funnel-sim']);
+const ROUTES_OWN_FILTERS = new Set(['affiliate-ranking', 'affiliate-overview', 'affiliate-refund', 'funnel-sim', 'decisions']);
 // Filtro "Afiliado" (conta de plataforma ou pessoa unificada): vale em todas
 // as abas de venda. Onde não se aplica, o seletor fica apagado com o motivo
 // — a escolha continua na URL e volta a valer ao trocar de aba.

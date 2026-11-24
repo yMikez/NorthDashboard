@@ -2366,3 +2366,106 @@ model SurveyAsset {
   createdBy String?
   createdAt DateTime @default(now())
 }
+
+// ============================================================
+// IA DE DECISÕES E BRIEFING (2026-11-24)
+// ============================================================
+
+// Briefing da IA no topo da Visão geral: um por recorte (operação inteira ou
+// a carteira de um captador, com ou sem as decisões do ClickUp) por janela.
+// A janela fecha ONTEM, então o texto é gerado 1x por dia por recorte e
+// reaproveitado (custo e latência). lib/briefing/.
+model AiBriefing {
+  id        String   @id @default(cuid())
+  scopeKey  String
+  // Último dia da janela atual (YYYY-MM-DD, Brasília).
+  windowEnd String
+  model     String?
+  // Números do pacote + texto da IA (lib/briefing/core.ts).
+  payload   Json
+  createdAt DateTime @default(now())
+
+  @@unique([scopeKey, windowEnd])
+}
+
+// ClickUp (chat): canais lidos pelo dash. Só CHANNEL entra por padrão — DM e
+// grupo de DM são conversa pessoal de quem gerou o token. lib/clickup/.
+model ClickUpChannel {
+  id              String    @id // id do canal no ClickUp
+  name            String?
+  type            String // CHANNEL | DM | GROUP_DM | ...
+  visibility      String?
+  // Sincronizar este canal.
+  enabled         Boolean   @default(false)
+  // Canal de liderança/decisão: lido primeiro e com mais peso na extração.
+  leadership      Boolean   @default(false)
+  latestMessageAt DateTime?
+  lastSyncedAt    DateTime?
+  // Leitura do histórico em partes (cursor da próxima página mais antiga).
+  backfillCursor  String?
+  backfillDone    Boolean   @default(false)
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  messages ClickUpMessage[]
+}
+
+model ClickUpMessage {
+  id           String         @id // id da mensagem no ClickUp
+  channelId    String
+  channel      ClickUpChannel @relation(fields: [channelId], references: [id], onDelete: Cascade)
+  // Raiz da thread (null = a própria mensagem é raiz).
+  parentId     String?
+  userId       String?
+  userName     String?
+  type         String // message | post
+  title        String? // título do post (anúncio)
+  content      String
+  postedAt     DateTime
+  repliesCount Int            @default(0)
+  // Extração de decisões (só nas raízes): impressão do conteúdo da thread
+  // na última leitura da IA — muda quando entra resposta nova.
+  extractedHash String?
+  extractedAt   DateTime?
+  createdAt    DateTime       @default(now())
+  updatedAt    DateTime       @updatedAt
+
+  @@index([channelId, postedAt])
+  @@index([parentId])
+}
+
+enum DecisionStatus {
+  DETECTED  // a IA achou; ninguém revisou
+  CONFIRMED // alguém confirmou
+  DISCARDED // não era decisão (some das análises)
+}
+
+// Decisão tomada (lida das threads do ClickUp pela IA, revisável). A
+// correlação com as métricas é calculada pelo dash (números), nunca pela IA,
+// e é sempre CORRELAÇÃO: outros fatores mexem nos mesmos números.
+model Decision {
+  id               String         @id @default(cuid())
+  channelId        String?
+  threadRootId     String?
+  decidedAt        DateTime
+  title            String
+  summary          String
+  decidedBy        String?
+  // [{ metric, expected: subir | cair | incerto }]
+  metrics          Json
+  // { platforms: string[], families: string[], note: string | null }
+  scope            Json
+  confidence       String // alta | media | baixa
+  sourceMessageIds String[]
+  status           DecisionStatus @default(DETECTED)
+  // Alguém mexeu no texto/métricas: nova leitura da IA não sobrescreve.
+  edited           Boolean        @default(false)
+  reviewedBy       String?
+  correlation      Json?
+  correlationAt    DateTime?
+  createdAt        DateTime       @default(now())
+  updatedAt        DateTime       @updatedAt
+
+  @@index([decidedAt])
+  @@index([threadRootId])
+}

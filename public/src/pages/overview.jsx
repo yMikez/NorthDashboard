@@ -424,7 +424,7 @@ function OficialStrip({ oficial, filters }) {
   );
 }
 
-function OverviewPage({ filters }) {
+function OverviewPage({ filters, user }) {
   const [state, setState] = useStateOv({ status: 'loading', data: null, error: null });
   const [panels, setPanels] = useStateOv({ status: 'loading', data: null });
   const [metric, setMetric] = useStateOv('gross');
@@ -537,6 +537,8 @@ function OverviewPage({ filters }) {
 
   return (
     <div className="page-in">
+      {/* Briefing da IA (saudação + semana × semana anterior): public/src/pages/briefing.jsx */}
+      <BriefingHero user={user}/>
       <div className="page-head">
         <div className="lead">
           <span className="eyebrow" style={{ whiteSpace: 'normal' }}>{presetLabel} · USD</span>

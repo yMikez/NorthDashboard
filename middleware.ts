@@ -45,6 +45,7 @@ const SPA_ROUTES = new Set([
   '/funnel',
   '/vsl',
   '/refund-cohorts',
+  '/decisions',
   '/funnel-sim',
   '/affiliate-ranking',
   '/affiliate-overview',

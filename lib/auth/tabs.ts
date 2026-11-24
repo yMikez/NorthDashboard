@@ -10,6 +10,7 @@ export type TabId =
   | 'funnel'
   | 'vsl'
   | 'refund-cohorts'
+  | 'decisions'
   | 'funnel-sim'
   | 'affiliate-ranking'
   | 'affiliate-overview'
@@ -42,6 +43,10 @@ export const AVAILABLE_TABS: TabSpec[] = [
   // VSLs: quem tem a aba vê e edita (troca VSL de página no ar, roda teste A/B).
   { id: 'vsl',            label: 'VSLs',                group: 'Análise' },
   { id: 'refund-cohorts', label: 'Reembolsos',          group: 'Análise' },
+  // Decisões: o que a liderança decidiu no ClickUp (lido pela IA) contra as
+  // métricas que a decisão podia mexer — correlação, não causa. O conteúdo
+  // vem de canais privados: só quem o admin liberar.
+  { id: 'decisions',      label: 'Decisões',            group: 'Análise' },
   // Simulador de Funil: metas (conversão, CPA, devolução, custos, call center)
   // sobre o real de um produto; análises salvas com nome (docs/kb/simulador-funil.md).
   { id: 'funnel-sim',     label: 'Simulador de Funil',  group: 'Análise' },

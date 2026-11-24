@@ -97,6 +97,22 @@ function fetchOficial(filters) {
   });
 }
 
+// Briefing da IA no topo da Visão geral: números na hora, texto quando a IA
+// termina (status: generating → ready). POST = gerar de novo (admin).
+function fetchBriefing() { return coGet('/api/metrics/briefing'); }
+function regenerateBriefing() { return coSend('/api/metrics/briefing', 'POST', {}); }
+
+// Aba Decisões (ClickUp → IA → correlação com as métricas).
+function fetchDecisions(params = {}) {
+  const qs = new URLSearchParams();
+  for (const [k, v] of Object.entries(params)) { if (v) qs.set(k, v); }
+  const q = qs.toString();
+  return coGet(`/api/metrics/decisions${q ? `?${q}` : ''}`);
+}
+function decisionAction(body) { return coSend('/api/metrics/decisions', 'POST', body); }
+function fetchClickUpAdmin() { return coGet('/api/admin/clickup'); }
+function clickUpAdminAction(body) { return coSend('/api/admin/clickup', 'POST', body); }
+
 function fetchOverviewPanels(filters) {
   return fetchJSON('/api/metrics/overview-panels', {
     start_date: toISODate(filters.dateRange.start),
@@ -938,6 +954,12 @@ window.NSApi = _wrapMutations({
   fetchRecurrences,
   fetchNetworkCatalog,
   fetchOverviewPanels,
+  fetchBriefing,
+  regenerateBriefing,
+  fetchDecisions,
+  decisionAction,
+  fetchClickUpAdmin,
+  clickUpAdminAction,
   getAffRefundMode,
   setAffRefundMode,
   fetchOficial,
