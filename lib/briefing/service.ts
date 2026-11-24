@@ -12,7 +12,9 @@
 //   '+d'       com as decisões do ClickUp (só pra quem abre a aba Decisões)
 // Os filtros da barra NÃO entram: o briefing é a leitura da semana inteira.
 
-import { z } from 'zod';
+// zod/v4: o helper do SDK (betaZodOutputFormat) converte com o toJSONSchema da v4 —
+// esquema da API clássica (v3) quebra antes da chamada ("reading 'def'").
+import { z } from 'zod/v4';
 import { Prisma } from '@prisma/client';
 import { db, dbRead } from '../db';
 import { logger } from '../logger';
@@ -50,14 +52,16 @@ export interface BriefingPack {
   decisions: BriefingDecision[];
 }
 
-const AiSchema = z.object({
+export const BriefingAiSchema = z.object({
   headline: z.string().describe('O fato mais importante da semana, em até ~100 caracteres.'),
   summary: z.string().describe('2 a 3 frases que contam a semana.'),
   highlights: z.array(z.object({
     title: z.string().describe('Até 6 palavras.'),
     detail: z.string().describe('Uma frase com o número que sustenta.'),
-    tone: z.enum(['positivo', 'negativo', 'neutro']),
-    metric: z.enum(['faturamento', 'pedidos', 'aov', 'net_after_cpa', 'aprovacao', 'reembolso', 'chargeback', 'outro']),
+    // Texto livre + normalização: o SDK (0.95) não manda `enum` como
+    // restrição à API, e um valor fora da lista derrubaria a resposta inteira.
+    tone: z.string().describe('Um de: positivo | negativo | neutro.'),
+    metric: z.string().describe('Um de: faturamento | pedidos | aov | net_after_cpa | aprovacao | reembolso | chargeback | outro.'),
   })).describe('3 ou 4 destaques.'),
   attention: z.string().nullable().describe('Um ponto a vigiar nesta semana, ou null.'),
   decisions: z.array(z.object({
@@ -65,7 +69,17 @@ const AiSchema = z.object({
     line: z.string().describe('Uma frase ligando a decisão às métricas, sempre como correlação.'),
   })).describe('Uma linha por decisão do pacote; vazio se não houver.'),
 });
-export type BriefingAi = z.infer<typeof AiSchema>;
+export type BriefingAi = z.infer<typeof BriefingAiSchema>;
+
+const TONES = new Set(['positivo', 'negativo', 'neutro']);
+/** Tom fora da lista (ex.: "positiva") vira o mais próximo; o resto, neutro. */
+export function normalizeTone(raw: string): 'positivo' | 'negativo' | 'neutro' {
+  const t = raw.trim().toLowerCase();
+  if (TONES.has(t)) return t as 'positivo' | 'negativo' | 'neutro';
+  if (t.startsWith('posit')) return 'positivo';
+  if (t.startsWith('negat')) return 'negativo';
+  return 'neutro';
+}
 
 export interface BriefingResponse {
   status: 'ready' | 'generating' | 'error';
@@ -242,10 +256,14 @@ async function generate(key: string, windowEnd: string, pack: BriefingPack): Pro
       label: 'briefing',
       system: SYSTEM,
       user: `Pacote da semana (JSON):\n${JSON.stringify(promptPayload(pack))}`,
-      schema: AiSchema,
+      schema: BriefingAiSchema,
       effort: 'medium',
     });
-    const ai = { ...res.data, decisions: res.data.decisions.filter((d) => pack.decisions.some((x) => x.id === d.id)) };
+    const ai = {
+      ...res.data,
+      highlights: res.data.highlights.map((h) => ({ ...h, tone: normalizeTone(h.tone) })),
+      decisions: res.data.decisions.filter((d) => pack.decisions.some((x) => x.id === d.id)),
+    };
     const payload = JSON.parse(JSON.stringify({ pack, ai })) as Prisma.InputJsonValue;
     await db.aiBriefing.upsert({
       where: { scopeKey_windowEnd: { scopeKey: key, windowEnd } },

@@ -9,7 +9,8 @@
 // Revisão manda: decisão confirmada, descartada ou editada não é
 // sobrescrita quando a thread muda e é relida.
 
-import { z } from 'zod';
+// zod/v4: exigido pelo helper do SDK (ver lib/insights/llm.ts).
+import { z } from 'zod/v4';
 import { Prisma } from '@prisma/client';
 import { db } from '../db';
 import { logger } from '../logger';
@@ -22,25 +23,33 @@ export const EXTRACT_DAYS = 180;
 /** Thread com mensagem nos últimos 45 min ainda está em andamento: espera. */
 const SETTLE_MS = 45 * 60_000;
 
-const DecisionsSchema = z.object({
+export const DecisionsSchema = z.object({
   decisions: z.array(z.object({
     title: z.string().describe('Até 10 palavras, começando pelo verbo (ex.: "Subir preço do NeuroRecall 6 potes").'),
     summary: z.string().describe('2 a 3 frases: o que foi decidido, por quê e a partir de quando.'),
     decided_at: z.string().describe('AAAA-MM-DD: dia em que a decisão ficou clara (ou a data de início combinada, se explícita).'),
     decided_by: z.string().nullable().describe('Nome(s) de quem decidiu.'),
     source_message_ids: z.array(z.string()).describe('Ids das mensagens que sustentam a decisão (só ids fornecidos).'),
+    // Texto livre + normalização (cleanExpectations/normalizeConfidence): o SDK
+    // (0.95) não manda `enum` à API e um valor fora da lista derrubaria a thread.
     metrics: z.array(z.object({
-      metric: z.enum(DECISION_METRICS as unknown as [string, ...string[]]),
-      expected: z.enum(['subir', 'cair', 'incerto']),
+      metric: z.string().describe(`Um de: ${DECISION_METRICS.join(' | ')}.`),
+      expected: z.string().describe('Um de: subir | cair | incerto.'),
     })).describe('Métricas do dash que a decisão pode mexer (normalmente 1 a 3).'),
     scope: z.object({
       platforms: z.array(z.string()).describe('Slugs da lista de plataformas; vazio = todas.'),
       families: z.array(z.string()).describe('Nomes da lista de famílias; vazio = todas.'),
       note: z.string().nullable().describe('Escopo que não cabe nas listas (ex.: um afiliado, um país), ou null.'),
     }),
-    confidence: z.enum(['alta', 'media', 'baixa']),
+    confidence: z.string().describe('Um de: alta | media | baixa.'),
   })),
 });
+
+/** Confiança fora da lista ("média", "Alta") vira a mais próxima; sem pista, média. */
+export function normalizeConfidence(raw: string): 'alta' | 'media' | 'baixa' {
+  const t = raw.trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+  return t.startsWith('alt') ? 'alta' : t.startsWith('baix') ? 'baixa' : 'media';
+}
 
 const SYSTEM = `Você lê conversas do chat interno da NorthScale (ClickUp) e registra as DECISÕES de negócio já tomadas.
 
@@ -168,7 +177,7 @@ export async function extractDecisions(opts: { maxCalls: number }): Promise<Extr
                 families: d.scope.families.map((f) => famSet.get(f.toLowerCase())).filter((f): f is string => !!f),
                 note: d.scope.note,
               },
-              confidence: d.confidence,
+              confidence: normalizeConfidence(d.confidence),
               sourceMessageIds: sources.length ? sources : [root.id],
             },
             select: { id: true },

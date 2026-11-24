@@ -5,13 +5,21 @@
 //   raciocínio é sempre adaptativo — o controle é o esforço (padrão dele é
 //   medium; passamos sempre explícito).
 // - Saída estruturada (output_config.format + zod): nada de "extrair JSON
-//   do texto".
+//   do texto". O esquema TEM que ser do `zod/v4`: o helper do SDK converte
+//   com o toJSONSchema da v4, e esquema da API clássica (`zod`, v3 na 3.25)
+//   quebra antes da chamada ("reading 'def'") — foi o erro do 1º briefing em
+//   prod. A tipagem do helper aponta pro `zod` clássico, por isso o cast.
 // - Recusa por política: fallback no servidor (beta server-side-fallback),
 //   que reexecuta no modelo certo pra categoria. O SDK instalado (0.95) ainda
 //   não tipa `fallbacks`, mas repassa o campo no corpo — por isso o cast.
 
-import type { ZodType, infer as zodInfer } from 'zod';
+import type { ZodType, infer as zodInfer } from 'zod/v4';
 import { betaZodOutputFormat } from '@anthropic-ai/sdk/helpers/beta/zod';
+
+/** Formato de saída estruturada a partir de um esquema zod/v4. */
+export function outputFormat<S extends ZodType>(schema: S) {
+  return betaZodOutputFormat(schema as unknown as Parameters<typeof betaZodOutputFormat>[0]);
+}
 import { ANTHROPIC_INSIGHTS_MODEL, getAnthropicClient } from '../services/ai';
 import { logger } from '../logger';
 
@@ -43,7 +51,7 @@ export async function askStructured<S extends ZodType>(opts: {
     max_tokens: opts.maxTokens ?? 16000,
     system: opts.system,
     messages: [{ role: 'user' as const, content: opts.user }],
-    output_config: { effort: opts.effort ?? 'medium', format: betaZodOutputFormat(opts.schema) },
+    output_config: { effort: opts.effort ?? 'medium', format: outputFormat(opts.schema) },
     betas: ['server-side-fallback-2026-07-01'],
     fallbacks: 'default',
   };

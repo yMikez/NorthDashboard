@@ -31,8 +31,10 @@ function bfFirstName(user) {
   const first = raw.trim().split(/[\s._-]+/)[0] || '';
   return first ? first.charAt(0).toUpperCase() + first.slice(1) : '';
 }
+// "terça-feira, 24 de novembro" → "Terça-feira, 24 de novembro" (só a 1ª letra).
 function bfToday(now) {
-  return new Intl.DateTimeFormat('pt-BR', { weekday: 'long', day: 'numeric', month: 'long', timeZone: 'America/Sao_Paulo' }).format(now);
+  const s = new Intl.DateTimeFormat('pt-BR', { weekday: 'long', day: 'numeric', month: 'long', timeZone: 'America/Sao_Paulo' }).format(now);
+  return s.charAt(0).toUpperCase() + s.slice(1);
 }
 function bfDm(ymd) { return ymd ? `${ymd.slice(8, 10)}/${ymd.slice(5, 7)}` : ''; }
 function bfFormatter(format) {
@@ -97,7 +99,8 @@ function BfTile({ m, series, index }) {
   return (
     <div className="bf-tile" style={{ '--i': index }}>
       <div className="bf-tile-label">{m.label}</div>
-      <div className={`bf-tile-value${m.format.startsWith('money') ? ' is-money' : ''}`}>
+      {/* Dinheiro em verde (DS); valor negativo (ex.: Net after CPA no prejuízo) em vermelho. */}
+      <div className={`bf-tile-value${m.cur < 0 ? ' is-negative' : m.format.startsWith('money') ? ' is-money' : ''}`}>
         {BF_REDUCED ? m.curFmt : <CountUp value={m.cur} format={bfFormatter(m.format)} duration={1100}/>}
       </div>
       <div className="bf-tile-foot">
@@ -195,12 +198,14 @@ function BriefingHero({ user }) {
             <div className="bf-eyebrow"><Icon name="sparkles" size={12}/> Resumo da semana · IA</div>
             {!ai && (
               <div className="bf-thinking" role="status">
-                <div className="bf-thinking-bar" aria-hidden="true"/>
+                {!(d && d.status === 'error') && <div className="bf-thinking-bar" aria-hidden="true"/>}
                 <span>
                   {state.status === 'loading' ? 'Juntando os números da semana…'
-                    : d && d.status === 'error' ? 'A IA não conseguiu escrever agora — os números abaixo seguem valendo.'
+                    : d && d.status === 'error' ? 'A IA não conseguiu escrever agora — os números abaixo seguem valendo. Ela tenta de novo em alguns minutos.'
                     : 'A IA está lendo a semana…'}
                 </span>
+                {/* Motivo pro admin (o resto vê só a frase acima). */}
+                {isAdmin && d && d.status === 'error' && d.error && <span className="bf-footnote">Motivo: {d.error}</span>}
               </div>
             )}
             {ai && (
