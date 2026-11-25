@@ -21,6 +21,7 @@ const DC_VERDICT = {
   sem_base: ['sem base', 'var(--fg5)'],
 };
 const DC_STATUS = { DETECTED: ['a revisar', 'var(--warning)'], CONFIRMED: ['confirmada', 'var(--success)'], DISCARDED: ['descartada', 'var(--fg5)'] };
+const DC_LEVEL = { ampla: 'abrangência ampla', setor: 'um setor' };
 const DC_FILTERS = [['', 'Ativas'], ['DETECTED', 'A revisar'], ['CONFIRMED', 'Confirmadas'], ['DISCARDED', 'Descartadas']];
 const DC_INPUT = {
   padding: '7px 9px', fontSize: 13, color: 'var(--fg1)', background: 'var(--bg)',
@@ -164,6 +165,9 @@ function DcCard({ dec, busy, disclaimer, onAct, onEdit }) {
             <h3 style={{ margin: 0, fontSize: 16, color: 'var(--fg1)' }}>{dec.title}</h3>
             <span style={{ fontSize: 11, color: stColor }}>{stLabel}</span>
             {dec.confidence !== 'alta' && dec.status === 'DETECTED' && <span style={{ fontSize: 11, color: 'var(--fg5)' }}>confiança {dec.confidence}</span>}
+            {dec.scope && dec.scope.impact && (
+              <span style={{ fontSize: 11, color: 'var(--fg4)' }}>impacto {dec.scope.impact}{DC_LEVEL[dec.scope.level] ? ` · ${DC_LEVEL[dec.scope.level]}` : ''}</span>
+            )}
           </div>
           <div style={{ fontSize: 12, color: 'var(--fg4)', marginTop: 2 }}>
             {dec.manual ? 'registrada à mão' : (dec.channel && (dec.channel.name || dec.channel.id))}

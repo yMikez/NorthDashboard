@@ -18,7 +18,8 @@ export interface DecisionView {
   channel: { id: string; name: string | null } | null;
   link: string | null;
   metrics: MetricExpectation[];
-  scope: { platforms: string[]; families: string[]; note: string | null };
+  /** level/impact: a régua da IA (abrangência e impacto) — ausente em decisão registrada à mão. */
+  scope: { platforms: string[]; families: string[]; note: string | null; level?: string; impact?: string };
   confidence: string;
   status: DecisionStatus;
   edited: boolean;

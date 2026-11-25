@@ -49,7 +49,14 @@ texto diz que é **correlação no tempo, não prova de causa**.
 últimos 180 dias (espera 45 min de silêncio), até 20 por rodada, liderança e recentes primeiro.
 Decisão = escolha concluída de fazer/mudar algo (preço, oferta, funil, produto, plataforma,
 afiliados, tráfego, call center, fulfillment, processo). Aviso de ausência, alerta, pergunta e
-discussão sem conclusão ficam de fora. A IA devolve as métricas que a decisão pode mexer (com a
+discussão sem conclusão ficam de fora.
+
+**Régua de impacto** (desde 2026-11-25, pedido do usuário): só entra decisão de impacto e
+abrangência. A IA classifica cada uma em abrangência (ampla = operação toda / várias áreas; setor =
+um produto, plataforma, funil ou canal; pontual = um afiliado, cliente, conta, pagamento) e impacto
+(alto/médio/baixo); o código descarta pontual e baixo impacto (`isMaterial`). Ex.: "Definir CPA de
+$125 para o afiliado X" fica fora; "Subir o CPA padrão de todos os afiliados JVZoo" entra. Mudar a
+régua = subir `EXTRACT_VERSION` (a thread já lida volta pra fila e é relida). A IA devolve as métricas que a decisão pode mexer (com a
 direção esperada) e o escopo, escolhido de uma lista fechada de plataformas e famílias.
 
 **Revisão manda**: decisão confirmada, descartada ou editada não é sobrescrita quando a thread é

@@ -28,7 +28,8 @@ describe('saída estruturada — esquemas reais no helper do SDK', () => {
     const parsed = f.parse(JSON.stringify({
       decisions: [{
         title: 'Subir preço', summary: 'S', decided_at: '2026-11-20', decided_by: null, source_message_ids: ['1'],
-        metrics: [{ metric: 'aov', expected: 'subir' }], scope: { platforms: [], families: [], note: null }, confidence: 'Média',
+        metrics: [{ metric: 'aov', expected: 'subir' }], scope: { platforms: [], families: [], note: null },
+        abrangencia: 'setor', impacto: 'alto', confidence: 'Média',
       }],
     }));
     expect(normalizeConfidence(parsed.decisions[0].confidence)).toBe('media');
